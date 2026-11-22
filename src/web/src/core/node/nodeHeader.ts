@@ -8,9 +8,9 @@
 // mode (owner design 2026-10-12, inbox #406).
 //
 // **As many actions as fit are buttons, the rest one menu** (ADR 0110): the page that draws the header names its kind's
-// priority as an id list (`order`), core measures the row and {@link fitHeaderActions} says how many of the actions that
-// may be buttons are; the rest, and every {@link isMenuOnly} action (delete, report) after a separator, are entries of
-// one ⋯ menu. No action is lost at any width. Which of its two layouts the header takes is {@link headerLayout}'s answer,
+// priority as an id list (`order`), the core's plan (`plans.ts`, ADR 0154 decision 2) says which actions may be buttons and
+// which are the menu's last group (move, copy, report, delete), core measures the row and {@link fitHeaderActions} says how
+// many of those that may be buttons are; the rest, and the last group after a separator, are entries of one ⋯ menu. No action is lost at any width. Which of its two layouts the header takes is {@link headerLayout}'s answer,
 // from the header's own width and fixed sizes; on a wide header the name comes first, down to {@link headerFloor}.
 //
 // **An action is already a rights answer.** The caller builds the list from its fail-closed rights function
@@ -152,60 +152,12 @@ export interface NodeHeaderAction {
   pressed?: boolean
   /** An extra class for the application's own styling hook. */
   class?: string
-  /** Never a button, always an entry of the ⋯ menu's last group (report; a `danger` action is one anyway, ADR 0110). */
-  menuOnly?: boolean
 }
-
-/** Where a core action goes among the application's: before them, after them, or right after the application's action of
- *  that id (core's "Copy to…" beside "Move to…") - after them all where the application offers no such action. */
-export type CoreActionPlacement = 'before' | 'after' | { after: string }
 
 /** A core-owned action (the favorite heart, the cover, copy, download, report - `coreNodeActions.ts`): contributed by core
- *  next to the application's own, gated by a core rights function, never supplied by the application. */
-export interface CoreHeaderAction extends NodeHeaderAction {
-  /** Before or after the application's actions, or beside one of them. Default `after`. */
-  placement?: CoreActionPlacement
-}
-
-/** Core's contributions placed around (and beside) the application's list, stable order within each group: the one rule
- *  of {@link mergeHeaderActions} and the level row's `mergeRowActions`. */
-export function placeCoreActions<A extends { id: string }, C extends A & { placement?: CoreActionPlacement }>(core: readonly C[], app: readonly A[]): A[] {
-  const before = core.filter((a) => a.placement === 'before')
-  const beside = (id: string) => core.filter((a) => typeof a.placement === 'object' && a.placement.after === id)
-  const ids = new Set(app.map((a) => a.id))
-  const after = core.filter((a) => a.placement === undefined || a.placement === 'after' || (typeof a.placement === 'object' && !ids.has(a.placement.after)))
-  return [...before, ...app.flatMap((a) => [a, ...beside(a.id)]), ...after]
-}
-
-/** The header's action row: core's contributions around the application's list (stable order within each group). This
- *  is where a core action plugs in — `NodeHeader` merges what `coreNodeActions.ts` supplies for its node; no application
- *  change is needed. */
-export function mergeHeaderActions(core: readonly CoreHeaderAction[], app: readonly NodeHeaderAction[]): NodeHeaderAction[] {
-  return placeCoreActions(core, app)
-}
-
-/** Delete and report are never buttons (ADR 0110 decision 6): a button that moves with the width is too easy to hit by
- *  mistake, and both open a consequential dialog. */
-export function isMenuOnly(a: Pick<NodeHeaderAction, 'menuOnly' | 'severity'>): boolean {
-  return a.menuOnly === true || a.severity === 'danger'
-}
-
-/** The header's actions in the kind's priority: the ones whose ids `order` lists first, in that order, then every other
- *  one in the given (merge) order — so a core action added later appears, it never vanishes for being unlisted. */
-export function orderHeaderActions<A extends { id: string }>(actions: readonly A[], order: readonly string[] = []): A[] {
-  const rank = new Map(order.map((id, i) => [id, i]))
-  const listed = actions.filter((a) => rank.has(a.id)).sort((a, b) => rank.get(a.id)! - rank.get(b.id)!)
-  return [...listed, ...actions.filter((a) => !rank.has(a.id))]
-}
-
-/** The shown actions split into those that may be buttons (in order) and the menu-only ones, a `danger` one last. */
-export function partitionHeaderActions<A extends NodeHeaderAction>(actions: readonly A[]): { buttons: A[]; menuOnly: A[] } {
-  const menuOnly = actions.filter(isMenuOnly)
-  return {
-    buttons: actions.filter((a) => !isMenuOnly(a)),
-    menuOnly: [...menuOnly.filter((a) => a.severity !== 'danger'), ...menuOnly.filter((a) => a.severity === 'danger')],
-  }
-}
+ *  next to the application's own, gated by a core rights function, never supplied by the application. Where it sits among
+ *  them is the core's plan (`plans.ts`). */
+export type CoreHeaderAction = NodeHeaderAction
 
 /** What {@link fitHeaderActions} weighs, in CSS pixels. Header buttons are icon-only and one size, so one measured button
  *  width stands for all of them. */
@@ -313,15 +265,15 @@ export function standardActionList(
   return all.filter((a) => a.shown)
 }
 
-/** A node HEADER's standard actions (ADR 0110 decision 11): share, then move and delete in the ⋯ menu - the move is
- *  menu-only there, as core's copy beside it. The rename is no action of a header: the name itself is edited in place
+/** A node HEADER's standard actions (ADR 0110 decision 11): share, move and delete (the plan puts the move and the delete
+ *  in the ⋯ menu's last group, as core's copy beside it). The rename is no action of a header: the name itself is edited in place
  *  ({@link standardNodeRename}), so a header offers no entry for it, whatever `flags.rename` says. */
 export function standardNodeActions(
   t: (key: string) => string,
   flags: StandardActionFlags,
   on: StandardActionHandlers,
 ): NodeHeaderAction[] {
-  return standardActionList(t, { ...flags, rename: false }, on).map((a) => (a.id === 'move' ? { ...a, menuOnly: true } : a))
+  return standardActionList(t, { ...flags, rename: false }, on)
 }
 
 /** The header's rename in place (ADR 0110 decision 11): where the rights answer grants the rename AND the page has the write

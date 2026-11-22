@@ -13,6 +13,10 @@
 // - **Not while the node's application is switched off** (uc.platform.switch-application-off): its nodes are read-only.
 // - **Not in a guest's identity folder.** Those folders belong to the drop box's guests, and a member only deletes or moves
 //   them out (ADR 0080 decision 11).
+//
+// The rule is the platform's (`CoreRights.cover`, `@veyq/core-js/navigation`, held by contracts/platform/plans/v1-vectors.json);
+// this file reads the session and the registry into it.
+import { coverRight } from '@veyq/core-js/navigation'
 import { applicationWritable, type Access, type RightsTarget } from '../../access'
 import { registry } from '../../applications/registry'
 
@@ -25,10 +29,11 @@ const NONE: CoverRights = Object.freeze({ setCover: false })
 
 /** The cover rights of `access` for the node `at` describes (`targetOf`). Every right defaults to false. */
 export function coverRights(access: Access, at: Pick<RightsTarget, 'kind' | 'inIdentityFolder'>): CoverRights {
-  if (access.mode !== 'member' || access.readonly || !access.epochs) return NONE
-  if (!at.kind || at.inIdentityFolder) return NONE
-  // A node of a switched-off application takes no cover (uc.platform.switch-application-off).
-  if (!applicationWritable(access, at.kind)) return NONE
-  const info = registry.kind(at.kind)
-  return info.supported && info.cover ? { setCover: true } : NONE
+  const member = access.mode === 'member'
+  const info = at.kind ? registry.kind(at.kind) : null
+  const set = coverRight(
+    member, member && access.epochs !== null, member && access.readonly, at.kind !== null, at.inIdentityFolder,
+    at.kind !== null && applicationWritable(access, at.kind), !!info?.supported && !!info.cover,
+  )
+  return set ? { setCover: true } : NONE
 }

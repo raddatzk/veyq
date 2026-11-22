@@ -1,4 +1,4 @@
-// The node header's pure half (ADR 0110): the kind's priority, the menu-only split, which layout a header width gets and how
+// The node header's pure half (ADR 0110): which layout a header width gets and how
 // many buttons fit a width. A unit test has no layout, so this is where the count and the switch are held; a real browser
 // pass at phone and desktop width proves the rest.
 import { describe, it, expect } from 'vitest'
@@ -6,16 +6,11 @@ import {
   fitHeaderActions,
   headerFloor,
   headerLayout,
-  isMenuOnly,
-  orderHeaderActions,
-  partitionHeaderActions,
   type HeaderFit,
   type HeaderLayout,
   type HeaderLayoutInput,
-  type NodeHeaderAction,
 } from './nodeHeader'
 
-const act = (id: string, over: Partial<NodeHeaderAction> = {}): NodeHeaderAction => ({ id, label: id, icon: 'heart', shown: true, onClick: () => {}, ...over })
 
 describe('fitHeaderActions', () => {
   // 36 px buttons, 7 px gaps, a 36 px ⋯: n buttons alone take 36n + 7(n - 1); k buttons and the ⋯ take 43k + 36.
@@ -117,24 +112,3 @@ describe('headerLayout', () => {
   })
 })
 
-describe('orderHeaderActions', () => {
-  it('the listed ids first in the list\'s order, every unlisted one after them in the given order; an unknown id is ignored', () => {
-    const ids = orderHeaderActions([act('a'), act('b'), act('c'), act('d')], ['c', 'x', 'a']).map((a) => a.id)
-    expect(ids).toEqual(['c', 'a', 'b', 'd'])
-  })
-
-  it('no order: the given order', () => {
-    expect(orderHeaderActions([act('b'), act('a')]).map((a) => a.id)).toEqual(['b', 'a'])
-  })
-})
-
-describe('partitionHeaderActions', () => {
-  it('a danger action and a menuOnly one are menu-only, the danger one last, whatever the order', () => {
-    expect(isMenuOnly(act('delete', { severity: 'danger' }))).toBe(true)
-    expect(isMenuOnly(act('report', { menuOnly: true }))).toBe(true)
-    expect(isMenuOnly(act('upload', { severity: 'primary' }))).toBe(false)
-    const parts = partitionHeaderActions([act('delete', { severity: 'danger' }), act('share'), act('report', { menuOnly: true }), act('move')])
-    expect(parts.buttons.map((a) => a.id)).toEqual(['share', 'move'])
-    expect(parts.menuOnly.map((a) => a.id)).toEqual(['report', 'delete'])
-  })
-})

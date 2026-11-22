@@ -31,7 +31,6 @@ function heart(t: Translate, failed: Failed, access: Access, node: { id: string;
       icon: pinned ? 'heart-fill' : 'heart',
       pressed: pinned,
       first: true,
-      placement: 'before',
       onClick: () => void toggleFavorite(node.id, access.scopeId).catch(() => failed(t('node.favoriteFailed'))),
     },
   ]

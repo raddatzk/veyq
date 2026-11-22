@@ -20,9 +20,6 @@ import { standardActionList } from './nodeHeader'
 
 type Translate = (key: string) => string
 
-/** The ids of core's default row actions. */
-export const STANDARD_ROW_ACTION_IDS = ['rename', 'move', 'delete'] as const
-
 /** Core's default actions for `node`'s row: the granted ones whose door `host` has, in the order rename, move, delete. The
  *  delete carries the kind's own write where its selection names one (`LevelRowSelection.remove`; none does today). */
 export function standardRowActions(t: Translate, node: TreeNode, row: Pick<LevelRow, 'standard' | 'selection'>, host: NodeHost): LevelRowAction[] {
@@ -39,11 +36,9 @@ export function standardRowActions(t: Translate, node: TreeNode, row: Pick<Level
   )
 }
 
-/** The application's actions with core's defaults added where it has none of that id: rename and move before its own
- *  (so core's "Copy to…" finds "Move to…" to sit beside), delete after them. The row's menu orders them anyway
- *  (`splitRowActions`). */
+/** The application's actions with core's defaults added where it has none of that id. Where each sits is the row's plan
+ *  (`plans.ts`), not this list's order. */
 export function withStandardRowActions(app: readonly LevelRowAction[], standard: readonly LevelRowAction[]): LevelRowAction[] {
   const own = new Set(app.map((a) => a.id))
-  const kept = standard.filter((a) => !own.has(a.id))
-  return [...kept.filter((a) => a.id !== 'delete'), ...app, ...kept.filter((a) => a.id === 'delete')]
+  return [...standard.filter((a) => !own.has(a.id)), ...app]
 }

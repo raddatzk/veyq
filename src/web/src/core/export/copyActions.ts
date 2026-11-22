@@ -1,6 +1,6 @@
 // "Copy to…" as a CORE action (uc.platform.copy-node), contributed to the two places a node shows its
 // actions - a node's header and its row, through `core/node/coreNodeActions.ts` - beside the application's own "Move to…"
-// (`placement: { after: 'move' }`), with no change to any application's action list. Gated by {@link canCopy}: a copy is a
+// (the core's plan places it there), with no change to any application's action list. Gated by {@link canCopy}: a copy is a
 // member flow (ADR 0082 decision 5, as the import), so a share guest - whatever the role - is never offered one.
 import { registry } from '../applications/registry'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
@@ -28,7 +28,7 @@ export function canCopy(access: Access, node: { kind: NodeKind } | null): boolea
 
 function action(t: Translate, access: Access, node: { id: string; kind: NodeKind } | null, onCopy: () => void): (CoreRowAction & CoreHeaderAction)[] {
   const shown = canCopy(access, node)
-  return shown ? [{ id: 'copy', label: t('node.copy.action'), icon: 'copy', placement: { after: 'move' }, shown, onClick: onCopy }] : []
+  return shown ? [{ id: 'copy', label: t('node.copy.action'), icon: 'copy', shown, onClick: onCopy }] : []
 }
 
 export function copyHeaderActions(t: Translate, access: Access, node: { id: string; kind: NodeKind } | null, onCopy: () => void): CoreHeaderAction[] {

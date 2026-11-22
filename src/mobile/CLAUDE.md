@@ -1140,9 +1140,11 @@ never filtered, sorted, whitelisted or extended by a platform; an affordance tha
 application's list draws no New of its own — the drawer's New makes its kinds. A new entry the core adds fails every
 platform's build until drawn: Kotlin's `when`, Rust's `match`, Swift's `switch` over the generated `.entry` mirror and
 C#'s `switch` expression under `CS8509` are exhaustive; `scripts/validate_mobile_structure.py` refuses a fallback arm, a
-whitelist and a filter or sort over a plan (its docstring the rules and blind spots). The orders are held to the web by
-`PlansAreTheWebsTest` (each `register.ts`'s `header.order`, `coreNodeActions.ts`, `sections.ts`): a plan's order changes
-only with the web's.
+whitelist and a filter or sort over a plan (its docstring the rules and blind spots). A node header's and a level row's
+plans, each kind's header order and core's favourite, cover and bookmark rights (`navigation/CoreRights.kt`) are the web's
+too (`@veyq/core-js/navigation`), held to `contracts/platform/plans/v1-vectors.json` by `PlanVectorsTest`, whose write mode
+(`VEYQ_WRITE_VECTORS=1`) records them: such a change is the core's, and the web follows by construction. The Settings
+order is held to the web's `sections.ts` by `PlansAreTheWebsTest`: it changes only with the web's.
 
 ## Traps
 

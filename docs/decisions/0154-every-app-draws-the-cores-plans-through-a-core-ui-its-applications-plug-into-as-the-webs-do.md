@@ -299,6 +299,12 @@ held for the screens' models but not around them:
   music from `headerActions` (the page's own menu, no core header there). Every tile and row of a level or an
   application's list opens its row menu (`rowPlan`) on every app since 2026-11-22 (Apple's tiles #1053, Android's
   application lists #1064: `ArrangedListScreen` wraps each as the level does).
+- **The web draws the header's and the row's plans from the core** (2026-11-22, [ADR 0155](0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md)
+  § The rights and plans' slice): `NodeHeader.plan` and `LevelRow.plan` through `@veyq/core-js/navigation`, held with each
+  kind's header order by `contracts/platform/plans/v1-vectors.json` (`PlanVectorsTest`), which replaced
+  `PlansAreTheWebsTest`'s reading of `register.ts` and `coreNodeActions.ts` (its Settings reading stays). A Memory's
+  `BANNER` moved to `Slot.LAST`, the web's menu-only banner: on the four apps *Add banner* now sits behind the menu's
+  separator. `HeaderAction` is serialized at its use site (no longer `@Serializable` itself), its serial names unchanged.
 - **The passes (decision 2)**, 2026-11-21, each a throwaway erased after; compared against the web's orders as
   `PlansAreTheWebsTest` reads them (each `register.ts`'s `header.order`, `coreNodeActions.ts`, `sections.ts`), not
   beside a web screen. **Linux** (Broadway, its own home volume): the sign-in Submit, then the QR, the kit and *Open a

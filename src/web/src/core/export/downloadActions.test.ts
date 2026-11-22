@@ -51,7 +51,7 @@ describe('the action', () => {
     for (const make of [downloadHeaderActions, downloadRowActions]) {
       const [a, ...rest] = make(t, unlocked, { id: 'n', kind: FOLDER_KIND }, () => called++)
       expect(rest).toEqual([])
-      expect(a).toMatchObject({ id: 'download', label: 'export.action', icon: 'download', placement: 'after' })
+      expect(a).toMatchObject({ id: 'download', label: 'export.action', icon: 'download' })
       a.onClick()
     }
     expect(called).toBe(2)

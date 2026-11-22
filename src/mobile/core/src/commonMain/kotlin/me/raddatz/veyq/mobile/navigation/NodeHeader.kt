@@ -23,15 +23,6 @@ object NodeHeader {
     /** Where an action may go: a button where it fits, else the menu ([ANY]); the menu ([MENU]); the menu's last group. */
     enum class Slot { ANY, MENU, LAST }
 
-    /** Where a core action sits among the application's: before them, after them, or right after the action [afterId]. */
-    class Placement private constructor(val before: Boolean, val afterId: HeaderAction?) {
-        companion object {
-            val BEFORE = Placement(true, null)
-            val AFTER = Placement(false, null)
-            fun after(id: HeaderAction) = Placement(false, id)
-        }
-    }
-
     /**
      * What may be offered on the node, every flag the page's rights answer AND its door (absent door: not offered, fail
      * closed): core's base narrowed by the application's rights function for its kind (a Pot of a switched-off Expenses
@@ -128,53 +119,105 @@ object NodeHeader {
      * order), in the kind's priority [order], at most [maxButtons] of them buttons.
      */
     fun plan(rights: Rights, order: List<HeaderAction>, maxButtons: Int, own: List<HeaderAction> = emptyList()): Plan {
-        val actions = ordered(placed(core(rights), standard(rights) + own), order)
-        val buttons = actions.filter { it.slot == Slot.ANY }.take(maxButtons.coerceAtLeast(0))
-        val menu = actions.filter { it.slot != Slot.LAST && it !in buttons }
-        val lastGroup = actions.filter { it.slot == Slot.LAST }
-        // a kept link's share report right after its name's (`coreNodeActions.ts`' `bookmarkReport`), the delete last of
-        // all (`partitionHeaderActions`: a danger action ends the menu)
-        val tail = listOf(HeaderAction.REPORT_SHARED, HeaderAction.DELETE)
-        val last = lastGroup.filter { it !in tail } + tail.filter { it in lastGroup }
+        val buttons = ArrayList<HeaderAction>()
+        val menu = ArrayList<HeaderAction>()
+        val last = ArrayList<HeaderAction>()
+        planInto(granted(rights), order, maxButtons, own, buttons, menu, last)
         return Plan(buttons, menu, last)
     }
 
-    /** The standard ones (`standardNodeActions`), as the application's list starts: rename, share, move, delete. */
-    internal fun standard(rights: Rights): List<HeaderAction> = listOfNotNull(
-        HeaderAction.RENAME.takeIf { rights.rename },
-        HeaderAction.SHARE.takeIf { rights.share },
-        HeaderAction.MOVE.takeIf { rights.move },
-        HeaderAction.DELETE.takeIf { rights.delete },
-    )
+    /**
+     * [plan] over the entries [granted] grants (each right its entry of one name, [granted]), written into [buttons], [menu]
+     * and [last]: the web's façade plans with it, so no [Rights] or [Plan] is built on its path (ADR 0155 § The rights
+     * and plans' slice). Written as loops over lists: no set, map or sort on a JavaScript path.
+     */
+    fun planInto(
+        granted: List<HeaderAction>, order: List<HeaderAction>, maxButtons: Int, own: List<HeaderAction>,
+        buttons: MutableList<HeaderAction>, menu: MutableList<HeaderAction>, last: MutableList<HeaderAction>,
+    ) {
+        val actions = ordered(placed(granted, own), order)
+        var room = if (maxButtons < 0) 0 else maxButtons
+        for (a in actions) if (a.slot == Slot.ANY && room > 0) { buttons.add(a); room-- }
+        for (a in actions) if (a.slot != Slot.LAST && a !in buttons) menu.add(a)
+        // a kept link's share report right after its name's (`coreNodeActions.ts`' `bookmarkReport`), the delete last of
+        // all (`partitionHeaderActions`: a danger action ends the menu)
+        for (a in actions) if (a.slot == Slot.LAST && a != HeaderAction.REPORT_SHARED && a != HeaderAction.DELETE) last.add(a)
+        if (HeaderAction.REPORT_SHARED in actions) last.add(HeaderAction.REPORT_SHARED)
+        if (HeaderAction.DELETE in actions) last.add(HeaderAction.DELETE)
+    }
 
     /**
-     * Core's own (`coreNodeActions`) in their merge order ([CORE_ORDER]): the heart before, the copy beside the move, cover,
-     * download, "Available offline" and report after.
+     * The entries [rights] grants: each right is the entry of its name — the heart [HeaderAction.FAVORITE], the link
+     * [HeaderAction.SHARE], … "Available offline" [HeaderAction.OFFLINE] — in [RIGHTS]' order.
      */
-    internal fun core(rights: Rights): List<Pair<HeaderAction, Placement>> = listOfNotNull(
-        (HeaderAction.FAVORITE to Placement.BEFORE).takeIf { rights.favorite },
-        (HeaderAction.COVER to Placement.AFTER).takeIf { rights.cover },
-        (HeaderAction.COPY to Placement.after(HeaderAction.MOVE)).takeIf { rights.copy },
-        (HeaderAction.DOWNLOAD to Placement.AFTER).takeIf { rights.download },
-        (HeaderAction.OFFLINE to Placement.AFTER).takeIf { rights.offline },
-        (HeaderAction.REPORT to Placement.AFTER).takeIf { rights.report },
+    fun granted(rights: Rights): List<HeaderAction> {
+        val out = ArrayList<HeaderAction>(RIGHTS.size)
+        for (a in RIGHTS) if (grants(rights, a)) out.add(a)
+        return out
+    }
+
+    private fun grants(r: Rights, a: HeaderAction): Boolean = when (a) {
+        HeaderAction.FAVORITE -> r.favorite
+        HeaderAction.SHARE -> r.share
+        HeaderAction.RENAME -> r.rename
+        HeaderAction.MOVE -> r.move
+        HeaderAction.COVER -> r.cover
+        HeaderAction.COPY -> r.copy
+        HeaderAction.DOWNLOAD -> r.download
+        HeaderAction.REPORT -> r.report
+        HeaderAction.DELETE -> r.delete
+        HeaderAction.OFFLINE -> r.offline
+        HeaderAction.UPLOAD, HeaderAction.MUSIC, HeaderAction.BANNER, HeaderAction.REPLACE, HeaderAction.SEND,
+        HeaderAction.OPEN_OWN_PAGE, HeaderAction.REPORT_SHARED -> false
+    }
+
+    /** The entries a [Rights] grants, one per right; every other entry is a page's own. */
+    val RIGHTS: List<HeaderAction> = listOf(
+        HeaderAction.FAVORITE, HeaderAction.SHARE, HeaderAction.RENAME, HeaderAction.MOVE, HeaderAction.COVER, HeaderAction.COPY,
+        HeaderAction.DOWNLOAD, HeaderAction.REPORT, HeaderAction.DELETE, HeaderAction.OFFLINE,
     )
 
-    /** Core's actions in the order [core] merges them, every one granted — what a test holds to `coreNodeActions.ts`. */
-    val CORE_ORDER: List<HeaderAction> get() = core(Rights(true, true, true, true, true, true, true, true, true, offline = true)).map { it.first }
+    /** The standard ones (`standardNodeActions`), as the application's list starts: rename, share, move, delete. */
+    private val STANDARD: List<HeaderAction> = listOf(HeaderAction.RENAME, HeaderAction.SHARE, HeaderAction.MOVE, HeaderAction.DELETE)
 
-    /** The web's `placeCoreActions`: core's before, the application's each followed by core's beside it, core's after. */
-    internal fun placed(core: List<Pair<HeaderAction, Placement>>, app: List<HeaderAction>): List<HeaderAction> {
-        val ids = app.toSet()
-        val before = core.filter { it.second.before }.map { it.first }
-        fun beside(id: HeaderAction) = core.filter { it.second.afterId == id }.map { it.first }
-        val after = core.filter { !it.second.before && (it.second.afterId == null || it.second.afterId !in ids) }.map { it.first }
-        return before + app.flatMap { listOf(it) + beside(it) } + after
+    /**
+     * Core's own (`coreNodeActions`) in their merge order: the heart before the application's, the copy beside the move
+     * ([besideOf]), cover, download, "Available offline" and report after them.
+     */
+    val CORE_ORDER: List<HeaderAction> = listOf(
+        HeaderAction.FAVORITE, HeaderAction.COVER, HeaderAction.COPY, HeaderAction.DOWNLOAD, HeaderAction.OFFLINE, HeaderAction.REPORT,
+    )
+
+    /** The application's entry a core one sits right after where the application offers it (the copy beside the move). */
+    private fun besideOf(core: HeaderAction): HeaderAction? = if (core == HeaderAction.COPY) HeaderAction.MOVE else null
+
+    /**
+     * The web's `placeCoreActions`: core's granted ones before (the heart), the application's — the standard ones [granted]
+     * grants, then [own] — each followed by core's beside it, then core's after.
+     */
+    internal fun placed(granted: List<HeaderAction>, own: List<HeaderAction>): List<HeaderAction> {
+        val app = ArrayList<HeaderAction>()
+        for (a in STANDARD) if (a in granted) app.add(a)
+        app.addAll(own)
+        val out = ArrayList<HeaderAction>()
+        if (HeaderAction.FAVORITE in granted) out.add(HeaderAction.FAVORITE)
+        for (a in app) {
+            out.add(a)
+            for (c in CORE_ORDER) if (c in granted && besideOf(c) == a) out.add(c)
+        }
+        for (c in CORE_ORDER) {
+            if (c == HeaderAction.FAVORITE || c !in granted) continue
+            val beside = besideOf(c)
+            if (beside == null || beside !in app) out.add(c)
+        }
+        return out
     }
 
     /** The web's `orderHeaderActions`: the ids [order] lists first, in its order, then every other in the given order. */
     internal fun ordered(actions: List<HeaderAction>, order: List<HeaderAction>): List<HeaderAction> {
-        val rank = order.withIndex().associate { (i, id) -> id to i }
-        return actions.filter { it in rank }.sortedBy { rank.getValue(it) } + actions.filter { it !in rank }
+        val out = ArrayList<HeaderAction>(actions.size)
+        for (o in order) if (o in actions && o !in out) out.add(o)
+        for (a in actions) if (a !in order) out.add(a)
+        return out
     }
 }

@@ -73,8 +73,9 @@ class NodeHeaderTest {
         val plan = NodeHeader.plan(all, order = emptyList(), maxButtons = 9, own = own)
         // the heart before them all; rename, share, move (+ copy beside it), delete, the page's own; cover, download, report after
         assertEquals(listOf(FAVORITE, SHARE, UPLOAD, DOWNLOAD), plan.buttons)
-        assertEquals(listOf(RENAME, BANNER, COVER), plan.menu)
-        assertEquals(listOf(MOVE, COPY, REPORT, DELETE), plan.last)
+        assertEquals(listOf(RENAME, COVER), plan.menu)
+        // the banner in the last group, after the move and its copy as the merge order has them
+        assertEquals(listOf(MOVE, COPY, BANNER, REPORT, DELETE), plan.last)
     }
 
     @Test
@@ -141,11 +142,12 @@ class NodeHeaderTest {
     }
 
     @Test
-    fun a_memorys_banner_is_a_menu_entry_where_its_order_puts_it() {
+    fun a_memorys_banner_is_in_the_menus_last_group_where_its_order_puts_it() {
+        // the web's `menuOnly` banner: behind the separator, before the move its order names after it
         val plan = NodeHeader.plan(all, AppKinds.headerOrder("MEMORY"), maxButtons = 2, own = listOf(UPLOAD, HeaderAction.MUSIC, BANNER))
         assertEquals(listOf(FAVORITE, UPLOAD), plan.buttons)
-        assertEquals(listOf(SHARE, HeaderAction.MUSIC, DOWNLOAD, BANNER, RENAME, COVER), plan.menu)
-        assertEquals(DELETE, plan.last.last())
+        assertEquals(listOf(SHARE, HeaderAction.MUSIC, DOWNLOAD, RENAME, COVER), plan.menu)
+        assertEquals(listOf(BANNER, MOVE, COPY, REPORT, DELETE), plan.last)
     }
 
     @Test

@@ -3,8 +3,8 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { registry } from '../applications/registry'
 import { FOLDER_KIND } from '../node/kind'
-import { mergeHeaderActions, type NodeHeaderAction } from '../node/nodeHeader'
-import { mergeRowActions } from '../node/levelRow'
+import type { NodeHeaderAction } from '../node/nodeHeader'
+import { headerPlan, rowPlan } from '../node/plans'
 import { guestAccessOf, memberAccessOf } from '../../test/models'
 import { epochsOf } from '../../features/spaces/epochsTestUtil'
 import { canCopy, copiesKind, copyHeaderActions, copyRowActions } from './copyActions'
@@ -67,20 +67,20 @@ describe('the action', () => {
     const row = copyRowActions(t, unlocked, { id: 'n', kind: FOLDER_KIND }, () => called++)
     for (const [a, ...rest] of [header, row]) {
       expect(rest).toEqual([])
-      expect(a).toMatchObject({ id: 'copy', label: 'node.copy.action', icon: 'copy', placement: { after: 'move' } })
+      expect(a).toMatchObject({ id: 'copy', label: 'node.copy.action', icon: 'copy' })
       a.onClick()
     }
     expect(called).toBe(2)
-    expect(mergeHeaderActions(header, app('share', 'rename', 'move', 'delete')).map((a) => a.id)).toEqual(['share', 'rename', 'move', 'copy', 'delete'])
-    expect(mergeRowActions(row, app('download', 'move', 'delete')).map((a) => a.id)).toEqual(['download', 'move', 'copy', 'delete'])
+    // the core's plan puts it beside the move: in a header's last group, in a row's menu
+    expect(headerPlan([...header, ...app('share', 'move', 'delete')]).last.map((a) => a.id)).toEqual(['move', 'copy', 'delete'])
+    expect(rowPlan([...row, ...app('download', 'move', 'delete')]).menu.map((a) => a.id)).toEqual(['move', 'copy', 'download'])
   })
 
-  it('goes after the application\'s actions where it offers no move; core\'s before / after stay where they were', () => {
+  it('goes after the application\'s actions where it offers no move; the heart and the download stay where they were', () => {
     const [copy] = copyRowActions(t, unlocked, { id: 'n', kind: FOLDER_KIND }, () => {})
-    const before = { ...app('heart')[0], placement: 'before' as const }
-    const after = { ...app('download')[0], placement: 'after' as const }
-    expect(mergeRowActions([before, copy, after], app('rename', 'delete')).map((a) => a.id)).toEqual(['heart', 'rename', 'delete', 'copy', 'download'])
-    expect(mergeRowActions([before, copy, after], app('rename', 'move')).map((a) => a.id)).toEqual(['heart', 'rename', 'move', 'copy', 'download'])
+    const menu = (...own: string[]) => rowPlan([...app('favorite'), copy!, ...app('download'), ...app(...own)]).menu.map((a) => a.id)
+    expect(menu('rename', 'delete')).toEqual(['rename', 'favorite', 'copy', 'download'])
+    expect(menu('rename', 'move')).toEqual(['rename', 'move', 'favorite', 'copy', 'download'])
   })
 
   it('is not there for a guest', () => {

@@ -62,7 +62,7 @@ describe('LevelRowItem', () => {
   })
 
   it('every other tile is a card: its open button holds the cover first, then the name and meta inside; checkbox and actions sit over it', () => {
-    const w = mountItem(row({ actions: [act('heart', { first: true })] }), 'grid', { selected: false })
+    const w = mountItem(row({ actions: [act('favorite', { first: true })] }), 'grid', { selected: false })
     expect(w.classes()).toEqual(expect.arrayContaining(['is-grid']))
     expect([...w.get('.veyq-level-item-main').element.children].map((el) => el.className.split(' ')[0])).toEqual([
       'veyq-level-item-visual', 'veyq-level-item-text',
@@ -75,9 +75,9 @@ describe('LevelRowItem', () => {
 
   it('in both layouts the heart and "more" are quiet icon buttons (no frame), each named - in the tile beside its cover', () => {
     for (const mode of ['list', 'grid'] as const) {
-      const w = mountItem(row({ actions: [act('heart', { first: true, pressed: true }), act('rename')] }), mode)
+      const w = mountItem(row({ actions: [act('favorite', { first: true, pressed: true }), act('rename')] }), mode)
       const buttons = w.findAll('.veyq-level-item-actions button')
-      expect(buttons.map((b) => b.attributes('aria-label')), mode).toEqual(['heart thing', t('node.rowMore', { name: 'report.pdf' })])
+      expect(buttons.map((b) => b.attributes('aria-label')), mode).toEqual(['favorite thing', t('node.rowMore', { name: 'report.pdf' })])
       for (const b of buttons) {
         expect(b.classes(), mode).toContain('veyq-button--text')
         expect(b.classes(), mode).not.toContain('veyq-button--outlined')
@@ -169,11 +169,11 @@ describe('LevelRowItem', () => {
     expect(w.find('[data-action="favorite"]').attributes('aria-pressed')).toBe('true')
   })
 
-  it('merges core\'s own actions around the application\'s, without the application knowing', () => {
+  it('plans core\'s own actions with the application\'s, without the application knowing (the heart first)', () => {
     const w = mountItem(row({ actions: [act('download', { first: true })] }), 'list', {
-      coreActions: [{ ...act('heart', { first: true }), placement: 'before' }],
+      coreActions: [act('favorite', { first: true })],
     })
-    expect(w.findAll('.veyq-level-item-actions [data-action]').map((b) => b.attributes('data-action'))).toEqual(['heart', 'download'])
+    expect(w.findAll('.veyq-level-item-actions [data-action]').map((b) => b.attributes('data-action'))).toEqual(['favorite', 'download'])
   })
 
   it('an unsupported item is not a button: it says so and cannot be clicked', () => {

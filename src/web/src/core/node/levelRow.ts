@@ -12,8 +12,8 @@
 // **An action is already a rights answer.** The factory builds the action list from its application's fail-closed
 // rights function (`core/access.ts`, `rights.ts`): an action it was not granted is `shown: false` or left out,
 // and core decides nothing of its own. A share guest gets this very row with fewer actions (inbox #401), never a
-// guest-only one. Core may add its own actions next to the application's (`coreActions`, merged by
-// {@link mergeRowActions}): the favourite heart of inbox #409 is one, with no change to any application.
+// guest-only one. Core may add its own actions next to the application's (`coreActions`, placed by
+// the core's row plan, `plans.ts`): the favourite heart of inbox #409 is one, with no change to any application.
 //
 // **Rename, move and delete are core's defaults** (owner 2026-11-01, `standardRowActions.ts`): an application does not
 // build them; it answers its rights for THIS node in {@link LevelRow.standard} and core adds the granted ones through
@@ -22,38 +22,33 @@
 // its `actions`, which REPLACES core's default whatever `standard` says - its own `shown` decides then (no kind does
 // today).
 //
-// **Visible and overflow.** At most {@link MAX_FIRST_ACTIONS} actions the kind marks `first` are real buttons on the row;
-// every other shown action sits in ONE "more" menu (a `VeyqMenu`), so a row stays readable at every width and no
-// action is hidden by a media query (a width-hidden button is a lost action). The menu's order is
-// {@link splitRowActions}': rename and move first, the other actions, then - after a separator - the menu-only ones,
-// report and then delete. Delete and report are never row buttons.
+// **Visible and overflow.** The row's menu is the core's plan (`plans.ts` over `@veyq/core-js/navigation`, the menu every
+// app draws, ADR 0154 decision 2): rename and move first, the other actions, then - after a separator - report and then
+// delete. Of its first group, at most two entries the kind marks `first` are real buttons on the row (`MAX_FIRST_ACTIONS`);
+// every other entry sits in ONE "more" menu (a `VeyqMenu`), so a row stays readable at every width and no action is hidden
+// by a media query (a width-hidden button is a lost action). Delete and report are never row buttons.
 import type { Component, Ref } from 'vue'
 import type { TreeNode } from './tree'
 import type { ScopeKey } from '../../features/spaces/epochs'
 import type { Access, TreeSource } from '../access'
 import type { ViewMode } from '../../shared/state/useViewMode'
-import { isMenuOnly, partitionHeaderActions, placeCoreActions, type CoreActionPlacement, type CoreHeaderAction, type NodeHeaderAction } from './nodeHeader'
+import type { NodeHeaderAction } from './nodeHeader'
 import type { LevelActionHandler } from './levelActions'
 import type { LoadedCover } from './cover/coverModel'
 import type { DirectoryInput } from '../export/importSource'
 import type { VeyqIconName } from '../../shared/ui/icons'
 import type { NodeHost } from './nodeHost'
 
-/** How many `first` actions a row shows as buttons; further ones fall into the overflow menu. */
-export const MAX_FIRST_ACTIONS = 2
-
 /** One action of a row: the header action model of inbox #406 plus where it sits. */
 export interface LevelRowAction extends NodeHeaderAction {
-  /** A first-class action: a visible button on the row (at most {@link MAX_FIRST_ACTIONS}); the rest are in the menu. */
+  /** A first-class action: a visible button on the row (at most `MAX_FIRST_ACTIONS`, `plans.ts`); the rest are in the menu. */
   first?: boolean
   /** The action is running (a download in progress): the button shows a spinner. */
   loading?: boolean
 }
 
-/** A core-owned action next to the application's (see the header). */
-export interface CoreRowAction extends LevelRowAction {
-  placement?: CoreActionPlacement
-}
+/** A core-owned action next to the application's (see the header): where it sits is the core's plan (`plans.ts`). */
+export type CoreRowAction = LevelRowAction
 
 /** The row's leading visual when the kind's icon is not it: an application component with its props (Memories' cover). */
 export interface LevelRowLeading {
@@ -185,27 +180,3 @@ export interface LevelRowSource {
 }
 
 export type LevelRowsFactory = (ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsHost) => LevelRowSource
-
-/** The row's actions: core's contributions around the application's list (stable order within each group). */
-export function mergeRowActions(core: readonly CoreRowAction[], app: readonly LevelRowAction[]): LevelRowAction[] {
-  return placeCoreActions(core, app)
-}
-
-/** The ids the row's menu opens with, in this order (src/web/CLAUDE.md § One list for the level). */
-export const ROW_MENU_LEAD = ['rename', 'move'] as const
-
-/** Split a row's actions into the buttons on the row and the overflow menu: the shown ones only, the first
- *  {@link MAX_FIRST_ACTIONS} of those marked `first` as buttons - never a menu-only one (`isMenuOnly`: delete, report) -,
- *  and everything else in the menu: `menu` is {@link ROW_MENU_LEAD} first, then the rest in the given order; `menuOnly`
- *  the menu's last group, report before delete (`partitionHeaderActions`, the header's rule). */
-export function splitRowActions(actions: readonly (LevelRowAction | CoreHeaderAction)[]): {
-  buttons: LevelRowAction[]
-  menu: LevelRowAction[]
-  menuOnly: LevelRowAction[]
-} {
-  const shown = actions.filter((a) => a.shown) as LevelRowAction[]
-  const buttons = shown.filter((a) => a.first === true && !isMenuOnly(a)).slice(0, MAX_FIRST_ACTIONS)
-  const { buttons: rest, menuOnly } = partitionHeaderActions(shown.filter((a) => !buttons.includes(a)))
-  const lead = ROW_MENU_LEAD.flatMap((id) => rest.filter((a) => a.id === id))
-  return { buttons, menu: [...lead, ...rest.filter((a) => !lead.includes(a))], menuOnly }
-}

@@ -5,10 +5,10 @@
 // a primary click and the actions. The application supplies the data and its rights answers; core owns the look, the
 // keyboard (every control is a real, labelled `<button>`), the dark mode (tokens) and the split of the actions: at most two
 // FIRST-CLASS buttons on the item, every other shown action in ONE "more" menu (a `VeyqMenu`, a real menu: arrow
-// keys, Escape): rename and move first, the others, then - after a separator - report and delete (`splitRowActions`).
-// Core's own actions (the favourite heart, inbox #409) plug in as `coreActions`, merged around the application's list by
-// `mergeRowActions`; core's default rename, move and delete are already in `row.actions` (the level adds them,
-// `standardRowActions.ts`).
+// keys, Escape): rename and move first, the others, then - after a separator - report and delete: the core's row plan
+// (`../plans.ts` over `@veyq/core-js/navigation`, the menu every app draws, ADR 0154 decision 2), whose entries marked `first`
+// are the buttons. Core's own actions (the favourite heart, inbox #409) come in as `coreActions` beside the application's
+// list; core's default rename, move and delete are already in `row.actions` (the level adds them, `standardRowActions.ts`).
 //
 // The visual is hidden from assistive technology: an item is named by its title (the primary button's `aria-label`).
 //
@@ -35,7 +35,8 @@ import VeyqMenu from '../../../shared/ui/VeyqMenu.vue'
 import VeyqTooltip from '../../../shared/ui/VeyqTooltip.vue'
 import type { VeyqMenuItem } from '../../../shared/ui/menu'
 import { actionMenuItems } from '../actionMenu'
-import { levelRowDetails, mergeRowActions, splitRowActions, type CoreRowAction, type LevelRow, type LevelRowAction } from '../levelRow'
+import { levelRowDetails, type CoreRowAction, type LevelRow, type LevelRowAction } from '../levelRow'
+import { rowPlan } from '../plans'
 
 const props = withDefaults(
   defineProps<{
@@ -73,10 +74,10 @@ const { t } = useI18n()
 // Berlin"), the " · " a literal part of the text. Absent details leave no hole and no separator.
 const details = computed(() => levelRowDetails(props.row))
 
-const split = computed(() => splitRowActions(mergeRowActions(props.coreActions, props.row.actions)))
+const split = computed(() => rowPlan<LevelRowAction>([...props.coreActions, ...props.row.actions]))
 const menu = ref<InstanceType<typeof VeyqMenu> | null>(null)
-const menuItems = computed<VeyqMenuItem[]>(() => actionMenuItems([split.value.menu, split.value.menuOnly], 'veyq-row'))
-const hasMenu = computed(() => split.value.menu.length + split.value.menuOnly.length > 0)
+const menuItems = computed<VeyqMenuItem[]>(() => actionMenuItems([split.value.menu, split.value.last], 'veyq-row'))
+const hasMenu = computed(() => split.value.menu.length + split.value.last.length > 0)
 // A folder's tile is compact: the level lists its folders as a group of their own (`LevelView`), short above the cards.
 const compact = computed(() => props.mode === 'grid' && props.folder)
 const variantOf = (a: LevelRowAction): 'primary' | 'secondary' | 'danger' => (a.severity === 'danger' ? 'danger' : a.severity === 'primary' ? 'primary' : 'secondary')

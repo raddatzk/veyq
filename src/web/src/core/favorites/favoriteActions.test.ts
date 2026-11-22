@@ -28,7 +28,7 @@ describe('the heart', () => {
     const node = { id: 'n1', kind }
     for (const actions of [favoriteHeaderActions(t, failed, member, node), favoriteRowActions(t, failed, member, node)]) {
       expect(actions).toHaveLength(1)
-      expect(actions[0]).toMatchObject({ id: 'favorite', label: '<node.favorite>', icon: 'heart', pressed: false, placement: 'before' })
+      expect(actions[0]).toMatchObject({ id: 'favorite', label: '<node.favorite>', icon: 'heart', pressed: false })
     }
     expect(favoriteRowActions(t, failed, member, node)[0].first, 'a visible button on a row, never in the menu').toBe(true)
   })

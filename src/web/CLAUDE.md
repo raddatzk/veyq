@@ -238,14 +238,19 @@ here; the server is blind.
   so it cannot flip. The application only feeds data: its action list
   (`NodeHeaderAction` in `core/node/nodeHeader.ts`: id, label = aria-label + tooltip, icon, handler, `severity` primary|danger, `shown` - REQUIRED, so an
   action nobody gated does not compile, and a row's `LevelRowAction` inherits it -,
-  `disabled`, `pressed`, `menuOnly`), each `shown` by its rights function — fail closed, a share guest gets this very header with fewer actions
-  (inbox #401), never a guest-only one; `standardNodeActions` builds a header's share, move (menu-only) and delete - core's
+  `disabled`, `pressed`), each `shown` by its rights function — fail closed, a share guest gets this very header with fewer actions
+  (inbox #401), never a guest-only one; `standardNodeActions` builds a header's share, move and delete - core's
   defaults, which every kind's page takes from it with its rights answer as the flags, the rename never an entry (a row's four
   are `standardActionList`'s; a kind with its own implementation passes its own action of that id instead, as the row's rule
   below, and its own rename write, Depot's file through its source's `renameTo`); and its kind's priority, the descriptor's `header.order` (the
-  ids first as buttons, core's included; an unlisted one follows, never vanishes). **As many as fit are buttons, the rest one ⋯ menu:** core
+  ids first as buttons, core's included; an unlisted one follows, never vanishes). **Which actions may be buttons and which are the menu's last
+  group is the core's plan** (ADR 0154 decision 2, ADR 0155 § The rights and plans' slice): `core/node/plans.ts` hands
+  `@veyq/core-js/navigation`'s `headerPlan` what is offered — each standard or core action's presence its `NodeHeader.Rights`
+  flag, every other id the page's own entry — and draws exactly the ids it returns with the web's own action objects; an id
+  the core does not know throws (a web entry of its own is a defect), and each id is a `HeaderAction`'s serial name (a kept
+  link's reports `report` and `report-shared`), held by contracts/platform/plans/v1-vectors.json. **As many as fit are buttons, the rest one ⋯ menu:** core
   measures the row (on mount, on each resize of the header or the name, `fitHeaderActions` the pure count; unmeasured, as in every unit test, the
-  header is wide and each action that may be a button is one; an e2e spec reaches an action through `tests/e2e/src/header.ts`, never a button by name, and the name through its `renameInHeader`) and puts the rest, then the menu-only ones (a `danger` action is one; move and core's copy and report set `menuOnly`: move, copy, report, then delete) behind
+  header is wide and each action that may be a button is one; an e2e spec reaches an action through `tests/e2e/src/header.ts`, never a button by name, and the name through its `renameInHeader`) and puts the rest, then the plan's last group (move, copy, a Memory's banner, report, then delete) behind
   a separator, into one `VeyqMenu` (`actionMenuItems`, `core/node/actionMenu.ts`, the entries the level rows share). Delete and report are never
   buttons. Core owns the look, the fit, the keyboard (real labelled buttons, the layer's menu) and the dark mode (tokens). Tests reach the two
   halves through `src/test/nodeHeader.ts` (`headerButtonIds`, `headerMenuIds`, `chooseHeaderEntry`, and for a page in `document.body`
@@ -257,8 +262,8 @@ here; the server is blind.
   provides (`provideCoreNodeActions`): the level (`LevelView`: every row and the folder header) and core's node page
   `core/node/components/NodePage.vue` - both hosts (`views/SpaceView.vue`, `core/sharing/ShareTreePage.vue`) mount
   every kind's `detail` through it, never bare; it mounts the dialog of core's cover action.
-  `NodeHeader` takes the REQUIRED `node` it heads (null only for the space's top level) and merges core's actions for it
-  (`CoreHeaderAction`, `placement` before|after|{after: id}, `mergeHeaderActions`) with the application's; a page builds,
+  `NodeHeader` takes the REQUIRED `node` it heads (null only for the space's top level) and plans core's actions for it
+  (`CoreHeaderAction`) with the application's (`plans.ts`: where each sits is the core's); a page builds,
   lists and forwards none, so it cannot leave Report out (a legal duty) - `NodePage.report.test.ts` walks every
   registered kind's page and the folder level, and that a detail mounted bare draws no header. A test of what core adds to a page mounts it through `src/test/nodePage.ts`
   (`mountNodePage`; `coreActionsStandIn` + `coverStandIn` for a header test). A kind's `order` may still name a core id. Deleting from a
@@ -306,10 +311,11 @@ here; the server is blind.
   severity, shown, disabled, pressed) plus `first` and `loading`: AT MOST TWO actions marked `first` are real buttons on the
   row (Depot: download, every kind: core's heart), every other shown action sits in ONE "more" menu (the layer's `VeyqMenu`, entries
   `veyq-row-action-<id>`), `shown` by the application's fail-closed rights function - a share guest gets this very row with
-  fewer actions, never a guest-only one. **The menu's order** (`splitRowActions`): rename and move first, the other actions in
-  their merge order, then after a separator the menu-only group - report, then delete (`danger`); delete and report are never
-  row buttons. Core's own actions (the favorite heart of inbox #409) plug in as the
-  level's `coreRowActions`, merged around the application's by `mergeRowActions`, with no change to any application.
+  fewer actions, never a guest-only one. **The menu's order is the core's row plan** (`plans.ts` over
+  `@veyq/core-js/navigation`'s `rowPlan`, the menu every app draws): rename and move first, the other actions in their merge
+  order, then after a separator report and delete; the `first` buttons are taken from its first group, so delete and report
+  are never row buttons. Core's own actions (the favorite heart of inbox #409) come in as the level's `coreRowActions` beside
+  the application's, with no change to any application.
   **Rename, move and delete are core's DEFAULTS** (owner 2026-11-01, `core/node/standardRowActions.ts`, the row's mirror of
   `standardNodeActions`): an application builds none of them; its row answers `standard: { rename, move, delete }` from its
   rights function for THAT node (a folder's is core's `folderRights`), and the level adds the granted ones through the

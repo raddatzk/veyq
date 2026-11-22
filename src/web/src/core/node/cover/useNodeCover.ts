@@ -261,7 +261,6 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
         shown,
         label: translate(store.declared.has(node.id) ? 'node.cover.change' : 'node.cover.set'),
         icon: 'image',
-        placement: 'after',
         onClick: () => open(node),
       },
     ]

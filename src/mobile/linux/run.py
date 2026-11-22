@@ -172,11 +172,13 @@ def test(pattern: str | None) -> int:
     format_vectors = "src/mobile/words/format-vectors.json"
     # and the node tree's vectors (TreeVectorsTest), read the same way
     tree_vectors = "contracts/platform/tree/v1-vectors.json"
+    # and the node plans' vectors (PlanVectorsTest), read the same way
+    plan_vectors = "contracts/platform/plans/v1-vectors.json"
     mounts = {**{d: f"/veyq/bin/{m}" for m, d in kexe_dirs.items()}, runner: "/veyq/run/test-modules.sh",
               VECTORS: "/veyq/vectors.json", NORMALIZATION_TEST: "/veyq/NormalizationTest.txt",
               ROOT / qr_fixtures: f"/veyq/repo/{qr_fixtures}", ROOT / search_vectors: f"/veyq/repo/{search_vectors}",
               ROOT / export_contracts: f"/veyq/repo/{export_contracts}", ROOT / format_vectors: f"/veyq/repo/{format_vectors}",
-              ROOT / tree_vectors: f"/veyq/repo/{tree_vectors}"}
+              ROOT / tree_vectors: f"/veyq/repo/{tree_vectors}", ROOT / plan_vectors: f"/veyq/repo/{plan_vectors}"}
     env = {"VEYQ_VECTORS": "/veyq/vectors.json", "VEYQ_NORMALIZATION_TEST": "/veyq/NormalizationTest.txt",
            "VEYQ_REPO_ROOT": "/veyq/repo", "TZ": ZONE}
     # WallClockTest's values are Berlin's. kotlinx-datetime reads the zone from /etc/localtime, glibc from TZ: both set.

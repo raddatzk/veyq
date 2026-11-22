@@ -10,6 +10,10 @@
 // - **A pending deletion keeps the heart.** A pin is the member's own preference, not a write to the scope's tree, and
 //   Memories' matrix kept it through the grace window since cr-0090 (`docs/apps/memories.md`). The server's put takes
 //   the READ gate for the same reason (`FavoritesHandler`, ADR 0068 §10), so the toggle in that window is stored.
+//
+// The rule is the platform's (`CoreRights.favorite`, `@veyq/core-js/navigation`, held by contracts/platform/plans/v1-vectors.json);
+// this file reads the session and the registry into it.
+import { favoriteRight } from '@veyq/core-js/navigation'
 import type { Access } from '../access'
 import { registry } from '../applications/registry'
 import type { NodeKind } from '../node/kind'
@@ -23,6 +27,5 @@ const NONE: FavoriteRights = Object.freeze({ favorite: false })
 
 /** The favorite rights of `access` for `node` (null: the scope root). Every right defaults to false. */
 export function favoriteRights(access: Access, node: { id: string; kind: NodeKind } | null): FavoriteRights {
-  if (!node || access.mode !== 'member') return NONE
-  return registry.kind(node.kind).supported ? { favorite: true } : NONE
+  return favoriteRight(access.mode === 'member', !!node, !!node && registry.kind(node.kind).supported) ? { favorite: true } : NONE
 }

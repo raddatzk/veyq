@@ -25,6 +25,7 @@ const ENTRIES: Record<string, { control: string }> = {
   search: { control: 'search/Query.kt' },
   tree: { control: 'tree/LevelOrder.kt' },
   sharing: { control: 'sharing/ReceivedLink.kt' },
+  navigation: { control: 'navigation/NodeHeader.kt' },
 }
 
 /**
@@ -45,6 +46,8 @@ const SLICES: { slice: string; deletedGz: number; allowed?: { ratio: number; own
   // the share links' rules (ADR 0155 decision 7.2.2, § The share links' slice): bookmarkLink.ts' exports, linkRules.ts'
   // lastExpiryDay, shareInstance.ts' embeddability and olderMajorsInWindow - 2,678 B min / 1,253 B gz, measured on sources.
   { slice: 'the share links\' rules', deletedGz: 1_253 },
+  // the rights and the node plans (ADR 0155 decision 7.2.3, § The rights and plans' slice): nodeHeader.ts' placeCoreActions, mergeHeaderActions, isMenuOnly, orderHeaderActions, partitionHeaderActions, levelRow.ts' mergeRowActions, ROW_MENU_LEAD, splitRowActions, favoriteRights, coverRights, bookmarkRights - 2,145 B min / 923 B gz, measured on sources.
+  { slice: 'the rights and the node plans', deletedGz: 923 },
 ]
 const BUDGET_GZ = Math.floor(SEARCH_ALONE_GZ + SLICES.reduce((n, s) => n + (s.allowed?.ratio ?? R) * s.deletedGz, 0))
 

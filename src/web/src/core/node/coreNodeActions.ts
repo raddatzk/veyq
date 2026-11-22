@@ -53,9 +53,9 @@ export const coreNodeActionsKey: InjectionKey<CoreNodeActions | null> = Symbol('
 /**
  * Core's actions for the nodes a view draws, for whoever looks. Called in a view's setup (it uses the i18n, toast and
  * cover contexts). `nodes` are those whose covers the view resolves (the folder on screen and its children, or the one
- * node of a page). In merge order a header's are: the heart (before the application's), the copy beside the move (a menu
- * entry, as the move), the download, and Report (menu-only, the menu's last group before delete); a row's add the cover
- * after the heart.
+ * node of a page). A header's are the heart, the copy, the download and Report; a row's add the cover. Where each sits among
+ * the application's is the core's plan (`plans.ts`: the heart first, the copy beside the move in the menu's last group,
+ * the download and Report after them).
  */
 export function useCoreNodeActions(
   access: () => Access,
@@ -72,16 +72,16 @@ export function useCoreNodeActions(
   /** A bookmark's Report is its share's (ADR 0120 decision 6): handed to the share page where the share lives, as that
    *  link's guest would report it, offered wherever the bookmark opens - whether or not THIS instance takes reports. Its
    *  name, the one thing of it that is content here, is this instance's to judge by core's rule (`nodeTarget` reports a
-   *  bookmark by its name alone): `report-name` beside the share's, or `report` itself where no link reads. */
+   *  bookmark by its name alone): `report` always, the share's `report-shared` beside it where a link reads (the core's ids,
+   *  `HeaderAction.REPORT` and `REPORT_SHARED`). */
   function bookmarkReport(node: TreeNode): (CoreRowAction & CoreHeaderAction)[] {
     const a = access()
     const kept = bookmarkRights(a, targetOf(tree(), node)).open ? bookmarkOfNode(a, tree(), node) : null
     const name = reportRowActions(t, reportOn.value, a, node, report(node)).map((r) => ({ ...r, label: t('node.bookmark.reportName') }))
     if (!kept) return name
     return [
-      ...name.map((r) => ({ ...r, id: 'report-name' })),
-      { id: 'report', label: t('node.bookmark.reportShare'), icon: 'flag', placement: 'after', menuOnly: true, shown: true,
-        onClick: () => openBookmark(kept, true, bookmarkDoors) },
+      ...name,
+      { id: 'report-shared', label: t('node.bookmark.reportShare'), icon: 'flag', shown: true, onClick: () => openBookmark(kept, true, bookmarkDoors) },
     ]
   }
   const copy = (node: TreeNode) => () => doors.copy?.([node])
@@ -96,7 +96,7 @@ export function useCoreNodeActions(
       // menu entry, as the move beside it.
       return [
         ...favoriteHeaderActions(t, toast.error, a, node),
-        ...(doors.copy ? copyHeaderActions(t, a, node, copy(node)).map((c) => ({ ...c, menuOnly: true })) : []),
+        ...(doors.copy ? copyHeaderActions(t, a, node, copy(node)) : []),
         ...(doors.download ? downloadHeaderActions(t, a, node, download(node)) : []),
         ...(node.kind === SHARE_BOOKMARK_KIND ? bookmarkReport(node) : reportHeaderActions(t, reportOn.value, a, node, report(node))),
       ]

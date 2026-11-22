@@ -55,15 +55,24 @@ object LevelRow {
 
     /**
      * The menu of a row whose node grants [rights] (`NodeHeader.Rights`, as its header would), with the kind's [own]
-     * entries: core's around the standard ones (`placeCoreActions`, a row's cover after the heart), [LEAD] first, the
-     * menu-only ones (move's copy aside, report, delete) last.
+     * entries: core's around the standard ones (`placeCoreActions`), [LEAD] first, the menu-only ones (report, a kept link's
+     * share report, delete) last.
      */
     fun plan(rights: NodeHeader.Rights, own: List<HeaderAction> = emptyList()): Plan {
-        val all = NodeHeader.placed(NodeHeader.core(rights), NodeHeader.standard(rights) + own)
-        // the web's `isMenuOnly`: report and delete end the menu, report first
-        val menuOnly = listOf(HeaderAction.REPORT, HeaderAction.REPORT_SHARED, HeaderAction.DELETE)
-        val rest = all.filter { it !in menuOnly }
-        val lead = LEAD.filter { it in rest }
-        return Plan(lead + rest.filter { it !in lead }, menuOnly.filter { it in all })
+        val menu = ArrayList<HeaderAction>()
+        val last = ArrayList<HeaderAction>()
+        planInto(NodeHeader.granted(rights), own, menu, last)
+        return Plan(menu, last)
     }
+
+    /** [plan] over the entries [granted] grants (`NodeHeader.granted`), written into [menu] and [last] (the web's façade). */
+    fun planInto(granted: List<HeaderAction>, own: List<HeaderAction>, menu: MutableList<HeaderAction>, last: MutableList<HeaderAction>) {
+        val all = NodeHeader.placed(granted, own)
+        // the web's `isMenuOnly`: report and delete end the menu, report first
+        for (a in LEAD) if (a in all) menu.add(a)
+        for (a in all) if (a !in MENU_ONLY && a !in LEAD) menu.add(a)
+        for (a in MENU_ONLY) if (a in all) last.add(a)
+    }
+
+    private val MENU_ONLY: List<HeaderAction> = listOf(HeaderAction.REPORT, HeaderAction.REPORT_SHARED, HeaderAction.DELETE)
 }

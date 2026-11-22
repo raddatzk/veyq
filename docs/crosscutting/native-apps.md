@@ -340,8 +340,10 @@ release build (ADR 0154's Consequences).
 a node's header (`HeaderAction`, Delete last, the banner and a kept link's own entries in the plan), a level's New and
 its tools (Trash, then the view switch), the drawer's New below the switcher (a folder at the space's top), the Settings
 sections in the web's order with Sign out last, the sign-in's entries (Submit first), a level row's, a medium tile's and
-a link row's menu — each a list of `@Plan` enum entries every app draws whole and in order, its look the platform's. The
-orders are held to the web's sources by `PlansAreTheWebsTest`, the drawing by the compilers' exhaustiveness (Apple's
+a link row's menu — each a list of `@Plan` enum entries every app draws whole and in order, its look the platform's. A
+node header's and a level row's plans the web draws from the core too (`@veyq/core-js/navigation`, ADR 0155 § The rights
+and plans' slice), both held to `contracts/platform/plans/v1-vectors.json` with each kind's header order; the Settings
+order is held to the web's `sections.ts` by `PlansAreTheWebsTest`. The drawing by the compilers' exhaustiveness (Apple's
 over generated Swift mirrors, `apple/generate_plans.py`; Windows' with `CS8509` an error) and by
 `scripts/validate_mobile_structure.py` (no fallback arm, no whitelist, no filter over a plan). An application's list
 draws no New of its own; the drawer's makes its kinds.

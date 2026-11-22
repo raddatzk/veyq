@@ -204,10 +204,11 @@ const headerActions = computed<NodeHeaderAction[]>(() => [
   // banner opens its own dialog (`MemoryBanner`'s edit), so the menu offers it only while none is drawn: none set yet, or
   // one whose picture does not open (it draws nothing, E5 - the dialog still changes or removes it).
   {
-    id: 'banner', label: memoryBanner.banner.value ? t('memory.banner.change') : t('memory.banner.add'), icon: 'objects-column', menuOnly: true,
+    id: 'banner', label: memoryBanner.banner.value ? t('memory.banner.change') : t('memory.banner.add'), icon: 'objects-column',
     shown: can.value.setBanner && !bannerDrawn.value, disabled: !props.memoryKey, onClick: () => openBannerDialog(),
   },
-  // Move and delete are core's standard actions (`standardNodeActions`, both in the ⋯ menu), granted by `can`; the move is
+  // Move and delete are core's standard actions (`standardNodeActions`; the plan puts both, and the banner, in the ⋯ menu's
+  // last group), granted by `can`; the move is
   // core's dialog (inbox #358): a Memory to the root or a folder, a chapter into another Memory. The rename is the name's own,
   // in place (`headerRename`).
   ...standardNodeActions(t, { move: can.value.move, delete: can.value.delete }, { move: () => emit('move'), remove: () => emit('delete') }),
