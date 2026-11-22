@@ -4,7 +4,8 @@
 //! person's input goes to the core as one call; the core decides what it means and answers with the next gate.
 //!
 //! Under the fields stand the core's entries (`SignIn.Plan`, ADR 0154 decision 2), each drawn, in their order: Sign in
-//! first, Cancel while another account is being added, the device links, the kit, *Open a link* — the buttons as GNOME
+//! first, Cancel while another account is being added, *I don't have my Secret Key with me* (the locked sign-in,
+//! [crate::core_ui::sign_in_entries]), the device links, the kit, *Forgot your password?*, *Open a link* — the buttons as GNOME
 //! draws a form's (a suggested pill, a flat one), the rest as button rows in a boxed list. The plan is asked again when
 //! adding changes and once the Camera portal said whether a camera is (the scans are entries only where one may be).
 //!
@@ -41,7 +42,7 @@ pub fn unlock_words(method: Method, level: Option<StaySignedIn>) -> (String, Str
 }
 
 /// The column every way-in page shares: the brand, a heading, then [rows], clamped and scrolling, under a bare header bar.
-fn page(heading: &gtk::Label, rows: &[&gtk::Widget]) -> adw::ToolbarView {
+pub(crate) fn page(heading: &gtk::Label, rows: &[&gtk::Widget]) -> adw::ToolbarView {
     let column = gtk::Box::new(gtk::Orientation::Vertical, 18);
     column.set_margin_top(24);
     column.set_margin_bottom(24);
@@ -97,13 +98,13 @@ pub(crate) fn watch_typo(row: &adw::PasswordEntryRow, label: &gtk::Label) {
     });
 }
 
-fn error_label() -> gtk::Label {
+pub(crate) fn error_label() -> gtk::Label {
     let error = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
     error.add_css_class("error");
     error
 }
 
-fn show_error(label: &gtk::Label, error: &Option<String>) {
+pub(crate) fn show_error(label: &gtk::Label, error: &Option<String>) {
     match error {
         Some(key) => {
             label.set_label(&said::key(key));
@@ -129,6 +130,12 @@ pub struct SignIn {
     link_scan: adw::ButtonRow,
     link_show: adw::ButtonRow,
     open_link: adw::ButtonRow,
+    /// *I don't have my Secret Key with me* (uc.account.sessions E3) and *Forgot your password?* (uc.account.recover-access).
+    locked: adw::ButtonRow,
+    forgot: adw::ButtonRow,
+    /// What the way here left to say that is no error, and the locked sign-in's way back keeping nothing.
+    notice: gtk::Label,
+    keeps_nothing: gtk::Label,
     /// Where the plan's entries are drawn, under the fields.
     entries: gtk::Box,
     /// What the plan was last asked with: adding another account (none before the first gate), a camera possible.
@@ -173,6 +180,15 @@ impl SignIn {
         // *Open a link* under the sign-in (ADR 0150 decision 4): a received link needs no session (`win.open-link`)
         let open_link = adw::ButtonRow::builder().title(words::link_open()).start_icon_name("insert-link-symbolic").action_name("win.open-link").build();
         open_link.set_widget_name("open-link");
+        let locked = adw::ButtonRow::builder().title(words::signin_locked()).start_icon_name("system-lock-screen-symbolic").build();
+        locked.set_widget_name("signin-locked");
+        let forgot = adw::ButtonRow::builder().title(words::signin_forgot()).build();
+        forgot.set_widget_name("signin-forgot");
+        let notice = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
+        notice.add_css_class("success");
+        notice.set_widget_name("signin-notice");
+        let keeps_nothing = gtk::Label::builder().label(words::locked_back_hint()).wrap(true).xalign(0.0).visible(false).build();
+        keeps_nothing.add_css_class("dim-label");
         let entries = gtk::Box::new(gtk::Orientation::Vertical, 12);
         entries.set_widget_name("signin-entries");
         let other_server = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
@@ -190,7 +206,10 @@ impl SignIn {
         cancel.add_css_class("flat");
         let spinner = adw::Spinner::builder().visible(false).build();
         let heading = gtk::Label::new(Some(&words::signin_title()));
-        let page = page(&heading, &[fields.upcast_ref(), typo.upcast_ref(), other_server.upcast_ref(), error.upcast_ref(), spinner.upcast_ref(), entries.upcast_ref()]);
+        let page = page(
+            &heading,
+            &[fields.upcast_ref(), typo.upcast_ref(), other_server.upcast_ref(), keeps_nothing.upcast_ref(), error.upcast_ref(), notice.upcast_ref(), spinner.upcast_ref(), entries.upcast_ref()],
+        );
 
         let s = Rc::new(Self {
             page,
@@ -205,6 +224,10 @@ impl SignIn {
             link_scan,
             link_show,
             open_link,
+            locked,
+            forgot,
+            notice,
+            keeps_nothing,
             entries,
             asked: Cell::new(None),
             camera: Cell::new(false),
@@ -221,6 +244,22 @@ impl SignIn {
         // Enter in the last field signs in, as a form's default button does
         s.secret_key.connect_entry_activated(move |_| ask());
         s.cancel.connect_clicked(|_| bridge::send(Call::SessionCancelAdd));
+        // the locked sign-in: the login alone, with the email and the password typed (the core refuses blanks)
+        let (server, email, password) = (s.server.clone(), s.email.clone(), s.password.clone());
+        s.locked.connect_activated(move |_| {
+            bridge::send(Call::SessionSignInLocked {
+                server: server.text().trim().to_string(),
+                email: email.text().trim().to_string(),
+                password: password.text().to_string(),
+            })
+        });
+        let (server, email) = (s.server.clone(), s.email.clone());
+        s.forgot.connect_activated(move |_| {
+            bridge::send(Call::SessionForgotPassword {
+                server: Some(server.text().trim().to_string()),
+                email: Some(email.text().trim().to_string()),
+            })
+        });
         clear.connect_clicked(|_| bridge::send(Call::SessionSignInKitClear));
         let w = Rc::downgrade(&s);
         s.open_kit.connect_activated(move |_| if let Some(s) = w.upgrade() {
@@ -271,7 +310,7 @@ impl SignIn {
     /// Every entry of the plan, in its order: a button as itself, consecutive rows in one boxed list.
     fn draw_entries(&self, entries: &[SignInEntry]) {
         eprintln!("veyq: sign-in entries: {}", entries.iter().map(|e| format!("{e:?}")).collect::<Vec<_>>().join(","));
-        for row in [&self.open_kit, &self.scan_kit, &self.link_scan, &self.link_show, &self.open_link] {
+        for row in [&self.open_kit, &self.scan_kit, &self.link_scan, &self.link_show, &self.open_link, &self.locked, &self.forgot] {
             if let Some(list) = row.parent().and_downcast::<gtk::ListBox>() {
                 list.remove(row);
             }
@@ -288,6 +327,8 @@ impl SignIn {
                 SignInEntry::LinkScan => Some(&self.link_scan),
                 SignInEntry::KitOpen => Some(&self.open_kit),
                 SignInEntry::KitScan => Some(&self.scan_kit),
+                SignInEntry::Locked => Some(&self.locked),
+                SignInEntry::Forgot => Some(&self.forgot),
                 SignInEntry::OpenLink => Some(&self.open_link),
             };
             match row {
@@ -393,7 +434,7 @@ impl SignIn {
     /// Draws [gate] (a `Gate.SignIn`): the server and the email it knows, a kit's own replacing them once, the Secret Key
     /// row as typed or as the kit's, working or not, the core's error.
     pub fn show(self: &Rc<Self>, gate: &Gate) {
-        let Gate::SignIn { working, error, server, email, adding, kit } = gate else { return };
+        let Gate::SignIn { working, error, server, email, adding, kit, notice, keeps_nothing } = gate else { return };
         if self.asked.replace(Some(*adding)) != Some(*adding) {
             self.ask_plan();
         }
@@ -423,8 +464,12 @@ impl SignIn {
         self.open_kit.set_sensitive(!working);
         self.link_scan.set_sensitive(!working);
         self.link_show.set_sensitive(!working);
+        self.locked.set_sensitive(!working);
+        self.forgot.set_sensitive(!working);
+        self.keeps_nothing.set_visible(*keeps_nothing);
         self.spinner.set_visible(*working);
         show_error(&self.error, error);
+        show_error(&self.notice, notice);
     }
 
     /// The password and the Secret Key typed, forgotten once the core has left the sign-in (signed in, unlocking): the

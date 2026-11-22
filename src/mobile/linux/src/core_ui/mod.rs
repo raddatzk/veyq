@@ -56,6 +56,7 @@ pub mod selection;
 pub mod share_sheet;
 pub mod shell;
 pub mod sign_in;
+pub mod sign_in_entries;
 pub mod theme;
 pub mod tiles;
 pub mod trash;

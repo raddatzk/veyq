@@ -72,6 +72,22 @@ sealed interface Screen {
         val email: String? = null,
         /** An Emergency Kit read: its Secret Key held by the core, the row says so; null where the key is typed. */
         val kit: me.raddatz.veyq.mobile.session.SessionModel.KitShown? = null,
+        /** What the way here left to say that is no error (every device signed out, uc.account.sessions E3). */
+        val notice: me.raddatz.veyq.mobile.words.Msg? = null,
+        /** The locked sign-in's way back: this sign-in keeps nothing on the device, and says so. */
+        val keepsNothing: Boolean = false,
+    ) : Screen
+
+    /** Signed in without unlocking (uc.account.sessions E3, core's `Gate.Locked`): one action and the way back. */
+    data class Locked(val server: String, val email: String, val working: Boolean = false, val error: me.raddatz.veyq.mobile.words.Msg? = null) : Screen
+
+    /** *Reset your password* (uc.account.recover-access, core's `Gate.Recover`): the link asked for; the web finishes it. */
+    data class Recover(
+        val server: String? = null,
+        val email: String? = null,
+        val working: Boolean = false,
+        val sent: Boolean = false,
+        val error: me.raddatz.veyq.mobile.words.Msg? = null,
     ) : Screen
 
     /** An account this device trusts: the password alone (DEVICE), or the person's authentication (DEVICE_KEY). */
@@ -273,7 +289,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             else -> ""
         })
         when (g) {
-            is me.raddatz.veyq.mobile.session.SessionModel.Gate.SignIn -> _screen.value = Screen.SignIn(g.working, g.error, g.adding, g.server, g.email, g.kit)
+            is me.raddatz.veyq.mobile.session.SessionModel.Gate.SignIn -> _screen.value = Screen.SignIn(g.working, g.error, g.adding, g.server, g.email, g.kit, g.notice, g.keepsNothing)
+            is me.raddatz.veyq.mobile.session.SessionModel.Gate.Locked -> _screen.value = Screen.Locked(g.server, g.email, g.working, g.error)
+            is me.raddatz.veyq.mobile.session.SessionModel.Gate.Recover -> _screen.value = Screen.Recover(g.server, g.email, g.working, g.sent, g.error)
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Unlock -> _screen.value = Screen.Unlock(g.record, g.working, g.error)
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed -> {
                 shellModel?.state?.value?.let(::publish)
@@ -347,6 +365,32 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /** The Secret Key row's way back to typing: the kit's held key ends. */
     fun clearKit() = session.clearKit()
+
+    /** The sign-in's *I don't have my Secret Key with me* (uc.account.sessions E3): the login alone; the gate shows the locked state. */
+    fun signInLocked(server: String, email: String, password: String) {
+        viewModelScope.launch { session.signInLocked(server, email, password) }
+    }
+
+    /** The locked state's one action, asked first by its screen: every device signed out, this one included. */
+    fun signOutEverywhere() {
+        viewModelScope.launch { session.signOutEverywhere() }
+    }
+
+    /** The locked state's way back: the sign-in again, keeping nothing on this device. */
+    fun lockedBack() {
+        viewModelScope.launch { session.lockedBack() }
+    }
+
+    /** The sign-in's *Forgot your password?* with the form's server and email. */
+    fun forgotPassword(server: String, email: String) = session.forgotPassword(server, email)
+
+    /** *Reset your password*'s Send: the link asked for. */
+    fun requestRecovery(server: String, email: String) {
+        viewModelScope.launch { session.requestRecovery(server, email) }
+    }
+
+    /** *Reset your password*'s Back. */
+    fun backToSignIn() = session.backToSignIn()
 
     /** Why the sign-in's Secret Key field, as typed, holds no key (core's `SessionModel.secretKeyProblem`): a typo is said. */
     fun secretKeyProblem(text: String) = session.secretKeyProblem(text)

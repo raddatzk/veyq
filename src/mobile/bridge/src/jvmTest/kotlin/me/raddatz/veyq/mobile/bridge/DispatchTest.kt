@@ -847,7 +847,8 @@ class DispatchTest {
             Answer.SignInPlan(
                 listOf(
                     me.raddatz.veyq.mobile.session.SignInEntry.SUBMIT, me.raddatz.veyq.mobile.session.SignInEntry.CANCEL,
-                    me.raddatz.veyq.mobile.session.SignInEntry.LINK_SHOW, me.raddatz.veyq.mobile.session.SignInEntry.KIT_OPEN,
+                    me.raddatz.veyq.mobile.session.SignInEntry.LOCKED, me.raddatz.veyq.mobile.session.SignInEntry.LINK_SHOW,
+                    me.raddatz.veyq.mobile.session.SignInEntry.KIT_OPEN, me.raddatz.veyq.mobile.session.SignInEntry.FORGOT,
                     me.raddatz.veyq.mobile.session.SignInEntry.OPEN_LINK,
                 ),
             ),
@@ -863,6 +864,9 @@ class DispatchTest {
             ),
             b.ask(Call.UnlockPlan),
         )
+        // the locked sign-in's and the reset's plans (ADR 0154 § As built: the sign-in's entries)
+        assertEquals(Answer.LockedPlan(me.raddatz.veyq.mobile.session.LockedPlan.entries()), b.ask(Call.LockedPlan))
+        assertEquals(Answer.RecoverPlan(listOf(me.raddatz.veyq.mobile.session.RecoverEntry.BACK)), b.ask(Call.RecoverPlan(sent = true)))
         // a row's menu is the shell's: none without a tenant open
         assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.RowPlan(NodeAt("s", "f1", "FOLDER", "Trip"))))
     }

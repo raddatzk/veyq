@@ -25,6 +25,15 @@ struct SignInView: View {
     /// Why the Secret Key as typed is none (core's `SessionModel.secretKeyProblem`, inbox #1058): a typo is said under the
     /// field as it is typed, a key that is no key at all says nothing until the sign-in refuses it.
     var secretKeyProblem: (String) -> SecretKeyProblem? = { _ in nil }
+    /// What the way here left to say that is no error (every device signed out, uc.account.sessions E3).
+    var notice: Msg?
+    /// The locked sign-in's way back: this sign-in keeps nothing on the device, and says so.
+    var keepsNothing = false
+    /// *I don't have my Secret Key with me* (uc.account.sessions E3) over the server, email and password as typed; nil in
+    /// the share extension (the app signs in there).
+    var onLocked: ((String, String, String) -> Void)?
+    /// *Forgot your password?* (uc.account.recover-access) over the server and email as typed; nil in the share extension.
+    var onForgot: ((String, String) -> Void)?
     let onSignIn: (String, String, String, String) -> Void
 
     @State private var server: String
@@ -39,7 +48,8 @@ struct SignInView: View {
 
     init(
         working: Bool, error: Msg?, adding: Bool = false, server: String? = nil, email: String? = nil,
-        kit: SessionModelKitShown? = nil, onCancel: @escaping () -> Void = {},
+        kit: SessionModelKitShown? = nil, notice: Msg? = nil, keepsNothing: Bool = false, onCancel: @escaping () -> Void = {},
+        onLocked: ((String, String, String) -> Void)? = nil, onForgot: ((String, String) -> Void)? = nil,
         onKit: @escaping (URL, String) -> Void = { _, _ in }, onClearKit: @escaping () -> Void = {},
         onScanKit: ((String) -> QrScan<AnyObject>)? = nil,
         onScanFromTrusted: ((String) -> Void)? = nil, onShowForSignIn: ((String) -> Void)? = nil,
@@ -51,6 +61,10 @@ struct SignInView: View {
         self.error = error
         self.adding = adding
         self.kit = kit
+        self.notice = notice
+        self.keepsNothing = keepsNothing
+        self.onLocked = onLocked
+        self.onForgot = onForgot
         self.onCancel = onCancel
         self.onKit = onKit
         self.onClearKit = onClearKit
@@ -128,6 +142,13 @@ struct SignInView: View {
             }
             if let error {
                 Section { Text(say(error)).foregroundStyle(.red) }
+            }
+            if let notice {
+                Section { Text(say(notice)).foregroundStyle(Role.primary).accessibilityIdentifier("signin-notice") }
+            }
+            if keepsNothing {
+                // the locked sign-in's way back keeps nothing on this device, and the form says so (uc.account.sessions E3)
+                Section { Text(say(.lockedBackHint)).foregroundStyle(Role.muted) }
             }
             // the ways in, core's (`SignInPlan.entries`, ADR 0154 decision 2: the web's — Submit first, then Cancel while
             // adding, the device links, the kit, *Open a link*), whole and in their order under the fields
@@ -207,6 +228,19 @@ private extension SignInView {
             if let onScanKit {
                 Button { scan = onScanKit(server) } label: { Label(say(.signinKitScan), systemImage: "qrcode.viewfinder").frame(maxWidth: .infinity) }
                     .disabled(working)
+            }
+        case .locked:
+            // uc.account.sessions E3: the login alone, to sign every device out — the email and the password needed
+            if let onLocked {
+                Button { onLocked(server, email, password) } label: { Label(say(.signinLocked), systemImage: "lock").frame(maxWidth: .infinity) }
+                    .disabled(working || email.isEmpty || password.isEmpty)
+                    .accessibilityIdentifier("signin-locked")
+            }
+        case .forgot:
+            if let onForgot {
+                Button { onForgot(server, email) } label: { Text(say(.signinForgot)).frame(maxWidth: .infinity) }
+                    .disabled(working)
+                    .accessibilityIdentifier("signin-forgot")
             }
         case .openLink:
             // *Open a link* (owner 2026-11-19): a received link needs no session
