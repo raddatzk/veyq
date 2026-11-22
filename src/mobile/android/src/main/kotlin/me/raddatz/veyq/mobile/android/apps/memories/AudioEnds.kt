@@ -1,4 +1,4 @@
-package me.raddatz.veyq.mobile.android.core
+package me.raddatz.veyq.mobile.android.apps.memories
 
 import android.content.Context
 import android.media.AudioFormat

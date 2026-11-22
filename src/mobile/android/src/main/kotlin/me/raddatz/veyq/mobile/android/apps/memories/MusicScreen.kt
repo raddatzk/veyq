@@ -130,7 +130,7 @@ internal fun MusicView(gallery: GalleryModel, music: MusicModel, model: AppModel
     val palette = LocalPalette.current
     val context = LocalContext.current
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) model.addMusic(music, uris)
+        if (uris.isNotEmpty()) model.memories.addMusic(music, uris)
     }
     // what an add or a rename left to say, once
     val said = state.said
@@ -147,7 +147,7 @@ internal fun MusicView(gallery: GalleryModel, music: MusicModel, model: AppModel
         val id = saving
         saving = null
         if (uri == null || id == null) return@rememberLauncherForActivityResult
-        val save = model.saveTrack(music, id, uri) ?: return@rememberLauncherForActivityResult
+        val save = model.memories.saveTrack(music, id, uri) ?: return@rememberLauncherForActivityResult
         scope.launch { snackbar.show(context, save.state.first { it.end != null }.notice) }
     }
     CreateAction(say(Msg.MUSIC_ADD), shown = state.rights.add, onClick = { pick.launch(arrayOf("audio/*")) }) { list, bottom ->
@@ -175,7 +175,7 @@ internal fun MusicView(gallery: GalleryModel, music: MusicModel, model: AppModel
                             saving = t.mediaId
                             saveTo.launch(t.track.fileName ?: t.title ?: context.words(Msg.MUSIC_UNTITLED, t.number))
                         },
-                        onRemove = { model.galleryAct { music.remove(t.mediaId)?.let { snackbar.show(context, it) } } },
+                        onRemove = { model.memories.galleryAct { music.remove(t.mediaId)?.let { snackbar.show(context, it) } } },
                         onReport = { reporting = music.reportSheet(t.mediaId) },
                     )
                 }

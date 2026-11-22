@@ -20,6 +20,8 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,13 +74,13 @@ import me.raddatz.veyq.mobile.sharing.GuestScreen
  */
 @Composable
 private fun memoryHeader(node: NodeAt, model: AppModel): HeaderContribution {
-    val gallery = androidx.compose.runtime.remember(node) { model.galleryModel(node) } ?: return HeaderContribution()
+    val gallery = androidx.compose.runtime.remember(node) { model.memories.galleryModel(node) } ?: return HeaderContribution()
     // read here, whatever is offered: an action appears once the gallery's first read finds it
     val state = gallery.state.collectAsStateWithLifecycle().value
     // the system's photo picker: photos and videos, several at once; full media access asked once before the first pick
     // (the picker hands a photo over with its location zeroed otherwise), whatever the answer the picker opens
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
-        if (uris.isNotEmpty()) model.uploadMedia(gallery, uris)
+        if (uris.isNotEmpty()) model.memories.uploadMedia(gallery, uris)
     }
     val pickMedia = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) }
     val askAccess = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { pickMedia() }
@@ -86,13 +88,13 @@ private fun memoryHeader(node: NodeAt, model: AppModel): HeaderContribution {
         val label = say(gallery.label(a)!!)
         when (a) {
             me.raddatz.veyq.mobile.navigation.HeaderAction.UPLOAD -> OwnAction(a, label, androidx.compose.material.icons.Icons.Outlined.AddPhotoAlternate) {
-                if (model.mediaAccessAsked()) pickMedia() else askAccess.launch(mediaAccessPermissions())
+                if (model.memories.mediaAccessAsked()) pickMedia() else askAccess.launch(mediaAccessPermissions())
             }
             me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC -> OwnAction(
                 a, label, if (state.musicHere) androidx.compose.material.icons.Icons.Outlined.MusicOff else androidx.compose.material.icons.Icons.Outlined.MusicNote,
             ) { gallery.toggleMusic() }
             // the banner's dialog where whoever looks may set it, online (the web's header `banner`)
-            me.raddatz.veyq.mobile.navigation.HeaderAction.BANNER -> OwnAction(a, label, androidx.compose.material.icons.Icons.Outlined.Panorama) { model.openBanner(gallery) }
+            me.raddatz.veyq.mobile.navigation.HeaderAction.BANNER -> OwnAction(a, label, androidx.compose.material.icons.Icons.Outlined.Panorama) { model.memories.openBanner(gallery) }
             // core's own, or another page's: never a gallery's (`GalleryModel.headerActions` holds none of these)
             me.raddatz.veyq.mobile.navigation.HeaderAction.FAVORITE, me.raddatz.veyq.mobile.navigation.HeaderAction.SHARE,
             me.raddatz.veyq.mobile.navigation.HeaderAction.RENAME, me.raddatz.veyq.mobile.navigation.HeaderAction.MOVE,
@@ -117,9 +119,9 @@ private fun memoryHeader(node: NodeAt, model: AppModel): HeaderContribution {
  */
 @Composable
 private fun MemoryNameDialog(space: String, model: AppModel, onClose: () -> Unit, onCreate: suspend (String, Boolean, Boolean) -> String?) {
-    val offers = remember(space) { model.offersWasThere(space) }
+    val offers = remember(space) { model.memories.offersWasThere(space) }
     // the place armed to come from the photos (uc.memory.place A1, the web's opt-in): offered where the map services are shown, unticked
-    val offersPlace = remember(space) { model.offersAutoPlace() }
+    val offersPlace = remember(space) { model.memories.offersAutoPlace() }
     var wasThere by remember { mutableStateOf(true) }
     var autoPlace by remember { mutableStateOf(false) }
     NameDialog(
@@ -160,7 +162,7 @@ private fun MemoriesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) 
         MemoriesMapTab(s, model)
         return
     }
-    ArrangedListScreen(s.applicationList(ApplicationId.MEMORIES), onOpen = onOpen, state = LocalListStates.current.of("app:MEMORIES"))
+    ArrangedListScreen(s.applicationList(ApplicationId.MEMORIES), model, onOpen = onOpen, state = LocalListStates.current.of("app:MEMORIES"))
 }
 
 /**
@@ -225,7 +227,7 @@ private fun MemoryGuestPage(page: GuestPage, screen: GuestScreen, model: AppMode
 /** New Memory at the level shown (core's `MemoryCreate`), the web's `createDialog` of a Memory. */
 private val newMemory: CreateDialog = { _, model, space, folder, onClose ->
     if (space != null) MemoryNameDialog(space, model, onClose = onClose) { name, wasThere, autoPlace ->
-        model.createMemory(space, folder, name, wasThere, autoPlace)
+        model.memories.createMemory(space, folder, name, wasThere, autoPlace)
     }
 }
 
@@ -239,6 +241,8 @@ internal object MemoriesUi {
         header = { node, model -> memoryHeader(node, model) },
         body = { ref, _, model -> MemoryScreen(ref, model) },
         guest = { page, screen, model, snackbar -> MemoryGuestPage(page, screen, model, snackbar) },
+        // a Memory's music, played or stopped on the link's bar as on the member's header (#1034)
+        guestActions = { page, _, _, _ -> if (page is MemoriesGuest.Gallery) GuestMusicAction(page) },
     )
 
     fun register(registry: Registry) {
@@ -249,7 +253,22 @@ internal object MemoriesUi {
                 list = { s, model, onOpen -> MemoriesList(s, model, onOpen) },
                 creates = mapOf(me.raddatz.veyq.mobile.AppKinds.Create.MEMORY to newMemory),
                 personSection = { profile, model, frame -> PersonMemoriesSection(profile, model, frame) },
+                holding = MemoriesHeld,
             ),
+        )
+    }
+}
+
+/** A guest's Memory's music played or stopped (core's `GalleryModel.headerActions`' MUSIC), as the member's header offers it. */
+@Composable
+private fun GuestMusicAction(page: MemoriesGuest.Gallery) {
+    val gallery = page.model
+    val state by gallery.state.collectAsStateWithLifecycle()
+    if (gallery.headerActions.none { it == me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC }) return
+    IconButton(onClick = gallery::toggleMusic, modifier = Modifier.testTag("guest-music")) {
+        Icon(
+            if (state.musicHere) androidx.compose.material.icons.Icons.Outlined.MusicOff else androidx.compose.material.icons.Icons.Outlined.MusicNote,
+            say(gallery.label(me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC)!!),
         )
     }
 }

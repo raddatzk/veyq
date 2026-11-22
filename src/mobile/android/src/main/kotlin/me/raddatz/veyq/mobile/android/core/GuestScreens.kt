@@ -1,10 +1,7 @@
 package me.raddatz.veyq.mobile.android.core
 
-import me.raddatz.veyq.mobile.memories.MemoriesGuest
 
-import me.raddatz.veyq.mobile.expenses.PotGuest
 
-import me.raddatz.veyq.mobile.depot.DepotGuest
 
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -188,12 +185,12 @@ internal fun GuestLinkScreen(screen: GuestScreen, model: AppModel) {
                         }
                     },
                     actions = {
-                        (page as? DepotGuest.File)?.let { GuestFileActions(it, view.access, model, snackbar) }
+                        // the page's own actions as its kind's application registered them (a file's download and
+                        // replace, a Memory's music: the registry's `guestActions`)
+                        page?.let { p -> KindPages.of(p.node.kind)?.guestActions?.invoke(p, screen, model, snackbar) }
                         if (screen.keepOffered) {
                             IconButton(onClick = { keeping = true }, modifier = Modifier.testTag("guest-keep")) { Icon(Icons.Outlined.BookmarkAdd, stringResource(R.string.link_keep)) }
                         }
-                        // a Memory's music, played or stopped as on the member's header (#1034)
-                        (page as? MemoriesGuest.Gallery)?.let { GuestMusicAction(it) }
                         // an upload link's guest sees no node, so it reports the link itself; a viewing guest reports the
                         // page on screen from the views (#1033: the web's `reportNodes`; the backend refuses a LINK item
                         // of a READ or READ_WRITE link) — while the link's instance takes reports
@@ -309,10 +306,10 @@ internal fun GuestContent(screen: GuestScreen, model: AppModel, snackbar: Snackb
             val said: (me.raddatz.veyq.mobile.words.Notice) -> Unit = { n -> scope.launch { snackbar.show(context, n) } }
             if (access != null && access.naming.offered) GuestLine(access, said) {
                 // a Pot's page reads its write right anew: a named guest adds entries (the web's `requestGuest`, then the write)
-                if (view.page.value is PotGuest.Pot) model.refreshPot {}
+                guestNamed(view, model)
             }
             // a write offered to a guest not named yet asks its name at the write (core's one naming flow, the web's)
-            if (access != null) NamingAsked(access, said) { if (view.page.value is PotGuest.Pot) model.refreshPot {} }
+            if (access != null) NamingAsked(access, said) { guestNamed(view, model) }
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 page?.let { GuestPageBody(it, screen, model, snackbar) } ?: Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             }
@@ -386,56 +383,10 @@ private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, vie
     ) { name -> withContext(Dispatchers.IO) { level.createFolder(name) } }
 }
 
-/** A guest's Memory's music played or stopped (core's `GalleryModel.headerActions`' MUSIC), as the member's header offers it. */
-@Composable
-private fun GuestMusicAction(page: MemoriesGuest.Gallery) {
-    val gallery = page.model
-    val state by gallery.state.collectAsStateWithLifecycle()
-    if (gallery.headerActions.none { it == me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC }) return
-    IconButton(onClick = gallery::toggleMusic, modifier = Modifier.testTag("guest-music")) {
-        Icon(
-            if (state.musicHere) androidx.compose.material.icons.Icons.Outlined.MusicOff else androidx.compose.material.icons.Icons.Outlined.MusicNote,
-            say(gallery.label(me.raddatz.veyq.mobile.navigation.HeaderAction.MUSIC)!!),
-        )
-    }
-}
-
-/**
- * A file's own actions on the link's bar: its download (a copy where the person picks) and, where core offers it
- * (`FileRights.replace`), a READ_WRITE guest's replace — a guest not named yet asked its name at the write.
- */
-@Composable
-private fun GuestFileActions(page: DepotGuest.File, access: GuestAccess?, model: AppModel, snackbar: SnackbarHostState) {
-    val file = page.model
-    val state by file.state.collectAsStateWithLifecycle()
-    val h = state.header ?: return
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        val resolver = context.contentResolver
-        val run = file.save { produce ->
-            val out = withContext(Dispatchers.IO) { resolver.openOutputStream(uri) } ?: return@save false
-            out.use { o -> produce { o.write(it) } }
-        } ?: return@rememberLauncherForActivityResult
-        scope.launch {
-            val ended = run.state.first { it.end != null }
-            if (ended.end != me.raddatz.veyq.mobile.blob.FileSave.End.SAVED) {
-                withContext(Dispatchers.IO) { runCatching { android.provider.DocumentsContract.deleteDocument(resolver, uri) } }
-            }
-            snackbar.show(context, ended.notice)
-        }
-    }
-    val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        val a = access ?: return@rememberLauncherForActivityResult
-        uri?.let { model.guestReplace(a, file, it) }
-    }
-    IconButton(onClick = { save.launch(h.downloadName) }) { Icon(Icons.Outlined.Download, stringResource(R.string.node_download)) }
-    if (access != null && h.own.any { it == me.raddatz.veyq.mobile.navigation.HeaderAction.REPLACE }) {
-        IconButton(onClick = { if (file.chooseReplace()) pick.launch(arrayOf("*/*")) }) {
-            Icon(Icons.Outlined.Upload, say(h.label(me.raddatz.veyq.mobile.navigation.HeaderAction.REPLACE)!!))
-        }
-    }
+/** The guest named itself (or was forgotten): the page on screen follows, as its application registered (the registry's `guestNamed`). */
+private fun guestNamed(view: me.raddatz.veyq.mobile.sharing.GuestView, model: AppModel) {
+    val page = view.page.value ?: return
+    KindPages.of(page.node.kind)?.guestNamed?.invoke(page, model)
 }
 
 /**

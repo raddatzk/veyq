@@ -68,7 +68,7 @@ internal fun DropBoxScreen(ref: ObjectRef, model: AppModel) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val details by model.rowDetails.collectAsStateWithLifecycle()
     // the page is core's `DropBoxPage`: its folders read anew with the shell's lists, a folder's delete asked first
-    val page = remember(ref.nodeId) { model.dropBoxPage(me.raddatz.veyq.mobile.navigation.NodeAt(ref.scopeId, ref.nodeId, ref.kind, ref.name)) } ?: return
+    val page = remember(ref.nodeId) { model.depot.dropBoxPage(me.raddatz.veyq.mobile.navigation.NodeAt(ref.scopeId, ref.nodeId, ref.kind, ref.name)) } ?: return
     DisposableEffect(page) { onDispose { page.close() } }
     // live while the page is on screen and the app started: a guest's new folder shows up (core's poll)
     val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current

@@ -389,9 +389,13 @@ A Gradle build of its own, run through its own wrapper.
   `KindPage` (the body the frame draws, the `guest` page of a received link) and one `ApplicationUi(id, list, creates,
   personSection)` —; the root registers the core's kinds (folder, bookmark), each application, then `seal()`s, before
   anything is drawn. A new kind's page goes into its application's `register`, never a `when`/`switch` in the shell; a
-  file two applications or the core use is core UI and names no application. `scripts/validate_mobile_ui_direction.py`
-  holds it: no core UI file names an application but the root, no application another's, and in the Kotlin core no
-  application package another's and no core file one but `AppKinds.kt` and the shrinking `CORE_ROOTS` (inbox #1048).
+  file two applications or the core use is core UI and names no application. On Android what the app's one model holds
+  of an application (its pages' models, its dialogs, its uploads) is that application's `Holding`, registered as
+  `ApplicationUi.holding` and reached as `model.<application>`; the core UI asks every holding at the tenant's moments and
+  in the flows an application answers (`core/Holding.kt` lists them), never by its type. `scripts/validate_mobile_ui_direction.py`
+  holds it: no core UI file names an application but the root, no application another's, and Android's core UI no core
+  application's package (`…mobile.<application>`, `…mobile.api.<application>`, inbox #1056; the Kotlin core's own
+  direction is `validate_mobile_module_graph.py`'s).
 - `words/` — every word the apps show (ADR 0136 decision 3): `words.json` (English and German, `{n}` / `{n:int}`
   placeholders, plurals by CLDR category) is the one source; `generate_words.py` writes the core's `Msg` keys
   (`:core:generateWords`), Android's resources and `Context.words` (`:android:generateWords`; the app has no

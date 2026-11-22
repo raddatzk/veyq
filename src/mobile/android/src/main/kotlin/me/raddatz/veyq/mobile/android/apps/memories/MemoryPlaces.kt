@@ -76,7 +76,6 @@ import me.raddatz.veyq.mobile.android.core.MapPlace
 import me.raddatz.veyq.mobile.android.core.RasterMap
 import me.raddatz.veyq.mobile.android.core.clickableRow
 import me.raddatz.veyq.mobile.android.core.language
-import me.raddatz.veyq.mobile.android.core.memoryDateText
 import me.raddatz.veyq.mobile.android.core.photoDot
 import me.raddatz.veyq.mobile.android.core.projected
 import me.raddatz.veyq.mobile.android.core.role
@@ -121,12 +120,12 @@ internal fun MemoryFactsLine(gallery: GalleryModel, model: AppModel) {
     FlowRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (editable) {
             AssistChip(
-                onClick = { dates = model.dateEditor(gallery) },
+                onClick = { dates = model.memories.dateEditor(gallery) },
                 label = { Text(dateText ?: say(Msg.MEMORY_DATE_NONE)) },
                 leadingIcon = { Icon(Icons.Outlined.CalendarMonth, say(Msg.MEMORY_DATE_EDIT), Modifier.size(18.dp)) },
             )
             AssistChip(
-                onClick = { places = model.placeEditor(gallery) },
+                onClick = { places = model.memories.placeEditor(gallery) },
                 label = { Text(placeText ?: say(Msg.MEMORY_PLACE_SET)) },
                 leadingIcon = { Icon(Icons.Outlined.Place, say(Msg.MEMORY_PLACE_EDIT), Modifier.size(18.dp)) },
             )

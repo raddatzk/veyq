@@ -59,7 +59,7 @@ import me.raddatz.veyq.mobile.android.core.text
 @Composable
 fun PotCreateSheet(s: Screen.Signed, model: AppModel, onClose: () -> Unit) {
     // core's `PotCreateSheet` holds the space, currency, people and the enable rule; the name and a typed person stay here
-    val sheet = remember { model.potCreateSheet() }
+    val sheet = remember { model.expenses.potCreateSheet() }
     if (sheet == null) {
         LaunchedEffect(Unit) { onClose() }
         return
@@ -131,7 +131,7 @@ fun PotCreateSheet(s: Screen.Signed, model: AppModel, onClose: () -> Unit) {
                         typed = ""
                         scope.launch {
                             if (sheet.create(name, t)) {
-                                model.potCreated()
+                                model.expenses.potCreated()
                                 onClose()
                             }
                         }

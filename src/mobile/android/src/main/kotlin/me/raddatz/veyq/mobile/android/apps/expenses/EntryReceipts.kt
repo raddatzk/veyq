@@ -126,7 +126,7 @@ private fun ReceiptViewer(view: PotView, model: AppModel, receiptId: String, onC
     var bytes by remember { mutableStateOf<ByteArray?>(null) }
     var failed by remember { mutableStateOf(false) }
     LaunchedEffect(receiptId) {
-        val b = model.openReceipt(receiptId)
+        val b = model.expenses.openReceipt(receiptId)
         if (b == null) failed = true else bytes = b
     }
     val name = Receipts.downloadName(receipt?.name, receipt?.type)
@@ -153,7 +153,7 @@ private fun ReceiptViewer(view: PotView, model: AppModel, receiptId: String, onC
                 val b = bytes
                 when {
                     // offline, a receipt this device did not keep says so (muted: no failure), else it is unreadable (core's words)
-                    failed -> model.receiptFailure().let { why ->
+                    failed -> model.expenses.receiptFailure().let { why ->
                         Text(say(why), color = if (why == me.raddatz.veyq.mobile.words.Msg.OFFLINE_NOT_KEPT) role(LocalPalette.current.muted) else MaterialTheme.colorScheme.error)
                     }
                     b == null -> CircularProgressIndicator()

@@ -148,7 +148,7 @@ internal fun MemoryPeopleLine(gallery: GalleryModel, model: AppModel) {
     var listing by remember { mutableStateOf(false) }
     if (line.add) {
         AssistChip(
-            onClick = { model.openParticipants(gallery) },
+            onClick = { model.memories.openParticipants(gallery) },
             label = { Text(stringResource(R.string.memory_participants_add)) },
             leadingIcon = { Icon(Icons.Outlined.PersonAdd, null, Modifier.size(18.dp)) },
             modifier = Modifier.padding(horizontal = 16.dp),
@@ -180,10 +180,10 @@ internal fun MemoryPeopleLine(gallery: GalleryModel, model: AppModel) {
             Text(text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(start = 8.dp))
         }
         if (line.edits) {
-            IconButton(onClick = { model.openParticipants(gallery) }) { Icon(Icons.Outlined.Edit, stringResource(R.string.memory_participants_edit)) }
+            IconButton(onClick = { model.memories.openParticipants(gallery) }) { Icon(Icons.Outlined.Edit, stringResource(R.string.memory_participants_edit)) }
         }
     }
-    if (listing) ParticipantsListSheet(line, onOpen = { id -> listing = false; model.openPerson(id) }, onEdit = { listing = false; model.openParticipants(gallery) }) { listing = false }
+    if (listing) ParticipantsListSheet(line, onOpen = { id -> listing = false; model.openPerson(id) }, onEdit = { listing = false; model.memories.openParticipants(gallery) }) { listing = false }
 }
 
 /** Everyone listed (avatar, name; a former member greyed), a current member's row opening their profile (decision 11). */
@@ -220,7 +220,7 @@ private fun ParticipantsListSheet(line: Participants.Line, onOpen: (String) -> U
 internal fun ParticipantsPickerSheet(picker: ParticipantsPicker, model: AppModel) {
     val s by picker.state.collectAsStateWithLifecycle()
     val palette = LocalPalette.current
-    ModalBottomSheet(onDismissRequest = { if (!s.saving) model.closeParticipants(picker) }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    ModalBottomSheet(onDismissRequest = { if (!s.saving) model.memories.closeParticipants(picker) }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             Text(stringResource(R.string.memory_participants_dialog_title), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.memory_participants_dialog_hint), style = MaterialTheme.typography.bodySmall, color = role(palette.muted), modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
@@ -237,7 +237,7 @@ internal fun ParticipantsPickerSheet(picker: ParticipantsPicker, model: AppModel
                 s.failed -> item(key = "failed") {
                     Column(Modifier.padding(16.dp)) {
                         Text(stringResource(R.string.memory_participants_load_error), color = role(palette.danger))
-                        TextButton(onClick = model::reloadParticipants) { Text(stringResource(R.string.memory_people_retry)) }
+                        TextButton(onClick = model.memories::reloadParticipants) { Text(stringResource(R.string.memory_people_retry)) }
                     }
                 }
                 s.members == null -> item(key = "loading") {
@@ -261,8 +261,8 @@ internal fun ParticipantsPickerSheet(picker: ParticipantsPicker, model: AppModel
             if (s.said != null) Text(stringResource(R.string.memory_participants_save_failed), style = MaterialTheme.typography.bodySmall, color = role(palette.danger), modifier = Modifier.padding(top = 8.dp))
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                 if (s.saving) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                TextButton(onClick = { model.closeParticipants(picker) }, enabled = !s.saving) { Text(stringResource(R.string.trash_cancel)) }
-                TextButton(onClick = model::saveParticipants, enabled = s.canSave) { Text(stringResource(R.string.entry_save)) }
+                TextButton(onClick = { model.memories.closeParticipants(picker) }, enabled = !s.saving) { Text(stringResource(R.string.trash_cancel)) }
+                TextButton(onClick = model.memories::saveParticipants, enabled = s.canSave) { Text(stringResource(R.string.entry_save)) }
             }
         }
     }
@@ -374,28 +374,28 @@ internal fun BannerDialog(editor: BannerEditor, gallery: GalleryModel, model: Ap
     val s by editor.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val palette = LocalPalette.current
-    LaunchedEffect(s.done) { if (s.done) model.closeBanner() }
-    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(model::pickBanner) }
+    LaunchedEffect(s.done) { if (s.done) model.memories.closeBanner() }
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(model.memories::pickBanner) }
     fun pickMedium() = pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
     // full media access asked once before the first pick, as an upload's is (the same flag): the picker's own copy of a
     // photo has its location zeroed, so its digest never equals the gallery's original and an equal file is uploaded
     // anew instead of shared (ADR 0144 decision 5; measured 2026-11-18, its Android pass: 1 store PUT without, 0 with)
     val askAccess = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { pickMedium() }
-    fun choose() = if (model.mediaAccessAsked()) pickMedium() else askAccess.launch(mediaAccessPermissions())
+    fun choose() = if (model.memories.mediaAccessAsked()) pickMedium() else askAccess.launch(mediaAccessPermissions())
     // the previews show the picked file, else the banner as it is
     val now by produceState<BannerPicture?>(null) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { BannerPicture.of(gallery.bannerPicture()) } }
     val picked = s.picked
     val pickedPicture = remember(picked) { picked?.let { BannerPicture.of(it.picture) } }
     val preview = pickedPicture ?: now
-    Dialog(onDismissRequest = { if (!s.saving) model.closeBanner() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+    Dialog(onDismissRequest = { if (!s.saving) model.memories.closeBanner() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
         EdgeToEdgeDialogWindow(darkIcons = !androidx.compose.foundation.isSystemInDarkTheme())
         Scaffold(
             contentWindowInsets = androidx.compose.foundation.layout.WindowInsets.safeDrawing,
             topBar = {
                 TopAppBar(
                     title = { Text(stringResource(if (s.hasBanner) R.string.memory_banner_change else R.string.memory_banner_add)) },
-                    navigationIcon = { IconButton(onClick = model::closeBanner, enabled = !s.saving) { Icon(Icons.Filled.Close, stringResource(R.string.trash_cancel)) } },
-                    actions = { TextButton(onClick = { model.saveBanner() }, enabled = s.canSave) { Text(stringResource(R.string.memory_banner_save)) } },
+                    navigationIcon = { IconButton(onClick = model.memories::closeBanner, enabled = !s.saving) { Icon(Icons.Filled.Close, stringResource(R.string.trash_cancel)) } },
+                    actions = { TextButton(onClick = { model.memories.saveBanner() }, enabled = s.canSave) { Text(stringResource(R.string.memory_banner_save)) } },
                 )
             },
         ) { padding ->
@@ -436,11 +436,11 @@ internal fun BannerDialog(editor: BannerEditor, gallery: GalleryModel, model: Ap
                     } else {
                         LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 16.dp))
                     }
-                    TextButton(onClick = model::cancelBanner) { Text(stringResource(R.string.trash_cancel)) }
+                    TextButton(onClick = model.memories::cancelBanner) { Text(stringResource(R.string.trash_cancel)) }
                 }
                 if (s.hasBanner) {
                     Spacer(Modifier.height(16.dp))
-                    TextButton(onClick = { model.saveBanner(remove = true) }, enabled = s.canRemove) {
+                    TextButton(onClick = { model.memories.saveBanner(remove = true) }, enabled = s.canRemove) {
                         Text(stringResource(R.string.memory_banner_remove), color = if (s.canRemove) role(palette.danger) else Color.Unspecified)
                     }
                 }
@@ -475,7 +475,7 @@ internal fun BannerPictureQuestion(gallery: GalleryModel, model: AppModel) {
         confirmButton = {
             TextButton(onClick = {
                 val remove = removeToo
-                model.galleryAct {
+                model.memories.galleryAct {
                     val said = gallery.trashBannerPicture(remove)
                     // the trash's own notice is its Undo (the gallery's state); a banner that did not go is said
                     if (remove && said?.msg == Msg.MEMORY_REFUSED_FAILED) model.said(me.raddatz.veyq.mobile.words.Notice(Msg.MEMORY_BANNER_FAILED))

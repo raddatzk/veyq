@@ -52,9 +52,10 @@ import me.raddatz.veyq.mobile.blob.UploadQueue
  */
 @Composable
 internal fun UploadTray(model: AppModel) {
-    // the tray is core's `DepotUploads`: its queue, the folder being prepared, the acknowledge of a batch all in
-    val depot = model.depot.collectAsStateWithLifecycle().value ?: return
-    val shown by depot.state.collectAsStateWithLifecycle()
+    // the tray is the level uploads' (Depot's `DepotUploads`, through the registry): its queue, the folder being
+    // prepared, the acknowledge of a batch all in; none while no tenant is open
+    val depot = model.levelUploads ?: return
+    val shown = depot.tray.collectAsStateWithLifecycle().value ?: return
     val state = shown.queue
     val preparing = shown.preparing
     var open by remember { mutableStateOf(false) }
@@ -96,7 +97,7 @@ internal fun UploadTray(model: AppModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun UploadSheet(state: UploadQueue.State, depot: me.raddatz.veyq.mobile.depot.DepotUploads, onDismiss: () -> Unit) {
+private fun UploadSheet(state: UploadQueue.State, depot: LevelUploads, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.navigationBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -122,7 +123,7 @@ private fun UploadSheet(state: UploadQueue.State, depot: me.raddatz.veyq.mobile.
 }
 
 @Composable
-private fun UploadRow(item: UploadQueue.Item, depot: me.raddatz.veyq.mobile.depot.DepotUploads) {
+private fun UploadRow(item: UploadQueue.Item, depot: LevelUploads) {
     val status = androidx.compose.ui.platform.LocalContext.current.text(me.raddatz.veyq.mobile.words.Notices.uploadStatus(item))
     ListItem(
         headlineContent = { Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },

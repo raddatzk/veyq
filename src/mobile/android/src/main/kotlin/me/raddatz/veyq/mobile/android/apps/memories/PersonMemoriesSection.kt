@@ -39,7 +39,6 @@ import me.raddatz.veyq.mobile.android.core.LocalPalette
 import me.raddatz.veyq.mobile.android.core.clickableRow
 import me.raddatz.veyq.mobile.android.core.joined
 import me.raddatz.veyq.mobile.android.core.kindIcon
-import me.raddatz.veyq.mobile.android.core.memoryDateText
 import me.raddatz.veyq.mobile.android.core.role
 import me.raddatz.veyq.mobile.android.core.spaceName
 import me.raddatz.veyq.mobile.android.core.tileColumns
@@ -67,7 +66,7 @@ private fun SectionHead(profile: PersonProfile, memories: PersonMemories, state:
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                 views.forEachIndexed { i, (view, label) ->
                     SegmentedButton(
-                        selected = state.view == view, onClick = { model.choosePersonView(memories, view) },
+                        selected = state.view == view, onClick = { model.memories.choosePersonView(memories, view) },
                         shape = SegmentedButtonDefaults.itemShape(i, views.size),
                     ) { Text(stringResource(label)) }
                 }
@@ -89,7 +88,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.personRows(memories: 
         state.failed -> item(key = "failed") {
             Column(Modifier.padding(16.dp)) {
                 Text(stringResource(R.string.memory_people_error), color = role(LocalPalette.current.danger))
-                TextButton(onClick = { model.retryPerson(memories) }) { Text(stringResource(R.string.memory_people_retry)) }
+                TextButton(onClick = { model.memories.retryPerson(memories) }) { Text(stringResource(R.string.memory_people_retry)) }
             }
         }
         state.empty -> item(key = "empty") {
@@ -135,7 +134,7 @@ private fun PersonMemoryRow(row: PersonMemories.Row, onOpen: () -> Unit) {
 @Composable
 internal fun PersonMemoriesSection(profile: PersonProfile, model: AppModel, frame: @Composable ColumnScope.() -> Unit) {
     val userId = profile.userId
-    val memories = if (ApplicationId.MEMORIES in profile.sections) remember(userId) { model.personMemories(userId) } else null
+    val memories = if (ApplicationId.MEMORIES in profile.sections) remember(userId) { model.memories.personMemories(userId) } else null
     val state = memories?.state?.collectAsStateWithLifecycle()?.value
     val head: @Composable ColumnScope.() -> Unit = {
         frame()

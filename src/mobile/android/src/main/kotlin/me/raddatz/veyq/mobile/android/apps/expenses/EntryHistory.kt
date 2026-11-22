@@ -61,9 +61,9 @@ internal fun EntryHistory(view: PotView, entryId: String) {
 @Composable
 internal fun DeletedEntrySheet(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotModel.State, model: AppModel, row: PotView.EntryRow, onClose: () -> Unit) {
     // the window on the core's clock (`PotModel.restorable`), never the platform's
-    val restorable = model.restorable(row.id)
+    val restorable = model.expenses.restorable(row.id)
     val purge = view.purgeAfter(row.id)
-    ModalBottomSheet(onDismissRequest = { model.clearPotMessage(); onClose() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
+    ModalBottomSheet(onDismissRequest = { model.expenses.clearPotMessage(); onClose() }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(row.title ?: stringResource(R.string.pot_transfer), style = MaterialTheme.typography.titleLarge)
             row.amount?.let { Text(money(it, view.currency, view.minorUnits), fontWeight = FontWeight.SemiBold) }
@@ -76,9 +76,9 @@ internal fun DeletedEntrySheet(view: PotView, state: me.raddatz.veyq.mobile.expe
             EntryHistory(view, row.id)
             state.message?.let { Text(potRefusal(it), color = MaterialTheme.colorScheme.error) }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                TextButton(onClick = { model.clearPotMessage(); onClose() }) { Text(stringResource(R.string.entry_cancel)) }
+                TextButton(onClick = { model.expenses.clearPotMessage(); onClose() }) { Text(stringResource(R.string.entry_cancel)) }
                 if (restorable) {
-                    Button(onClick = { model.restoreEntry(row.id) { onClose() } }, enabled = !state.saving) {
+                    Button(onClick = { model.expenses.restoreEntry(row.id) { onClose() } }, enabled = !state.saving) {
                         Text(stringResource(R.string.entry_restore))
                     }
                 }

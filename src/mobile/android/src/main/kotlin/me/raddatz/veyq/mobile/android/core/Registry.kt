@@ -15,26 +15,31 @@ import me.raddatz.veyq.mobile.sharing.GuestScreen
 /**
  * A kind's page as an application registers it (the web's `KindDescriptor`, ADR 0154 decision 3): what the kind's page
  * contributes to core's header ([header]: null while the page cannot tell yet), the page's body under it ([body]; a
- * folder's is core's level), and the page a link's guest is shown of it ([guest], share view = member view). What the
- * header offers is core's (`NodeHeaderModel`, `AppKinds`); core draws it for every kind (`NodeHeaderActions`), never an
- * application.
+ * folder's is core's level), the page a link's guest is shown of it ([guest], share view = member view), what the link's
+ * own bar offers on that page ([guestActions]: a file's download, a Memory's music) and what the page does once the
+ * guest named itself ([guestNamed]: a Pot reads its write right anew). What the header offers is core's
+ * (`NodeHeaderModel`, `AppKinds`); core draws it for every kind (`NodeHeaderActions`), never an application.
  */
 internal class KindPage(
     val header: @Composable (NodeAt, AppModel) -> HeaderContribution?,
     val body: (@Composable (ObjectRef, BarTab?, AppModel) -> Unit)? = null,
     val guest: (@Composable (GuestPage, GuestScreen, AppModel, SnackbarHostState) -> Unit)? = null,
+    val guestActions: (@Composable (GuestPage, GuestScreen, AppModel, SnackbarHostState) -> Unit)? = null,
+    val guestNamed: ((GuestPage, AppModel) -> Unit)? = null,
 )
 
 /**
  * What an application registers for itself beside its kinds: its own list in the drawer ([list]; null: core's arranged
  * list), the dialogs of what it creates ([creates], the web's `createDialog`: opened by core's New with the space and
- * folder shown) and its section of a person's profile ([personSection]: it draws the profile under core's [frame]).
+ * folder shown), its section of a person's profile ([personSection]: it draws the profile under core's [frame]) and
+ * what it holds in the app's model for the open tenant ([holding], its [Holding]: the models of its pages, its uploads).
  */
 internal class ApplicationUi(
     val id: ApplicationId,
     val list: (@Composable (Screen.Signed, AppModel, (ObjectRef) -> Unit) -> Unit)? = null,
     val creates: Map<AppKinds.Create, CreateDialog> = emptyMap(),
     val personSection: (@Composable (profile: PersonProfile, model: AppModel, frame: @Composable ColumnScope.() -> Unit) -> Unit)? = null,
+    val holding: HoldingKey<*>? = null,
 )
 
 /** A create dialog an application registers (the web's `createDialog`): opened over the space and folder shown, closed by [onClose]. */
@@ -49,6 +54,7 @@ internal typealias CreateDialog = @Composable (s: Screen.Signed, model: AppModel
 internal object Registry {
     private val kinds = HashMap<String, KindPage>()
     private val applications = HashMap<ApplicationId, ApplicationUi>()
+    private val order = ArrayList<ApplicationUi>()
     private var sealed = false
 
     fun kind(page: KindPage, vararg kind: String) {
@@ -59,6 +65,7 @@ internal object Registry {
     fun application(ui: ApplicationUi) {
         check(!sealed) { "the registry is sealed" }
         check(applications.put(ui.id, ui) == null) { "the application ${ui.id} is registered twice" }
+        order += ui
     }
 
     /** Called once by the composition root after every registration. */
@@ -71,6 +78,9 @@ internal object Registry {
     fun page(kind: String): KindPage? = ready { kinds[kind] }
 
     fun application(id: ApplicationId): ApplicationUi? = ready { applications[id] }
+
+    /** Every application registered, in the order the composition root registered them. */
+    fun applications(): List<ApplicationUi> = ready { order.toList() }
 
     fun create(create: AppKinds.Create): CreateDialog? =
         ready { applications.values.firstNotNullOfOrNull { it.creates[create] } }

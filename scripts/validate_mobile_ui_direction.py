@@ -15,7 +15,12 @@ an application added there is guarded the day it lands. Every source is read wit
   `…android.apps.<application>` (directory `apps/<application>/`), everything else is the core UI:
   - **(a)** no core UI file names `…android.apps` — but the one composition root, `main/…/android/Applications.kt`,
     which registers each application into the core UI's registry (the web's `src/web/src/applications.ts`).
-  - **(b)** no file of one application's UI names another application's UI (`…android.apps.<other>`).
+  - **(b)** no file of one application's UI names another application's UI (`…android.apps.<other>`), nor another core
+    application's package (`…mobile.<other>`, its generated API `…mobile.api.<other>`).
+  - **(c)** no core UI file names a core application's package (`me.raddatz.veyq.mobile.<application>`, the module
+    `:apps:<application>`, or its generated API `…mobile.api.<application>`) — but the composition root: what the core UI
+    holds of an application (its pages' models, its uploads) the application holds itself, in the `Holding` it registers,
+    and the core UI asks every holding (inbox #1056).
   - fail closed: a directory under `apps/` that is no application, an application without a file under `apps/`,
     a composition root that is missing or does not name every application's package, and a `package` that is not
     its directory's are each red. Kotlin's packages make the import the whole edge: a symbol of another package is
@@ -68,9 +73,10 @@ to `validate_mobile_module_graph.py` when the core split into modules, where the
 graph does not carry.
 
 **Its limit.** It reads names, not types: an application's class reached through a type alias, an `Any` handed over and
-cast, or a kind spelled as a literal (`"MEMORY"`, which the mask blanks) is not seen. A platform's core UI naming a core
-application's package (`me.raddatz.veyq.mobile.memories…`, Android's `AppModel` holding a gallery) is not read: inbox
-#1056 decided it breaks ADR 0154 decision 3, and its fix is a CR of its own. The bridge module
+cast, or a kind spelled as a literal (`"MEMORY"`, which the mask blanks) is not seen; on Android a core application's
+type reached without its name — an inferred `val` holding what a composition function returns (`ShellModel.fileModel`) —
+is not either. Apple's core UI naming a core application's Kotlin type through the framework (`GalleryModel` in
+`AppModel.swift`) is not read: Swift sees one flat module of bridged names, and inbox #1066 asks it there. The bridge module
 (`src/mobile/bridge`, the desktops' dispatch over every application) is not read: it is a host, a composition root
 by its nature. A platform whose rules are not switched on (`PLATFORMS`) is not read at all. On Linux a `#[path]`
 attribute that mounts another directory's file, an item re-exported by core under another name (`pub use`) and a
@@ -103,6 +109,7 @@ PLATFORMS: dict[str, bool] = {"android": True, "apple": True, "linux": True, "wi
 
 ANDROID_SRC = MOBILE / "android" / "src"
 ANDROID_PACKAGE = "me.raddatz.veyq.mobile.android"
+CORE_PACKAGE = "me.raddatz.veyq.mobile"
 ANDROID_BASE = pathlib.Path("kotlin/me/raddatz/veyq/mobile/android")
 ANDROID_ROOT = pathlib.Path("main") / ANDROID_BASE / "Applications.kt"
 
@@ -161,6 +168,9 @@ def check_android(android_src: pathlib.Path, apps: list[str]) -> list[str]:
     if not files:
         return [f"{_rel(android_src)}: no Kotlin file under */{ANDROID_BASE} — the guard would check nothing"]
     apps_ref = re.compile(r"\b" + _dotted(ANDROID_PACKAGE + ".apps") + r"(?:\s*\.\s*(\w+))?")
+    core_app_ref = re.compile(
+        r"\b" + _dotted(CORE_PACKAGE) + r"\s*\.\s*(?:api\s*\.\s*)?(" + "|".join(map(re.escape, apps)) + r")\b"
+    )
     root = android_src / ANDROID_ROOT
     populated: set[str] = set()
     for source_set, f in files:
@@ -193,6 +203,19 @@ def check_android(android_src: pathlib.Path, apps: list[str]) -> list[str]:
                     f"{_rel(f)}:{_line(masked, m.start())}: (b) the application `{own}` names "
                     f"`{ANDROID_PACKAGE}.apps{'.' + target if target else ''}` — another application's UI; what two "
                     f"applications draw belongs to the core UI",
+                )
+        for m in core_app_ref.finditer(masked):
+            target = m.group(1)
+            if own is None:
+                errors.append(
+                    f"{_rel(f)}:{_line(masked, m.start())}: (c) the core UI names the core application `{target}`'s "
+                    f"package (`{CORE_PACKAGE}.{target}`, `{CORE_PACKAGE}.api.{target}`) — what it holds of an application "
+                    f"the application holds in the `Holding` it registers, and the core UI asks every holding",
+                )
+            elif target != own:
+                errors.append(
+                    f"{_rel(f)}:{_line(masked, m.start())}: (b) the application `{own}` names the core application "
+                    f"`{target}`'s package — another application's; what two applications share belongs to the platform",
                 )
     for app in apps:
         if app not in populated:

@@ -1,4 +1,4 @@
-package me.raddatz.veyq.mobile.android.core
+package me.raddatz.veyq.mobile.android.apps.memories
 
 import me.raddatz.veyq.mobile.media.Derivation
 import android.content.Context

@@ -39,6 +39,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.android.R
+import me.raddatz.veyq.mobile.memories.place.MemoryLocation
+import me.raddatz.veyq.mobile.map.Viewport
 import me.raddatz.veyq.mobile.android.core.AppModel
 import me.raddatz.veyq.mobile.android.core.LocalCovers
 import me.raddatz.veyq.mobile.android.core.LocalPalette
@@ -50,7 +52,6 @@ import me.raddatz.veyq.mobile.android.core.ScreenTransform
 import me.raddatz.veyq.mobile.android.core.clickableRow
 import me.raddatz.veyq.mobile.android.core.role
 import me.raddatz.veyq.mobile.android.core.say
-import me.raddatz.veyq.mobile.android.core.worldView
 import me.raddatz.veyq.mobile.map.Cluster
 import me.raddatz.veyq.mobile.map.Mercator
 import me.raddatz.veyq.mobile.memories.place.MemoriesMap
@@ -72,7 +73,7 @@ private const val PIN_HIT_DP = 28.0
 internal fun MemoriesMapTab(s: Screen.Signed, model: AppModel) {
     val list = s.applicationList(ApplicationId.MEMORIES)
     val refs = remember(list) { list.favorites + list.recent + list.all }
-    val pins by produceState<MemoriesMap?>(null, refs) { value = runCatching { model.memoriesMap(refs) }.getOrNull() }
+    val pins by produceState<MemoriesMap?>(null, refs) { value = runCatching { model.memories.memoriesMap(refs) }.getOrNull() }
     MemoriesPinMap(pins, model, Modifier.fillMaxSize()) { pin ->
         val ref = refs.firstOrNull { it.nodeId == pin.nodeId && it.scopeId == pin.scopeId } ?: ObjectRef(pin.scopeId, pin.nodeId, "MEMORY", ApplicationId.MEMORIES, pin.name)
         model.open(ref)
@@ -200,3 +201,7 @@ private fun DrawScope.memoryPin(t: ScreenTransform, c: Cluster<MemoriesMap.Pin>,
     }
     drawCircle(Color.Black.copy(alpha = 0.15f), r + ring, o, style = Stroke(1.dp.toPx()))
 }
+
+/** The zoom a [Viewport] framing nothing opens at, and its centre: the world. */
+private fun worldView(width: Double, height: Double): Viewport =
+    Viewport(MemoryLocation.WORLD_CENTER, MemoryLocation.WORLD_ZOOM, width, height)

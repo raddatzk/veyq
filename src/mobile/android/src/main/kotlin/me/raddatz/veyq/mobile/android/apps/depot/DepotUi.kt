@@ -3,6 +3,14 @@ package me.raddatz.veyq.mobile.android.apps.depot
 import me.raddatz.veyq.mobile.depot.DepotGuest
 
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.flow.first
+import me.raddatz.veyq.mobile.android.core.SendCopy
+import me.raddatz.veyq.mobile.android.core.show
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
@@ -50,12 +58,12 @@ import me.raddatz.veyq.mobile.sharing.GuestPage
 @Composable
 private fun fileHeader(node: NodeAt, model: AppModel): HeaderContribution? {
     // what the header offers on a file is core's (`FileModel`'s header: its facts, Replace, Send a copy, its download name)
-    val file = androidx.compose.runtime.remember(node) { model.fileModel(node) } ?: return null
+    val file = androidx.compose.runtime.remember(node) { model.depot.fileModel(node) } ?: return null
     val state by file.state.collectAsStateWithLifecycle()
     val h = state.header ?: return null
     // the replace: the system's picker hands over one document, which replaces the content shown
     val pick = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { model.replaceFile(file, it) }
+        uri?.let { model.depot.replaceFile(file, it) }
     }
     return HeaderContribution(
         facts = h.facts,
@@ -72,7 +80,9 @@ private fun fileHeader(node: NodeAt, model: AppModel): HeaderContribution? {
                     }
                 // a decrypted copy to another app the person picks (the system's share sheet), after the shell's notice
                 me.raddatz.veyq.mobile.navigation.HeaderAction.SEND ->
-                    OwnAction(a, say(h.label(a)!!), androidx.compose.material.icons.Icons.AutoMirrored.Outlined.Send) { model.askToSend(node) }
+                    OwnAction(a, say(h.label(a)!!), androidx.compose.material.icons.Icons.AutoMirrored.Outlined.Send) {
+                        model.askToSend(SendCopy(node) { model.depot.fileModel(node)?.current?.header?.takeIf { it.facts.hasContent }?.let { it.downloadName to it.mediaType } })
+                    }
                 // core's own, or another page's: never a file's (`FileModel.Header.own` holds none of these)
                 me.raddatz.veyq.mobile.navigation.HeaderAction.FAVORITE, me.raddatz.veyq.mobile.navigation.HeaderAction.SHARE,
                 me.raddatz.veyq.mobile.navigation.HeaderAction.RENAME, me.raddatz.veyq.mobile.navigation.HeaderAction.MOVE,
@@ -148,6 +158,8 @@ internal object DepotUi {
     private val file = KindPage(
         header = { node, model -> fileHeader(node, model) },
         body = { ref, _, model -> FileScreen(ref, model) },
+        // a file's download and a READ_WRITE guest's replace on the link's bar
+        guestActions = { page, screen, model, snackbar -> if (page is DepotGuest.File) GuestFileActions(page, screen.view.access, model, snackbar) },
         guest = { page, _, _, _ ->
             if (page is DepotGuest.File) {
                 DisposableEffect(page.model) { onDispose { page.model.close() } }
@@ -170,6 +182,44 @@ internal object DepotUi {
     fun register(registry: Registry) {
         registry.kind(file, me.raddatz.veyq.mobile.depot.DepotFiles.FILE)
         registry.kind(dropBox, me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX)
-        registry.application(ApplicationUi(ApplicationId.DEPOT))
+        registry.application(ApplicationUi(ApplicationId.DEPOT, holding = DepotHeld))
+    }
+}
+
+/**
+ * A file's own actions on the link's bar: its download (a copy where the person picks) and, where core offers it
+ * (`FileRights.replace`), a READ_WRITE guest's replace — a guest not named yet asked its name at the write.
+ */
+@Composable
+private fun GuestFileActions(page: DepotGuest.File, access: GuestAccess?, model: AppModel, snackbar: SnackbarHostState) {
+    val file = page.model
+    val state by file.state.collectAsStateWithLifecycle()
+    val h = state.header ?: return
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val resolver = context.contentResolver
+        val run = file.save { produce ->
+            val out = withContext(Dispatchers.IO) { resolver.openOutputStream(uri) } ?: return@save false
+            out.use { o -> produce { o.write(it) } }
+        } ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            val ended = run.state.first { it.end != null }
+            if (ended.end != me.raddatz.veyq.mobile.blob.FileSave.End.SAVED) {
+                withContext(Dispatchers.IO) { runCatching { android.provider.DocumentsContract.deleteDocument(resolver, uri) } }
+            }
+            snackbar.show(context, ended.notice)
+        }
+    }
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val a = access ?: return@rememberLauncherForActivityResult
+        uri?.let { model.depot.guestReplace(a, file, it) }
+    }
+    IconButton(onClick = { save.launch(h.downloadName) }) { Icon(Icons.Outlined.Download, stringResource(R.string.node_download)) }
+    if (access != null && h.own.any { it == me.raddatz.veyq.mobile.navigation.HeaderAction.REPLACE }) {
+        IconButton(onClick = { if (file.chooseReplace()) pick.launch(arrayOf("*/*")) }) {
+            Icon(Icons.Outlined.Upload, say(h.label(me.raddatz.veyq.mobile.navigation.HeaderAction.REPLACE)!!))
+        }
     }
 }

@@ -3,7 +3,8 @@
 - Built: decisions 1 and 3 on every app and decision 6's words and direction guard (2026-11-20), decision 2 on every
   app and decision 6's structure guard (2026-11-21), decisions 4 and 5 on every app and the rest of decision 6, the
   duration and formatter rule `platform-format` (2026-11-21; each § Consequences). Decision 6's shared plan fixture
-  each platform's tests draw was not built: the compilers' exhaustiveness and the structure guard hold it (§ Consequences)
+  each platform's tests draw was not built: the compilers' exhaustiveness and the structure guard hold it (§ Consequences).
+  Decision 3 on Android down to the core applications' packages (inbox #1056, 2026-11-22; § Consequences)
 - Date: 2026-11-20
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -170,9 +171,10 @@ held for the screens' models but not around them:
   actions and `facts_later`, Windows' `KindBody`: the hero slot, tabs, the header's commands, `FactsWhenRead`).
   **Left in the core UI on purpose, named:** the header's hero is still placed by each desktop page inside its own
   scroll (a slot the frame fills: lifting it out of the scroll changes what is drawn, the structure CR's); the link
-  bar's file and music actions on the phones (header actions over core-Kotlin models); kind literals for glyphs, the
-  rows' dates and `TREE_PAGES`; Android's and Apple's `AppModel` methods per application and Apple's holders it stores
-  for Memories (`Core/AppModelHeld.swift`: a stored property cannot live in an application's extension); Windows'
+  bar's file and music actions on Apple (header actions over core-Kotlin models); kind literals for glyphs, the
+  rows' dates (Android's are Memories' `rowLines` now) and `TREE_PAGES`; Apple's `AppModel` methods per application and the holders it stores for Memories
+  (`Core/AppModelHeld.swift`: a stored property cannot live in an application's extension; Android's left its core UI,
+  below, and Apple's are inbox #1066); Windows'
   WRITE_ONLY upload page and the bookmark page (core kinds); Linux's `home::ask_dates` (a bridge call).
   **The guard**, `scripts/validate_mobile_ui_direction.py` (its docstring the rules and limits): (a) no core UI file
   names an application but the composition root; (b) no application names another's; (c) in the Kotlin core no
@@ -190,6 +192,23 @@ held for the screens' models but not around them:
   only*, the rows' details, the notices, the link form, the guest pages' per-kind models, the tray, the kept reads, the
   folder walk and the four Swift adapters in `appleMain` — each a hook behind `AppKinds` that needs a design of its own
   (inbox #1048); the list only shrinks (a root that names no application any more is red).
+- **As built, decision 3 on Android's core applications** (inbox #1056, 2026-11-22). Android's core UI named the core
+  applications' packages (`me.raddatz.veyq.mobile.<application>`) in 11 files — `AppModel` held each application's screen
+  models, the guest screens their pages, the tray Depot's uploads. Each application now holds them itself in a
+  `Holding` (`core/Holding.kt`) it registers as `ApplicationUi.holding` (a typed `HoldingKey`); `AppModel` builds every
+  registered holding once, in registration order, and the application reaches its own through an extension it declares
+  (`model.memories`, `model.depot`, `model.expenses`). The core UI asks every holding the tenant's moments — `leave`
+  (another tenant is shown), `shown` (its models built over the new shell), `locked`, `signedOut`, `personOpened`,
+  `listsRead` — and the flows an application answers for its kinds: `rowLines` (a Memory's date), `trashed` (an open Pot
+  closes), `moveSheet` (a Pot's copy by the open Pot), `addHere` and `drop` (a gallery's Memories, a level's or a folder
+  row's Depot), `takesDrop` (an open Pot's new expense), `levelUploads` (the tray and New's *Upload files*/*folder*,
+  Depot's) and `deriver` (Memories' tiers, a link guest's upload's too). A `KindPage` adds `guestActions` (the link bar's
+  file download and replace, a Memory's music) and `guestNamed` (a Pot reads its write right anew); *Add here* on a
+  page is an `AddHerePage` the page sets, "Send a copy" a `SendCopy` the file's header hands the shell. What only
+  Memories used moved into it (`AudioEnds`, `MediaDerive`, the date text, the world view). The guard's rule (c) holds
+  it: no core UI file names a core application's package or generated API (`…mobile.api.<application>`), and (b) no
+  application another core application's. Behaviour-preserving but for one place: the link bar draws a Memory's music
+  before *Keep* now (it was after). The decision log is ADR 0156's, entries 29–37.
 - **The passes (decision 3).** Behaviour-preserving, so each platform's pass checked that every kind still reaches its
   page through the registry with its header and body. Throwaways, erased after. Android (an API 36 emulator): New pot
   and New Memory (registered creates), a Memory's, a Pot's and a folder's page, the drawer's Expenses and Memories lists
@@ -257,8 +276,9 @@ held for the screens' models but not around them:
   string), a plan's list renamed into a local first or built by a loop with `if`, a list whose property has a library
   name (`entries`, `keys`), a whitelist of one string. **Left:** no `SELECT` tool — no app level selects (#1049); a
   level's tabs stay `Shell.barTabs` (the bar's, ADR 0122); a guest's link pages on the phones draw only the gallery's
-  music from `headerActions` (the page's own menu, no core header there), Apple's tiles in a level carry no row menu
-  yet (its rows do).
+  music from `headerActions` (the page's own menu, no core header there). Every tile and row of a level or an
+  application's list opens its row menu (`rowPlan`) on every app since 2026-11-22 (Apple's tiles #1053, Android's
+  application lists #1064: `ArrangedListScreen` wraps each as the level does).
 - **The passes (decision 2)**, 2026-11-21, each a throwaway erased after; compared against the web's orders as
   `PlansAreTheWebsTest` reads them (each `register.ts`'s `header.order`, `coreNodeActions.ts`, `sections.ts`), not
   beside a web screen. **Linux** (Broadway, its own home volume): the sign-in Submit, then the QR, the kit and *Open a

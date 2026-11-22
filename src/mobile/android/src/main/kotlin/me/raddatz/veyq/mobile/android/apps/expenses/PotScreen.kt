@@ -83,14 +83,14 @@ import me.raddatz.veyq.mobile.navigation.ObjectRef
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PotScreen(ref: ObjectRef, tab: BarTab?, model: AppModel) {
-    val state by model.pot.collectAsStateWithLifecycle()
-    LaunchedEffect(ref) { model.loadPot(ref) }
+    val state by model.expenses.pot.collectAsStateWithLifecycle()
+    LaunchedEffect(ref) { model.expenses.loadPot(ref) }
     val s = state?.takeIf { it.ref == ref }
     val view = s?.view
     // Live while the Pot is on screen and the app started: what another device writes shows up (core's `LivePoll`).
     val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
     LaunchedEffect(ref, view != null) {
-        if (view != null) owner.repeatOnLifecycle(Lifecycle.State.STARTED) { model.livePot() }
+        if (view != null) owner.repeatOnLifecycle(Lifecycle.State.STARTED) { model.expenses.livePot() }
     }
     var refreshing by remember { mutableStateOf(false) }
     when {
@@ -107,7 +107,7 @@ fun PotScreen(ref: ObjectRef, tab: BarTab?, model: AppModel) {
                 isRefreshing = refreshing,
                 onRefresh = {
                     refreshing = true
-                    model.refreshPot { refreshing = false }
+                    model.expenses.refreshPot { refreshing = false }
                 },
                 modifier = Modifier.weight(1f),
             ) {
@@ -205,7 +205,7 @@ private fun Entries(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMod
         // On the page's own scope, not this effect's: the take empties `incoming`, which restarts this effect and would
         // cancel the read of the files it took — no editor opened and the share was lost (inbox #1006, 2026-11-19).
         taking.launch {
-            val taken = model.takeShare() ?: return@launch
+            val taken = model.expenses.takeShare() ?: return@launch
             shared = taken.pending
             // what the new expense left out, in Expenses' own words: no image or PDF, too large, too many
             if (taken.refused > 0) notices?.let { n -> n.scope.launch { n.snackbar.show(context, me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.SHARE_REFUSED, taken.refused)) } }
@@ -262,7 +262,7 @@ private fun Overview(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMo
                     Text(say(view.pays(t)), Modifier.weight(1f))
                     Text(money(t.amount, view.currency, view.minorUnits), fontWeight = FontWeight.SemiBold)
                     if (view.canRecord) {
-                        TextButton(onClick = { model.recordSettleUp(listOf(t)) }, enabled = !state.saving) {
+                        TextButton(onClick = { model.expenses.recordSettleUp(listOf(t)) }, enabled = !state.saving) {
                             Text(stringResource(R.string.balances_record))
                         }
                     }
@@ -270,7 +270,7 @@ private fun Overview(view: PotView, state: me.raddatz.veyq.mobile.expenses.PotMo
             }
             if (view.canRecordAll) {
                 item {
-                    TextButton(onClick = { model.recordSettleUp(view.settleUp) }, enabled = !state.saving) {
+                    TextButton(onClick = { model.expenses.recordSettleUp(view.settleUp) }, enabled = !state.saving) {
                         Text(stringResource(R.string.balances_record_all))
                     }
                 }

@@ -75,8 +75,9 @@ carry a second façade without the first one's users paying for it (ADR 0155 § 
   own, and an application gets a conformance compilation for its own runners.
 - **Build time:** a clean `:composition:jsPackage` 30.5 s against 27.0 s before the split (local, fresh processes); the
   CI `frontend` job and the Apple pre-build step were not timed apart.
-- **The UI guard's core rules retired into this one**; each platform's UI keeps its own rules. Android's core UI still
-  names core application packages (inbox #1056: against ADR 0154 decision 3, a CR of its own).
+- **The UI guard's core rules retired into this one**; each platform's UI keeps its own rules. Android's core UI named
+  core application packages (inbox #1056, against ADR 0154 decision 3): since 2026-11-22 each application holds what it
+  did in a `Holding` it registers, and the UI guard's rule (c) reads those packages (entries 29–37; Apple's is #1066).
 - **Left, named:** 82 platform-package tests run in `:composition` rather than over a played kind; the played server
   `PlayedTenant` is not split into the platform's half and the applications'; `validate_mobile_search_names_no_application.py`
   is a second check of what the build now holds; a few kind literals remain in the composition (it may name applications).
@@ -337,3 +338,63 @@ names were the implementation session's and are not kept.
     (a module of its own for the JSON seam and the shared formats, or those parts in `:apps:expenses`), the entries need
     a declaration file each, and an application needs a conformance compilation of its own for its runners.
 
+29. **2026-11-22 — Inbox #1056 built (cr-android-core-ui-through-the-registry, harvested here).** Substrate: branch
+    `claude/android-coreui` from `961f96c1f`, clean but for nothing of this work; `:android:assembleDebug` green before the
+    first edit. A CR or none: the work moved ~1000 lines out of Android's `AppModel` into three applications and added a
+    registry member and a guard rule — CR-sized (`docs/ai/README.md` § The pipeline); written, built, harvested into this
+    log and ADR 0154's Consequences, deleted. Cost: none beyond the file.
+30. **2026-11-22 — The mechanism.** Options: (a) keep `AppModel`'s per-application members, typed through core-UI
+    interfaces (the core UI would still build each application's model through the composition and hold it);
+    (b) one `AndroidViewModel` per application (its own scope; the tenant's moments would need a bus between view
+    models); (c) one `Holding` per application inside the one `AppModel`, registered through the registry
+    (`ApplicationUi.holding`, a typed `HoldingKey`), built once in registration order, reached by the application through
+    an extension it declares (`model.memories`). Chosen (c): one lifecycle and one scope as before (a rotation keeps the
+    same objects), the registry the only edge, the call sites `model.<application>.x`. Evidence: remembered (Apple's
+    `AppModelHeld.swift` already keeps Memories' stored state apart, though in core). Cost: `AppModel` opens seven
+    members as `internal` (`shellModel` and `tenantSession` read-only, `readRowDetails`, `refreshLists(t)`,
+    `appLanguage`, `followLevelView`, `rowDetail`); `held` casts once by its key.
+31. **2026-11-22 — The tenant's moments, one hook each.** Question: one "closed" hook or one per moment? The old code
+    closed different things at each: a lock closed a Memory's Music view, its dialogs and a profile's section but kept
+    the gallery and the uploads; a sign-out closed those and the gallery, the media and Depot's uploads; showing a tenant
+    closed the pages first and built the models after the shell. Chosen one hook per moment (`leave`, `shown`, `locked`,
+    `signedOut`, `personOpened`, `listsRead`), each closing exactly what its moment closed — measured by reading the
+    removed lines against each override (`git show f4e302d59`). Cost: six hooks where one would read simpler.
+32. **2026-11-22 — The flows the core asks.** Each preserves its answer: *Add here* and a drop go to the target's
+    application (`AddHere.Gallery`/`DropTarget.Gallery` Memories', `AddHere.Level`/`DropTarget.Level`/`Row` Depot's;
+    none answering, the composition's drop with no uploads, as before with none built); a drop on the app reaches the open
+    object where an application says it takes it (Expenses' `takesDrop`, the old `PotShare.takesDropOn`); the header's
+    `closeOpen` is `trashed`; a Pot's copy sheet is Expenses' by its kind, every other kind's the composition's with no
+    Pot (the Pot only ever reached `duplicateOpen`, which `AppKinds.copiesByOpenModel` gives a Pot alone — measured by
+    reading `MoveSheet.kt:233` and `ExpensesKinds.kt:93`); a row's last line is `rowLines`; a link guest's tiers are the
+    registered `deriver`. Level *Add here* says no notice: the old line said Memories' `MediaUploads.notTaken`, but a
+    level takes any file (`FolderShare.answer`'s intake is `{ true }`), so its refused count is always 0 — measured by
+    reading. "Send a copy" keeps its check at confirm time: the file's header hands the shell a `SendCopy` whose name and
+    type are read when the person confirms. Cost: eleven questions on `Holding`, each a default for the applications that
+    do not answer.
+33. **2026-11-22 — The tray.** Options: the tray's actions on the platform's `UploadQueue` directly (they are
+    `queue.cancel`/`retry`/`acknowledge`, `DepotUploads.kt:312–317`); or through Depot. Chosen through Depot's
+    `LevelUploads` (`tray`, its actions, New's `upload`/`uploadFolder`): the tray shows a folder being prepared (Depot's
+    state) and is hidden while no tenant's uploads exist, as before. Cost: four one-line delegations.
+34. **2026-11-22 — The small files.** `AudioEnds` and `MediaDerive` move to `apps/memories/` (their only users Memories'
+    music and media; `MediaDerive` follows `MediaUpload`'s spec); a Memory's date text and the world view (`MemoryLocation`'s
+    constants) move beside their only callers; the music bar's lengths are `Shown.length` (`MusicQueue.formatLength` is
+    exactly that, `MusicQueue.kt:63`); a Depot tab's icon reads the kind literal `"DEPOT_DROPBOX"`, as `kindIcon` beside it
+    does (the guard blanks literals: its documented limit); two imports were unused. Nothing in `src/mobile/core/` or
+    `src/mobile/apps/` changed: the registry answered every question.
+35. **2026-11-22 — One drawing change.** The link bar's per-kind actions are one slot (`KindPage.guestActions`), drawn
+    where the file's were, before *Keep*; a Memory's music, after *Keep* before, moves left of it. Options: two slots to
+    keep the order; one. Chosen one (the order of two icons on a guest's bar is no plan of the core's). Cost: that icon's
+    place.
+36. **2026-11-22 — The guard.** `validate_mobile_ui_direction.py` gains rule (c) — no Android core UI file names
+    `me.raddatz.veyq.mobile.<application>` or its generated API `…mobile.api.<application>` (read over the masked text, so a
+    comment is none) — and its rule (b) reads core application packages too. Bites, each planted in the real tree and
+    restored with `/bin/cp -f`: Depot's `DepotUploads` imported into `core/UploadTray.kt` → red (c); a spaced
+    `me . raddatz.veyq.mobile.api.expenses` in `MainActivity.kt` → red (c); Expenses' `PotModel` imported into Memories'
+    `MemoryScreen.kt` → red (b); the name in a comment → green. On the tree before (`b2656a816`, in a throwaway worktree
+    with the new guard) → 104 violations in 11 files, the inbox's 11. `validate_guard_gaps.py` pins cases 116 and 117.
+    Limit, documented: a type reached without its name (an inferred `val` of what a composition function returns).
+37. **2026-11-22 — The other platforms.** Apple's core UI names the core applications' Kotlin types through the
+    framework (`GalleryModel`, `PotModel`, `DepotUploads`, … in 6 files of `Veyq/Core/`, measured by `grep -rlwE` over
+    the names); Linux's and Windows' reach applications through the bridge, a composition root, and their core UIs carry
+    application-shaped bridge names (10 and 5 files, an unclassified grep). Not this CR's (Android's; Apple's build and
+    pass need the Mac): inbox #1066. Cost: Apple's half of decision 3 stays open.

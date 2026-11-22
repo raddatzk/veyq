@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
-import me.raddatz.veyq.mobile.memories.MediaUpload
 import me.raddatz.veyq.mobile.session.DeviceKeys
 import me.raddatz.veyq.mobile.session.DeviceStore
 import me.raddatz.veyq.mobile.session.TenantSession
