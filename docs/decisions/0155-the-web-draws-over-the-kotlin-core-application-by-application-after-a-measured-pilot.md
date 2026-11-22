@@ -11,7 +11,8 @@
   allowance, accepted by the owner 2026-11-22 as chunk overhead); its second (2026-11-22: the share-link rules,
   `@veyq/core-js/sharing`, § The share links' slice — 2.63×, inside R; inbox #1057 fixed for every app through the same
   rule); its third (2026-11-22: a node header's and a level row's plans and core's favourite, cover and bookmark rights,
-  `@veyq/core-js/navigation`, § The rights and plans' slice — 1.90×). Decision 7.3 and 8 are not built: Expenses' move is parked, half built on
+  `@veyq/core-js/navigation`, § The rights and plans' slice — 1.90×); its fourth (2026-11-22: a content sniff, a download name
+  and an archive name, `@veyq/core-js/files`, § The file facts' slice — 1.93×; inbox #1059 decided per app). Decision 7.3 and 8 are not built: Expenses' move is parked, half built on
   branch `claude/p2-impl`; the owner (2026-11-22) counts the platform code its façade needs against the platform module's
   running budget and retired the search-alone budget (§ Consequences)
 - Date: 2026-11-20
@@ -144,7 +145,8 @@ Measured before the decision (2026-11-20):
          (1,388 B gz): the structure every client draws, after the tree's kind facts exist to build them on — **built**,
          § The rights and plans' slice (923 B gz deleted: the standard builders stay);
       4. **the file facts** — a content sniff, a download name, an archive name (2,566 B gz): lazy today (Depot's
-         viewer), and the SVG rule is a security rule;
+         viewer), and the SVG rule is a security rule — **built**, § The file facts' slice (2,539 B gz deleted; measured
+         eager, not lazy: every part sat in the eager set already);
       5. **the media headers** — EXIF, video and image headers (4,780 B gz): lazy, and no vectors yet;
       6. **the export archive** — the ZIP, its CRC and manifest (5,726 B gz): lazy, streamed, and a wrong byte loses data;
       7. **the music order and fades** (859 B gz).
@@ -154,7 +156,8 @@ Measured before the decision (2026-11-20):
       word catalog; the **slug folding** (`shared/naming.ts`) stays beside the Kotlin as decision 9's crypto does, held by
       `v1.json#name_folding`; the **URL fragment rules** are the router's (decision 1). Every platform façade lands in
       `:core`'s one JavaScript file, which a bundler cannot split, so a rule that is lazy in TypeScript turns eager when
-      it moves — the reason slices 4 to 6 come last, each asking first whether a module of its own is cheaper — and the
+      it moves — the reason slices 4 to 6 come last, each asking first whether a module of its own is cheaper (slice 4 measured
+      its TypeScript eager already, so the question did not arise: § The file facts' slice, D2) — and the
       package's size check becomes one running bound on that file: the split's measured search alone plus R × each moved
       slice's deleted TypeScript (a slice the owner granted another ratio carries it, named with the owner's date, on its row
       of `src/packages/core-js/src/slice.test.ts`; R stays the rule). Platform code an application's façade needs (Expenses'
@@ -497,6 +500,142 @@ Measured before the decision (2026-11-20):
     entries and a guest's tile delete — each a difference measured in the slice's map, none moved; `access.ts`' `nodeRights`
     and `folderRights` (the applications' base, their own slice); the apps reading `CoreRights` (they answer the same three
     rules through their doors today).
+
+- **The file facts' slice** (decision 7.2's fourth, built 2026-11-22, branch `claude/files-slice`). What a decrypted file's
+  first bytes are (`blob/Sniff`: image, container, PDF, text and its encoding, an SVG's markup, the claims that narrow), the
+  name a download is saved under (`blob/DownloadName`) and the safe name of a path segment inside a download's ZIP
+  (`export/ArchiveName`) are the platform's alone; the web draws them through `@veyq/core-js/files`
+  (`jsMain/…/files/web/`) behind its unchanged `core/blob/sniff.ts`, `core/blob/meta.ts`' `downloadName`/`typeExtension` and
+  `core/export/archiveName.ts`, which hold no rule. `contracts/platform/files/v1-vectors.json` holds every side
+  (`FileFactsVectorsTest`, the writer; the package's `files.test.ts`; the web's `files.vectors.test.ts`). **Inbox #1059** is
+  decided per app, security first (D9). Its gate (each number against `c4306dcce`):
+
+  | Criterion | Measured | Bound |
+  |---|---|---|
+  | size: the platform module, every entry | 37,145 → 42,049 B gz; own code 4,904 = 1.93× the 2,539 B gz deleted | 38,634 + 3.0 × 2,539 = 46,251 |
+  | size: the eager set | +2,024 B gz (639,288 → 641,312: the Kotlin now in the `review` chunk, `activeSpace` and `main` lose the TypeScript) | 7,617 at R |
+  | size: any lazy chunk | +109 B gz at most (`media`) | ≤ 1,024 |
+  | time (Node 22, median of 15 after 3 warm-ups, the answers compared first) | opening a file (`loadFileView`'s questions of a 256 KiB first frame) 0.71–1.02× for a text or an SVG, ≤ 1.92× for the rest (≤ 0.02 ms); `archiveName` over a directory of 10,000 ≤ 0.93× (9.2 ms); `isArchivePath` ≤ 0.78×; `downloadName` × 10,000 ≤ 2.24× (1 ms); `claimsText` ≤ 1.94×; the answers identical | ≤ 2.5× and ≤ 100 ms |
+  | delivery | three `--rerun-tasks` builds from a removed `dist/`, one digest (`4d43a730…`); `verify:csp`, `verify:license-sources` green | identical |
+  | tests | the deleted `sniff.test.ts` and `archiveName.test.ts` cases each a vector case (152 heads, 24 claims, 23 names, 43 download names, 53 directories, 40 segments and paths); `SVG_SKIPS = 17` turns `FileFactsVectorsTest`, the package's `files.test.ts` and the web's `files.vectors.test.ts` red, a renamed `audio/mpeg` row and a dropped `¹` the core's | — |
+  | behaviour | the web's tests pass, their imports unchanged; the browser pass (one throwaway, headless Chrome, this worktree's Vite over the dev backend): five SVGs uploaded and opened — see D9 and D11 | identical but D11 |
+
+  The slice's decision log, kept by its implementer (question, options, choice and why, evidence, cost):
+  - **D1 — The slice's set.** *Q:* what TypeScript leaves? *Options:* (a) ADR 0155's row — `sniff.ts`, `downloadName` with
+    `MIME_TO_EXT`, `archiveName.ts`; (b) (a) and Depot's `view.ts` decision (`loadFileView`). *Choice:* (a). `view.ts` is
+    Depot's (an application's slice), and it streams and collects chunks — the browser's transport, which ADR 0155 decision 1
+    keeps. Memories' `sniffMediaType` (the type an upload seals) stays Memories' and keeps its three byte readers (`asciiAt`,
+    `hasAscii`, `readEbmlDocType`, 298 B gz) in `features/memories/download.ts`, not counted as deleted. *Evidence:* measured,
+    `npx -y node@22 scratchpad/ff/measure-ts.mjs <web src>` (each set bundled alone, every other import external, minified,
+    gzip -9): the sniff's eight exports 4,136 B min / 1,746 B gz, `downloadName` + `MIME_TO_EXT` 627 / 405,
+    `archiveName.ts`' exports 1,070 / 648; **together 5,815 B min / 2,539 B gz** (ADR 0155's row said 2,566). *Cost:* none.
+  - **D2 — Lazy or eager: the central question, answered by a measurement.** *Q:* the platform module is eager; does moving
+    this slice turn lazy code eager, and would a second, lazily loaded Kotlin module be cheaper? *Evidence:* measured on the
+    web's production build at `c4306dcce` (`vite build` under Node 22, then `/usr/bin/python3 scratchpad/ff/eager.py dist`:
+    `index.html`'s entry and modulepreloads, each gzip -9; markers located by grep in the minified chunks): the eager set is
+    **639,288 B gz** (ADR 0155's last recorded number); the sniff (`theora`, `x-ndjson`, `utf-16le`, `avis`) sits in
+    `activeSpace` — eager, pulled there by `core/people/avatarCache.ts` (`sniffImage`) and Expenses' `receiptRules.ts`; the type
+    → extension table in `activeSpace`; `archiveName`'s rules (`con|prn|aux`) in `main`. **Nothing of the slice is lazy
+    today** — ADR 0155's premise was the Depot viewer's import, but the module lands where its first eager importer puts it.
+    *Choice:* the platform module, as every slice before; no second module. A lazily loaded module would pay ADR 0156's
+    per-module overhead to keep lazy what is eager already. *Cost:* none beyond R; ADR 0155's note on slices 4–6 corrected for
+    this one (slices 5 and 6 measure their own).
+  - **D3 — The entry is `@veyq/core-js/files`.** `jsMain/…/files/web/`, a core area's name (no application is `files`), so the
+    web's direction guard reads it as core's; its code the module file, its types `dist/files.d.mts` (remembered from the earlier
+    slices' entries).
+  - **D4 — Bytes cross without a copy.** The web holds a `Uint8Array`; Kotlin/JS's `ByteArray` is an `Int8Array`. The façade
+    takes the `Uint8Array` and reads it through an `Int8Array` view of the same buffer — no copy of a 256 KiB first chunk.
+  - **D5 — The taken names cross as the web's own `Set`.** `archiveName(name, taken)` adds to the caller's set, which the web's
+    exporter and folder upload keep across a directory. *Options:* an opaque handle per directory; an external interface
+    (`has`, `add`) a `Set<string>` satisfies. *Choice:* the external interface — the callers keep their sets, no handle to
+    track; the core's `ArchiveName.of` takes its own small `Taken` interface, a `MutableSet` adapter on the apps.
+  - **D6 — Where the core and the web answered apart, the web's answer won** (ADR 0154's rule; each a vector case now). The
+    core's `Sniff` had no SVG rule (#1059's half: added); read a Matroska file by `"matroska"` anywhere in its first 64 bytes
+    where the web reads the EBML `DocType` element in the first KiB (`ebmlDocType`, ported: a DocType past byte 64 is Matroska,
+    a `matroska` that is not the DocType is WebM); and said only whether a head is text, not in which encoding (`textEncoding`).
+    `DownloadName`'s table lacked the six audio rows the web added for music tracks (ADR 0135), so an app's track download got
+    no extension. And the core's `extensionOf`, `HAS_EXTENSION` and `trim` read the JVM's white space (`\s` ASCII on the JVM,
+    `isWhitespace` elsewhere): JavaScript's set now (`JsText`), so `a.b c` has no extension on any client. *Evidence:*
+    measured, the vectors recorded from the web (phase 2) answered by the core (`:core:jvmTest --tests '*FileFactsVectorsTest*'`:
+    10 tests, 0 failures) and rewritten by it byte for byte (`VEYQ_WRITE_VECTORS=1 …`, `cmp` against phase 2's file). *Cost:* an
+    app user sees a Matroska/WebM file read as the web reads it, and a track saved as `.mp3`.
+  - **D7 — No `Regex`, `HashMap` or `Pair` on the path.** `Sniff`'s sets became `when`s, its UTF-8 reading one loop without a
+    `Pair` per byte, `extensionOf`/`hasExtension`/the SVG prolog/`ArchiveName`'s forbidden, reserved and trailing rules hand loops
+    (ADR 0155's traps). The apps' API stays (`Sniff.isText`, `DownloadName.of`, `ArchiveName.of(name, MutableSet)`).
+  - **D8 — The bites (phase 3).** Each planted in the core, `:core:jvmTest --tests '*FileFactsVectorsTest*'` red (exit 1), restored
+    with `/bin/cp -f`: `SVG_SKIPS = 17` (the seventeen-comments case), the `audio/mpeg` row renamed (the track case), `¹`
+    dropped from the device names (`COM¹`).
+  - **D9 — Inbox #1059: an SVG, per app, security first.**
+    *Threat model.* An SVG in a space is a peer's bytes (a member, a link guest uploading into a drop box), opened on the
+    viewer's device where the keys are. Must-not: (1) **script execution** — `<script>`, `on*` attributes, `javascript:`
+    links, a `foreignObject`'s HTML: on the web an XSS beside the keys (operator-blind E2EE broken), in an app code run in its
+    process; (2) **external fetches** — `<image href>`/`xlink:href`, `<use href>`, `<feImage>`, CSS `@import`/`url()`, a
+    `foreignObject`'s frame or image, XInclude: a beacon telling a third party the viewer's address and when the file was
+    opened; (3) **XXE** — an external entity (`SYSTEM "file:…"` or `"http:…"`) expanding a local file into the picture or
+    fetching. Bounded, not excluded: a renderer's denial of service (huge sizes, deep filters; the 64 MiB cap bounds the bytes,
+    not the work) and a decoder's memory-safety bug (the residual every image decoder carries). Not a threat: a drawing that
+    looks like UI — it stays inside the picture's frame. **The sniff is a gate, not a sanitizer**: it says the markup is an SVG
+    (any doctype skipped, `<!DOCTYPE html><svg>` too — the web's rule, a vector case); safety is the renderer's mode.
+    *Options per app:* draw it only through a renderer that is static by construction or a browser's image mode, proven on that
+    platform by a hostile-file test; else show the text (fail closed, today's state).
+    *Choice:* **web** — unchanged: an `<img>` from a blob URL (the SVG-as-image mode: no script, no resource loads) under the
+    app's CSP (`script-src 'self'`, `img-src data: blob:`), never inline (remembered from the specifications; the browser pass
+    checks the hostile files below). **Linux** — draws it: GTK decodes through gdk-pixbuf and glycin, whose SVG loader is
+    librsvg in a sandbox of its own (no network, no file system); librsvg runs no script and resolves no URL but `data:` for
+    bytes with no base file. Proven by `file_page.rs`' `an_svg_draws_with_nothing_in_it_run_or_fetched` in the Fedora 44
+    container (`run.py build`'s SANDBOX_SKIPS): nine hostile files naming a loopback listener, no connection; an external
+    file entity does not expand where the internal control does. Turned on by the bridge's Linux start
+    (`platformDrawsSvgAsImage`, `FileView.drawSvgAsImage`), for a member's and a guest's file page alike. **Windows,
+    Android, iOS/macOS** — show it as its text, named in `docs/apps/depot.md` as the platform's difference: Android has no
+    SVG decoder (a WebView's image mode would be a new browser surface, AndroidSVG a dependency whose maintenance is in doubt)
+    and no device this run may use; Apple has no public decoder of arbitrary SVG data (a `WKWebView` image mode the
+    candidate) and builds only here; Windows' candidates (WinUI's `SvgImageSource` over Direct2D, or the hardened WebView2 of
+    `PdfWeb.cs` in image mode) need a hostile-file test on the VM that this slice did not write. *Cost:* an SVG looks
+    different on four clients; each follow-up is a renderer plus its proof.
+  - **D10 — The gate** (phase 4, Node 22.23.3, macOS arm64, Kotlin 2.4.21; the machine at a load of ~30 from parallel work, so
+    the times carry its noise):
+    - size: the platform module with every entry **37,145 → 42,049 B gz** (base measured on a worktree of `c4306dcce`, the
+      package's `slice.test.ts`); own code **4,904 B gz = 1.93×** the 2,539 deleted (budget 38,634 + 3.0 × 2,539 = 46,251); the
+      eager set **639,288 → 641,312 B gz, +2,024** (`scratchpad/ff/eager.py` over `vite build`'s `dist`: `index.html`'s entry and
+      modulepreloads, gzip -9; the bound R × 2,539 = 7,617) — less than the own code, since the deleted TypeScript was eager too;
+      no lazy chunk grows by more than 109 B gz (`media`);
+    - time (`scratchpad/ff/bench/bench.ts`: the deleted TypeScript from git against the shipped module, median of 15 after 3
+      warm-ups, the answers compared first, three runs): opening a file — what `loadFileView` asks of a 256 KiB first frame —
+      0.71–0.91× (text), 0.90–1.02× (SVG), 1.89–1.92× (random binary, 0.02 ms), 1.36–1.81× (PDF, 0.003 ms), the JPEG below the
+      timer; `archiveName` over a directory of 10,000 0.78–0.93× (≤ 9.2 ms); `isArchivePath` over 10,000 0.69–0.78×;
+      `downloadName` × 10,000 1.81–2.24× (≤ 1 ms); `claimsText` × 10,000 1.62–1.94× — each within 2.5× and 100 ms;
+    - delivery: three `--no-daemon --rerun-tasks :composition:jsPackage` builds from a removed `dist/`, one digest
+      (`4d43a730…`); the web's `verify:csp` and `verify:license-sources` green in its check;
+    - bites: `SVG_SKIPS = 17` red in the core's, the package's and the web's vector tests; the slice's row at 900 B gz deleted
+      turns the running budget red; restored with `/bin/cp -f`.
+  - **D11 — The web's SVG: a blob URL opened in a tab ran its script — shown as a PNG now.** *Q:* does the web's SVG drawing
+    hold the threat model? *Evidence:* measured, the browser pass (headless system Chrome through Playwright, a throwaway on
+    this worktree's Vite at `tw-…localhost:8197` over the dev backend; the store's presigned PUTs, whose CORS names only origin
+    8081, sent through Playwright's `route.fetch` with the page's origin added — the pass's one workaround, the listener's
+    origin never routed): five SVGs (benign; `<script>` and `onload`; `<image href>`, `xlink:href`, `<use>`, CSS `@import` and
+    `url()`, a `javascript:` link; a `foreignObject` frame, image and script; an external `http` and a `file` entity), each naming
+    a loopback listener. In the page's `<img>` nothing ran and nothing was requested. But the `<img>`'s blob URL opened in a tab
+    of its own ran the SVG's script — `PWNED-script`, `PWNED-onload`, `PWNED-foreign` in the console, the tab's title rewritten
+    — on the app's origin: the page's CSP (`script-src 'self'`, a response header) was not inherited by the blob document.
+    `depot.md`'s note that it is was remembered and wrong. *Options:* a `data:` URL (an opaque origin when opened, but the
+    script still runs and may fetch); serving the SVG under another type (no image then); drawing it once into pixels.
+    *Choice:* pixels — `features/depot/svgRaster.ts` decodes the SVG off the DOM in image mode, draws it onto a canvas (its own
+    size × the screen's ratio ≤ 2, at most 4096 px) and the page shows the PNG; the SVG's URL is revoked once drawn. Re-run:
+    four SVGs shown as PNGs, each tab opening a PNG, no listener hit, no off-origin request, no `PWNED`; the `foreignObject`
+    one taints the canvas and is "cannot be shown" with the download. `FileViewer.test.ts` holds it (bitten: the SVG's blob
+    shown again → two red). *Cost:* an SVG is a raster at a fixed resolution (zoom shows pixels); one with a `foreignObject`
+    no longer shows.
+  - **D12 — Left:** a renderer and its hostile-file proof for Windows, Android and Apple (#1059's next step); the installed
+    Flatpak's glycin sandbox was not exercised (the test runs in the Fedora container, where glycin's loaders run as in
+    `run.py run`; the GNOME 51 runtime carries the same loaders, remembered from the manifest); the browser pass ran against
+    Vite's dev build and headless Chrome only (Firefox and Safari not run; the PNG holds there by construction).
+  - **D13 — A lone surrogate is no vector case.** *Evidence:* measured, Windows' `run.py test`: `archiveName("lone \ud800
+    surrogate")` kept the surrogate on the JVM, `macosArm64` and JavaScript but became U+FFFD on Windows (and so on Linux): the
+    bridged targets' `crypto/nfc` normalizes through utf8proc over UTF-8, which cannot carry a lone surrogate. *Choice:* the two
+    lone-surrogate cases leave the vectors; `nfc` is not changed here (it folds the name tokens, `v1.json#name_folding`, a crypto
+    change of its own). A name of decrypted UTF-8 cannot hold one; a browser's picked file name can. *Cost:* such a name's ZIP
+    segment differs between the desktops and the other clients (follow-up: `nfc` on the bridged targets keeping lone
+    surrogates, under the crypto suite's vectors).
 
 - **Expenses' move is parked, not merged** ([cr-web-expenses-on-the-core](../../changes/cr-web-expenses-on-the-core.md)),
   on branch `claude/p2-impl`: the vectors (`c76d3212f`), the JSON seam and Expenses' pure homes (`c5793db14`), the
