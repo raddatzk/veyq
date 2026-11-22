@@ -467,4 +467,25 @@ apps' builds of phase 2 and every `scripts/validate_*.py` green.
 
 ## Retrospective
 
-(Filled by the implementer.)
+*Interim, 2026-11-22: phases 1–3 built, stopped at phase 3's gate (D28); phases 4–5 and the harvest wait for the owner.*
+
+- **Where it stands.** `claude/node-tree`: phase 1 `4c4743d16` (the vectors, the web answering them), phase 2 `d5f0c0269`
+  (the platform's `tree/`, the apps on it, the vectors rewritten by the core byte for byte), phase 3 `fcf3e65b7` +
+  `a034cbe73` (the façade, the entries, the checks; red on the running budget only). The web's rewiring, unverified:
+  `claude/node-tree-p4-wip` (`76889fa28`). Nothing pushed, nothing merged; the decision log above is the record (D15–D29).
+- **The CR read one ratio two ways.** Phase 3's probe (4× own code: the eager-set bound net of the deleted TypeScript) and
+  decision 10's running budget (3× gross) disagree by one deleted TypeScript; the slice lands between them (3.14×). A
+  refine that sets two bounds on one quantity computes both on one example before freezing them.
+- **A small slice pays mostly fixed cost.** Of the 4,158 B gz of own code, the collator's table alone is 196 and the façade's
+  conversions and the handles another large share; R = 3.0 was measured on a slice (the search) whose rules dwarfed its
+  façade. The size work (D26: 33,404 → 32,101) found its biggest single item by reading the compiled module, not the map
+  (a `const val` string inlined four times) — a source map's attribution undercounts what gzip sees as repeated.
+- **The CR's named risk came true and has a measured fix.** A second entry re-exporting from the shared module broke a test's
+  `vi.mock` (D29); entries now differ by their types only. Expenses' resumed move meets the same mechanism.
+- **Accounted assertions (decision 12's tests line), for phase 4:** `levelList.test.ts` → the vectors' `order` cases (folders
+  first, kinds mixed, numbers, case and accents, ties) and `TreeRulesTest.theOrderDoesNotChangeItsInputs`
+  (`compareByName` as a comparator has no successor: the order is the façade's whole); `location.test.ts`' `compareByCreation`
+  trio and `displayNamesOf` case → `TreeRulesTest.theCreationOrder_…` and the `displayNames` vectors; `siblingCollision.test.ts`'
+  `collidingSibling` cases → the `collision` vectors one by one (its slug-token test and `nameTakenMessage` stay);
+  `move.test.ts`' browser, copy, guest and selection-plan cases → the `moveBlock`, `moveBlockOf`, `movePlaces`, `moveTrail`,
+  `moveStart`, `planMove` vectors (its door, writes and refusals stay). Parked with the WIP branch, unverified.
