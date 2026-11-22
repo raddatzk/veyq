@@ -30,6 +30,9 @@ struct SelectableRow<Label: View>: View {
 struct SelectionBar: View {
     @Bindable var model: AppModel
     let selection: LevelSelection.Picking
+    /// A link guest's level (#1063): its selection's calls and its move sheet the guest level's (core's `GuestLevelMoves`,
+    /// whose plan holds a move only); nil: the shell's level.
+    var guest: GuestLevelMoves? = nil
     @State private var moving: MoveAsked?
     @State private var reporting: Asked?
     @State private var deleting: SelectionTrash?
@@ -64,7 +67,7 @@ struct SelectionBar: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(say(selection.label))
         .sheet(item: $moving) { m in
-            NodeMoveSheet(model: model, ref: m.ref, copying: m.copying) { [model] in model.selectionMoveSheet(copying: m.copying) }
+            NodeMoveSheet(model: model, ref: m.ref, copying: m.copying) { [model, guest] in guest.map { $0.selectionSheet() } ?? model.selectionMoveSheet(copying: m.copying) }
         }
         .sheet(item: $reporting) { asked in
             ReportSheet(model: model, ref: asked.ref) { [model] in model.selectionReportSheet() }
@@ -82,13 +85,13 @@ struct SelectionBar: View {
     @ViewBuilder private var controls: some View {
         Text(say(notice: selection.count)).fontWeight(.semibold)
             .accessibilityAddTraits(.updatesFrequently)
-        Button(say(selection.all)) { model.selectAll() }
-        Button(say(selection.none)) { model.selectNone() }
+        Button(say(selection.all)) { if let guest { guest.selectAll() } else { model.selectAll() } }
+        Button(say(selection.none)) { if let guest { guest.selectNone() } else { model.selectNone() } }
         ForEach(Array(selection.entries.enumerated()), id: \.offset) { _, a in
             action(a)
         }
         Spacer(minLength: 0)
-        Button(say(selection.cancel)) { model.selectCancel() }
+        Button(say(selection.cancel)) { if let guest { guest.selectCancel() } else { model.selectCancel() } }
     }
 
     /// One action of the bar: its words, enabled where some selected row allows it; what it opens is core's.
@@ -106,6 +109,11 @@ struct SelectionBar: View {
     }
 
     private func ask(_ action: SelectionAction, copying: Bool) {
+        // a guest's sheet is the guest level's own (`make`), titled by it: no node of the shell's to name it by
+        if guest != nil {
+            moving = MoveAsked(ref: NodeAt(scopeId: "", nodeId: "", kind: "", name: ""), copying: copying)
+            return
+        }
         guard let first = model.selectedFirst(action) else { return }
         moving = MoveAsked(ref: first, copying: copying)
     }
