@@ -132,6 +132,14 @@ held for the screens' models but not around them:
   server field (compiled only). **Apple:** both builds green, nothing clicked; the Mac's drops (a ZIP and a folder onto a
   level, onto a folder row and a guest's identity folder, onto a gallery; #1039's folder from Finder), its dialogs and a
   guest's link are the coordinator's pass, the iPhone's the owner's.
+- **As built, decision 1 — a Contributions view's bucket** (inbox #1065, 2026-11-22). A drop on a Memory's Contributions
+  view goes into the bucket it shows, as the web's Beiträge drop does: `DropTarget.Bucket(contributions)`, judged by the
+  view alone (`Contributions.intake`: the caller's own root takes it, another uploader's refuses it with
+  `memory_buckets_drop_not_own`, a sub-bucket offline with `offline_read_only`) and sorted as a gallery's drop
+  (`Drops.sorted`); a sub-bucket's upload is filed by a move once each medium is in (`MediaUploads.upload`'s filer,
+  ADR 0034 point 7). The desktops send `DropOn.Buckets` with the open view's id; Android, Apple, Linux and Windows pick
+  the bucket target while their Contributions view shows. Tests: `ContributionsTest`, `MediaUploadsTest`,
+  `BucketDropTest`. **Not run:** a drop on any app's Contributions view (the passes above apply; owed in #1065).
 - **As built, decision 6's words** (2026-11-20). `scripts/validate_mobile_words.py` reads Android's Kotlin
   (`android-literal`), Swift's accessibility hints and values and `Text(verbatim:`, C#'s and XAML's help texts and a
   dialog's three button texts, GTK's alert responses and an entry row's text, and the two manifests that show text
