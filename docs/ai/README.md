@@ -128,7 +128,11 @@ Five rules follow:
    built on its own branch (a worktree when a session has one) and lands as one squashed pull request; `main` never
    holds a half-built feature, because `main` is what the weekly snapshot publishes and a release promotes (owner
    2026-11-13 and 2026-11-22; [ADR 0091](../decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
-   decision 5). A CR's phases are commits on that branch, not merges into `main`.
+   decision 5). A CR's phases are commits on that branch, not merges into `main`. **Its body carries the release
+   note** — a `## Release note` section in the release's own words (Use-area tone), or `none` when nobody using or
+   running veyq would notice: the Monday release draft is gathered from those sections, so it is written by whoever
+   built the change, while the context is fresh (`.github/pull_request_template.md`, `release-note.yml`; the form is
+   `scripts/release_notes.py`'s docstring).
 
    **A live parallel session is a hazard for WRITES too, and this one bites harder than a stale count.** A checkout
    can still be shared — the main checkout carries IntelliJ and every session started without a worktree — and
