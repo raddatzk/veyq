@@ -352,7 +352,8 @@ Measured before the decision (2026-11-20):
     parameter — `LocalDays` for the apps, the engine's `Date` behind the façade (0.30×): one formula, one reading per platform.
   - *Left:* an instance's tenant switch for `.embeddable` does not reach `/api/setup`'s capability list (measured in the
     pass: switched off, the list still named it and the page embedded), so the page decides by the instance's answer, as
-    before the slice — the server's question, not this slice's (inbox #1067: since 2026-11-22 the list is the link domain's tenant's, ADR 0088 decision 3).
+    before the slice — the server's question, not this slice's (inbox #1067: since 2026-11-22 the list is the link domain's tenant's, ADR 0088 decision 3; the same day's re-run of
+    the pass, switched off and reloaded, showed the fallback line naming the host, ADR 0121 decision 3 § `Cache-Control`).
 
 - **Expenses' move is parked, not merged** ([cr-web-expenses-on-the-core](../../changes/cr-web-expenses-on-the-core.md)),
   on branch `claude/p2-impl`: the vectors (`c76d3212f`), the JSON seam and Expenses' pure homes (`c5793db14`), the
