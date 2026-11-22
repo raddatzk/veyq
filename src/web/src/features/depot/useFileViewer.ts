@@ -15,7 +15,7 @@ import { useObjectUrl } from '../../shared/state/useObjectUrls'
 import { handleFromUrl, registerPlayback, revokePlayback } from '../../sw/register'
 import { openPdf, PdfOpenError, type PdfDocument } from '../../shared/pdf/pdfEngine'
 import { loadFileView, type UnsupportedReason, type ViewHints } from './view'
-import { rasterizeSvg } from './svgRaster'
+import { decodeSvg, type SvgPicture } from './svgRaster'
 
 /** What the viewer opens: `id` changes whenever the content does (the blob's id); the provider reads and decrypts it. */
 export type ViewerTarget = { id: string; source: BlobChunkProvider; hints: ViewHints }
@@ -24,7 +24,9 @@ export type ViewerTarget = { id: string; source: BlobChunkProvider; hints: ViewH
 export type ViewerUnsupported = UnsupportedReason | 'codec' | 'no-sw' | 'pdf-password' | 'pdf-broken' | 'pdf-pages'
 
 export type ReadyView =
-  | { kind: 'image'; url: string; svg: boolean }
+  | { kind: 'image'; url: string }
+  /** An SVG: its decoded picture, painted onto the page's canvases (`SvgView.vue`); it has no URL. */
+  | { kind: 'svg'; picture: SvgPicture }
   | { kind: 'text'; text: string; truncated: boolean }
   | { kind: 'pdf'; doc: PdfDocument }
   | { kind: 'stream'; element: 'video' | 'audio'; type: string; src: string }
@@ -50,7 +52,7 @@ export function useFileViewer(target: () => ViewerTarget | null): {
   submitPassword: (password: string) => void
   /** The user declines the prompt: the PDF stays closed and the download is offered. */
   cancelPassword: () => void
-  /** The page's `<img>` could not decode what was sniffed as an image (HEIC off Safari, a truncated file). */
+  /** The page's `<img>` could not decode what was sniffed as an image (HEIC off Safari, a truncated file), or an SVG's paint was refused. */
   imageFailed: () => void
   /** The page's `<video>`/`<audio>` could not play the stream (a codec the browser lacks, a failed read). */
   mediaFailed: () => void
@@ -61,6 +63,7 @@ export function useFileViewer(target: () => ViewerTarget | null): {
   let controller: AbortController | null = null
   let handle: string | null = null
   let pdf: PdfDocument | null = null
+  let picture: SvgPicture | null = null
   // The one pending answer of the password prompt: a resolver, never the password. It is the only way a password gets from the
   // field to pdf.js - not state, not a log, not a request - and it is gone as soon as it has been called.
   let answer: ((password: string | null) => void) | null = null
@@ -76,6 +79,8 @@ export function useFileViewer(target: () => ViewerTarget | null): {
     if (handle) revokePlayback(handle)
     handle = null
     image.clear()
+    picture?.close()
+    picture = null
   }
 
   async function open(): Promise<void> {
@@ -97,21 +102,26 @@ export function useFileViewer(target: () => ViewerTarget | null): {
         },
       })
       if (mine !== run) return
-      if (view.kind === 'image') {
-        const svg = view.type === 'image/svg+xml'
-        // an SVG is shown as the PNG it draws, never by its own URL (`svgRaster.ts`, inbox #1059); one that does not draw is
-        // the decode failure every image can have
-        let shown: Blob
+      if (view.kind === 'image' && view.type === 'image/svg+xml') {
+        // an SVG is shown as pixels painted from its decoded picture, never by its own URL (`svgRaster.ts`, inbox #1059);
+        // one that does not draw is the decode failure every image can have
+        let decoded: SvgPicture
         try {
-          shown = svg ? await rasterizeSvg(view.blob, ctl.signal) : view.blob
+          decoded = await decodeSvg(view.blob, ctl.signal)
         } catch (e) {
           if (mine !== run || ctl.signal.aborted) throw e
           state.value = { status: 'unsupported', reason: 'format' }
           return
         }
-        if (mine !== run) return
-        image.set(shown)
-        state.value = { status: 'ready', view: { kind: 'image', url: image.url.value!, svg } }
+        if (mine !== run) {
+          decoded.close()
+          return
+        }
+        picture = decoded
+        state.value = { status: 'ready', view: { kind: 'svg', picture: decoded } }
+      } else if (view.kind === 'image') {
+        image.set(view.blob)
+        state.value = { status: 'ready', view: { kind: 'image', url: image.url.value! } }
       } else if (view.kind === 'text') {
         state.value = { status: 'ready', view: { kind: 'text', text: view.text, truncated: view.truncated } }
       } else if (view.kind === 'pdf') {
@@ -178,6 +188,8 @@ export function useFileViewer(target: () => ViewerTarget | null): {
   }
   function imageFailed(): void {
     image.clear()
+    picture?.close()
+    picture = null
     state.value = { status: 'unsupported', reason: 'format' }
   }
   function mediaFailed(): void {

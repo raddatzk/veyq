@@ -74,6 +74,13 @@ const en = {
         copiedShown: 'Copied the shown part of the text to the clipboard.',
         copyManual: 'Your browser does not allow copying with the button here. The text is selected: press Ctrl+C (Cmd+C on a Mac) to copy it.',
       },
+      // An SVG's zoom (components/SvgView.vue): the picture is drawn again at each zoom, so it stays sharp.
+      image: {
+        toolbar: 'Image controls',
+        zoomOut: 'Zoom out',
+        zoomIn: 'Zoom in',
+        fit: 'Fit to the view',
+      },
       // A PDF's viewer: its pages and toolbar are core's renderer (`shared/pdf/PdfPages.vue`, its texts core's `pdf.*`);
       // what stays here is Depot's own part of it.
       pdf: {
@@ -253,6 +260,12 @@ const de: typeof en = {
         copied: 'In die Zwischenablage kopiert.',
         copiedShown: 'Den angezeigten Teil des Textes in die Zwischenablage kopiert.',
         copyManual: 'Dein Browser erlaubt das Kopieren per Schaltfläche hier nicht. Der Text ist markiert: Drücke Strg+C (Cmd+C auf dem Mac), um ihn zu kopieren.',
+      },
+      image: {
+        toolbar: 'Bildsteuerung',
+        zoomOut: 'Verkleinern',
+        zoomIn: 'Vergrößern',
+        fit: 'In die Ansicht einpassen',
       },
       pdf: {
         passwordTitle: '{name} ist passwortgeschützt',
