@@ -45,7 +45,9 @@ internal static class ReceivedText
     public static string DrawnKey(ReceivedShown s)
     {
         var page = s.page is { } p
-            ? $"{p.kind}|{p.file}|{p.gallery}|{p.pot}|{string.Join(",", p.rows.Select(r => r.id))}|{string.Join("\n", p.sent)}"
+            ? $"{p.kind}|{p.file}|{p.gallery}|{p.pot}|{string.Join(",", p.rows.Select(r => $"{r.id}:{string.Join("/", r.menu.Select(a => a.id))}"))}|{string.Join("\n", p.sent)}"
+              // the level's move (#1063): its tools and, while it picks, what is selected and the bar's state
+              + $"|{string.Join(",", p.tools)}|{(p.selection is { } sel ? $"{string.Join(",", sel.selected)}|{string.Join(",", sel.actions.Select(a => $"{a.id}:{a.enabled}:{a.cannot is not null}"))}" : "-")}"
             : "";
         return $"{s.gate}|{s.refusal}|{s.askedAgain}|{page}";
     }
