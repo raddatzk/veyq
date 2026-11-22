@@ -417,6 +417,11 @@
     "en": "The Secret Key is not right.",
     "de": "Der Secret Key stimmt nicht."
   },
+  "secret_key_typo": {
+    "note": "Under every Secret Key field while the typed key is 54 symbols whose check disagrees (KeyIntake.problem TYPO): the web's unlock.secretKeyTypo verbatim.",
+    "en": "This Secret Key has a typo. Compare it with your Emergency Kit, group by group.",
+    "de": "In diesem Secret Key steckt ein Tippfehler. Vergleiche ihn Gruppe für Gruppe mit deinem Notfall-Kit."
+  },
   "signin_error_no_tenant": {
     "en": "This server has no space at this address.",
     "de": "Unter dieser Adresse gibt es auf dem Server keinen Bereich."

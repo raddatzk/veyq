@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
 import me.raddatz.veyq.mobile.crypto.EmergencyKit
 import me.raddatz.veyq.mobile.crypto.Primitives
+import me.raddatz.veyq.mobile.crypto.SecretKeyProblem
 import me.raddatz.veyq.mobile.crypto.SecretKeyText
 import me.raddatz.veyq.mobile.qr.QrDecoder
 import me.raddatz.veyq.mobile.qr.QrFrame
@@ -67,6 +68,22 @@ class KeyIntake(private val primitives: Primitives, private val account: Account
     /** The 32 bytes of a typed or pasted Secret Key — a `veyqkit:` token's key first (the web's paste swap), then a bare
      *  key —, a fresh array the caller zeroes; null where the text reads as neither. */
     fun typed(text: String): ByteArray? = EmergencyKit.read(primitives, text)?.secretKey ?: SecretKeyText.read(primitives, text)
+
+    /**
+     * Why the field's [text] is no Secret Key as it is typed — the web's `SecretKeyField` typo line (ADR 0154 decision
+     * 1: typed, as a UI tells the two apart): [SecretKeyProblem.TYPO] is said under the field at once ([Msg.SECRET_KEY_TYPO]),
+     * [SecretKeyProblem.MALFORMED] says nothing while it is typed (the action refuses it as a key that does not match).
+     * Null for a `veyqkit:` token that reads, or a key; a key read here is zeroed at once. An empty field is
+     * `MALFORMED`, as the reader and `v1.json#secret_key_text.refused` have it — and says nothing either.
+     */
+    fun problem(text: String): SecretKeyProblem? {
+        val kit = EmergencyKit.read(primitives, text)
+        if (kit != null) {
+            kit.wipe()
+            return null
+        }
+        return SecretKeyText.problem(primitives, text)
+    }
 
     /**
      * The key an action uses, a fresh array the caller zeroes: [text]'s where something is typed ([typed]; 32 zero bytes
