@@ -443,7 +443,8 @@ what each pass proved). The Use pages: [Mark the best photos](../../site/src/con
 [Copy things](../../site/src/content/docs/spaces/copy-things.mdx).
 
 **A received link, on all four apps** ([ADR 0150](../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md), built 2026-11-19): the web's share page ported into the core
-(`sharing/`: the link held to the web's parse by `contracts/platform/share-links/cases.v1.json`, the link instance's
+(`sharing/`: the link held to the web's parse by `contracts/platform/share-links/cases.v1.json` — the web's parse itself
+since ADR 0155's share-link slice, which also made a link's last end day `LinkDays`' for the web and every app —, the link instance's
 `/api/setup`, the gates — password, terms, note — in the web's order, the guest's tree and its write session), each kind's
 guest door its application's (a folder's level, Depot's file and drop box, Memories' gallery and uploader, Expenses' Pot
 over a door). *Open a link* on the sign-in and unlock screens (a paste control that reads the clipboard on the tap only;

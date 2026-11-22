@@ -99,7 +99,8 @@ proxy through this instance would make it learn what each member reads.
    falls back to ADR 0120's open, with one line saying why. Until a major 2 is released that window is this client's
    own major alone, so the built check — equality — is the rule's whole extent; the guest adapter for an older major
    is due with major 2 (ADR 0085 § Consequences). A write's own capability (`.contribute`) is the share's
-   server's to refuse, as on its page. As built (`core/sharing/shareInstance.ts`): `embeddability` is one pure function
+   server's to refuse, as on its page. As built (`core/sharing/shareInstance.ts` over the platform's `sharing/ShareInstance.kt`
+   `embedding` since 2026-11-22, ADR 0155 § The share links' slice — the reading the apps' open shares): `embeddability` is one pure function
    over what was read, its refusals `switchedOff`, `unreachable` (no answer, or no version or capability list),
    `otherVersion`, `noLinks` and `notEmbeddable`; the fallback line names each but `switchedOff`. "No answer" is its own
    unavailable (`ShareUnavailableError('unreachable')`, where the generated client got no HTTP response — the network,

@@ -8,7 +8,9 @@
   direction guard reading the entry); decision 7's ratio written; decision 7.1 (2026-11-22: the core's split into a
   platform module and one module per application, [ADR 0156](0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md)). Decision 7.2's first slice (2026-11-22: the node tree's rules,
   `@veyq/core-js/tree`, § The node tree's slice — accepted by the owner at 3.14×; its eager set 67 B gz over that
-  allowance, accepted by the owner 2026-11-22 as chunk overhead). Decision 7.3 and 8 are not built: Expenses' move is parked, half built on
+  allowance, accepted by the owner 2026-11-22 as chunk overhead); its second (2026-11-22: the share-link rules,
+  `@veyq/core-js/sharing`, § The share links' slice — 2.63×, inside R; inbox #1057 fixed for every app through the same
+  rule). Decision 7.3 and 8 are not built: Expenses' move is parked, half built on
   branch `claude/p2-impl`; the owner (2026-11-22) counts the platform code its façade needs against the platform module's
   running budget and retired the search-alone budget (§ Consequences)
 - Date: 2026-11-20
@@ -136,7 +138,7 @@ Measured before the decision (2026-11-20):
          key material and no JSON — **built**, § The node tree's slice;
       2. **the share-link rules** — a received link's parsing and report link, a link's last end day, an instance's
          embeddability (1,251 B gz): pinned by `contracts/platform/share-links/cases.v1.json` on both sides already; the
-         bookmark's sealed meta joins once Expenses has built decision 4's JSON seam;
+         bookmark's sealed meta joins once Expenses has built decision 4's JSON seam — **built**, § The share links' slice;
       3. **the rights and ADR 0154's plans** — a header's and a row's actions, the favourite, cover and bookmark rights
          (1,388 B gz): the structure every client draws, after the tree's kind facts exist to build them on;
       4. **the file facts** — a content sniff, a download name, an archive name (2,566 B gz): lazy today (Depot's
@@ -300,6 +302,58 @@ Measured before the decision (2026-11-20):
   - *Left:* Depot's `DepotFiles.collision` and Memories' `MemoryCreate.check` keep their own loops (over the same
     `AppKinds.tokenInput`); the apps' level and header plans do not hand the numbered name on yet (inbox #1062); a guest
     moves nothing in the apps (inbox #1063).
+- **The share links' slice** (decision 7.2's second, built 2026-11-22, branch `claude/share-links-slice`). A received
+  link's check, its host, its report link and the share page's `&report` (`ReceivedLink`), a link's last end day under a
+  tenant's limit (`LinkDays`, new) and an instance's embeddability (`ShareInstance.refusal` for the apps' open,
+  `embedding` for the web page, one reading) are the platform's `sharing/` (`:core`), with `session/ClientWindow`'s window;
+  the web draws them through `@veyq/core-js/sharing` behind its unchanged `bookmarkLink.ts`, `linkRules.ts`' `lastExpiryDay`
+  and `shareInstance.ts`' `embeddability`, which hold no rule. `contracts/platform/share-links/cases.v1.json` holds every
+  side (`ShareLinkVectorsTest`, the package's `sharing.test.ts`, the web's three tests). **Inbox #1057** — the apps
+  counted an edited link's last end day from today, the server from the link's creation — is fixed for all four apps in
+  `LinkForm.start`, which now takes `now` and counts from the edited link's `createdAt`. The bookmark's sealed meta stays
+  TypeScript: decision 4's JSON seam is only on the parked `claude/p2-impl`. Its gate (each number against `b8c2228de`):
+
+  | Criterion | Measured | Bound |
+  |---|---|---|
+  | size: the platform module, every entry | 32,101 → 35,392 B gz; own code 3,291 = 2.63× the 1,253 B gz deleted (8,753 B minified, 3.27× the 2,678) | 32,106 + 3.0 × 1,253 = 35,865 |
+  | size: the eager set | +2,656 B gz (634,769 → 637,425: `activeSpace` +3,156, `main` −493) | 3,759 at R |
+  | size: any lazy chunk | +5 B gz at most (`browser`) | ≤ 1,024 |
+  | time (Node 22, median of 15) | `parseShareLink` (a keystroke) 1.41×, `keptLink` + `hostOf` (a list of 10,000) 1.17×, `lastExpiryDay` (a list of 10,000 stopped links) 0.30×, `embeddability` (once a page) 2.05×; each whole batch ≤ 26 ms, the answers identical (20,038 compared) | ≤ 2.5× and ≤ 100 ms |
+  | delivery | three `--rerun-tasks` builds one digest; no `eval`, `new Function` or DOM sink; `verify:csp`, `verify:license-sources` green | identical |
+  | tests | the deleted bodies' unit cases stay as the adapters' tests over the shipped module; the pre-fix `today + maxDays − 1` turns the #1057 vector red in `ShareLinkVectorsTest` and `LinkFormTest`; a `withoutReport` keeping empty parameters and a `lastEndDay` without its `− 1` turn the package's `sharing.test.ts` red | — |
+  | behaviour | the browser pass (one throwaway, headless Chrome, a 7-day rule): the new and the edit form offer today … today + 6, a pasted link's eight cases answered as the vectors say, the bookmark row and page name the host, the page embeds the share, `&report` opens the share page's report dialog and leaves its address | identical but the three cases below |
+
+  The slice's decision log, kept by its implementer:
+  - *The set:* the three groups of the row, with `olderMajorsInWindow` (1,253 B gz). `linkRules()` (a capability read),
+    `readShareInstance` (a fetch) and `EMBED_MAJORS` (the web embed's own adapters, under the web's VERSION tripwire) stay
+    the browser's. `MAX_LINK_LENGTH` left the web; its one reader reads the vectors' `maxLinkLength`.
+  - *The entry* is `@veyq/core-js/sharing` (`jsMain/…/sharing/web/`), a core area's name, so the web's direction guard reads
+    it as core's; its code the module file, its types `dist/sharing.d.mts`.
+  - *#1057's rule:* `LinkDays.lastEndDay(maxDays, madeAt) = dayOf(madeAt + maxDays × 24 h) − 1` — a picked day is sent as
+    its end, which must not pass the server's `createdAt + maxDays`. `LinkForm.start` takes `now`, never a day, so no caller
+    can hand an edit a today-counted last day; a link past its lifetime keeps its last day as the end (the web's picker caps
+    the same way), and `withEndDay` no longer meets the empty range it would now find. The vectors name a zone per case (the
+    JVM test sets the default zone, the package's test `process.env.TZ`), across both ends of daylight saving time.
+  - *Where the two parsers read apart,* the core's answer won (fail closed, one rule), measured by running both over
+    candidate inputs: a key whose last character sets bits past the 256th (`noKey`; `atob` read it), an empty user info
+    `https://:@host` (`credentials`), and a host in Unicode (`notAUrl`; the punycode form still reads). A member who pastes
+    such a text on the web is refused now; no link veyq builds is one of them. Ten more cases both already agreed on joined.
+  - *One embeddability reading:* the apps' `Refusal` enum keeps its three constants (Swift and Android switch over it
+    exhaustively); the page's answer adds this instance's switch first and `.embeddable` last, in the web's words.
+  - *No `Regex` and none of the library's general string search on a façade's path.* The façade's first build measured
+    37,357 B gz (own code 4.19×): a Kotlin `Regex` (~9 KB minified with its wrapper), `split`'s delimited-ranges sequence,
+    the ignore-case paths of `indexOf`/`lastIndexOf`/`startsWith`/`endsWith` and `trim`'s Unicode table, attributed by the
+    source map and an unminified diff of the bundle. `ReceivedLink` reads its shapes with helpers of its own. The same build
+    found a defect only JavaScript had: the IPv6 host's `^\[[0-9a-f:.]+]$` is no valid expression in the `u` mode Kotlin/JS
+    compiles a `Regex` to — the web's first parse threw, while the JVM and native read it. `trim` is now JavaScript's own set
+    of white space, for every client.
+  - *A `Long` on a list path, again:* through `LocalDays` (epoch ms as an emulated `Long`) the guest-stop rows'
+    `lastExpiryDay` measured 19.8× the TypeScript. `LinkDays` takes the instant as a `Double` and the local-day reading as a
+    parameter — `LocalDays` for the apps, the engine's `Date` behind the façade (0.30×): one formula, one reading per platform.
+  - *Left:* an instance's tenant switch for `.embeddable` does not reach `/api/setup`'s capability list (measured in the
+    pass: switched off, the list still named it and the page embedded), so the page decides by the instance's answer, as
+    before the slice — the server's question, not this slice's.
+
 - **Expenses' move is parked, not merged** ([cr-web-expenses-on-the-core](../../changes/cr-web-expenses-on-the-core.md)),
   on branch `claude/p2-impl`: the vectors (`c76d3212f`), the JSON seam and Expenses' pure homes (`c5793db14`), the
   façade and its entry (`cbf54e21e`), `Big` over the engine's `BigInt` (`243e89185`), one optimisation round
