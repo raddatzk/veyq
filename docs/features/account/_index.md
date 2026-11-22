@@ -29,7 +29,7 @@ holds only **public** keys and ciphertext, never the password and never a conten
 - ★ [Account login (password)](use-cases/uc.account.login.md) — **built (backend + web)**
 - ★ [Unlock the Master Key (password + Secret Key)](use-cases/uc.account.unlock.md) — **built (web + backend)** (L0 — the floor)
 - [Change the sign-in address](use-cases/uc.account.change-email.md) — **built** (backend + web, cr-change-email; inbox #197, ADR 0074 Decision 8)
-- [Make a new Emergency Kit when a clearer one exists](use-cases/uc.account.renew-emergency-kit.md) — **planned** (cr-kit-layout-record; [ADR 0157](../../decisions/0157-a-kits-layout-has-a-version-and-a-sealed-record-says-which-one-the-account-last-made.md))
+- [Make a new Emergency Kit when a clearer one exists](use-cases/uc.account.renew-emergency-kit.md) — **built** (backend + web + admin-web, cr-kit-layout-record; [ADR 0157](../../decisions/0157-a-kits-layout-has-a-version-and-a-sealed-record-says-which-one-the-account-last-made.md))
 
 **Device unlock** — what a device may remember, so the Secret Key is typed once per device
 ([ADR 0005 §8–13](../../decisions/0005-unlock-methods-and-device-trust.md)):

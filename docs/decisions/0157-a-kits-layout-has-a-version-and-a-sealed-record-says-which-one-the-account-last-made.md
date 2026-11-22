@@ -1,7 +1,7 @@
 # ADR 0157 — A kit's layout has a version, and a sealed record says which one the account last made
 
 - Status: Accepted
-- Built: no (cr-kit-layout-record)
+- Built: yes (cr-kit-layout-record; its browser pass, 2026-11-22, is recorded in the use case)
 - Date: 2026-11-22
 - Model: [uc.account.renew-emergency-kit](../features/account/use-cases/uc.account.renew-emergency-kit.md),
   [en.account.key-model § The kit record](../features/account/enablers/en.account.key-model.md#the-kit-record)
@@ -65,15 +65,19 @@ What the tree holds (read 2026-11-22 on `main` `28e3312c0`):
      field is a mode spelled by omission): the ceremony always prints a kit of the current layout, the record belongs to
      the new Secret Key and commits with it, and the row the old Master Key sealed is replaced.
    - **The address change and the renewal write it with `PUT /api/account/kit-record`** once the PDF was saved: both have
-     a session, the Master Key and the same Secret Key.
+     a session, the Master Key and the same Secret Key. Each seals the record while its proof holds the Master Key and
+     sends the sealed blob only once the person confirmed the kit is kept, so no key is held across their save (built
+     so: `writeKitRecord` takes the blob, not the key).
    - **Recovery and a password change write nothing**: neither makes a kit, and the kit the account has stays valid.
 5. **The suggestion is a quiet one** (owner 2026-11-22). Settings → Security says which kit the account has: current, or
    "a clearer kit exists" with the layout's sentence (decision 2) and **Make a new kit**. Once per browser and account,
    the app shell shows a dismissible notice that links there, as the profile prompt does; it never blocks and never
-   returns after it was dismissed. Both say that **the kit the person has keeps working**: the Secret Key does not change,
+   returns after it was dismissed. The dismissal stores the layout the notice spoke of (built so), so a later raise of
+   `KIT_LAYOUT` — a new sheet with a sentence of its own (decision 2) — is told once more. Both say that **the kit the person has keeps working**: the Secret Key does not change,
    so nobody believes they are locked out, and the old sheet may be destroyed once the new one is kept.
 6. **Making the new kit proves the Secret Key first**: the person enters their password and Secret Key (the field takes
-   the old kit by upload or scan), the client checks both against the stored floor (`checkColdCredential`), and only then
+   the old kit by upload or scan), the client checks both against the stored floor (`proveColdCredential`, the vault
+   being unlocked there; the address change's page, which may be locked, uses `checkColdCredential`), and only then
    renders the current layout from the key that passed. A kit printed from an unchecked key would be a sheet that opens
    nothing.
 

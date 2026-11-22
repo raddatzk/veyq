@@ -1,7 +1,7 @@
 useCase: uc.account.renew-emergency-kit
 feature: account
 title: Make a new Emergency Kit when a clearer one exists
-# Refined 2026-11-22 (ADR 0157); cr-kit-layout-record builds it: the backend stores the record (table, resource, both
+# Refined 2026-11-22 (ADR 0157); cr-kit-layout-record built it: the backend stores the record (table, resource, both
 # births, the rotation, the erasure), the web carries KIT_LAYOUT, reads and writes the record in every flow that makes a
 # kit, and suggests the clearer kit in Settings - Security and once in the shell.
 acceptanceCriteria:
