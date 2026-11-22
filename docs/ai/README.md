@@ -124,8 +124,15 @@ Five rules follow:
    in a stubbed DOM); none clicked what the browser rendered. Unit tests prove the logic; the click proves the
    screen.
 
-   **A live parallel session is a hazard for WRITES too, and this one bites harder than a stale count.** Commits
-   here go straight to `main`, so a second session's tip and its uncommitted tree share yours. Two moves are
+   **Work reaches `main` only through a pull request, and only once it is releasable.** A CR, a feature or a fix is
+   built on its own branch (a worktree when a session has one) and lands as one squashed pull request; `main` never
+   holds a half-built feature, because `main` is what the weekly snapshot publishes and a release promotes (owner
+   2026-11-13 and 2026-11-22; [ADR 0091](../decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
+   decision 5). A CR's phases are commits on that branch, not merges into `main`.
+
+   **A live parallel session is a hazard for WRITES too, and this one bites harder than a stale count.** A checkout
+   can still be shared — the main checkout carries IntelliJ and every session started without a worktree — and
+   there a second session's tip and its uncommitted tree share yours. Two moves are
    therefore forbidden regardless of how clean the tree *looked* when the phase started: `git add -A` (which on
    2026-09-20 swept a neighbour's in-progress CR and inbox rows into an unrelated docs commit) and any
    `git reset` by relative ref such as `HEAD~1` (the same session then reset what it thought was its own tip,
@@ -142,7 +149,7 @@ Five rules follow:
    there while cr-files-becomes-depot committed). The form that cannot sweep anything up builds the commit in an index
    of its own: `GIT_INDEX_FILE=<scratch> git read-tree <tip>`, `git add` by explicit path (or `git update-index
    --cacheinfo` for a file whose working copy already carries the next phase), `git write-tree`, `git commit-tree -p
-   <tip>`, then `git update-ref refs/heads/main <new> <tip>`, which refuses when a neighbour moved the tip in between;
+   <tip>`, then `git update-ref refs/heads/<branch> <new> <tip>`, which refuses when a neighbour moved the tip in between;
    afterwards `git reset -q -- <your paths>` re-syncs the shared index for your paths only.
 
    **And the rule reaches a *delegated* read, where nobody can apply it from inside.** A subagent measures
