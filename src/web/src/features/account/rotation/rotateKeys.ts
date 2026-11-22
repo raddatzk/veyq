@@ -55,6 +55,7 @@ import { isUnreadableGrant, openPlanGrantKey, planOpener } from '../../spaces/sc
 import { collectMyVerifications, openJoinRecord, resignVerifications, type CarriedVerification } from '../tenantTrust'
 import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
 import { registerDocument } from '../deviceRegister'
+import { rememberCurrentKit, resetKitLayout, sealKitRecord } from '../emergencyKit/kitRecord'
 import { fetchKeyChain, linkOf, pinStoreDocument, type PinStoreWrite } from '../identityPins'
 import { carryMarks, raiseMarks, TrustStateRefused, type AccountDocumentStore } from '../trustMarks'
 import { unlockMasterKey } from '../unlock/unlock'
@@ -255,6 +256,9 @@ export async function rotateKeys(password: string, secretKeyText: string, next: 
     )
 
     const wire = (w: { wrappedKey: Uint8Array; kdfParams: Uint8Array }) => ({ wrappedKey: b64std(w.wrappedKey), kdfParams: b64std(w.kdfParams) })
+    // The kit record of the kit this ceremony printed for the new Secret Key — saved and kept before the publish could be
+    // pressed —, sealed under MK' and committed with it, replacing the one the retired key sealed (ADR 0157 decision 4).
+    const kitRecord = sealKitRecord(newMasterKey)
     let sealed!: { pins: PinStoreWrite; register: { blob: string; revision: number } }
     for (let attempt = 1; ; attempt++) {
       // The pin store and the device register ride inside the publish, re-sealed under MK' (ADR 0060 § Consequences):
@@ -291,6 +295,7 @@ export async function rotateKeys(password: string, secretKeyText: string, next: 
               secretKeyProofSignature: b64std(v1.secretKeyProofSign(oldProof.privateKey, statement)),
               identityPins: sealed.pins,
               deviceRegister: sealed.register,
+              kitRecord,
               keyChainStep: {
                 identitySignature: b64std(stepSignatures.identitySignature),
                 proofSignature: b64std(stepSignatures.proofSignature),
@@ -330,6 +335,7 @@ export async function rotateKeys(password: string, secretKeyText: string, next: 
         // Neither identity can be held with certainty — nor can this tab's session vault, which seals the Master Key
         // that may just have been retired: a reload must not restore it. Both go; the person unlocks again.
         clearVault()
+        resetKitLayout() // the record may be the one this publish carried: read again after the next unlock
         await clearSessionVault()
         throw new RotationOutcomeUnknown(e)
       }
@@ -341,6 +347,7 @@ export async function rotateKeys(password: string, secretKeyText: string, next: 
     // This tab's session vault sealed the retired Master Key: re-sealed under the published one, so a reload neither
     // restores a retired key nor finds one cached (the CR's invariant holds in the browser too).
     await carrySessionVault(newMasterKey)
+    rememberCurrentKit() // the committed record names this client's layout: the suggestion goes with it
     await afterCommit(oldMasterKey, newMasterKey, sealed, stage.planScopeIds())
     await resignVerifications(carried, self.userId, identity.priv.sign, v1.keyChainHead(keyChainStep))
     const states = await finishRotation().catch((): RotationScopeState[] => [])
@@ -845,6 +852,7 @@ async function resumeCommitted(password: string, secretKeyText: string): Promise
       published.fill(0)
     }
   }
+  resetKitLayout() // the record the earlier publish committed is read again, under the key that opens it
   const states = await finishRotation().catch((): RotationScopeState[] => [])
   return { outcome: 'resumed', states, unreadableScopeIds: [] }
 }

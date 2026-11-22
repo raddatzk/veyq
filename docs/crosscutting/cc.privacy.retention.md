@@ -45,7 +45,7 @@ pruned at B days.
 
 | Datum | Home | Basis | Kept | Erased by | Backup | Decided in |
 |---|---|---|---|---|---|---|
-| The account's address, its confirmation time, its public keys and wrapped keys | `veyq_user` (`email`, `email_confirmed_at`), `veyq_master_key_wrap`, the identity-pin store, `veyq_device_register` | (b) | while the account lives | `AccountPurge` | yes | [0003](../decisions/0003-operator-blind-password-auth.md), [0074](../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md) decision 1 |
+| The account's address, its confirmation time, its public keys and wrapped keys | `veyq_user` (`email`, `email_confirmed_at`), `veyq_master_key_wrap`, the identity-pin store, `veyq_device_register`, `veyq_kit_record` | (b) | while the account lives | `AccountPurge` | yes | [0003](../decisions/0003-operator-blind-password-auth.md), [0074](../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md) decision 1 |
 | A login challenge, naming the address | `veyq_login_challenge` | (b) | 5 minutes | `SessionPurge` (hourly) | yes, until it expires | 0003 |
 | A session: its family, created and last-used times, token hashes | `veyq_session_family` and its tokens | (b) | access token 15 minutes, refresh token 30 days; a family goes once it has no token | `SessionPurge` | yes | [0004](../decisions/0004-session-tokens.md) |
 | A recovery request: the address it was mailed to, a token hash | `veyq_account_recovery` | (b) | valid 1 hour; deleted 7 days after it was issued | `RecoveryPurge` | yes | [0054](../decisions/0054-password-recovery-two-factor-release.md) |

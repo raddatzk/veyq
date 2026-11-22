@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.account.email.EmailChangeEntity
 import me.raddatz.veyq.core.account.email.EmailConfirmationEntity
 import me.raddatz.veyq.core.account.identitypins.IdentityPinEntryEntity
 import me.raddatz.veyq.core.account.identitypins.IdentityPinsEntity
+import me.raddatz.veyq.core.account.kitrecord.KitRecordEntity
 import me.raddatz.veyq.core.account.login.AccessTokenEntity
 import me.raddatz.veyq.core.account.login.RefreshTokenEntity
 import me.raddatz.veyq.core.account.login.SessionFamilyEntity
@@ -163,6 +164,7 @@ class AccountPurge(
         IdentityPinEntryEntity.delete("accountId", accountId)
         IdentityPinsEntity.delete("accountId", accountId)
         DeviceRegisterEntity.delete("accountId", accountId)
+        KitRecordEntity.delete("accountId", accountId)
         DevicePairingEntity.delete("userId", accountId)
         AccountRecoveryEntity.delete("userId", accountId)
         EmailConfirmationEntity.delete("userId", accountId)

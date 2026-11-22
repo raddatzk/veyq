@@ -138,6 +138,7 @@ NOT_UNDER_SCOPE_KEY = {
     "identity-pins": "under the account's Master Key",
     "identity-pin": "under the account's Master Key",
     "device-register": "under the account's Master Key",
+    "kit-record": "under the account's Master Key (ADR 0157); an account rotation writes it anew under the new one",
     "share-key": "under the link's own K_share, which only a re-issue replaces",
     "share-password": "under K_share",
     "drop-public-key": "under K_share",

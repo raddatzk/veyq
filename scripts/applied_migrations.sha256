@@ -19,3 +19,4 @@ release: 202611070833
 4a6bdd0ec40c293fbcfd2ab614ed8ca41d13fda3f2550e174721ea6727a2d24d  src/backend/apps/expenses/src/main/resources/db/migration/V202611070833__expenses_baseline.sql
 10f2bfd1a61fce101bef147c531bc8cf2937126c65f69008b9009ad9bcdbe2c0  src/backend/core/src/main/resources/db/migration/V202611122155__core_tenant_invite_link.sql
 326afca6a371d9c1619b87c5a00ee94b8e5a2d08f4528d768749ed90982b0429  src/backend/core/src/main/resources/db/migration/V202611160756__core_tenant_invite_label.sql
+e6ea3789acd7c7397cf02c484477bb7c86add92918c3655a902549e3e7e0d9d5  src/backend/core/src/main/resources/db/migration/V202611221402__core_kit_record.sql

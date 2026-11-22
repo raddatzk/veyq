@@ -89,8 +89,10 @@ paths:
         as-is. It does not verify the password (there is none) — `authPublicKey` is stored for later
         challenge-response login. In the same transaction it stores `moderationEpoch`, epoch 1 of the instance
         moderation key sealed to this identity, and records the Server Owner as its first moderator (ADR 0099 § 3);
-        an epoch that is no public bundle answers `400 invalid_request` and stores nothing. Setup asks for no operator
-        value: every one is optional and set later in admin-web (ADR 0093 § 14).
+        an epoch that is no public bundle answers `400 invalid_request` and stores nothing. An optional `kitRecord` —
+        the layout of the Emergency Kit this setup printed, sealed under the new Master Key (ADR 0157 decision 4) — is
+        stored in the same transaction; absent, nothing is. Setup asks for no operator value: every one is optional and
+        set later in admin-web (ADR 0093 § 14).
       requestBody:
         required: true
         content:
@@ -107,6 +109,7 @@ paths:
                   wrappedKey: d3JhcHBlZC1tYXN0ZXIta2V5
               secretKeyProofPublicKey: c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5
               moderationEpoch: { kemPublicKey: a2VtLXB1YmxpYy1rZXk=, signPublicKey: c2lnbi1wdWJsaWMta2V5, sealedGrant: c2VhbGVkLWdyYW50 }
+              kitRecord: AgoLDA0ODxAREhMUFeLq88pk/r0L1Z9YaKvlghAsoXg4hvbKef2nvYo=
       responses:
         "201":
           description: The Server Owner was created and setup is now locked.
@@ -324,6 +327,15 @@ components:
         moderationEpoch:
           $ref: "#/components/schemas/ModerationEpochOne"
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
+        kitRecord:
+          # Optional (ADR 0157 decision 4): a client that predates the record still births; absent writes nothing.
+          # `contentEncoding` beside the `$ref` too: the opacity oracle (validate_field_visibility.is_opaque, the e2e
+          # sweep's name set) reads the property, never the scalar it `$ref`s.
+          $ref: "#/components/schemas/SealedKitRecord"
+          contentEncoding: base64
+
+    SealedKitRecord:
+      $ref: '_common.openapi.yaml#/components/schemas/SealedKitRecord'
 
     SetupResult:
       type: object

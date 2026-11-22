@@ -70,4 +70,5 @@ private fun CreateServerOwnerRequest.toRegistration() = OwnerRegistration(
     secretKeyProofPublicKey = secretKeyProofPublicKey,
     wraps = masterKeyWraps.map { WrapInput(method = it.method.value, wrappedKey = it.wrappedKey, kdfParams = it.kdfParams) },
     moderationEpoch = ModerationEpochOne(moderationEpoch.kemPublicKey, moderationEpoch.signPublicKey, moderationEpoch.sealedGrant),
+    kitRecord = kitRecord,
 )

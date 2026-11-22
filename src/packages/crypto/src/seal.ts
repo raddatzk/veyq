@@ -94,6 +94,11 @@ export const SEAL_PURPOSES = {
   // server cannot serve one contact's entry in another's slot.
   'identity-pin': [['pinId', 'digest']],
   'device-register': [['revision', 'uint']],
+  // The account's kit record (ADR 0157 decision 3): the layout of the last Emergency Kit it made, as the compact JSON
+  // `{"layout":n}`, under the Master Key. Purpose only, as `master-key`: the Master Key is the account's alone and an
+  // account has one record, and a birth seals it before the server has given the account an id. Last writer wins, so
+  // no revision is bound either.
+  'kit-record': [],
   // Purpose only: sealed under the share's own K_share (ADR 0072 Decision 2).
   'share-key': [],
   'share-password': [],

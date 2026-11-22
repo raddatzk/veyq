@@ -100,14 +100,21 @@ function opensIdentity(mk: Uint8Array, wrappedIdentityPrivateKey: string): boole
  * behind the unlock gate). It opens the stored `PASSWORD` floor with what was typed now — which only the account's
  * password AND its Secret Key do — and, where this session does hold a Master Key, runs [proveColdCredential] itself.
  * It returns nothing: its use is to refuse a Secret Key before anything is built from it (a new Emergency Kit printed
- * from a mistyped key fails exactly on the day it is needed).
+ * from a mistyped key fails exactly on the day it is needed). [use] is run with the Master Key the proof opened, once it
+ * passed and before that key is zeroed — the address change seals the kit record with it (ADR 0157 decision 4); it must
+ * not keep the key.
  */
-export async function checkColdCredential(password: string, secretKeyText: string): Promise<void> {
-  if (masterKey()) {
-    ;(await proveColdCredential(password, secretKeyText).catch(staleAsRejected)).fill(0)
-    return
+export async function checkColdCredential(password: string, secretKeyText: string, use?: (masterKey: Uint8Array) => void): Promise<void> {
+  const held = masterKey() // whether this session holds one: the proof below takes its own copy
+  held?.fill(0)
+  const opened = held
+    ? await proveColdCredential(password, secretKeyText).catch(staleAsRejected)
+    : (await openFloor(password, secretKeyText)).masterKey
+  try {
+    use?.(opened)
+  } finally {
+    opened.fill(0)
   }
-  ;(await openFloor(password, secretKeyText)).masterKey.fill(0)
 }
 
 /**

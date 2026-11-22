@@ -4,6 +4,7 @@ sources:
   - docs/features/account/enablers/en.account.key-model.md
   - docs/features/account/use-cases/uc.account.recover-access.md
   - docs/features/account/use-cases/uc.account.rotate-keys.md
+  - docs/features/account/use-cases/uc.account.renew-emergency-kit.md
   - docs/features/admin/use-cases/uc.admin.back-up-and-restore-instance.md
 ---
 
@@ -40,11 +41,27 @@ When you create your account, veyq makes your **Emergency Kit**: a one-page PDF 
 - Print it, or save it where you keep other important papers, such as a password manager. Not only on the device you
   use veyq on: if that device is lost, the kit should not be lost with it.
 - Don't share it. Someone who has your kit **and** your password can open everything you keep.
-- veyq cannot show you your kit again later. You get a new one in two cases: after you change your email address
-  (the old kit keeps working), and when you secure your account, which also gives you a new Secret Key (the old kit
-  stops working).
+- veyq cannot show you your kit again later. You get a new one after you change your email address and when veyq
+  suggests a clearer kit (in both cases the old kit keeps working), and when you secure your account, which also gives
+  you a new Secret Key (the old kit stops working).
 - If someone else may have your kit, [secure your account](/account/replace-your-keys/). That needs your
   password and the kit you have now.
+
+## When veyq suggests a new kit
+
+Now and then veyq learns to print a clearer kit, such as one that labels the Secret Key "9 blocks in 3 lines" so nobody
+types the first line alone. If yours is of an older kind, **Settings → Secure your account** says **A clearer Emergency
+Kit exists** and what the new one does better. veyq also shows a notice about it once; **Not now** closes it for good on
+that device.
+
+- **Your kit keeps working.** The new kit carries the same Secret Key, and nothing changes about how you sign in. You
+  don't have to make a new one.
+- **To make it,** open the menu at the bottom of the sidebar and choose **Settings**, then **Secure your account**, and
+  choose **Make a new kit**. Enter your password and your Secret Key: type it, or upload or scan the kit you have now.
+  Choose **Check and make the kit**; veyq checks both before it makes anything. Then download the new kit, keep it
+  safe and tick **I have saved my Emergency Kit somewhere safe.**
+- **Afterwards** you can destroy the old sheet. veyq remembers that you have the current kit, on all your devices,
+  in a note locked with your own key: the server cannot read which kit you made.
 
 ## If it is lost
 

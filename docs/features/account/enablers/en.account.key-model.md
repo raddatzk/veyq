@@ -14,7 +14,8 @@
   [onboard-device](../use-cases/uc.account.onboard-device.md),
   [recover-access](../use-cases/uc.account.recover-access.md),
   [change-password](../use-cases/uc.account.change-password.md),
-  [rotate-keys](../use-cases/uc.account.rotate-keys.md); and downstream
+  [rotate-keys](../use-cases/uc.account.rotate-keys.md),
+  [renew-emergency-kit](../use-cases/uc.account.renew-emergency-kit.md); and downstream
   [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) →
   [en.platform.node-tree](../../platform/enablers/en.platform.node-tree.md) build their scope/content keys on it.
 - **Depends on:** the crypto strategy ([ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md))
@@ -283,7 +284,8 @@ it rescuing data.
 ## The Emergency Kit
 
 The kit is the Secret Key made portable, and it is a **format with two writers and one reader**: `web` writes
-it when an account is born by joining a tenant and when an account is secured (a new Secret Key), `admin-web` when the Server Owner's account is born at setup
+it when an account is born by joining a tenant, when an account is secured (a new Secret Key), when its sign-in address
+changes and when a clearer kit is made (the same Secret Key), `admin-web` when the Server Owner's account is born at setup
 ([ADR 0065](../../../decisions/0065-admin-ui-cli-separate-service.md)), and only `web` reads it, at unlock.
 Two round-trip tests in two packages cannot keep a writer and a reader in agreement, so the codec exists
 **once**, in `@veyq/crypto`, pinned by a fixed-literal vector.
@@ -321,6 +323,39 @@ Two round-trip tests in two packages cannot keep a writer and a reader in agreem
   steps, the third saying that the password is deliberately not on the sheet; how to keep it; and the docs site's
   forgot-password page in the writer's language. The layout code is per package (no UI in `@veyq/crypto`), the two kept
   line for line alike.
+
+### The kit record
+
+What sheet the account last printed, so a clearer one can be suggested
+([ADR 0157](../../../decisions/0157-a-kits-layout-has-a-version-and-a-sealed-record-says-which-one-the-account-last-made.md),
+[uc.account.renew-emergency-kit](../use-cases/uc.account.renew-emergency-kit.md)). Client side in
+`src/web/src/features/account/emergencyKit/kitRecord.ts`; server side in
+`src/backend/core/src/main/kotlin/me/raddatz/veyq/core/account/kitrecord/`.
+
+- **The layout has a version, `KIT_LAYOUT`**, beside each writer's layout code and never in the token (the token's `v` is
+  its format's, and a new one would make every printed kit unreadable). Layout 1 is every kit before ADR 0157; layout 2
+  labels the key with its blocks and lines. It is raised only for a change that helps a person use the kit, each raise
+  with one sentence of what the new sheet does better (`kit.layoutNews.<n>`, both languages; a test asserts one for
+  every layout from 2 to `KIT_LAYOUT`). A test in each writer's package pins its number, so a raise touches both.
+- **The record is one blob sealed under the Master Key**, `{ "layout": n }`, purpose `kit-record` with no binding field
+  (the Master Key is the account's alone and the account has one record, ADR 0072), served by `GET`/`PUT /api/account/kit-record` to the account alone, last writer wins, deleted with the
+  account. The table is `veyq_kit_record` (one row per account, the sealed blob); the `PUT` replaces it under the
+  account lock (`AccountStore.lock`), so a first write cannot race a second one, a rotation or an erasure. No record, a
+  blob that does not open, or JSON without a positive integer `layout` reads as layout 1 — never an error on screen.
+- **Whatever makes a kit writes it in the same step**: the two births in their request (`registerAndAcceptTenantInvite`,
+  `createServerOwner`, an optional `kitRecord`: absent writes nothing), securing the account in the rotation request
+  under the new Master Key (a **required** `kitRecord`, as every field of that request is, ADR 0060 decision 1; it
+  replaces the row the old Master Key sealed in the same commit), the address change and the renewal with the `PUT`. Those
+  two seal the record while the proof holds the Master Key (`sealKitRecord`) and send the sealed blob once
+  `EmergencyKitSave` says the PDF was saved and kept (`writeKitRecord` takes the blob, never the key), so no key is held
+  across the person's save. Recovery and a password change make no kit and write nothing.
+- **Read once per unlock, kept in memory.** The Settings block (`EmergencyKitStatus`) and the shell's notice
+  (`KitRenewalPrompt`) share one read; a write and a committed rotation set it to current, and a rotation whose outcome
+  is unknown, or its resume, drops it to be read again under the key that opens it. A sign-out is a document load
+  ([ADR 0070](../../../decisions/0070-a-session-ends-with-a-new-document.md)), so the memory goes with the page.
+- **The notice's dismissal** is a per-user, per-browser preference holding the layout the notice spoke of
+  (`kitRenewalDismissed.ts`): that layout's notice never returns there, and a later raise of `KIT_LAYOUT` is told once
+  more.
 
 ### The Secret Key's text form
 

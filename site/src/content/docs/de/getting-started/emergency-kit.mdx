@@ -4,6 +4,7 @@ sources:
   - docs/features/account/enablers/en.account.key-model.md
   - docs/features/account/use-cases/uc.account.recover-access.md
   - docs/features/account/use-cases/uc.account.rotate-keys.md
+  - docs/features/account/use-cases/uc.account.renew-emergency-kit.md
   - docs/features/admin/use-cases/uc.admin.back-up-and-restore-instance.md
 ---
 
@@ -40,11 +41,29 @@ Wenn du dein Konto anlegst, erstellt veyq dein **Notfall-Kit**: ein einseitiges 
 - Druck es aus oder speichere es dort, wo du andere wichtige Unterlagen hast, etwa in einem Passwort-Manager. Nicht nur
   auf dem Gerät, mit dem du veyq nutzt: Geht das Gerät verloren, soll das Kit nicht mit verloren gehen.
 - Gib es nicht weiter. Wer dein Kit **und** dein Passwort hat, kann alles öffnen, was du aufbewahrst.
-- veyq kann dir dein Kit später nicht noch einmal zeigen. Ein neues bekommst du in zwei Fällen: nachdem du deine
-  E-Mail-Adresse geändert hast (das alte funktioniert weiter), und wenn du dein Konto absicherst, wobei du auch einen
-  neuen Secret Key bekommst (das alte funktioniert dann nicht mehr).
+- veyq kann dir dein Kit später nicht noch einmal zeigen. Ein neues bekommst du, nachdem du deine E-Mail-Adresse
+  geändert hast und wenn veyq ein übersichtlicheres Kit vorschlägt (in beiden Fällen funktioniert das alte weiter), und
+  wenn du dein Konto absicherst, wobei du auch einen neuen Secret Key bekommst (das alte funktioniert dann nicht mehr).
 - Könnte jemand anderes dein Kit haben, [sichere dein Konto ab](/de/account/replace-your-keys/). Dafür brauchst
   du dein Passwort und das Kit, das du jetzt hast.
+
+## Wenn veyq ein neues Kit vorschlägt
+
+Ab und zu lernt veyq, ein übersichtlicheres Kit zu drucken, etwa eines, bei dem am Secret Key „9 Blöcke in 3 Zeilen“
+steht, damit niemand nur die erste Zeile eintippt. Ist deins noch von der älteren Art, steht unter **Einstellungen →
+Konto absichern** **Es gibt ein übersichtlicheres Notfall-Kit** und was das neue besser macht. veyq zeigt dazu auch
+einmal einen Hinweis; **Jetzt nicht** schließt ihn auf diesem Gerät für immer.
+
+- **Dein Kit funktioniert weiter.** Das neue Kit trägt denselben Secret Key, und am Anmelden ändert sich nichts. Du
+  musst kein neues erstellen.
+- **So erstellst du es:** Öffne das Menü unten in der Seitenleiste und wähle **Einstellungen**, dann **Konto
+  absichern**, und wähle **Neues Kit erstellen**. Gib dein Passwort und deinen Secret Key ein: tippe ihn ein, lade das
+  Kit hoch, das du jetzt hast, oder scanne es. Wähle **Prüfen und Kit erstellen**; veyq prüft beides, bevor es etwas
+  erstellt. Dann lade das neue Kit herunter, bewahre es sicher auf und setze den Haken bei **Ich habe mein Notfall-Kit
+  sicher gespeichert.**
+- **Danach** kannst du das alte Blatt vernichten. veyq merkt sich auf allen deinen Geräten, dass du das aktuelle Kit
+  hast, in einer Notiz, die mit deinem eigenen Schlüssel verschlossen ist: Der Server kann nicht lesen, welches Kit du
+  erstellt hast.
 
 ## Wenn es verloren ist
 
