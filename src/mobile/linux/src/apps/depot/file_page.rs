@@ -493,10 +493,19 @@ fn pdf_password(name: &str, wrong: bool, open: impl Fn(String) + 'static, cancel
     page.upcast()
 }
 
+/// The bytes as GTK decodes a picture: its own loaders for PNG, JPEG and TIFF, everything else — WebP, AVIF, HEIC and an SVG
+/// the core decided is one (`FileView.svgAsImage`, inbox #1059) — through gdk-pixbuf and glycin, whose SVG loader is librsvg
+/// in a sandbox of its own: librsvg runs no script and loads no resource an SVG names but a `data:` URL (the bytes come
+/// with no base file, so no `file:` either), and glycin's sandbox gives the loader no network and no file system. The test
+/// below holds that against hostile files.
+fn decoded(bytes: Vec<u8>) -> Result<gdk::Texture, glib::Error> {
+    gdk::Texture::from_bytes(&glib::Bytes::from_owned(bytes))
+}
+
 /// A picture decoded by GTK from the bytes, held at [edge] pixels on its longest side at most (the core's
 /// `FileView.IMAGE_EDGE`), shown at most its own size; one GTK cannot decode is said as not shown here.
 fn picture(bytes: Vec<u8>, edge: i32) -> gtk::Widget {
-    let texture = match gdk::Texture::from_bytes(&glib::Bytes::from_owned(bytes)) {
+    let texture = match decoded(bytes) {
         Ok(t) => t,
         Err(e) => {
             eprintln!("veyq: the file's picture did not decode: {e}");
@@ -653,5 +662,87 @@ impl PdfPages {
             let held: Vec<String> = rendered.iter().enumerate().filter(|(_, r)| **r).map(|(i, _)| (i + 1).to_string()).collect();
             eprintln!("veyq: file PDF pages held: {}", held.join(","));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::TcpListener;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::time::Duration;
+
+    /// The alpha of [texture]'s pixel at (x, y).
+    fn alpha(texture: &gdk::Texture, x: usize, y: usize) -> u8 {
+        let stride = texture.width() as usize * 4;
+        let mut pixels = vec![0u8; stride * texture.height() as usize];
+        texture.download(&mut pixels, stride);
+        pixels[y * stride + x * 4 + 3]
+    }
+
+    /// Inbox #1059's threat model on Linux: an SVG drawn as a picture runs nothing in it and fetches nothing it names. Every
+    /// hostile file names a listener on this host's loopback — a script's `fetch`, an `onload`, an `<image>` (both `href`
+    /// spellings), a `<use>`, an `<feImage>`, CSS `@import` and `url()`, a `foreignObject`'s frame and image, an XInclude and
+    /// an external entity — and the listener must see no connection. An external entity naming a file must not expand: the
+    /// same document with an internal entity (the control) draws a rectangle the file's entity would draw. Runs where glycin
+    /// runs (`run.py`'s SANDBOX_SKIPS: the Fedora 44 container), through the call the file page draws with.
+    #[test]
+    fn an_svg_draws_with_nothing_in_it_run_or_fetched() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("a loopback listener");
+        let port = listener.local_addr().unwrap().port();
+        listener.set_nonblocking(true).unwrap();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let stop = Arc::new(AtomicBool::new(false));
+        let (counted, stopped) = (hits.clone(), stop.clone());
+        let watcher = std::thread::spawn(move || {
+            while !stopped.load(Ordering::SeqCst) {
+                if listener.accept().is_ok() {
+                    counted.fetch_add(1, Ordering::SeqCst);
+                }
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        });
+        let at = format!("http://127.0.0.1:{port}");
+
+        let benign = r##"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="40" height="20" fill="#2a6"/></svg>"##;
+        let picture = decoded(benign.as_bytes().to_vec()).expect("an SVG decodes");
+        assert_eq!((picture.width(), picture.height()), (40, 20));
+        assert_eq!(alpha(&picture, 5, 5), 255, "the benign SVG draws");
+
+        let open = r#"<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="40" height="20""#;
+        let hostile = [
+            format!(r#"{open}><script>fetch("{at}/script")</script><rect width="9" height="9"/></svg>"#),
+            format!(r#"{open} onload="fetch('{at}/onload')"><rect width="9" height="9"/></svg>"#),
+            format!(r#"{open}><image href="{at}/image.png" width="9" height="9"/><image xlink:href="{at}/xlink.png" width="9" height="9"/></svg>"#),
+            format!(r#"{open}><use href="{at}/use.svg#x"/></svg>"#),
+            format!(r#"{open}><filter id="f"><feImage href="{at}/feimage.png"/></filter><rect width="9" height="9" filter="url(#f)"/></svg>"#),
+            format!(r#"{open}><style>@import url({at}/import.css); rect {{ fill: url({at}/fill.svg#p) }}</style><rect width="9" height="9"/></svg>"#),
+            format!(r#"{open}><foreignObject width="40" height="20"><iframe xmlns="http://www.w3.org/1999/xhtml" src="{at}/frame"/><img xmlns="http://www.w3.org/1999/xhtml" src="{at}/img.png"/></foreignObject></svg>"#),
+            format!(r#"{open} xmlns:xi="http://www.w3.org/2001/XInclude"><xi:include href="{at}/include.svg"/></svg>"#),
+            format!(r#"<?xml version="1.0"?><!DOCTYPE svg [<!ENTITY e SYSTEM "{at}/entity">]>{open}><text>&e;</text></svg>"#),
+        ];
+        for svg in &hostile {
+            // drawn or refused: either is fine, a connection is not
+            let _ = decoded(svg.clone().into_bytes());
+        }
+
+        let file = std::env::temp_dir().join(format!("veyq-xxe-{}", std::process::id()));
+        std::fs::write(&file, "30").unwrap();
+        let entity = |declaration: String| {
+            format!(r##"<?xml version="1.0"?><!DOCTYPE svg [{declaration}]><svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><rect width="&w;" height="20" fill="#2a6"/></svg>"##)
+        };
+        let control = decoded(entity(r#"<!ENTITY w "30">"#.to_string()).into_bytes()).expect("an internal entity decodes");
+        assert_eq!(alpha(&control, 20, 10), 255, "the control: an expanded entity draws the rectangle");
+        let external = entity(format!(r#"<!ENTITY w SYSTEM "file://{}">"#, file.display()));
+        if let Ok(drawn) = decoded(external.into_bytes()) {
+            assert_eq!(alpha(&drawn, 20, 10), 0, "an external entity naming a file expanded");
+        }
+        std::fs::remove_file(&file).ok();
+
+        std::thread::sleep(Duration::from_millis(500));
+        stop.store(true, Ordering::SeqCst);
+        watcher.join().unwrap();
+        assert_eq!(hits.load(Ordering::SeqCst), 0, "an SVG drawn as a picture reached the network");
     }
 }

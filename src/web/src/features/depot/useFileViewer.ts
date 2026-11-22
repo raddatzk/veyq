@@ -15,6 +15,7 @@ import { useObjectUrl } from '../../shared/state/useObjectUrls'
 import { handleFromUrl, registerPlayback, revokePlayback } from '../../sw/register'
 import { openPdf, PdfOpenError, type PdfDocument } from '../../shared/pdf/pdfEngine'
 import { loadFileView, type UnsupportedReason, type ViewHints } from './view'
+import { rasterizeSvg } from './svgRaster'
 
 /** What the viewer opens: `id` changes whenever the content does (the blob's id); the provider reads and decrypts it. */
 export type ViewerTarget = { id: string; source: BlobChunkProvider; hints: ViewHints }
@@ -97,8 +98,20 @@ export function useFileViewer(target: () => ViewerTarget | null): {
       })
       if (mine !== run) return
       if (view.kind === 'image') {
-        image.set(view.blob)
-        state.value = { status: 'ready', view: { kind: 'image', url: image.url.value!, svg: view.type === 'image/svg+xml' } }
+        const svg = view.type === 'image/svg+xml'
+        // an SVG is shown as the PNG it draws, never by its own URL (`svgRaster.ts`, inbox #1059); one that does not draw is
+        // the decode failure every image can have
+        let shown: Blob
+        try {
+          shown = svg ? await rasterizeSvg(view.blob, ctl.signal) : view.blob
+        } catch (e) {
+          if (mine !== run || ctl.signal.aborted) throw e
+          state.value = { status: 'unsupported', reason: 'format' }
+          return
+        }
+        if (mine !== run) return
+        image.set(shown)
+        state.value = { status: 'ready', view: { kind: 'image', url: image.url.value!, svg } }
       } else if (view.kind === 'text') {
         state.value = { status: 'ready', view: { kind: 'text', text: view.text, truncated: view.truncated } }
       } else if (view.kind === 'pdf') {

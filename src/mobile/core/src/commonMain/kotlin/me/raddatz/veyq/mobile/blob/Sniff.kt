@@ -1,53 +1,92 @@
 package me.raddatz.veyq.mobile.blob
 
+import me.raddatz.veyq.mobile.search.JsText
+
 /**
- * What a blob's decrypted bytes are, by their magic numbers alone — a port of `src/web/src/core/blob/sniff.ts` (images,
- * audio and video containers, text, PDF). The bytes decide; a claimed type or name only ever narrows ([claimsText]), so a
- * peer's file labelled "image" that is no image is never handed to an image decoder as one.
+ * What a blob's decrypted bytes are, by their magic numbers alone (inbox #412) — the one rule every client reads: the apps
+ * directly, the web through `@veyq/core-js/files` (ADR 0155 decision 7.2, the file facts' slice; its TypeScript deleted).
+ * A blob's sealed type and an object's name are a PEER's statement about the bytes; nothing here lets that statement decide
+ * how the bytes are rendered. The functions answer from the bytes alone, and a viewer combines the answer with the claim only
+ * to NARROW (a text needs a text-ish claim too, an SVG needs the claim to agree, [claimsText], [claimsSvg]), never to widen: a
+ * PNG claimed as `text/plain` is a PNG, a binary claimed as `image/png` is neither. `contracts/platform/files/v1-vectors.json`
+ * holds every answer on every client.
+ *
+ * Its path runs on JavaScript per file opened, over a first frame of up to 256 KiB (ADR 0155: no `Long`, `Regex` or
+ * `HashMap` on a web path): sets are `when`s, the patterns hand-written loops, the white space JavaScript's ([JsText]).
  */
 object Sniff {
     enum class Image(val mime: String) { JPEG("image/jpeg"), PNG("image/png"), GIF("image/gif"), WEBP("image/webp"), AVIF("image/avif"), BMP("image/bmp"), HEIC("image/heic") }
 
-    private val AVIF = setOf("avif", "avis")
-    private val HEIC = setOf("heic", "heix", "hevc", "heim", "heis", "hevm", "hevs", "heif", "mif1", "msf1")
-    private val BMP_DIB = setOf(12, 40, 52, 56, 64, 108, 124)
-    private val TEXT_CONTROLS = setOf(0x09, 0x0a, 0x0c, 0x0d, 0x1b)
+    /** How a text is decoded: UTF-8 (a BOM dropped), or UTF-16 only where a byte-order mark says so. No 8-bit legacy
+     *  encoding is guessed: it is not valid UTF-8, so it is not text. */
+    const val UTF8 = "utf-8"
+    const val UTF16LE = "utf-16le"
+    const val UTF16BE = "utf-16be"
+
     private const val PDF_WINDOW = 1024
+    /** How much of a text an SVG's first element is looked for in, and how many prolog items are skipped before it. */
+    private const val SVG_WINDOW = 4096
+    private const val SVG_SKIPS = 16
+    /** How far an EBML header's `DocType` is looked for (it sits at the very top of a well-formed file). */
+    private const val EBML_WINDOW = 1024
 
     private fun u(b: ByteArray, i: Int) = b[i].toInt() and 0xff
 
     fun asciiAt(b: ByteArray, offset: Int, length: Int): String =
         buildString { for (i in offset until minOf(b.size, offset + length)) append(u(b, i).toChar()) }
 
-    fun hasAscii(b: ByteArray, offset: Int, ascii: String) = b.size >= offset + ascii.length && asciiAt(b, offset, ascii.length) == ascii
+    fun hasAscii(b: ByteArray, offset: Int, ascii: String): Boolean {
+        if (offset < 0 || b.size < offset + ascii.length) return false
+        for (i in ascii.indices) if (u(b, offset + i) != ascii[i].code) return false
+        return true
+    }
 
-    /** The raster image format [b] is, or null. */
+    private fun avifBrand(brand: String) = brand == "avif" || brand == "avis"
+    private fun heicBrand(brand: String) = when (brand) {
+        "heic", "heix", "hevc", "heim", "heis", "hevm", "hevs", "heif", "mif1", "msf1" -> true
+        else -> false
+    }
+
+    /** A BMP's DIB header sizes (BITMAPCOREHEADER … BITMAPV5HEADER): `BM` alone is two letters any text may start with. */
+    private fun bmpDib(size: Int) = when (size) {
+        12, 40, 52, 56, 64, 108, 124 -> true
+        else -> false
+    }
+
+    /** The raster image format [b] is, or null. An SVG is text and answered by [svg]. */
     fun image(b: ByteArray): Image? {
         if (b.size >= 3 && u(b, 0) == 0xff && u(b, 1) == 0xd8 && u(b, 2) == 0xff) return Image.JPEG
         if (b.size >= 8 && u(b, 0) == 0x89 && hasAscii(b, 1, "PNG\r\n") && u(b, 6) == 0x1a && u(b, 7) == 0x0a) return Image.PNG
         if (hasAscii(b, 0, "GIF87a") || hasAscii(b, 0, "GIF89a")) return Image.GIF
         if (hasAscii(b, 0, "RIFF") && hasAscii(b, 8, "WEBP")) return Image.WEBP
-        if (b.size >= 26 && u(b, 0) == 0x42 && u(b, 1) == 0x4d && u(b, 15) == 0 && u(b, 16) == 0 && u(b, 17) == 0 && u(b, 14) in BMP_DIB) return Image.BMP
+        if (b.size >= 26 && u(b, 0) == 0x42 && u(b, 1) == 0x4d && u(b, 15) == 0 && u(b, 16) == 0 && u(b, 17) == 0 && bmpDib(u(b, 14))) return Image.BMP
         if (hasAscii(b, 4, "ftyp")) {
             val brand = asciiAt(b, 8, 4)
-            if (brand in AVIF) return Image.AVIF
-            if (brand in HEIC) return Image.HEIC
+            if (avifBrand(brand)) return Image.AVIF
+            if (heicBrand(brand)) return Image.HEIC
         }
         return null
     }
 
+    /** Control bytes a text may hold: tab, line feed, form feed, carriage return, escape (ANSI colours in logs). */
+    private fun textControl(c: Int) = c == 0x09 || c == 0x0a || c == 0x0c || c == 0x0d || c == 0x1b
+
     /**
-     * Whether [b] is valid text: a UTF-16 byte-order mark followed by a decodable body, or valid UTF-8 with no NUL and no
-     * control byte but tab, line feed, form feed, carriage return and escape. A sequence cut off by the end is not an error
-     * while [b] is a prefix, but is when it is the [complete] file.
+     * The encoding [b] is valid text in ([UTF8], [UTF16LE], [UTF16BE]), or null: a UTF-16 byte-order mark followed by a
+     * decodable body, or valid UTF-8 with no NUL and no control byte but tab, line feed, form feed, carriage return and escape.
+     * A sequence cut off by the end is not an error while [b] is a prefix, but is when it is the [complete] file. Only [b] is
+     * judged; what follows it decodes with U+FFFD.
      */
-    fun isText(b: ByteArray, complete: Boolean = false): Boolean {
-        if (b.size >= 2 && ((u(b, 0) == 0xff && u(b, 1) == 0xfe) || (u(b, 0) == 0xfe && u(b, 1) == 0xff))) {
-            return utf16Decodes(b, littleEndian = u(b, 0) == 0xff)
+    fun textEncoding(b: ByteArray, complete: Boolean = false): String? {
+        if (b.size >= 2) {
+            val le = u(b, 0) == 0xff && u(b, 1) == 0xfe
+            if (le || (u(b, 0) == 0xfe && u(b, 1) == 0xff)) return if (utf16Decodes(b, le)) (if (le) UTF16LE else UTF16BE) else null
         }
-        for (i in b.indices) if (u(b, i) < 0x20 && u(b, i) !in TEXT_CONTROLS) return false
-        return utf8Valid(b, complete)
+        return if (utf8Text(b, complete)) UTF8 else null
     }
+
+    /** Whether [b] is valid text ([textEncoding]). */
+    fun isText(b: ByteArray, complete: Boolean = false): Boolean = textEncoding(b, complete) != null
 
     private fun utf16Decodes(b: ByteArray, littleEndian: Boolean): Boolean {
         val n = b.size - (b.size % 2)
@@ -70,52 +109,52 @@ object Sniff {
         return !pendingHigh
     }
 
-    private fun utf8Valid(b: ByteArray, complete: Boolean): Boolean {
+    /** Valid UTF-8 (the WHATWG decoder's fatal reading, streaming unless [complete]) holding no forbidden control byte. */
+    private fun utf8Text(b: ByteArray, complete: Boolean): Boolean {
+        val size = b.size
         var i = 0
-        while (i < b.size) {
+        while (i < size) {
             val c = u(b, i)
-            val (n, min) = when {
-                c < 0x80 -> 0 to 0
-                c in 0xc2..0xdf -> 1 to 0x80
-                c in 0xe0..0xef -> 2 to 0x800
-                c in 0xf0..0xf4 -> 3 to 0x10000
+            if (c < 0x80) {
+                if (c < 0x20 && !textControl(c)) return false
+                i++
+                continue
+            }
+            // the lead's length and the range its second byte must fall in (the decoder's lower and upper boundary)
+            val n: Int
+            var lo = 0x80
+            var hi = 0xbf
+            when {
+                c in 0xc2..0xdf -> n = 1
+                c in 0xe0..0xef -> {
+                    n = 2
+                    if (c == 0xe0) lo = 0xa0
+                    if (c == 0xed) hi = 0x9f
+                }
+                c in 0xf0..0xf4 -> {
+                    n = 3
+                    if (c == 0xf0) lo = 0x90
+                    if (c == 0xf4) hi = 0x8f
+                }
                 else -> return false
             }
-            if (i + n >= b.size && n > 0) {
-                // Cut off by the end: valid so far is valid for a prefix, never for the complete file.
-                if (complete) return false
-                for (k in i + 1 until b.size) if (u(b, k) and 0xc0 != 0x80) return false
-                return prefixOk(b, i)
-            }
-            var cp = if (n == 0) c else c and (0x3f shr n)
             for (k in 1..n) {
+                if (i + k >= size) return !complete // cut off by the end: valid so far is valid for a prefix only
                 val cc = u(b, i + k)
-                if (cc and 0xc0 != 0x80) return false
-                cp = (cp shl 6) or (cc and 0x3f)
+                if (k == 1) {
+                    if (cc < lo || cc > hi) return false
+                } else if (cc and 0xc0 != 0x80) {
+                    return false
+                }
             }
-            if (n > 0 && (cp < min || cp > 0x10ffff || cp in 0xd800..0xdfff)) return false
             i += n + 1
         }
         return true
     }
 
-    /** A truncated last sequence at [i] that could still complete validly (its second byte within the lead's range). */
-    private fun prefixOk(b: ByteArray, i: Int): Boolean {
-        if (i + 1 >= b.size) return true
-        val c = u(b, i)
-        val c1 = u(b, i + 1)
-        return when (c) {
-            0xe0 -> c1 >= 0xa0
-            0xed -> c1 <= 0x9f
-            0xf0 -> c1 >= 0x90
-            0xf4 -> c1 <= 0x8f
-            else -> true
-        }
-    }
-
     /**
-     * Whether [b] is a PDF: `%PDF-` at byte 0, or within the first KiB but then only where [b] is NOT valid text (a text
-     * that merely mentions the header is a text).
+     * Whether [b] is a PDF: `%PDF-` at byte 0, or within the first KiB but then only where [b] is NOT valid text (a text that
+     * merely mentions the header is a text). The bytes decide; no claim is consulted.
      */
     fun pdf(b: ByteArray): Boolean {
         if (hasAscii(b, 0, "%PDF-")) return true
@@ -129,17 +168,35 @@ object Sniff {
     /** An audio or video container: whether it is video, and the MIME it is played under. */
     data class Stream(val video: Boolean, val mime: String)
 
-    /** The audio/video container [b] is, by its magic bytes (the web's `sniffStream`; the player decides if it can play it). */
+    /**
+     * An EBML file's `DocType` ("webm", "matroska"), read where its element id (`0x42 0x82`) first sits in the first KiB, its
+     * single-byte size and that many ASCII bytes; null where it is not found or not read so.
+     */
+    fun ebmlDocType(b: ByteArray): String? {
+        val end = minOf(b.size - 1, EBML_WINDOW)
+        for (i in 4 until end) {
+            if (u(b, i) != 0x42 || u(b, i + 1) != 0x82) continue
+            if (i + 2 >= b.size) return null
+            val sizeByte = u(b, i + 2)
+            if (sizeByte and 0x80 == 0) return null // only the single-byte size is expected here
+            val len = sizeByte and 0x7f
+            if (len == 0 || i + 3 + len > b.size) return null
+            return asciiAt(b, i + 3, len)
+        }
+        return null
+    }
+
+    /** The audio/video container [b] is, by its magic bytes (ADR 0047: the player, not this, decides if it can play it). */
     fun stream(b: ByteArray): Stream? {
         if (hasAscii(b, 4, "ftyp")) {
             val brand = asciiAt(b, 8, 4)
             if (brand == "qt  ") return Stream(true, "video/quicktime")
             if (brand == "M4A " || brand == "M4B " || brand == "M4P ") return Stream(false, "audio/mp4")
-            if (brand in AVIF || brand in HEIC) return null
+            if (avifBrand(brand) || heicBrand(brand)) return null // an image, answered by image()
             return Stream(true, "video/mp4")
         }
         if (b.size >= 4 && u(b, 0) == 0x1a && u(b, 1) == 0x45 && u(b, 2) == 0xdf && u(b, 3) == 0xa3) {
-            return if (asciiAt(b, 0, 64).contains("matroska")) Stream(true, "video/x-matroska") else Stream(true, "video/webm")
+            return if (ebmlDocType(b) == "matroska") Stream(true, "video/x-matroska") else Stream(true, "video/webm")
         }
         if (hasAscii(b, 0, "OggS")) return if (asciiAt(b, 0, 160).contains("theora")) Stream(true, "video/ogg") else Stream(false, "audio/ogg")
         if (hasAscii(b, 0, "RIFF") && hasAscii(b, 8, "WAVE")) return Stream(false, "audio/wav")
@@ -148,7 +205,9 @@ object Sniff {
         if (b.size >= 2 && u(b, 0) == 0xff && (u(b, 1) and 0xe0) == 0xe0) {
             val layer = (u(b, 1) shr 1) and 0x03
             val version = (u(b, 1) shr 3) and 0x03
-            if (layer == 0 && (u(b, 1) and 0xf6) == 0xf0) return Stream(false, "audio/aac")
+            if (layer == 0 && (u(b, 1) and 0xf6) == 0xf0) return Stream(false, "audio/aac") // ADTS
+            // An MPEG audio frame header, Layer III only (mp3; `FF FE`, a UTF-16 text's byte-order mark, is Layer I): a valid
+            // version, bitrate and sample-rate index.
             val bitrate = if (b.size > 2) u(b, 2) shr 4 else 1
             val rate = if (b.size > 2) (u(b, 2) shr 2) and 0x03 else 0
             if (layer == 1 && version != 1 && bitrate != 0x0f && rate != 0x03) return Stream(false, "audio/mpeg")
@@ -156,31 +215,132 @@ object Sniff {
         return null
     }
 
-    private val TEXT_TYPES = setOf(
+    /**
+     * Whether [b] is an SVG document: UTF-8 text ([textEncoding]) whose first element, after a byte-order mark, white space,
+     * and at most [SVG_SKIPS] XML declarations, processing instructions, comments and a doctype (its internal subset too),
+     * within its first [SVG_WINDOW] bytes, is `<svg` followed by white space, `>` or `/` (ASCII case ignored). The bytes decide;
+     * a viewer still requires a claim that agrees ([claimsSvg]) and draws it only where nothing in it can run or fetch
+     * (`docs/apps/depot.md` § The viewer, inbox #1059).
+     */
+    fun svg(b: ByteArray): Boolean {
+        if (textEncoding(b) != UTF8) return false
+        val s = svgWindow(b)
+        var at = 0
+        for (guard in 0 until SVG_SKIPS) {
+            while (at < s.length && JsText.isJsSpace(s[at])) at++
+            val skipped = prologEnd(s, at)
+            if (skipped < 0) break
+            at = skipped
+        }
+        if (!startsWithIgnoringAsciiCase(s, at, "<svg") || at + 4 >= s.length) return false
+        val next = s[at + 4]
+        return next == '>' || next == '/' || JsText.isJsSpace(next)
+    }
+
+    /** The first [SVG_WINDOW] bytes of valid UTF-8 [b] as text: a leading byte-order mark dropped, a sequence the window cuts
+     *  withheld (a streaming decoder's reading). */
+    private fun svgWindow(b: ByteArray): String {
+        var end = minOf(b.size, SVG_WINDOW)
+        // back up over a sequence the window cut: its lead's length runs past the end
+        var lead = end - 1
+        while (lead >= 0 && lead > end - 4 && (u(b, lead) and 0xc0) == 0x80) lead--
+        if (lead >= 0) {
+            val c = u(b, lead)
+            val len = when {
+                c < 0x80 -> 1
+                c < 0xe0 -> 2
+                c < 0xf0 -> 3
+                else -> 4
+            }
+            if (lead + len > end) end = lead
+        }
+        val start = if (end >= 3 && u(b, 0) == 0xef && u(b, 1) == 0xbb && u(b, 2) == 0xbf) 3 else 0
+        return if (start >= end) "" else b.decodeToString(start, end)
+    }
+
+    /** Where the declaration, instruction, comment or doctype at [at] of [s] ends, or -1 where none starts there. */
+    private fun prologEnd(s: String, at: Int): Int {
+        if (s.startsWith("<?", at)) return s.indexOf("?>", at + 2).let { if (it < 0) -1 else it + 2 }
+        if (s.startsWith("<!--", at)) return s.indexOf("-->", at + 4).let { if (it < 0) -1 else it + 3 }
+        if (!startsWithIgnoringAsciiCase(s, at, "<!DOCTYPE")) return -1
+        var i = at + 9
+        while (i < s.length && s[i] != '>' && s[i] != '[') i++
+        if (i >= s.length) return -1
+        if (s[i] == '>') return i + 1
+        // an internal subset: the first `]` after which only white space stands before a `>`
+        var close = s.indexOf(']', i + 1)
+        while (close >= 0) {
+            var k = close + 1
+            while (k < s.length && JsText.isJsSpace(s[k])) k++
+            if (k < s.length && s[k] == '>') return k + 1
+            close = s.indexOf(']', close + 1)
+        }
+        return -1
+    }
+
+    private fun startsWithIgnoringAsciiCase(s: String, at: Int, prefix: String): Boolean {
+        if (at + prefix.length > s.length) return false
+        for (i in prefix.indices) {
+            var c = s[at + i]
+            if (c in 'a'..'z') c -= 32
+            var p = prefix[i]
+            if (p in 'a'..'z') p -= 32
+            if (c != p) return false
+        }
+        return true
+    }
+
+    /** The claimed type without its parameters, trimmed as JavaScript trims, lower case. */
+    private fun essence(type: String?): String {
+        if (type == null) return ""
+        val semi = type.indexOf(';')
+        return JsText.trim(if (semi < 0) type else type.substring(0, semi)).lowercase()
+    }
+
+    private fun textType(t: String) = when (t) {
         "application/json", "application/ld+json", "application/x-ndjson", "application/xml", "application/javascript",
         "application/x-javascript", "application/typescript", "application/x-yaml", "application/yaml", "application/toml",
         "application/x-sh", "application/x-httpd-php", "application/sql", "application/x-tex", "application/rtf",
-    )
-    private val TEXT_EXTENSIONS = setOf(
+        -> true
+        else -> false
+    }
+
+    private fun textExtension(e: String) = when (e) {
         "txt", "text", "md", "markdown", "rst", "adoc", "csv", "tsv", "json", "jsonl", "ndjson", "xml", "yaml", "yml", "toml", "ini",
         "cfg", "conf", "env", "properties", "log", "sql", "html", "htm", "css", "scss", "less", "js", "mjs", "cjs", "ts", "tsx",
         "jsx", "vue", "svelte", "py", "rb", "php", "java", "kt", "kts", "scala", "go", "rs", "c", "h", "cc", "cpp", "hpp", "cs", "swift",
         "m", "sh", "bash", "zsh", "fish", "ps1", "bat", "lua", "pl", "r", "tex", "srt", "vtt", "gradle", "dockerfile", "gitignore",
         "lock", "diff", "patch", "svg",
-    )
-    private val EXTENSION = Regex("[^.]\\.([^.\\s/\\\\]{1,16})$")
+        -> true
+        else -> false
+    }
 
-    /** The lower-cased extension of [name] (no dot), or "" (the web's `extensionOf`). */
-    fun extensionOf(name: String?): String = EXTENSION.find(name ?: "")?.groupValues?.get(1)?.lowercase() ?: ""
+    /** The lower-cased extension of [name] (no dot), or "": after its last dot, which follows a character that is no dot,
+     *  1–16 characters that are no white space, `/` or `\`. */
+    fun extensionOf(name: String?): String {
+        if (name == null) return ""
+        val dot = name.lastIndexOf('.')
+        if (dot < 1 || name[dot - 1] == '.') return ""
+        val len = name.length - dot - 1
+        if (len < 1 || len > 16) return ""
+        for (i in dot + 1 until name.length) {
+            val c = name[i]
+            if (c == '/' || c == '\\' || JsText.isJsSpace(c)) return ""
+        }
+        return name.substring(dot + 1).lowercase()
+    }
 
     /** Whether the CLAIMED type or name says "text" — a claim that may only narrow what the bytes already allow. */
     fun claimsText(type: String?, name: String?): Boolean {
-        val t = (type ?: "").substringBefore(';').trim().lowercase()
-        if (t.startsWith("text/") || t in TEXT_TYPES || t.endsWith("+json") || t.endsWith("+xml")) return true
-        return extensionOf(name) in TEXT_EXTENSIONS
+        val t = essence(type)
+        if (t.startsWith("text/") || textType(t) || t.endsWith("+json") || t.endsWith("+xml")) return true
+        return textExtension(extensionOf(name))
     }
 
-    /** [b] as the text [isText] said it is: UTF-16 by its byte-order mark, else UTF-8 (a leading mark dropped). */
+    /** Whether the CLAIM names SVG: the sealed type or the name's extension. */
+    fun claimsSvg(type: String?, name: String?): Boolean = essence(type) == "image/svg+xml" || extensionOf(name) == "svg"
+
+    /** [b] as the text [textEncoding] said it is: UTF-16 by its byte-order mark, else UTF-8 (a leading mark dropped). */
     fun decodeText(b: ByteArray): String {
         if (b.size >= 2 && ((u(b, 0) == 0xff && u(b, 1) == 0xfe) || (u(b, 0) == 0xfe && u(b, 1) == 0xff))) {
             val le = u(b, 0) == 0xff

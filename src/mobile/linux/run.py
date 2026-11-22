@@ -174,11 +174,14 @@ def test(pattern: str | None) -> int:
     tree_vectors = "contracts/platform/tree/v1-vectors.json"
     # and the node plans' vectors (PlanVectorsTest), read the same way
     plan_vectors = "contracts/platform/plans/v1-vectors.json"
+    # and the file facts' vectors (FileFactsVectorsTest), read the same way
+    file_vectors = "contracts/platform/files/v1-vectors.json"
     mounts = {**{d: f"/veyq/bin/{m}" for m, d in kexe_dirs.items()}, runner: "/veyq/run/test-modules.sh",
               VECTORS: "/veyq/vectors.json", NORMALIZATION_TEST: "/veyq/NormalizationTest.txt",
               ROOT / qr_fixtures: f"/veyq/repo/{qr_fixtures}", ROOT / search_vectors: f"/veyq/repo/{search_vectors}",
               ROOT / export_contracts: f"/veyq/repo/{export_contracts}", ROOT / format_vectors: f"/veyq/repo/{format_vectors}",
-              ROOT / tree_vectors: f"/veyq/repo/{tree_vectors}", ROOT / plan_vectors: f"/veyq/repo/{plan_vectors}"}
+              ROOT / tree_vectors: f"/veyq/repo/{tree_vectors}", ROOT / plan_vectors: f"/veyq/repo/{plan_vectors}",
+              ROOT / file_vectors: f"/veyq/repo/{file_vectors}"}
     env = {"VEYQ_VECTORS": "/veyq/vectors.json", "VEYQ_NORMALIZATION_TEST": "/veyq/NormalizationTest.txt",
            "VEYQ_REPO_ROOT": "/veyq/repo", "TZ": ZONE}
     # WallClockTest's values are Berlin's. kotlinx-datetime reads the zone from /etc/localtime, glibc from TZ: both set.
@@ -457,7 +460,9 @@ SANDBOX_SKIPS = ("core_ui::avatars::tests::a_picture_as_the_web_writes_it_decode
                  "core_ui::media_tiers::tests::a_photo_is_turned_by_its_exif_and_fitted_to_the_cores_edges",
                  "core_ui::media_tiers::tests::a_videos_poster_is_its_frame_at_the_cores_moment",
                  "core_ui::media_tiers::tests::a_file_that_does_not_decode_has_no_tiers",
-                 "core_ui::media_tiers::tests::the_reply_packs_the_preview_then_the_thumbnail")
+                 "core_ui::media_tiers::tests::the_reply_packs_the_preview_then_the_thumbnail",
+                 # an SVG through glycin's sandboxed librsvg, held to inbox #1059's threat model (file_page.rs)
+                 "apps::depot::file_page::tests::an_svg_draws_with_nothing_in_it_run_or_fetched")
 
 
 def runtime_pins(flatpak_arch: str) -> dict[str, str]:

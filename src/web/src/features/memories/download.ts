@@ -10,11 +10,40 @@
 // `shared/saveStream.ts` opens (a picked file, the Service Worker's download route, or — only up to its cap — an
 // in-memory Blob), so the tab holds a few chunks, not the original. It used to hold the whole decrypted original.
 import { streamBlob, STREAM_IN_FLIGHT, type ByteSink } from '../../core/blob/stream'
-import { MIME_TO_EXT, downloadName, type BlobMeta } from '../../core/blob/meta'
-import { asciiAt, hasAscii, readEbmlDocType } from '../../core/blob/sniff'
+import { downloadName, typeExtension, type BlobMeta } from '../../core/blob/meta'
 import { openSaveTarget } from '../../shared/saveStream'
 import type { ChunkProvider } from '../../sw/protocol'
 import { plaintextTotal } from '../../sw/range'
+
+// The byte readers Memories' own sniff reads (it answers which type to SEAL, a question of its own; the platform's sniff,
+// `@veyq/core-js/files`, answers what to SHOW): kept here when the platform's moved to the Kotlin core (ADR 0155 7.2).
+
+/** The ASCII text at `offset` (`length` bytes, fewer at the end of `b`). */
+function asciiAt(b: Uint8Array, offset: number, length: number): string {
+  let s = ''
+  for (let i = offset; i < Math.min(b.length, offset + length); i++) s += String.fromCharCode(b[i])
+  return s
+}
+
+/** Whether `ascii` sits at `offset`. */
+function hasAscii(b: Uint8Array, offset: number, ascii: string): boolean {
+  return b.length >= offset + ascii.length && asciiAt(b, offset, ascii.length) === ascii
+}
+
+/** An EBML file's `DocType` ("webm" / "matroska"): its element id (`0x42 0x82`) in the first KiB, a single-byte size and
+ *  that many ASCII bytes; undefined where not read so. */
+function readEbmlDocType(b: Uint8Array): string | undefined {
+  const end = Math.min(b.length - 1, 1024)
+  for (let i = 4; i < end; i++) {
+    if (b[i] !== 0x42 || b[i + 1] !== 0x82) continue
+    const sizeByte = b[i + 2]
+    if (sizeByte === undefined || (sizeByte & 0x80) === 0) return undefined
+    const len = sizeByte & 0x7f
+    if (len === 0 || i + 3 + len > b.length) return undefined
+    return asciiAt(b, i + 3, len)
+  }
+  return undefined
+}
 
 /**
  * Sniff the **full MIME type** of a decrypted original from its leading magic bytes — a small known set, else
@@ -52,10 +81,10 @@ export function sniffMediaType(bytes: Uint8Array): string | undefined {
 }
 
 /** The download extension for a media type, or undefined for one this client does not name (then: `bin`). The table
- *  is core's (`core/blob/meta.ts` `MIME_TO_EXT`, shared with Depot's download names since inbox #397); every type
+ *  is core's (`core/blob/meta.ts` `typeExtension`, the platform's table, shared with Depot's download names since inbox #397); every type
  *  [sniffMediaType] returns has its row there. Own rows only: the type is a peer's sealed statement. */
 export function extensionOf(mediaType: string | undefined): string | undefined {
-  return mediaType && Object.hasOwn(MIME_TO_EXT, mediaType) ? MIME_TO_EXT[mediaType] : undefined
+  return typeExtension(mediaType)
 }
 
 /** The derived fallback name: the decrypted Memory name + a 1-based index + an extension (e.g. `Rom 2026 3.jpg`). A

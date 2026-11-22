@@ -53,7 +53,7 @@ describe('sniffMediaType (full MIME — an untyped upload\'s blob meta type, the
   })
 })
 
-describe('extensionOf over a sniffed type (every type the sniff returns names an extension — core MIME_TO_EXT)', () => {
+describe('extensionOf over a sniffed type (every type the sniff returns names an extension — core typeExtension)', () => {
   const sniffedExt = (b: Uint8Array) => extensionOf(sniffMediaType(b)) ?? 'bin'
 
   it('recognises a known set of image / video / document signatures', () => {

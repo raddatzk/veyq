@@ -70,7 +70,7 @@ import { audioKindOf, isAudioMeta } from './music/audio'
 import { isTrackMeta } from './track/gpx'
 import { audioFactsFrom, measureAudioFile, type AudioFacts } from './music/audioFacts'
 import { normalizeMemoryCover } from './memoryCover'
-import { MIME_TO_EXT } from '../../core/blob/meta'
+import { typeExtension } from '../../core/blob/meta'
 import { CENTRE, normalizeBanner, normalizeFocal, sealedBanner, type Banner, type BannerMedium } from './banner/bannerModel'
 import { uploadBanner, writeMemoryBanner } from './banner/bannerWrite'
 import { CHAPTER_CONTENT, isObj, MEMORIES_CONTENT_VERSION, MEMORY_CONTENT } from './contentSchema'
@@ -230,7 +230,7 @@ async function bannerOf(ctx: ExportNodeContext, source: MemorySource, banner: Ba
     file = await whole('banner.jpg', banner.blob)
   } else {
     const type = banner.type ?? 'video/mp4'
-    file = add(`banner.${MIME_TO_EXT[type] ?? 'mp4'}`, banner.blob, type)
+    file = add(`banner.${typeExtension(type) ?? 'mp4'}`, banner.blob, type)
     if (banner.poster) poster = await whole('banner-poster.jpg', banner.poster)
   }
   if (!file) return undefined // a banner whose bytes do not read is left out, never a failed download

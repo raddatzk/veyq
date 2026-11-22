@@ -193,13 +193,15 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
 
 | What the bytes are | Shown as | Cap |
 |---|---|---|
-| JPEG, PNG, GIF, WebP, AVIF, BMP, SVG (HEIC is tried) | `<img>` on an object URL typed with the **sniffed** type (`useObjectUrl`, revoked on replace/unmount) | 64 MiB, then the download |
+| JPEG, PNG, GIF, WebP, AVIF, BMP (HEIC is tried) | `<img>` on an object URL typed with the **sniffed** type (`useObjectUrl`, revoked on replace/unmount) | 64 MiB, then the download |
+| SVG (its markup **and** its claim) | the PNG it draws (`svgRaster.ts`): decoded off the page in image mode, drawn onto a canvas, its own URL revoked; `<img>` on the PNG's object URL | 64 MiB, drawn at most 4096 px on its longer side |
 | text: valid UTF-8 (BOM dropped) or UTF-16 with a BOM, no NUL or other control byte, and a text-ish type or extension | `<pre>` through `textContent`, monospace, wrapping (a toggle), selectable, with a Copy button | first 1 MiB, a note says so; Copy copies what is shown |
 | MP4, MOV, WebM, Matroska, Ogg, MP3, AAC, WAV, FLAC, M4A | `<video controls playsinline>` / `<audio controls>` on the service worker's `/__media/<handle>` ([ADR 0047](../decisions/0047-inline-video-playback-range-streaming.md); the page holds the key, the worker none) | none: streamed |
 | PDF (`%PDF-` in the first KiB) | drawn page by page onto `<canvas>` elements by pdf.js, in the page (below) | 64 MiB and 1000 pages, then the download |
 | anything else, a text in another encoding, an image the browser cannot decode (`<img>` `error`), a codec it lacks, no usable worker, an unreadable PDF | message + download | — |
 
-- **The bytes decide** (`core/blob/sniff.ts`, `view.ts`): the first chunk is opened and sniffed; the blob's sealed type
+- **The bytes decide** (the platform's `blob/Sniff.kt` through `@veyq/core-js/files` behind `core/blob/sniff.ts` — one rule
+  with the apps, `contracts/platform/files/v1-vectors.json` — and `view.ts`): the first chunk is opened and sniffed; the blob's sealed type
   and the name only *narrow*. A PNG claimed as `text/plain` is an image; a binary claimed as `image/png` shows nothing;
   an SVG is an image only when its markup (first element `<svg`) **and** the type/extension say so — any other markup is
   text. Legacy 8-bit encodings are not guessed (they are not valid UTF-8, so the file is not shown as text).
@@ -207,9 +209,22 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
   too — never inline, never in `<object>`/`<iframe>`), blob URL types are the sniffed ones, and the media route sets
   `Content-Type` from the sniffed container (protocol 4 accepts `audio/*` besides `video/*`, same one-essence rule).
   Nothing is logged, no new network origin is used, and the object URL, the playback handle and the read in flight
-  (an `AbortSignal` into the stream pump) are released on a new file, on navigation and on unmount. A blob URL document
-  opened by the user in a tab inherits the app's CSP (`script-src 'self'`), so an SVG's script cannot run there either
-  (remembered from the specification, not measured in a browser).
+  (an `AbortSignal` into the stream pump) are released on a new file, on navigation and on unmount.
+- **An SVG never reaches the page by its own URL** (inbox #1059). A blob URL is the app's origin, and a blob URL document
+  opened in a tab of its own does **not** inherit the page's CSP: an SVG's `<script>`, `onload` and `foreignObject` script
+  ran there (measured 2026-11-22, headless Chrome, the file facts' browser pass — the earlier note here that it inherits
+  `script-src 'self'` was remembered and wrong). So the SVG is drawn once into a PNG (`features/depot/svgRaster.ts`) and
+  the page, and any tab opened from it, holds only the PNG. The same pass: five SVGs (benign; script and `onload`;
+  `<image href>`, `xlink:href`, `<use>`, CSS `@import`/`url()`, a `javascript:` link; a `foreignObject` frame, image and
+  script; an external and a file entity) named a loopback listener: no request reached it and nothing ran, in the page or
+  in a tab. One the canvas refuses (a `foreignObject` taints it) is shown as "cannot be shown" with the download.
+- **On the apps an SVG is the platform's** (inbox #1059; ADR 0155 § The file facts' slice holds the threat model). The core
+  decides it as an image only where a platform proved it draws one with nothing in it run or fetched
+  (`FileView.svgAsImage`): **Linux** draws it — GTK decodes it through glycin's sandboxed librsvg, which runs no script and
+  resolves no URL but `data:` (`file_page.rs`' hostile-file test, in the Fedora container: no connection, an external file
+  entity not expanded). **Android, iOS/macOS and Windows show it as its text**: Android has no SVG decoder of its own, Apple
+  no public one for arbitrary data, and Windows' candidates (WinUI's `SvgImageSource`, WebView2 in image mode) have no
+  hostile-file test yet. Each is a follow-up: a renderer and its proof.
 - **Memory.** Per-kind caps above; a file of another kind is read no further than its first chunk. Images and text are
   collected chunk by chunk (four frames in flight) into one `Blob`/string.
 - **A PDF is drawn inline by pdf.js, not by the browser's viewer** (owner decision 2026-10-12). The browser's own viewer

@@ -1,0 +1,3176 @@
+{
+  "format": "veyq-file-facts-v1",
+  "about": "The file facts (ADR 0155 decision 7.2, the fourth slice): a decrypted file's first bytes sniffed (hex), the claims that only narrow, a name's extension, the download name and the safe names inside a download's ZIP (ADR 0082 decision 3). Every client answers every case: the core's FileFactsVectorsTest (the writer: VEYQ_WRITE_VECTORS=1), the package's files.test.ts and the web's files.vectors.test.ts through @veyq/core-js/files.",
+  "sniff": [
+    {
+      "rule": "jpeg",
+      "hex": "ffd8ffe00000000000000000",
+      "expected": {
+        "image": "image/jpeg",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "jpeg, three bytes",
+      "hex": "ffd8ff",
+      "expected": {
+        "image": "image/jpeg",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "jpeg, two bytes",
+      "hex": "ffd8",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "png",
+      "hex": "89504e470d0a1a0a0000000000000000",
+      "expected": {
+        "image": "image/png",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "png, a short prefix",
+      "hex": "89504e47",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "png, a wrong eighth byte",
+      "hex": "89504e470d0a1a0b",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "gif87a",
+      "hex": "474946383761",
+      "expected": {
+        "image": "image/gif",
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "gif89a",
+      "hex": "474946383961",
+      "expected": {
+        "image": "image/gif",
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "gif88a is none",
+      "hex": "474946383861",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "webp",
+      "hex": "524946460000000057454250",
+      "expected": {
+        "image": "image/webp",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "riff wave",
+      "hex": "524946460000000057415645",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "audio",
+          "type": "audio/wav"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "avif",
+      "hex": "0000001866747970617669660000000069736f6d",
+      "expected": {
+        "image": "image/avif",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "avif sequence",
+      "hex": "0000001866747970617669730000000069736f6d",
+      "expected": {
+        "image": "image/avif",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "heic",
+      "hex": "0000001866747970686569630000000069736f6d",
+      "expected": {
+        "image": "image/heic",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "heix",
+      "hex": "0000001866747970686569780000000069736f6d",
+      "expected": {
+        "image": "image/heic",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "hevc",
+      "hex": "0000001866747970686576630000000069736f6d",
+      "expected": {
+        "image": "image/heic",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "heim",
+      "hex": "00000018667479706865696d0000000069736f6d",
+      "expected": {
+        "image": "image/heic",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "heis",
+      "hex": "0000001866747970686569730000000069736f6d",
+      "expected": {
+        "image": "image/heic",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "hevm",
+      "hex": "00000018667479706865766d0000000069736f6d",
+      "expected": {
+        "image": "image/heic",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "hevs",
+      "hex": "0000001866747970686576730000000069736f6d",
+      "expected": {
+        "image": "image/heic",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "heif",
+      "hex": "0000001866747970686569660000000069736f6d",
+      "expected": {
+        "image": "image/heic",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "mif1",
+      "hex": "00000018667479706d6966310000000069736f6d",
+      "expected": {
+        "image": "image/heic",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "msf1",
+      "hex": "00000018667479706d7366310000000069736f6d",
+      "expected": {
+        "image": "image/heic",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "bmp, DIB 12",
+      "hex": "424d0000000000000000000000000c000000000000000000000000000000",
+      "expected": {
+        "image": "image/bmp",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "bmp, DIB 40",
+      "hex": "424d00000000000000000000000028000000000000000000000000000000",
+      "expected": {
+        "image": "image/bmp",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "bmp, DIB 52",
+      "hex": "424d00000000000000000000000034000000000000000000000000000000",
+      "expected": {
+        "image": "image/bmp",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "bmp, DIB 56",
+      "hex": "424d00000000000000000000000038000000000000000000000000000000",
+      "expected": {
+        "image": "image/bmp",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "bmp, DIB 64",
+      "hex": "424d00000000000000000000000040000000000000000000000000000000",
+      "expected": {
+        "image": "image/bmp",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "bmp, DIB 108",
+      "hex": "424d0000000000000000000000006c000000000000000000000000000000",
+      "expected": {
+        "image": "image/bmp",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "bmp, DIB 124",
+      "hex": "424d0000000000000000000000007c000000000000000000000000000000",
+      "expected": {
+        "image": "image/bmp",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "bmp, an unknown DIB size",
+      "hex": "424d00000000000000000000000029000000000000000000000000000000",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "bmp, 25 bytes",
+      "hex": "424d0000000000000000000000002800000000000000000000",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "bmp, a non-zero size byte",
+      "hex": "424d00000000000000000000000028010000000000000000000000000000",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "text starting with BM",
+      "hex": "424d57206973206120636172206d616b65722e20424d57206973206120636172206d616b65722e20424d57206973206120636172206d616b65722e20",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "bytes of no format",
+      "hex": "0c31567ba0c522476c91b613385d82a704294e7398bd1a3f6489ae0b30557a9fc421466b90b512375c81a603284d7297bc193e6388ad0a2f54799ec320456a8f",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "empty",
+      "hex": "",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "mp4 (isom)",
+      "hex": "000000186674797069736f6d0000000069736f6d",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "video",
+          "type": "video/mp4"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "mp4 (mp42)",
+      "hex": "00000018667479706d7034320000000069736f6d",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "video",
+          "type": "video/mp4"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "quicktime",
+      "hex": "0000001866747970717420200000000069736f6d",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "video",
+          "type": "video/quicktime"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "m4a",
+      "hex": "00000018667479704d3441200000000069736f6d",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "audio",
+          "type": "audio/mp4"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "m4b",
+      "hex": "00000018667479704d3442200000000069736f6d",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "audio",
+          "type": "audio/mp4"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "m4p",
+      "hex": "00000018667479704d3450200000000069736f6d",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "audio",
+          "type": "audio/mp4"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "ftyp with a short brand",
+      "hex": "00000018667479706176",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "video",
+          "type": "video/mp4"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "webm",
+      "hex": "1a45dfa34282847765626d",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "video",
+          "type": "video/webm"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "matroska",
+      "hex": "1a45dfa34282886d6174726f736b61",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "video",
+          "type": "video/x-matroska"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "ebml, its DocType past the 64th byte",
+      "hex": "1a45dfa3000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004282886d6174726f736b61",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "video",
+          "type": "video/x-matroska"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "ebml, matroska named but not as the DocType",
+      "hex": "1a45dfa36d6174726f736b614282847765626d",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "video",
+          "type": "video/webm"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "ebml, a two-byte DocType size",
+      "hex": "1a45dfa3428240086d6174726f736b61",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "video",
+          "type": "video/webm"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "ebml, a DocType longer than the bytes",
+      "hex": "1a45dfa34282886d617472",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "video",
+          "type": "video/webm"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "ebml, an empty DocType",
+      "hex": "1a45dfa34282806d6174726f736b61",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "video",
+          "type": "video/webm"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "ebml, the DocType id within the first four bytes only",
+      "hex": "1a45dfa3",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "video",
+          "type": "video/webm"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "ogg vorbis",
+      "hex": "4f676753000000000000000000000000000000000000000000000000000000000000766f72626973",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "audio",
+          "type": "audio/ogg"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "ogg theora",
+      "hex": "4f676753000000000000000000000000000000000000000000000000000000000000807468656f7261",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "video",
+          "type": "video/ogg"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "ogg, theora past byte 160",
+      "hex": "4f676753000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000007468656f7261",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "audio",
+          "type": "audio/ogg"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "wav",
+      "hex": "524946460000000057415645",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "audio",
+          "type": "audio/wav"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "flac",
+      "hex": "664c6143",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "audio",
+          "type": "audio/flac"
+        },
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "mp3 with ID3",
+      "hex": "49443304",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "audio",
+          "type": "audio/mpeg"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "mp3 frame (MPEG1 layer III)",
+      "hex": "fffb9000",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "audio",
+          "type": "audio/mpeg"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "mp3 frame, two bytes",
+      "hex": "fffb",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "audio",
+          "type": "audio/mpeg"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "aac (ADTS)",
+      "hex": "fff15080",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "audio",
+          "type": "audio/aac"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "aac (ADTS, MPEG-2)",
+      "hex": "fff95080",
+      "expected": {
+        "image": null,
+        "stream": {
+          "element": "audio",
+          "type": "audio/aac"
+        },
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "a reserved mpeg version",
+      "hex": "ffe99000",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "a utf-16le text (its BOM looks like a layer I frame)",
+      "hex": "fffe68006900",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-16le",
+        "textComplete": "utf-16le",
+        "svg": false
+      }
+    },
+    {
+      "rule": "an mpeg frame with the invalid bitrate index",
+      "hex": "fffbf000",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "an mpeg frame with the reserved sample rate",
+      "hex": "fffb9c00",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "pdf at byte 0",
+      "hex": "255044462d312e370a25",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": true,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "pdf, the header alone",
+      "hex": "255044462d",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": true,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "pdf, four bytes",
+      "hex": "25504446",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "a text mentioning the header",
+      "hex": "41206e6f74652074686174206d656e74696f6e7320255044462d20696e2069747320626f6479",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "pdf after binary junk",
+      "hex": "6a756e6b00255044462d312e34ff00",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": true,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "pdf at offset 1024",
+      "hex": "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000255044462d312e34",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": true,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "pdf at offset 1025",
+      "hex": "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000255044462d312e34ff",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "pdf cut by the end of the head",
+      "hex": "00255044",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "png bytes are no pdf",
+      "hex": "89504e470d0a1a0a",
+      "expected": {
+        "image": "image/png",
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "utf-8 text",
+      "hex": "48616c6c6f2057656c740a09c384c396c39c20c39f20e697a5e69cace8aa9e20f09f98800d0a1b5b33316d726564",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "utf-8 with a BOM",
+      "hex": "efbbbf7769746820626f6d",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "a form feed and DEL",
+      "hex": "610c627f63",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "utf-8 cut in a four-byte sequence",
+      "hex": "616263f09f",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "windows-1252 cut",
+      "hex": "636166e9",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "utf-16le",
+      "hex": "fffe68006900",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-16le",
+        "textComplete": "utf-16le",
+        "svg": false
+      }
+    },
+    {
+      "rule": "utf-16be",
+      "hex": "feff00680069",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-16be",
+        "textComplete": "utf-16be",
+        "svg": false
+      }
+    },
+    {
+      "rule": "utf-16le, an odd byte left",
+      "hex": "fffe680069",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-16le",
+        "textComplete": "utf-16le",
+        "svg": false
+      }
+    },
+    {
+      "rule": "utf-16le, the BOM alone",
+      "hex": "fffe",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-16le",
+        "textComplete": "utf-16le",
+        "svg": false
+      }
+    },
+    {
+      "rule": "utf-16le, a surrogate pair",
+      "hex": "fffe3dd800de",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-16le",
+        "textComplete": "utf-16le",
+        "svg": false
+      }
+    },
+    {
+      "rule": "utf-16le, a lone high surrogate at the end",
+      "hex": "fffe68003dd8",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "utf-16le, a lone low surrogate",
+      "hex": "fffe00de6800",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "utf-16be, a high surrogate before a letter",
+      "hex": "feffd83d0068",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "utf-16 without a BOM",
+      "hex": "68006900",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "a NUL byte",
+      "hex": "74657874006d6f7265",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "a vertical tab",
+      "hex": "746578740b6d6f7265",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "an SOH byte",
+      "hex": "74657874016d6f7265",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "windows-1252",
+      "hex": "636166e9206f6b",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "a lone continuation byte",
+      "hex": "8041",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "an overlong NUL",
+      "hex": "41c080",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "an overlong slash",
+      "hex": "41e080af",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "an encoded surrogate",
+      "hex": "41eda080",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "past U+10FFFF",
+      "hex": "41f4908080",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "an F5 lead",
+      "hex": "41f5808080",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "cut after an E0 that cannot complete",
+      "hex": "41e080",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "cut after an E0 that can",
+      "hex": "41e0a0",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "cut after an ED that cannot complete",
+      "hex": "41eda0",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "cut after an F0 that cannot",
+      "hex": "41f08f",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "cut after an F4 that cannot",
+      "hex": "41f490",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "cut after a lead alone",
+      "hex": "41f0",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "a continuation missing mid-text",
+      "hex": "41c341",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "svg, bare",
+      "hex": "3c73766720786d6c6e733d22687474703a2f2f7777772e77332e6f72672f323030302f737667222f3e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, prolog, comment and doctype",
+      "hex": "3c3f786d6c2076657273696f6e3d22312e30223f3e0a3c212d2d206d6164652062792068616e64202d2d3e0a3c21444f435459504520737667205055424c494320222d2f2f5733432f2f4454442053564720312e312f2f454e222022782e647464223e0a3c7376672077696474683d2231223e3c2f7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, leading blanks",
+      "hex": "0a2020093c7376673e3c2f7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, upper case",
+      "hex": "3c5356473e3c2f5356473e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, mixed case",
+      "hex": "3c7356673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, a tab after the name",
+      "hex": "3c7376670976696577426f783d2230203020312031222f3e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, a slash after the name",
+      "hex": "3c7376672f3e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, a no-break space after the name",
+      "hex": "3c737667c2a02f3e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, leading em spaces",
+      "hex": "e28083e280833c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, a lower-case doctype",
+      "hex": "3c21646f6374797065207376673e3c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, a doctype with an internal subset (XXE)",
+      "hex": "3c3f786d6c2076657273696f6e3d22312e30223f3e3c21444f435459504520737667205b3c21454e54495459207878652053595354454d202266696c653a2f2f2f6574632f706173737764223e5d3e3c7376673e3c746578743e267878653b3c2f746578743e3c2f7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, a doctype whose quoted id holds a \">\"",
+      "hex": "3c21444f435459504520737667205055424c49432022613e6222202278223e3c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "svg, a comment holding \"-->\"-like text",
+      "hex": "3c212d2d2061203e2062202d2d3e3c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, an unterminated comment",
+      "hex": "3c212d2d206e6576657220636c6f736564203c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "svg, an unterminated prolog",
+      "hex": "3c3f786d6c2076657273696f6e3d22312e3022203c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "svg, sixteen comments before it",
+      "hex": "3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, seventeen comments before it",
+      "hex": "3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "svg, with a script",
+      "hex": "3c73766720786d6c6e733d22687474703a2f2f7777772e77332e6f72672f323030302f737667223e3c7363726970743e6665746368282268747470733a2f2f6576696c2e6578616d706c652f7322293c2f7363726970743e3c2f7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, with an external image",
+      "hex": "3c73766720786d6c6e733d22687474703a2f2f7777772e77332e6f72672f323030302f7376672220786d6c6e733a786c696e6b3d22687474703a2f2f7777772e77332e6f72672f313939392f786c696e6b223e3c696d61676520687265663d2268747470733a2f2f6576696c2e6578616d706c652f692e706e672220786c696e6b3a687265663d2268747470733a2f2f6576696c2e6578616d706c652f782e706e67222077696474683d22313022206865696768743d223130222f3e3c2f7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, with a foreignObject",
+      "hex": "3c73766720786d6c6e733d22687474703a2f2f7777772e77332e6f72672f323030302f737667223e3c666f726569676e4f626a6563742077696474683d223922206865696768743d2239223e3c696672616d6520786d6c6e733d22687474703a2f2f7777772e77332e6f72672f313939392f7868746d6c22207372633d2268747470733a2f2f6576696c2e6578616d706c652f66223e3c2f696672616d653e3c2f666f726569676e4f626a6563743e3c2f7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, with a CSS url()",
+      "hex": "3c73766720786d6c6e733d22687474703a2f2f7777772e77332e6f72672f323030302f737667223e3c7374796c653e40696d706f72742075726c2868747470733a2f2f6576696c2e6578616d706c652f632e637373293b20726563747b66696c6c3a75726c2868747470733a2f2f6576696c2e6578616d706c652f702e7376672370297d3c2f7374796c653e3c726563742077696474683d223922206865696768743d2239222f3e3c2f7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "an html page",
+      "hex": "3c21646f63747970652068746d6c3e3c68746d6c3e3c626f64793e3c7376673e3c2f7376673e3c2f626f64793e3c2f68746d6c3e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "a script first",
+      "hex": "3c7363726970743e616c6572742831293c2f7363726970743e3c7376672f3e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "svg-looking prose",
+      "hex": "746865203c7376673e20656c656d656e74206973",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "a name that merely starts alike",
+      "hex": "3c737667666f6f2f3e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "a prefixed svg element",
+      "hex": "3c7376673a73766720786d6c6e733a7376673d22687474703a2f2f7777772e77332e6f72672f323030302f737667222f3e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "svg, the name alone",
+      "hex": "3c737667",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "svg, sixteen comments then a blank",
+      "hex": "3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e3c212d2d2d2d3e203c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "svg, a minimal prolog",
+      "hex": "3c3f786d6c3f3e3c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, a prolog closing at once",
+      "hex": "3c3f3f3e3c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, an empty doctype",
+      "hex": "3c21444f43545950453e3c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, a doctype subset then blanks",
+      "hex": "3c21444f435459504520737667205b203c21454e54495459206120225d223e205d20203e0a3c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, a doctype subset never closed",
+      "hex": "3c21444f435459504520737667205b203c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "svg, a doctype bracket after its end",
+      "hex": "3c21444f435459504520737667205d3e3c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, a comment opener alone",
+      "hex": "3c212d2d3e3c7376673e2d2d3e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "svg, a form feed between",
+      "hex": "3c3f783f3e0c3c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, a line separator between",
+      "hex": "3c3f783f3ee280a83c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, U+0085 between",
+      "hex": "3c3f783f3ec2853c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "svg, a DOCTYPE in odd case",
+      "hex": "3c21446f6354797065207376673e3c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, an html doctype then svg",
+      "hex": "3c21444f43545950452068746d6c3e3c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, a BOM",
+      "hex": "efbbbf3c7376672f3e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, binary first",
+      "hex": "003c7376672f3e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": null,
+        "textComplete": null,
+        "svg": false
+      }
+    },
+    {
+      "rule": "svg in utf-16le",
+      "hex": "fffe3c007300760067002f003e00",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-16le",
+        "textComplete": "utf-16le",
+        "svg": false
+      }
+    },
+    {
+      "rule": "svg after 4096 blanks",
+      "hex": "202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020203c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "svg after 4090 blanks",
+      "hex": "202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020203c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": true
+      }
+    },
+    {
+      "rule": "svg, its name cut by the 4096th byte",
+      "hex": "202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020203c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    },
+    {
+      "rule": "svg, a multi-byte character cut at the 4096th byte",
+      "hex": "3c212d2d20202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020c3a92d2d3e3c7376673e",
+      "expected": {
+        "image": null,
+        "stream": null,
+        "pdf": false,
+        "text": "utf-8",
+        "textComplete": "utf-8",
+        "svg": false
+      }
+    }
+  ],
+  "claims": [
+    {
+      "type": "text/plain",
+      "name": "a",
+      "expected": {
+        "text": true,
+        "svg": false
+      }
+    },
+    {
+      "type": "text/markdown; charset=utf-8",
+      "name": null,
+      "expected": {
+        "text": true,
+        "svg": false
+      }
+    },
+    {
+      "type": "application/json",
+      "name": null,
+      "expected": {
+        "text": true,
+        "svg": false
+      }
+    },
+    {
+      "type": "application/vnd.api+json",
+      "name": null,
+      "expected": {
+        "text": true,
+        "svg": false
+      }
+    },
+    {
+      "type": "image/svg+xml",
+      "name": null,
+      "expected": {
+        "text": true,
+        "svg": true
+      }
+    },
+    {
+      "type": "",
+      "name": "notes.MD",
+      "expected": {
+        "text": true,
+        "svg": false
+      }
+    },
+    {
+      "type": null,
+      "name": "main.rs",
+      "expected": {
+        "text": true,
+        "svg": false
+      }
+    },
+    {
+      "type": "application/octet-stream",
+      "name": "archive.zip",
+      "expected": {
+        "text": false,
+        "svg": false
+      }
+    },
+    {
+      "type": "image/png",
+      "name": "photo.png",
+      "expected": {
+        "text": false,
+        "svg": false
+      }
+    },
+    {
+      "type": null,
+      "name": "LICENSE",
+      "expected": {
+        "text": false,
+        "svg": false
+      }
+    },
+    {
+      "type": "  TEXT/HTML  ",
+      "name": null,
+      "expected": {
+        "text": true,
+        "svg": false
+      }
+    },
+    {
+      "type": "application/rtf",
+      "name": null,
+      "expected": {
+        "text": true,
+        "svg": false
+      }
+    },
+    {
+      "type": "application/xhtml+xml",
+      "name": null,
+      "expected": {
+        "text": true,
+        "svg": false
+      }
+    },
+    {
+      "type": "Image/SVG+XML; q=1",
+      "name": null,
+      "expected": {
+        "text": true,
+        "svg": true
+      }
+    },
+    {
+      "type": "image/svg",
+      "name": "x.png",
+      "expected": {
+        "text": false,
+        "svg": false
+      }
+    },
+    {
+      "type": null,
+      "name": "logo.SVG",
+      "expected": {
+        "text": true,
+        "svg": true
+      }
+    },
+    {
+      "type": "text/plain",
+      "name": "logo.txt",
+      "expected": {
+        "text": true,
+        "svg": false
+      }
+    },
+    {
+      "type": null,
+      "name": "logo.svg.png",
+      "expected": {
+        "text": false,
+        "svg": false
+      }
+    },
+    {
+      "type": null,
+      "name": "Dockerfile.dockerfile",
+      "expected": {
+        "text": true,
+        "svg": false
+      }
+    },
+    {
+      "type": "﻿text/plain",
+      "name": null,
+      "expected": {
+        "text": true,
+        "svg": false
+      }
+    },
+    {
+      "type": " image/svg+xml",
+      "name": null,
+      "expected": {
+        "text": true,
+        "svg": true
+      }
+    },
+    {
+      "type": "image/svg+xml\u001c",
+      "name": null,
+      "expected": {
+        "text": false,
+        "svg": false
+      }
+    },
+    {
+      "type": null,
+      "name": ".svg",
+      "expected": {
+        "text": false,
+        "svg": false
+      }
+    },
+    {
+      "type": null,
+      "name": "a.svg ",
+      "expected": {
+        "text": false,
+        "svg": false
+      }
+    }
+  ],
+  "extension": [
+    {
+      "name": "Bericht.PDF",
+      "expected": "pdf"
+    },
+    {
+      "name": ".profile",
+      "expected": ""
+    },
+    {
+      "name": "Rom 2026",
+      "expected": ""
+    },
+    {
+      "name": null,
+      "expected": ""
+    },
+    {
+      "name": "",
+      "expected": ""
+    },
+    {
+      "name": "archive.tar.gz",
+      "expected": "gz"
+    },
+    {
+      "name": "a.b/c",
+      "expected": ""
+    },
+    {
+      "name": "a.b\\c",
+      "expected": ""
+    },
+    {
+      "name": "x.abcdefghijklmnop",
+      "expected": "abcdefghijklmnop"
+    },
+    {
+      "name": "x.abcdefghijklmnopq",
+      "expected": ""
+    },
+    {
+      "name": "x..y",
+      "expected": ""
+    },
+    {
+      "name": "x.",
+      "expected": ""
+    },
+    {
+      "name": "v1.2 notes",
+      "expected": ""
+    },
+    {
+      "name": "a.b c",
+      "expected": ""
+    },
+    {
+      "name": "a.b ",
+      "expected": ""
+    },
+    {
+      "name": "a.bc",
+      "expected": "bc"
+    },
+    {
+      "name": "a.b\u001cc",
+      "expected": "b\u001cc"
+    },
+    {
+      "name": "Résumé.DOCX",
+      "expected": "docx"
+    },
+    {
+      "name": "ÄÖÜ.Ä",
+      "expected": "ä"
+    },
+    {
+      "name": "İ.İ",
+      "expected": "i̇"
+    },
+    {
+      "name": "x.😀",
+      "expected": "😀"
+    },
+    {
+      "name": "..x",
+      "expected": ""
+    },
+    {
+      "name": "a .md",
+      "expected": "md"
+    }
+  ],
+  "downloadName": [
+    {
+      "objectName": "Renamed.pdf",
+      "sealedName": "Original.pdf",
+      "type": null,
+      "fallback": "Rom 2026 3",
+      "expected": "Renamed.pdf"
+    },
+    {
+      "objectName": "",
+      "sealedName": "Original.pdf",
+      "type": null,
+      "fallback": "Rom 2026 3",
+      "expected": "Original.pdf"
+    },
+    {
+      "objectName": "   ",
+      "sealedName": "Original.pdf",
+      "type": null,
+      "fallback": "Rom 2026 3",
+      "expected": "Original.pdf"
+    },
+    {
+      "objectName": null,
+      "sealedName": "  Original.pdf ",
+      "type": null,
+      "fallback": "Rom 2026 3",
+      "expected": "Original.pdf"
+    },
+    {
+      "objectName": null,
+      "sealedName": null,
+      "type": null,
+      "fallback": "Rom 2026 3",
+      "expected": "Rom 2026 3"
+    },
+    {
+      "objectName": "Bericht",
+      "sealedName": null,
+      "type": "application/pdf",
+      "fallback": "f",
+      "expected": "Bericht.pdf"
+    },
+    {
+      "objectName": "Bericht.PDF",
+      "sealedName": null,
+      "type": "application/pdf",
+      "fallback": "f",
+      "expected": "Bericht.PDF"
+    },
+    {
+      "objectName": "Notes.txt",
+      "sealedName": null,
+      "type": "image/png",
+      "fallback": "f",
+      "expected": "Notes.txt"
+    },
+    {
+      "objectName": null,
+      "sealedName": null,
+      "type": "image/heic",
+      "fallback": "Rom 2026 3",
+      "expected": "Rom 2026 3.heic"
+    },
+    {
+      "objectName": "v1.2 notes",
+      "sealedName": null,
+      "type": "image/jpeg",
+      "fallback": "f",
+      "expected": "v1.2 notes.jpg"
+    },
+    {
+      "objectName": ".profile",
+      "sealedName": null,
+      "type": "image/jpeg",
+      "fallback": "f",
+      "expected": ".profile.jpg"
+    },
+    {
+      "objectName": "Bericht",
+      "sealedName": null,
+      "type": "text/x-unknown",
+      "fallback": "f",
+      "expected": "Bericht"
+    },
+    {
+      "objectName": "Bericht",
+      "sealedName": null,
+      "type": "",
+      "fallback": "f",
+      "expected": "Bericht"
+    },
+    {
+      "objectName": "Bericht",
+      "sealedName": null,
+      "type": "toString",
+      "fallback": "f",
+      "expected": "Bericht"
+    },
+    {
+      "objectName": "Bericht",
+      "sealedName": null,
+      "type": "__proto__",
+      "fallback": "f",
+      "expected": "Bericht"
+    },
+    {
+      "objectName": "Bericht",
+      "sealedName": null,
+      "type": "IMAGE/PNG",
+      "fallback": "f",
+      "expected": "Bericht"
+    },
+    {
+      "objectName": "Bericht",
+      "sealedName": null,
+      "type": "image/png; q=1",
+      "fallback": "f",
+      "expected": "Bericht"
+    },
+    {
+      "objectName": "Bericht",
+      "sealedName": null,
+      "type": "image/avif",
+      "fallback": "f",
+      "expected": "Bericht"
+    },
+    {
+      "objectName": "Bericht",
+      "sealedName": null,
+      "type": "image/svg+xml",
+      "fallback": "f",
+      "expected": "Bericht"
+    },
+    {
+      "objectName": "Bericht x.",
+      "sealedName": null,
+      "type": "image/png",
+      "fallback": "f",
+      "expected": "Bericht x..png"
+    },
+    {
+      "objectName": "a.b c",
+      "sealedName": null,
+      "type": "image/png",
+      "fallback": "f",
+      "expected": "a.b c.png"
+    },
+    {
+      "objectName": "a.abcdefghijklmnopq",
+      "sealedName": null,
+      "type": "image/png",
+      "fallback": "f",
+      "expected": "a.abcdefghijklmnopq.png"
+    },
+    {
+      "objectName": "﻿Name ",
+      "sealedName": null,
+      "type": "image/png",
+      "fallback": "f",
+      "expected": "Name.png"
+    },
+    {
+      "objectName": "Name\u001c",
+      "sealedName": null,
+      "type": "image/png",
+      "fallback": "f",
+      "expected": "Name\u001c.png"
+    },
+    {
+      "objectName": " ",
+      "sealedName": " Sealed",
+      "type": "image/png",
+      "fallback": "f",
+      "expected": "Sealed.png"
+    },
+    {
+      "objectName": "",
+      "sealedName": "",
+      "type": "image/png",
+      "fallback": "  ",
+      "expected": "  .png"
+    },
+    {
+      "objectName": "song",
+      "sealedName": null,
+      "type": "audio/mpeg",
+      "fallback": "f",
+      "expected": "song.mp3"
+    },
+    {
+      "objectName": "f",
+      "sealedName": null,
+      "type": "image/jpeg",
+      "fallback": "x",
+      "expected": "f.jpg"
+    },
+    {
+      "objectName": "f",
+      "sealedName": null,
+      "type": "image/png",
+      "fallback": "x",
+      "expected": "f.png"
+    },
+    {
+      "objectName": "f",
+      "sealedName": null,
+      "type": "image/gif",
+      "fallback": "x",
+      "expected": "f.gif"
+    },
+    {
+      "objectName": "f",
+      "sealedName": null,
+      "type": "image/webp",
+      "fallback": "x",
+      "expected": "f.webp"
+    },
+    {
+      "objectName": "f",
+      "sealedName": null,
+      "type": "image/heic",
+      "fallback": "x",
+      "expected": "f.heic"
+    },
+    {
+      "objectName": "f",
+      "sealedName": null,
+      "type": "application/pdf",
+      "fallback": "x",
+      "expected": "f.pdf"
+    },
+    {
+      "objectName": "f",
+      "sealedName": null,
+      "type": "video/mp4",
+      "fallback": "x",
+      "expected": "f.mp4"
+    },
+    {
+      "objectName": "f",
+      "sealedName": null,
+      "type": "video/quicktime",
+      "fallback": "x",
+      "expected": "f.mov"
+    },
+    {
+      "objectName": "f",
+      "sealedName": null,
+      "type": "video/webm",
+      "fallback": "x",
+      "expected": "f.webm"
+    },
+    {
+      "objectName": "f",
+      "sealedName": null,
+      "type": "video/x-matroska",
+      "fallback": "x",
+      "expected": "f.mkv"
+    },
+    {
+      "objectName": "f",
+      "sealedName": null,
+      "type": "audio/mpeg",
+      "fallback": "x",
+      "expected": "f.mp3"
+    },
+    {
+      "objectName": "f",
+      "sealedName": null,
+      "type": "audio/mp4",
+      "fallback": "x",
+      "expected": "f.m4a"
+    },
+    {
+      "objectName": "f",
+      "sealedName": null,
+      "type": "audio/aac",
+      "fallback": "x",
+      "expected": "f.aac"
+    },
+    {
+      "objectName": "f",
+      "sealedName": null,
+      "type": "audio/ogg",
+      "fallback": "x",
+      "expected": "f.ogg"
+    },
+    {
+      "objectName": "f",
+      "sealedName": null,
+      "type": "audio/wav",
+      "fallback": "x",
+      "expected": "f.wav"
+    },
+    {
+      "objectName": "f",
+      "sealedName": null,
+      "type": "audio/flac",
+      "fallback": "x",
+      "expected": "f.flac"
+    }
+  ],
+  "archiveName": [
+    {
+      "rule": "one name: \"..\"",
+      "names": [
+        ".."
+      ],
+      "expected": [
+        "_"
+      ]
+    },
+    {
+      "rule": "one name: \".\"",
+      "names": [
+        "."
+      ],
+      "expected": [
+        "_"
+      ]
+    },
+    {
+      "rule": "one name: \"\"",
+      "names": [
+        ""
+      ],
+      "expected": [
+        "_"
+      ]
+    },
+    {
+      "rule": "one name: \"   \"",
+      "names": [
+        "   "
+      ],
+      "expected": [
+        "_"
+      ]
+    },
+    {
+      "rule": "one name: \"a/b\"",
+      "names": [
+        "a/b"
+      ],
+      "expected": [
+        "a_b"
+      ]
+    },
+    {
+      "rule": "one name: \"a\\\\b\"",
+      "names": [
+        "a\\b"
+      ],
+      "expected": [
+        "a_b"
+      ]
+    },
+    {
+      "rule": "one name: \"CON.txt\"",
+      "names": [
+        "CON.txt"
+      ],
+      "expected": [
+        "_CON.txt"
+      ]
+    },
+    {
+      "rule": "one name: \"con\"",
+      "names": [
+        "con"
+      ],
+      "expected": [
+        "_con"
+      ]
+    },
+    {
+      "rule": "one name: \"Lpt1.tar.gz\"",
+      "names": [
+        "Lpt1.tar.gz"
+      ],
+      "expected": [
+        "_Lpt1.tar.gz"
+      ]
+    },
+    {
+      "rule": "one name: \"name. \"",
+      "names": [
+        "name. "
+      ],
+      "expected": [
+        "name"
+      ]
+    },
+    {
+      "rule": "one name: \"trailing...\"",
+      "names": [
+        "trailing..."
+      ],
+      "expected": [
+        "trailing"
+      ]
+    },
+    {
+      "rule": "one name: \"Alfama: day 1\"",
+      "names": [
+        "Alfama: day 1"
+      ],
+      "expected": [
+        "Alfama_ day 1"
+      ]
+    },
+    {
+      "rule": "one name: \"what?<>|*\\\"\"",
+      "names": [
+        "what?<>|*\""
+      ],
+      "expected": [
+        "what______"
+      ]
+    },
+    {
+      "rule": "one name: \"tab\\there\\u0000\"",
+      "names": [
+        "tab\there\u0000"
+      ],
+      "expected": [
+        "tab_here_"
+      ]
+    },
+    {
+      "rule": "one name: \".env\"",
+      "names": [
+        ".env"
+      ],
+      "expected": [
+        ".env"
+      ]
+    },
+    {
+      "rule": "one name: \"Trip 2025\"",
+      "names": [
+        "Trip 2025"
+      ],
+      "expected": [
+        "Trip 2025"
+      ]
+    },
+    {
+      "rule": "one name: \"Übersicht\"",
+      "names": [
+        "Übersicht"
+      ],
+      "expected": [
+        "Übersicht"
+      ]
+    },
+    {
+      "rule": "one name: \"COM¹\"",
+      "names": [
+        "COM¹"
+      ],
+      "expected": [
+        "_COM¹"
+      ]
+    },
+    {
+      "rule": "one name: \"com0.x\"",
+      "names": [
+        "com0.x"
+      ],
+      "expected": [
+        "_com0.x"
+      ]
+    },
+    {
+      "rule": "one name: \"lpt² \"",
+      "names": [
+        "lpt² "
+      ],
+      "expected": [
+        "_lpt²"
+      ]
+    },
+    {
+      "rule": "one name: \"AUX .txt\"",
+      "names": [
+        "AUX .txt"
+      ],
+      "expected": [
+        "_AUX .txt"
+      ]
+    },
+    {
+      "rule": "one name: \"nul.\"",
+      "names": [
+        "nul."
+      ],
+      "expected": [
+        "_nul"
+      ]
+    },
+    {
+      "rule": "one name: \"CONSOLE\"",
+      "names": [
+        "CONSOLE"
+      ],
+      "expected": [
+        "CONSOLE"
+      ]
+    },
+    {
+      "rule": "one name: \"xCON\"",
+      "names": [
+        "xCON"
+      ],
+      "expected": [
+        "xCON"
+      ]
+    },
+    {
+      "rule": "one name: \"prn . txt\"",
+      "names": [
+        "prn . txt"
+      ],
+      "expected": [
+        "_prn . txt"
+      ]
+    },
+    {
+      "rule": "one name: \" name \"",
+      "names": [
+        " name "
+      ],
+      "expected": [
+        "name"
+      ]
+    },
+    {
+      "rule": "one name: \"﻿name\"",
+      "names": [
+        "﻿name"
+      ],
+      "expected": [
+        "name"
+      ]
+    },
+    {
+      "rule": "one name: \"name\\u001c\"",
+      "names": [
+        "name\u001c"
+      ],
+      "expected": [
+        "name_"
+      ]
+    },
+    {
+      "rule": "one name: \"del\"",
+      "names": [
+        "del"
+      ],
+      "expected": [
+        "_del"
+      ]
+    },
+    {
+      "rule": "one name: \"ab\"",
+      "names": [
+        "ab"
+      ],
+      "expected": [
+        "ab"
+      ]
+    },
+    {
+      "rule": "one name: \"a b\"",
+      "names": [
+        "a b"
+      ],
+      "expected": [
+        "a b"
+      ]
+    },
+    {
+      "rule": "one name: \". .\"",
+      "names": [
+        ". ."
+      ],
+      "expected": [
+        "_"
+      ]
+    },
+    {
+      "rule": "one name: \"x.y.\"",
+      "names": [
+        "x.y."
+      ],
+      "expected": [
+        "x.y"
+      ]
+    },
+    {
+      "rule": "one name: \"😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\ud83d",
+      "names": [
+        "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀.jpg"
+      ],
+      "expected": [
+        "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀.jpg"
+      ]
+    },
+    {
+      "rule": "one name: \"äääääääääääääääääääääääääääääääääääääää",
+      "names": [
+        "ääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääää.jpg"
+      ],
+      "expected": [
+        "ääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääää.jpg"
+      ]
+    },
+    {
+      "rule": "one name: \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "names": [
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ],
+      "expected": [
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ]
+    },
+    {
+      "rule": "one name: \"yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "names": [
+        "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy😀z"
+      ],
+      "expected": [
+        "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+      ]
+    },
+    {
+      "rule": "one name: \"a.bbbbbbbbbbbbbbbbb\"",
+      "names": [
+        "a.bbbbbbbbbbbbbbbbb"
+      ],
+      "expected": [
+        "a.bbbbbbbbbbbbbbbbb"
+      ]
+    },
+    {
+      "rule": "one name: \".xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "names": [
+        ".xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ],
+      "expected": [
+        ".xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ]
+    },
+    {
+      "rule": "one name: \"zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+      "names": [
+        "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.abcdefghijklmnop"
+      ],
+      "expected": [
+        "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz.abcdefghi"
+      ]
+    },
+    {
+      "rule": "one name: \"Café\"",
+      "names": [
+        "Café"
+      ],
+      "expected": [
+        "Café"
+      ]
+    },
+    {
+      "rule": "one name: \"İstanbul\"",
+      "names": [
+        "İstanbul"
+      ],
+      "expected": [
+        "İstanbul"
+      ]
+    },
+    {
+      "rule": "one name: \"ǅ\"",
+      "names": [
+        "ǅ"
+      ],
+      "expected": [
+        "ǅ"
+      ]
+    },
+    {
+      "rule": "two names differing in case",
+      "names": [
+        "IMG.jpg",
+        "img.JPG",
+        "Img.jpg",
+        "notes",
+        "NOTES"
+      ],
+      "expected": [
+        "IMG.jpg",
+        "img (2).JPG",
+        "Img (3).jpg",
+        "notes",
+        "NOTES (2)"
+      ]
+    },
+    {
+      "rule": "names equal once made safe",
+      "names": [
+        "a/b",
+        "a:b",
+        "a?b"
+      ],
+      "expected": [
+        "a_b",
+        "a_b (2)",
+        "a_b (3)"
+      ]
+    },
+    {
+      "rule": "a numbered name at the bound",
+      "names": [
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ],
+      "expected": [
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (2)",
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (3)"
+      ]
+    },
+    {
+      "rule": "NFC: two spellings",
+      "names": [
+        "Café",
+        "Café"
+      ],
+      "expected": [
+        "Café",
+        "Café (2)"
+      ]
+    },
+    {
+      "rule": "a suffix that collides with a name",
+      "names": [
+        "a (2).txt",
+        "a.txt",
+        "a.txt"
+      ],
+      "expected": [
+        "a (2).txt",
+        "a.txt",
+        "a (3).txt"
+      ]
+    },
+    {
+      "rule": "the manifest directory is a name like any",
+      "names": [
+        ".veyq",
+        ".VEYQ"
+      ],
+      "expected": [
+        ".veyq",
+        ".VEYQ (2)"
+      ]
+    },
+    {
+      "rule": "İ folds to i̇",
+      "names": [
+        "İ",
+        "i̇",
+        "I"
+      ],
+      "expected": [
+        "İ",
+        "i̇ (2)",
+        "I"
+      ]
+    },
+    {
+      "rule": "ß is not ss",
+      "names": [
+        "Straße",
+        "STRASSE"
+      ],
+      "expected": [
+        "Straße",
+        "STRASSE"
+      ]
+    },
+    {
+      "rule": "a dotfile is numbered after its dot",
+      "names": [
+        ".env",
+        ".ENV"
+      ],
+      "expected": [
+        ".env",
+        ".ENV (2)"
+      ]
+    },
+    {
+      "rule": "no extension past 16",
+      "names": [
+        "a.bbbbbbbbbbbbbbbbb",
+        "A.BBBBBBBBBBBBBBBBB"
+      ],
+      "expected": [
+        "a.bbbbbbbbbbbbbbbbb",
+        "A.BBBBBBBBBBBBBBBBB (2)"
+      ]
+    }
+  ],
+  "isArchiveName": [
+    {
+      "segment": "",
+      "expected": false
+    },
+    {
+      "segment": ".",
+      "expected": false
+    },
+    {
+      "segment": "..",
+      "expected": false
+    },
+    {
+      "segment": "a/b",
+      "expected": false
+    },
+    {
+      "segment": "CON",
+      "expected": false
+    },
+    {
+      "segment": "x.",
+      "expected": false
+    },
+    {
+      "segment": "x ",
+      "expected": false
+    },
+    {
+      "segment": " x",
+      "expected": false
+    },
+    {
+      "segment": "a:b",
+      "expected": false
+    },
+    {
+      "segment": "Café",
+      "expected": false
+    },
+    {
+      "segment": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "expected": false
+    },
+    {
+      "segment": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+      "expected": true
+    },
+    {
+      "segment": "ääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääää",
+      "expected": false
+    },
+    {
+      "segment": "äääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääääää",
+      "expected": true
+    },
+    {
+      "segment": "a",
+      "expected": true
+    },
+    {
+      "segment": ".veyq",
+      "expected": true
+    },
+    {
+      "segment": "_CON",
+      "expected": true
+    },
+    {
+      "segment": "ok name.txt",
+      "expected": true
+    },
+    {
+      "segment": " x",
+      "expected": false
+    },
+    {
+      "segment": "x ",
+      "expected": false
+    },
+    {
+      "segment": "ab",
+      "expected": true
+    },
+    {
+      "segment": "😀",
+      "expected": true
+    },
+    {
+      "segment": "COM¹",
+      "expected": false
+    },
+    {
+      "segment": "_",
+      "expected": true
+    },
+    {
+      "segment": "a (2).txt",
+      "expected": true
+    }
+  ],
+  "isArchivePath": [
+    {
+      "path": "Trip 2025/Lisbon/IMG_0412.jpg",
+      "expected": true
+    },
+    {
+      "path": "/abs",
+      "expected": false
+    },
+    {
+      "path": "a//b",
+      "expected": false
+    },
+    {
+      "path": "a/../b",
+      "expected": false
+    },
+    {
+      "path": "../a",
+      "expected": false
+    },
+    {
+      "path": ".veyq/manifest.json",
+      "expected": false
+    },
+    {
+      "path": ".VEYQ/x",
+      "expected": false
+    },
+    {
+      "path": "a/",
+      "expected": false
+    },
+    {
+      "path": "",
+      "expected": false
+    },
+    {
+      "path": "a/.veyq",
+      "expected": true
+    },
+    {
+      "path": ".veyqx/a",
+      "expected": true
+    },
+    {
+      "path": "a\\b",
+      "expected": false
+    },
+    {
+      "path": "a/CON/b",
+      "expected": false
+    },
+    {
+      "path": "one",
+      "expected": true
+    },
+    {
+      "path": ".Veyq",
+      "expected": false
+    }
+  ]
+}

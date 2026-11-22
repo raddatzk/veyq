@@ -19,7 +19,7 @@ acceptanceCriteria:
     text: A download (format version 2) unpacks as the tree - a directory per node that holds others, each file under its own name, a kind that is one file as that file - with every name made safe by core's archiveName (no separators, no dot names, no control or Windows-forbidden characters, no reserved device names, no trailing dot or space, bounded length, a case-insensitive clash numbered `Name (2)`), and the manifest at .veyq/manifest.json maps every node to its path and names each application with its content-schema version.
     coverage:
       web:
-        unit: [src/core/export/archiveName.test.ts, src/core/export/subtree.test.ts]
+        unit: [src/core/blob/files.vectors.test.ts, src/core/export/subtree.test.ts]
   - id: both-layouts-and-both-inputs
     text: An archive written before the tree layout (version 1, data/<id>/) still imports, and a download and the same download unpacked into a directory (dropped or picked, names in either Unicode form) import to the same tree.
     coverage:

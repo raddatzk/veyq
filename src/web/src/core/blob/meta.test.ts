@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { downloadName, MIME_TO_EXT, openBlobMetaOf, type OpenedBlobMeta } from './meta'
+import { downloadName, openBlobMetaOf, typeExtension, type OpenedBlobMeta } from './meta'
 import { makeChunkProvider, planBlob, readBlobMeta } from './transport'
 import type { BlobRef } from './types'
 
@@ -143,6 +143,14 @@ describe('downloadName', () => {
   })
 
   it('names every type the table holds by its row', () => {
-    for (const [type, ext] of Object.entries(MIME_TO_EXT)) expect(downloadName('f', meta({ type }), fallback)).toBe(`f.${ext}`)
+    const table: Record<string, string> = {
+      'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/webp': 'webp', 'image/heic': 'heic', 'application/pdf': 'pdf',
+      'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm', 'video/x-matroska': 'mkv', 'audio/mpeg': 'mp3',
+      'audio/mp4': 'm4a', 'audio/aac': 'aac', 'audio/ogg': 'ogg', 'audio/wav': 'wav', 'audio/flac': 'flac',
+    }
+    for (const [type, ext] of Object.entries(table)) {
+      expect(typeExtension(type)).toBe(ext)
+      expect(downloadName('f', meta({ type }), fallback)).toBe(`f.${ext}`)
+    }
   })
 })
