@@ -33,9 +33,41 @@ pub fn row(n: &NodeRef, icon: &str, sel: &ShownSelection) -> adw::ActionRow {
     row
 }
 
+/// The calls a selection's bar sends: a member's level's (`Select.*`, [Calls::member]) or a link guest's (`Received.Select*`,
+/// [Calls::guest], #1063) — the same bar either way, its actions the core's plan.
+pub struct Calls {
+    pub all: Call,
+    pub none: Call,
+    pub cancel: Call,
+    pub move_to: Call,
+}
+
+impl Calls {
+    /// The shell's level's selection.
+    pub fn member() -> Self {
+        Calls { all: Call::SelectAll, none: Call::SelectNone, cancel: Call::SelectCancel, move_to: Call::SelectMove { copy: false, deleted_name: words::pot_deleted_person() } }
+    }
+
+    /// The selection of received link [received]'s guest level: its plan holds a move only (a guest copies, reports and
+    /// deletes no selection).
+    pub fn guest(received: i64) -> Self {
+        Calls {
+            all: Call::ReceivedSelectAll { received },
+            none: Call::ReceivedSelectNone { received },
+            cancel: Call::ReceivedSelectCancel { received },
+            move_to: Call::ReceivedSelectMove { received },
+        }
+    }
+}
+
 /// The selection's bar under the level: the count, *All*, *None*, the plan's actions in order, *Cancel*, and what an
 /// action cannot reach under it.
 pub fn bar(sel: &ShownSelection, toasts: &adw::ToastOverlay) -> gtk::Widget {
+    bar_with(sel, toasts, &Calls::member())
+}
+
+/// [bar] sending [calls].
+pub fn bar_with(sel: &ShownSelection, toasts: &adw::ToastOverlay, calls: &Calls) -> gtk::Widget {
     let action_bar = gtk::ActionBar::new();
     action_bar.set_widget_name("selection-bar");
     let count = gtk::Label::builder().label(said::notice(&sel.count)).build();
@@ -43,10 +75,12 @@ pub fn bar(sel: &ShownSelection, toasts: &adw::ToastOverlay) -> gtk::Widget {
     count.update_property(&[gtk::accessible::Property::Label(&said::notice(&sel.count))]);
     action_bar.pack_start(&count);
     let all = gtk::Button::with_label(&words::select_all());
-    all.connect_clicked(|_| bridge::send(Call::SelectAll));
+    let call = calls.all.clone();
+    all.connect_clicked(move |_| bridge::send(call.clone()));
     action_bar.pack_start(&all);
     let none = gtk::Button::with_label(&words::select_none());
-    none.connect_clicked(|_| bridge::send(Call::SelectNone));
+    let call = calls.none.clone();
+    none.connect_clicked(move |_| bridge::send(call.clone()));
     action_bar.pack_start(&none);
     let actions = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     for a in &sel.actions {
@@ -55,7 +89,10 @@ pub fn bar(sel: &ShownSelection, toasts: &adw::ToastOverlay) -> gtk::Widget {
         // a sheet over the selection is titled by how many are selected while it reads
         let title = said::notice(&sel.count);
         match a.id {
-            SelectionAction::Move => { b.connect_clicked(move |b| move_sheet::open_call(b, &title, Call::SelectMove { copy: false, deleted_name: words::pot_deleted_person() }, &toasts)); }
+            SelectionAction::Move => {
+                let call = calls.move_to.clone();
+                b.connect_clicked(move |b| move_sheet::open_call(b, &title, call.clone(), &toasts));
+            }
             SelectionAction::Copy => { b.connect_clicked(move |b| move_sheet::open_call(b, &title, Call::SelectMove { copy: true, deleted_name: words::pot_deleted_person() }, &toasts)); }
             SelectionAction::Report => {
                 b.connect_clicked(move |b| report::open_by(b, &NodeAt { scope_id: String::new(), node_id: String::new(), kind: String::new(), name: title.clone() }, Call::SelectReport));
@@ -69,7 +106,8 @@ pub fn bar(sel: &ShownSelection, toasts: &adw::ToastOverlay) -> gtk::Widget {
     }
     action_bar.pack_start(&actions);
     let cancel = gtk::Button::with_label(&words::entry_cancel());
-    cancel.connect_clicked(|_| bridge::send(Call::SelectCancel));
+    let call = calls.cancel.clone();
+    cancel.connect_clicked(move |_| bridge::send(call.clone()));
     action_bar.pack_end(&cancel);
     let column = gtk::Box::new(gtk::Orientation::Vertical, 0);
     for a in &sel.actions {

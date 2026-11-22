@@ -18,7 +18,9 @@
 //! copy) and a READ_WRITE guest's *Replace* ([replace_offered]); a Pot's places held by its page;
 //! a READ_WRITE level's *New* — a folder (`Received.NewFolder`) and files (`Received.Upload`) — where the core says the
 //! level writes (`ReceivedPage.writes`, #1034); each row's *Report* to the link's own operator (`Received.ReportNode`,
-//! #1033).
+//! #1033); a READ_WRITE level's move (#1063) as a member's: each row's menu as the core plans it (`ReceivedRow.menu`:
+//! *Move to…*, `Received.Move`), the header's Select and the selection's bar (`ReceivedPage.tools`, `selection`, the
+//! `Received.Select*` calls), each sheet the member's (`move_sheet`).
 //!
 //! Before any guest write the web's notice of the guest-write record stands under the header while the link writes
 //! (`ReceivedShown.recordDays`, ADR 0093 § 10, inbox #1018), its *more* opening the link's instance's privacy notice;
@@ -37,7 +39,7 @@ use gtk::{gio, glib};
 
 use crate::bridge::{
     self, Watch,
-    wire::{Answer, Call, Create, Msg, NodeAt, ReceivedGate, ReceivedPage, ReceivedPageKind, ReceivedRefusal, ReceivedShown, Update, Watched},
+    wire::{Answer, Call, Create, HeaderAction, LevelTool, Msg, NodeAt, ReceivedGate, ReceivedPage, ReceivedPageKind, ReceivedRefusal, ReceivedShown, Update, Watched},
 };
 use crate::core_ui::home::{glib_escape, kind_icon};
 use crate::core_ui::registry::{registry, GuestFrame, Page};
@@ -216,8 +218,10 @@ pub fn replace_offered(can_write: bool) -> bool {
 /// What the content shows, as a key: drawn anew only when it changed (a level's rows, another page, another gate).
 pub fn drawn_key(s: &ReceivedShown) -> String {
     let page = s.page.as_ref().map(|p| {
-        let rows: Vec<&str> = p.rows.iter().map(|r| r.id.as_str()).collect();
-        format!("{:?}|{:?}|{:?}|{:?}|{}|{}|{}", p.kind, p.file, p.gallery, p.pot, rows.join(","), p.sent.join("\n"), p.writes)
+        let rows: Vec<String> = p.rows.iter().map(|r| format!("{}:{:?}", r.id, r.menu.iter().map(|a| a.id).collect::<Vec<_>>())).collect();
+        // the level's move (#1063): its tools and, while it picks, what is selected and the bar's state
+        let selection = p.selection.as_ref().map(|s| format!("{}|{:?}", s.selected.join(","), s.actions.iter().map(|a| (a.id, a.enabled, a.cannot.is_some())).collect::<Vec<_>>()));
+        format!("{:?}|{:?}|{:?}|{:?}|{}|{}|{}|{:?}|{:?}", p.kind, p.file, p.gallery, p.pot, rows.join(","), p.sent.join("\n"), p.writes, p.tools, selection)
     });
     format!("{:?}|{:?}|{}|{}", s.gate, s.refusal, s.asked_again, page.unwrap_or_default())
 }
@@ -246,6 +250,10 @@ struct Inner {
     /// A READ_WRITE level's *New*: core's `GuestLevel.creates` ([new_menu]), a folder, files or a folder uploaded here.
     new: gtk::MenuButton,
     new_menu: gio::Menu,
+    /// A READ_WRITE level's Select (`ReceivedPage.tools`, #1063): the member's toggle, pressed while the level picks.
+    select: gtk::ToggleButton,
+    /// Set while [select] follows the core's selection, so the toggle sends nothing then.
+    select_syncing: Cell<bool>,
     /// A file's *Download* (Save a copy) and its *Replace*, where the file offers them.
     save: gtk::Button,
     replace: gtk::Button,
@@ -285,6 +293,10 @@ impl ReceivedView {
         let new = crate::core_ui::create_action::create_menu(&words::drawer_new(), new_menu.upcast_ref());
         new.set_visible(false);
         new.set_widget_name("guest-new");
+        // the member's Select tool (`selection::tool`'s look), its toggle the guest level's (`Received.SelectStart`/`Cancel`)
+        let select = gtk::ToggleButton::builder().icon_name("selection-mode-symbolic").tooltip_text(words::select_action()).visible(false).build();
+        select.update_property(&[gtk::accessible::Property::Label(&words::select_action())]);
+        select.set_widget_name("level-select");
         let save = icon_button(crate::core_ui::header::icon_of(crate::bridge::wire::HeaderAction::Download), &words::node_download(), "received.save");
         let replace = icon_button(crate::core_ui::header::icon_of(crate::bridge::wire::HeaderAction::Replace), &words::depot_replace(), "received.replace");
         replace.set_widget_name("guest-replace");
@@ -294,6 +306,7 @@ impl ReceivedView {
         header.pack_start(&add);
         header.pack_start(&new);
         header.pack_end(&menu);
+        header.pack_end(&select);
         header.pack_end(&replace);
         header.pack_end(&save);
         if mode == Mode::InPlace {
@@ -339,6 +352,8 @@ impl ReceivedView {
             add,
             new,
             new_menu,
+            select,
+            select_syncing: Cell::new(false),
             save,
             replace,
             naming: RefCell::new(None),
@@ -413,6 +428,13 @@ impl Inner {
     fn connect(self: &Rc<Self>, not_you: &gtk::Button) {
         let id = self.received;
         self.back.connect_clicked(move |_| bridge::send(Call::ReceivedBack { received: id }));
+        // Select on and off (#1063); nothing while the toggle only follows the core's selection
+        let w = Rc::downgrade(self);
+        self.select.connect_toggled(move |b| {
+            if w.upgrade().is_some_and(|i| !i.select_syncing.get()) {
+                bridge::send(if b.is_active() { Call::ReceivedSelectStart { received: id } } else { Call::ReceivedSelectCancel { received: id } });
+            }
+        });
         let w = Rc::downgrade(self);
         self.add.connect_clicked(move |_| {
             if let Some(i) = w.upgrade() {
@@ -477,6 +499,16 @@ impl Inner {
                 p.act("replace", &i.window, &i.root);
             }
         }));
+        // a row's *Move to…*, by its node's id (`Received.Move`, #1063): the member's move sheet over the guest's door
+        let move_node = gio::SimpleAction::new("move-node", Some(glib::VariantTy::STRING));
+        let w = Rc::downgrade(self);
+        move_node.connect_activate(move |_, node| {
+            if let (Some(i), Some(node)) = (w.upgrade(), node.and_then(|v| v.str().map(str::to_owned))) {
+                let name = i.shown.borrow().as_ref().and_then(|s| s.page.as_ref()).and_then(|p| p.rows.iter().find(|r| r.id == node).map(|r| r.name.clone())).unwrap_or_default();
+                crate::core_ui::move_sheet::open_call(&i.root, &name, Call::ReceivedMove { received: i.received, node }, &i.root);
+            }
+        });
+        self.actions.add_action(&move_node);
         // a row's report, by its node's id (`Received.ReportNode`)
         let report_node = gio::SimpleAction::new("report-node", Some(glib::VariantTy::STRING));
         let w = Rc::downgrade(self);
@@ -562,7 +594,7 @@ impl Inner {
     fn draw_content(self: &Rc<Self>, s: &ReceivedShown) {
         self.held.borrow_mut().take();
         self.password.borrow_mut().take();
-        for w in [self.add.upcast_ref::<gtk::Widget>(), self.new.upcast_ref(), self.save.upcast_ref(), self.replace.upcast_ref()] {
+        for w in [self.add.upcast_ref::<gtk::Widget>(), self.new.upcast_ref(), self.select.upcast_ref(), self.save.upcast_ref(), self.replace.upcast_ref()] {
             w.set_visible(false);
         }
         match s.gate {
@@ -660,6 +692,11 @@ impl Inner {
                     self.new_menu.append(Some(&said::key(&c.word)), Some(action));
                 }
                 self.new.set_visible(self.new_menu.n_items() > 0);
+                // the level's Select (#1063, core's `GuestLevelMoves.tools`), pressed while the level picks
+                self.select_syncing.set(true);
+                self.select.set_visible(p.tools.contains(&LevelTool::Select));
+                self.select.set_active(p.selection.is_some());
+                self.select_syncing.set(false);
                 if p.rows.is_empty() {
                     self.set_content(&adw::StatusPage::builder().icon_name(kind_icon(&p.node_kind)).title(glib_escape(&p.name)).vexpand(true).build());
                     return;
@@ -669,12 +706,43 @@ impl Inner {
                 for r in &p.rows {
                     let row = adw::ActionRow::builder().title(glib_escape(&r.name)).activatable(true).build();
                     row.add_prefix(&gtk::Image::from_icon_name(kind_icon(&r.kind)));
+                    if let Some(sel) = &p.selection {
+                        // while the level picks: the row's check, the row's activation turning it (the member's `selection::row`)
+                        let check = gtk::CheckButton::builder().active(sel.selected.contains(&r.id)).valign(gtk::Align::Center).build();
+                        row.add_prefix(&check);
+                        row.set_activatable_widget(Some(&check));
+                        let node = r.id.clone();
+                        check.connect_toggled(move |_| bridge::send(Call::ReceivedSelectToggle { received: id, node: node.clone() }));
+                        group.add(&row);
+                        continue;
+                    }
+                    // the row's own menu: the core's plan (Move where the guest moves it, #1063), then after a separator
+                    // its report to the link's operator (#1033)
+                    let menu = gio::Menu::new();
+                    let lead = gio::Menu::new();
+                    for a in &r.menu {
+                        let action = match a.id {
+                            HeaderAction::Move => "received.move-node",
+                            other => {
+                                eprintln!("veyq: a guest row's menu offered {other:?}");
+                                continue;
+                            }
+                        };
+                        let item = gio::MenuItem::new(a.word.as_deref().map(said::key).as_deref(), None);
+                        item.set_action_and_target_value(Some(action), Some(&r.id.to_variant()));
+                        lead.append_item(&item);
+                    }
+                    if lead.n_items() > 0 {
+                        menu.append_section(None, &lead);
+                    }
                     if reports {
-                        // the row's own menu: its report to the link's operator (#1033)
-                        let menu = gio::Menu::new();
+                        let last = gio::Menu::new();
                         let item = gio::MenuItem::new(Some(&words::report_action()), None);
                         item.set_action_and_target_value(Some("received.report-node"), Some(&r.id.to_variant()));
-                        menu.append_item(&item);
+                        last.append_item(&item);
+                        menu.append_section(None, &last);
+                    }
+                    if menu.n_items() > 0 {
                         let more = gtk::MenuButton::builder().icon_name("view-more-symbolic").tooltip_text(words::node_more()).menu_model(&menu).valign(gtk::Align::Center).build();
                         more.add_css_class("flat");
                         row.add_suffix(&more);
@@ -686,7 +754,18 @@ impl Inner {
                 }
                 let column = column();
                 column.append(&group);
-                self.set_content(&scrolled(&column));
+                match &p.selection {
+                    // the member's selection bar under the level, its calls the guest level's
+                    Some(sel) => {
+                        let page = gtk::Box::new(gtk::Orientation::Vertical, 0);
+                        let list = scrolled(&column);
+                        list.set_vexpand(true);
+                        page.append(&list);
+                        page.append(&crate::core_ui::selection::bar_with(sel, &self.root, &crate::core_ui::selection::Calls::guest(id)));
+                        self.set_content(&page);
+                    }
+                    None => self.set_content(&scrolled(&column)),
+                }
             }
             ReceivedPageKind::DropBox | ReceivedPageKind::Uploader => self.draw_upload_page(s, p),
             ReceivedPageKind::NotShown => self.set_content(
