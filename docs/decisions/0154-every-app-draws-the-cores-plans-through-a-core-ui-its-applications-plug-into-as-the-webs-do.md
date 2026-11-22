@@ -252,8 +252,8 @@ held for the screens' models but not around them:
 
 - **As built, decision 2** (2026-11-21). A plan's enum carries `@Plan` (`navigation/Plan.kt`): `HeaderAction` (core's
   ten and the pages' own — `UPLOAD`, `MUSIC`, `BANNER`, `REPLACE`, `SEND`, `OPEN_OWN_PAGE`, `REPORT_SHARED` —, serial
-  names the web's ids), `LevelTool` (`TRASH`, `VIEW`), `DrawerSection` (`NEW` first), `SettingsSection`, `SignInEntry`, `UnlockEntry`,
-  `LinkAction`, `TileAction` and `AppKinds.Create`. The plans: `NodeHeader.Plan(buttons, menu, last)` with Delete always
+  names the web's ids), `LevelTool` (`TRASH`, `VIEW`; `SELECT` first since a level selects, below), `DrawerSection` (`NEW` first), `SettingsSection`, `SignInEntry`, `UnlockEntry`,
+  `LinkAction`, `TileAction` and `AppKinds.Create` (and `SelectionAction`, below). The plans: `NodeHeader.Plan(buttons, menu, last)` with Delete always
   in `last` and each kind's order `AppKinds.headerOrder` (the banner, a kept link's *Open on its own page* and *Report
   shared content* among the entries, no longer a page's body buttons or Windows' entries after Delete);
   `ShellModel.levelPlan` → `LevelPlan(creates, tools)` and `drawerCreates`/`drawerSections`; `AccountSettings.State.sections`;
@@ -294,7 +294,7 @@ held for the screens' models but not around them:
   adds fails every platform's build until drawn; that is why decision 6's shared plan fixture was not built. **Blind
   spots** (the docstring's): it reads names, not types — an arm naming no entry (`in set`, `.name` compared with a
   string), a plan's list renamed into a local first or built by a loop with `if`, a list whose property has a library
-  name (`entries`, `keys`), a whitelist of one string. **Left:** no `SELECT` tool — no app level selects (#1049); a
+  name (`entries`, `keys`), a whitelist of one string. **Left:** a
   level's tabs stay `Shell.barTabs` (the bar's, ADR 0122); a guest's link pages on the phones draw only the gallery's
   music from `headerActions` (the page's own menu, no core header there). Every tile and row of a level or an
   application's list opens its row menu (`rowPlan`) on every app since 2026-11-22 (Apple's tiles #1053, Android's
@@ -506,9 +506,8 @@ held for the screens' models but not around them:
     deletion yet (`readonly` false): the web's narrowing of a space pending deletion has no app twin — follow-up.
   - **P12 — #1049, a level's Select.** *Q:* fits this CR? Measured by the Explore map: no selection model in the core,
     `MoveSheet` and `NodeTrash` single-node, each platform's level a pick mode and an action bar of its own — roughly
-    1.5–2.5k lines over the core, the bridge and four platforms. *Choice:* its own CR, refined
-    (`changes/cr-level-selection.md`); `LevelTool` keeps no `SELECT` until it is built (an entry fails every platform's
-    build until drawn).
+    1.5–2.5k lines over the core, the bridge and four platforms. *Choice:* its own CR, refined; built 2026-11-22 (As built: a
+    level's Select, below).
   - **P13 — #1062, numbered sibling names.** *Q:* fits cleanly? A row's and a header's name are `NodeRef.name` and
     `FolderRef.name`, which the rename dialog prefills and the move and collision checks read; numbering them in place would
     prefill "Anna (2)". A display name beside the name touches every row, tile, title and breadcrumb drawing on four apps.
@@ -527,6 +526,88 @@ held for the screens' models but not around them:
     row menus rendered and acted. **Not clicked on the apps:** a guest's *Upload folder*, a kept link row's *Report shared
     content* and a guest tile's delete on every platform (Android, Linux and Windows built and their tests green, Apple
     both builds green); the passes are the coordinator's and the owner's.
+
+- **As built: a level's Select** (2026-11-22, branch `claude/level-selection`; inbox #1049, owner mandate 2026-11-21). The web's
+  Select (`LevelView.vue`, inbox #421) on every app, through the core: `LevelTool.SELECT` first among a level's tools, a
+  level's selection in the shell's state (`navigation/LevelSelection.kt`, `ShellModel.State.selection`), its bar's actions a
+  plan enum (`SelectionAction`: move, copy, report, delete) each platform draws whole, and every action the core's own sheet
+  over the selected rows it reaches (`MoveSheet` over a list, `SelectionTrash`, `ReportSheet` over several nodes). The
+  decision log, kept by its implementer (question, options, choice and why, evidence, cost):
+  - **L1 — The bar's rule.** *Q:* the refinement's invariant said an action is offered "where every selected row grants it"; is
+    that the web's? *Options:* every selected row; the web's. *Choice:* the web's (this ADR's rule): an action is shown where some row of
+    the level allows it, enabled where some SELECTED row does, its hint says how many of the selected it cannot reach (none for
+    the report), and it reaches only the selected rows that allow it (`LevelSelection.reached`) — so no row's rights are widened.
+    *Evidence:* measured in `LevelView.vue` (`anyMove`, `movable`, `cannotMoveText`); the vectors' `selection` cases. *Cost:* the
+    invariant's wording was the refinement's guess.
+  - **L2 — One table for both sides.** *Q:* the web's rule lives in `LevelView.vue`'s computeds; how do the vectors read it?
+    *Options:* hand-written expectations the web test re-derives; the web's rule extracted. *Choice:* `selectionBar` in the web's
+    `selection.ts` (numbers only: offered, count, hidden, entries), which `LevelView.vue` now draws from, and the core's
+    `LevelSelection.bar`; both read `contracts/platform/plans/v1-vectors.json`'s `selection` (ten cases), `level.tools` gained
+    `select`. *Evidence:* `:composition:jvmTest --tests '*PlanVectorsTest*'`, the web's `plans.vectors.test.ts`; written by the
+    core's write mode, every case read against its rule. *Cost:* the web touched (`LevelView.vue`, `selection.ts`).
+  - **L3 — A row's rights.** *Q:* where does a row's part in a selection come from? *Options:* a selection right per kind (the
+    web's `LevelRow.selection`); the row's own menu. *Choice:* the row's menu (`LevelSelection.Rights.of(LevelRow.plan(…))`):
+    the apps' row plan is already held to the web's rights by the vectors, so a selection can do nothing a row's menu cannot.
+    *Cost:* while the level picks, every state change re-plans each row (synchronous; the report's answer cached once).
+  - **L4 — Where the selection lives.** *Options:* a model per platform; a core model beside the shell; the shell's state.
+    *Choice:* `ShellModel.State.selection` (`LevelSelection.Picking`): every platform already follows the shell's one flow, and the
+    shell's every change keeps it on what the level holds or clears it where the place changed (`reselected`), as the web's
+    watchers do. *Cost:* one more field on the shell's state and the bridge's `ShellShown.selection`.
+  - **L5 — Which levels select.** *Choice:* Home's levels only (`selectionPlace`): the web offers Select where core draws the
+    rows, never in an application's own presentation; an application's list on the apps is the drawer's list, no level.
+    *Cost:* none against the web.
+  - **L6 — A selection's move and copy.** *Q:* the web's `MoveNodesDialog` stays open on a summary; how do four platforms say it?
+    *Options:* a summary view in each sheet; the summary as the sheet's one notice. *Choice:* `MoveSheet` over a list
+    (`nodes`), each node sent in turn and a refusal stopping nothing (a node already there left out), what went said with
+    what did not after it (`select_summary`: the moved count, then "Not moved:" and each node's reason — the web's words,
+    joined as the web's copy toast joins two), held until closed; one Undo moves every node back; nothing moved keeps the
+    sheet open on why. A copy goes node by node by its kind's way and stops at its first failure (the web's one run stops
+    too). *Evidence:* `MoveSheetTest` (four selection cases). *Cost:* the refusals are a notice, not a dialog; each node's move
+    re-reads the lists (N reads; the web re-reads once) — follow-up; a copy's room is checked node by node, so two that fit
+    apart but not together are refused by the server's quota.
+  - **L7 — The delete.** *Choice:* core's `SelectionTrash`: one question (one node: its kind's own, as the web's), each node
+    through the row's own delete (`ShellModel.trash`), one notice, one Undo restoring exactly what went; the bridge holds it
+    (`Select.Delete*`) and its Undo's window (`Watched.SelectionDelete`). *Evidence:* `SelectionTrashTest`. *Cost:* the kinds in
+    the question are joined with ", " (core's `Joined`), not the web's "a, b and c"; Memories' nouns are registered now
+    (`MemoriesKinds.noun`, which also words a name collision with a Memory as the web's), Depot's file and drop box still say
+    "an item" — follow-up.
+  - **L8 — The report.** *Choice:* one report of every selected row (`NodeReport.reportMany`: one `K_report`, each node whole,
+    a kept link its name), at most `NodeReport.MAX_ITEMS` (the web's 100); above it the sheet sends nothing and offers the
+    folder on screen (`ReportSheet.useEnclosing`). A node gone or not opening fails the whole report, as the web's one
+    submission does. *Evidence:* `ReportSheetTest`. *Cost:* none.
+  - **L9 — Words.** The web's English and German for every key (`select_*`, `move_many_*`, `copy_many_*`, `delete_many_*`,
+    `report_items`, `report_too_many`, `report_enclosing`, `node_a_folder`); *Cancel* is `entry_cancel`, the actions' words the
+    row's (`node_move`, `copy_action`, `report_action`, `entry_delete`). Where the German is a plural and the English is not, the
+    English is written as a plural of one text (the generator wants one shape). *Cost:* "Not moved: {1}" and
+    `select_summary` compose the web's heading and lines into one sentence.
+  - **L10 — The bridge.** The dispatch's one method hit the JVM's size limit with the new arms ("Method too large"), so the
+    selection's calls are dispatched by `selecting()`; `validate_mobile_ui_direction.py`'s `WIRE_PLATFORM` gained `Select` and
+    `Selection` (the selection is the platform's). *Cost:* a validator changed: `validate_guard_gaps.py` ran.
+  - **L11 — The structure guard's carriers.** *Found:* the guard's (c) reads a plan's list by its element class's simple name;
+    nested carriers named `Entry` and `Action` made three unrelated `List<Entry>` filters red. *Choice:* renamed
+    (`BarEntry`, `BarAction`); the name collision is a blind spot of the guard — follow-up. The bridge's Rust
+    names a wire type by its simple name too: a nested `LevelSelection.Shown` took the name `Shown` from the safety
+    code's (Linux's `safety.rs` imports `wire::Shown`), so the selection is `LevelSelection.Picking`.
+  - **L12 — A move sheet's "here".** `MoveSheet.here(state)` is a `Notice` (a selection's names the node that blocks the place);
+    `hereWord` is gone and the bridge's `MoveShown.here` is a notice.
+  - **L13 — Each platform's look.** Android: the level's tool an icon toggle, a row or tile one toggle with its checkbox, the
+    bar a surface above the list (Material's contextual actions); Apple: Files' Select — the toolbar toggle, check circles,
+    the bar at the bottom; Linux: Files' selection mode — the header toggle (`selection-mode-symbolic`), check rows, an action
+    bar under the level; Windows: Explorer's check boxes — an `AppBarToggleButton`, a `CommandBar` under the level.
+  - **L14 — The bites and the proofs.** Each restored with `/bin/cp -f`: the report's hint counted in `LevelSelection.bar`
+    turns `PlanVectorsTest`'s `selection` red, and in the web's `selectionBar` its `plans.vectors.test.ts`; a refused node's
+    restore offered with what went turns `SelectionTrashTest` red; a refusal that stops the rest `MoveSheetTest`; a report
+    above the cap that may still be sent `ReportSheetTest`; a selection kept across another place `ShellModelTest`; a `_ =>`
+    arm in Linux's drawing of `SelectionAction` `validate_mobile_structure.py`; `Select` missing from `WIRE_PLATFORM`
+    `validate_mobile_ui_direction.py` (22 violations). Green: `:core:jvmTest`, `:composition:jvmTest`, `:bridge:jvmTest`,
+    `compileKotlinJs compileTestKotlinJs`, `macosArm64Test`, `:android:assembleDebug`, the XCFramework, `xcodegen` and the
+    macOS ad-hoc build, Linux `run.py build` (clippy, tests) and `run.py test`, Windows `run.py build` (the app, the bridge's
+    and the app's tests; PdfWebTest needs a scheduled task this pass registered none of) and `run.py test`, the web's
+    `pnpm run check` under Node 22 (its timeout-only reds under load green on one re-run), every validator and
+    `validate_guard_gaps.py`. **Not clicked:** no app's Select was clicked (no throwaway emulator, Mac, Linux or Windows
+    pass ran under the machine's load); the passes are the coordinator's and the owner's: a level's Select on, rows and
+    tiles turned, All, None, the count with a tab hiding some, each action's sheet over the selection (a move with a
+    refusal, its one Undo; a copy; a report and above 100 its folder; the delete's question and its one Undo), Cancel.
 
 ## Alternatives considered
 
