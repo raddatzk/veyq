@@ -506,7 +506,7 @@ final class AppModel {
             guard let self else { return }
             Task { if (try? await self.session.forgetUnlocked())?.boolValue == true { self.trustLog("unlock stop trusting") } }
         }
-        if let ask = QueuedShown.shared.forgetAsk(session: session) { lossAsk = LossAsk(ask: ask, go: go) } else { go() }
+        if let ask = QueuedShown.shared.forgetAsk(waiting: session.waitingOnUnlock()) { lossAsk = LossAsk(ask: ask, go: go) } else { go() }
     }
 
     /// The switcher: another tenant of the same server is the same session at another domain; another server is its own.

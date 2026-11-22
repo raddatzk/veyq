@@ -846,7 +846,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.SessionUnlock -> opened(session.unlock(call.password))
             Call.SessionOtherAccount -> Answer.Done.also { session.otherAccount() }
             Call.SessionForgetUnlocked -> if (session.forgetUnlocked()) Answer.Done else Answer.Refused(Answer.Why.NOT_OFFERED)
-            Call.UnlockForgetAsk -> Answer.QueuedAsked(me.raddatz.veyq.mobile.composition.QueuedShown.forgetAsk(session))
+            Call.UnlockForgetAsk -> Answer.QueuedAsked(me.raddatz.veyq.mobile.composition.QueuedShown.forgetAsk(session.waitingOnUnlock()))
             Call.SessionAddServer -> Answer.Done.also { session.addServer() }
             Call.SessionCancelAdd -> Answer.Done.also { session.cancelAdd() }
             is Call.SessionSignInKit -> {

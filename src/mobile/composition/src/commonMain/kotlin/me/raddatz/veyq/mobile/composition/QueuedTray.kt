@@ -102,10 +102,12 @@ object QueuedShown {
 
     /**
      * The ask before the unlock's *Stop trusting this device* ([me.raddatz.veyq.mobile.session.SessionModel.forgetUnlocked],
-     * inbox #1052) while writes made offline wait for the account it shows — counted as its outbox last noted them, no key
-     * being open there; null where none waits, and outside the unlock (nothing to ask).
+     * inbox #1052) while [waiting] writes made offline wait for the account it shows — its
+     * [me.raddatz.veyq.mobile.session.SessionModel.waitingOnUnlock], counted as the outbox last noted them, no key being
+     * open there; null where none waits, and outside the unlock (nothing to ask). The count, not the model: a generic
+     * model reaches Swift as one it cannot pass back.
      */
-    fun forgetAsk(session: me.raddatz.veyq.mobile.session.SessionModel<*, *>): QueuedAsk? = ask(QueuedLoss.STOP_TRUSTING, session.waitingOnUnlock())
+    fun forgetAsk(waiting: Int): QueuedAsk? = ask(QueuedLoss.STOP_TRUSTING, waiting)
 
     /**
      * What *Save a copy* of a refused write's file [name] came to ([QueuedTray.saveCopy] into the path the host's save

@@ -525,7 +525,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      */
     fun forgetUnlocked() {
         val go = { viewModelScope.launch { if (session.forgetUnlocked()) trustLog("unlock stop trusting") }; Unit }
-        val ask = me.raddatz.veyq.mobile.composition.QueuedShown.forgetAsk(session)
+        val ask = me.raddatz.veyq.mobile.composition.QueuedShown.forgetAsk(session.waitingOnUnlock())
         if (ask == null) go() else _lossAsk.value = LossAsk(ask, go, {})
     }
 
