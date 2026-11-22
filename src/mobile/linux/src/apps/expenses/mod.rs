@@ -24,7 +24,7 @@ use crate::core_ui::{create_action, header, words};
 pub fn register(registry: &mut Registry) {
     registry.kind(ApplicationId::Expenses, &["EXPENSES_POT"], KindPage {
         body,
-        guest: Some(GuestPage { kind: ReceivedPageKind::Pot, body: guest, add_names_first: false }),
+        guest: Some(GuestPage { kind: ReceivedPageKind::Pot, body: guest }),
         actions: &["pot-download"],
         refreshes: true,
         facts_later: true,

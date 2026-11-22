@@ -19,7 +19,7 @@ use crate::core_ui::received;
 pub fn register(registry: &mut Registry) {
     registry.kind(ApplicationId::Depot, &["FILE"], KindPage {
         body: file,
-        guest: Some(GuestPage { kind: ReceivedPageKind::File, body: guest_file, add_names_first: false }),
+        guest: Some(GuestPage { kind: ReceivedPageKind::File, body: guest_file }),
         actions: &["file-save", "file-replace"],
         refreshes: false,
         facts_later: true,

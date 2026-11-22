@@ -1357,7 +1357,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.LinkConfirm -> links[call.link]?.let { taken(it.model.confirm(call.label)) } ?: noLink
             is Call.LinkEnterCode -> links[call.link]?.let { taken(it.model.enterCode(call.code)) } ?: noLink
             is Call.LinkClose -> links.remove(call.link)?.let { closeLink(it); Answer.Done } ?: noLink
-            is Call.ReceivedOpen, is Call.ReceivedPassword, is Call.ReceivedAcceptTerms, is Call.ReceivedAcceptNote, is Call.ReceivedOpenNode, is Call.ReceivedBack, is Call.ReceivedStay, is Call.ReceivedLeave, is Call.ReceivedClose, is Call.ReceivedName, is Call.ReceivedForgetGuest, is Call.ReceivedKeep, is Call.ReceivedUpload, is Call.ReceivedUploadFolder, is Call.ReceivedReplace, is Call.ReceivedNewFolder, is Call.ReceivedNamingSave, is Call.ReceivedNamingDecline, is Call.ReceivedReportNode, is Call.ReceivedReport, is Call.ReceivedKeepPlaces, is Call.ReceivedReportShown -> receivedCall(parts, call)
+            is Call.ReceivedOpen, is Call.ReceivedPassword, is Call.ReceivedAcceptTerms, is Call.ReceivedAcceptNote, is Call.ReceivedOpenNode, is Call.ReceivedBack, is Call.ReceivedStay, is Call.ReceivedLeave, is Call.ReceivedClose, is Call.ReceivedForgetGuest, is Call.ReceivedKeep, is Call.ReceivedUpload, is Call.ReceivedUploadFolder, is Call.ReceivedReplace, is Call.ReceivedNewFolder, is Call.ReceivedNamingSave, is Call.ReceivedNamingDecline, is Call.ReceivedReportNode, is Call.ReceivedReport, is Call.ReceivedKeepPlaces, is Call.ReceivedReportShown -> receivedCall(parts, call)
             is Call.BookmarkOpen -> openBookmark(parts, call.node)
             is Call.BookmarkOwnPage -> bookmarks[call.bookmark]?.let { b ->
                 heldReceived(b.page.openOwnPage(tenant.value?.models?.session))
@@ -1451,7 +1451,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 // each path opened by the core and read at offsets, named by its path for the host's tiers: nothing of a
                 // file crosses, none is held whole
                 val sources = call.paths.mapNotNull { path -> parts.files.source(path)?.let { PathSource(path, it) } }
-                val queued = g.upload(sources)
+                // a link's guest not named yet is asked its name first, at the write (`GalleryModel.uploadAsking`, #1044)
+                val queued = g.uploadAsking(sources)
                 Answer.Queued(queued, me.raddatz.veyq.mobile.memories.MediaUploads.notTaken(call.paths.size - queued))
             } ?: noGallery
             is Call.LightboxOpen -> galleries[call.gallery]?.let { g ->
@@ -2307,13 +2308,6 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             val id = (call as? Call.ReceivedLeave)?.received ?: (call as Call.ReceivedClose).received
             received.remove(id)?.let { h -> closeReceived(h); Answer.Done } ?: noReceived
         }
-        is Call.ReceivedName -> received[call.received]?.let { h ->
-            val access = h.screen.view.access ?: return noReceived
-            val named = runCatching {
-                if (access.role == me.raddatz.veyq.mobile.sharing.GuestAccess.WRITE_ONLY) access.nameUploader(call.name.trim()) else access.nameGuest(call.name.trim())
-            }.isSuccess
-            taken(named)
-        } ?: noReceived
         is Call.ReceivedForgetGuest -> received[call.received]?.let { h -> h.screen.view.gates.forgetGuest(); Answer.Done } ?: noReceived
         is Call.ReceivedKeep -> received[call.received]?.let { h ->
             val space = h.screen.keepPlaces().firstOrNull { it.scopeId == call.scope } ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
@@ -2323,9 +2317,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         is Call.ReceivedUpload -> received[call.received]?.let { h ->
             val sources = call.paths.mapNotNull { parts.files.source(it) }
             if (sources.isEmpty()) return Answer.Refused(Answer.Why.NO_SUCH_PATH)
+            // a guest not named yet is asked its name at the write by the core (`GuestAccess.naming`, ADR 0154 decision 1:
+            // a WRITE_ONLY uploader's or a READ_WRITE guest's, by the role there, #1042): no session or role read here
             val sent = when (val page = h.screen.view.page.value) {
-                is me.raddatz.veyq.mobile.depot.DepotGuest.DropBox -> page.model.upload(sources)
-                is me.raddatz.veyq.mobile.memories.MemoriesGuest.Uploader -> page.model.upload(sources)
+                is me.raddatz.veyq.mobile.depot.DepotGuest.DropBox -> page.model.uploadAsking(sources)
+                is me.raddatz.veyq.mobile.memories.MemoriesGuest.Uploader -> page.model.uploadAsking(sources)
                 // a READ_WRITE guest's files into the folder on screen (#1034), each its own file
                 is me.raddatz.veyq.mobile.sharing.GuestPage.Level -> page.model.uploadAsking(sources)
                 else -> 0

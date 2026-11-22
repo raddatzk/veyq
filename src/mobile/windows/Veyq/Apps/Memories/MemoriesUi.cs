@@ -110,8 +110,10 @@ internal static class MemoriesUi
 
         public override bool Shows(ObjectRef r) => false;
 
-        public override ICommandBarElement? GuestCreate(Action<Action> write) =>
-            _page.Shown is { canUpload: true } ? CreateAction.Button(Words.MemoryAdd(), "received-add", () => write(_page.Add)) : null;
+        // Add photos where the gallery's rights offer it, named or not (#1044): the core asks an unnamed guest's name at the
+        // upload (GalleryModel.uploadAsking, AskNaming)
+        public override ICommandBarElement? GuestCreate() =>
+            _page.Shown is { canUpload: true } ? CreateAction.Button(Words.MemoryAdd(), "received-add", _page.Add) : null;
 
         public override void Dispose() => _page.Dispose();
     }

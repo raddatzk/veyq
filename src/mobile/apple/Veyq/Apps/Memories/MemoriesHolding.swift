@@ -434,7 +434,8 @@ final class MemoriesHolding: Holding {
                 modifiedAt: fromPhotos ? nil : p.modifiedAt.map { KotlinLong(value: $0) }
             )
         }
-        _ = gallery.upload(sources: sources)
+        // a link's guest not named yet is asked its name first by the core, at the write (#1044)
+        Task { _ = try? await gallery.uploadAsking(sources: sources) }
     }
 
     // MARK: New Memory and Add chapter
