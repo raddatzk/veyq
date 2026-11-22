@@ -216,7 +216,12 @@ export async function refreshActiveScope(): Promise<void> {
   await registry.scopeEntered(activeSpace.scopeId)
 }
 
-/** Drop the active space + zero the held key (logout / re-lock). */
+/**
+ * Drop the active space + zero the held key (logout / re-lock). No production code calls it today: a sign-out is a
+ * document load (ADR 0070), so in-memory state goes with the page. State that must also go where THIS tab swaps or
+ * drops a key without a reload (a rotation's unknown outcome or its resume) resets there too — the kit layout does
+ * (`rotateKeys.ts`); a reset only here is never run.
+ */
 export function clearActiveSpace(): void {
   entry++ // an entry still opening must not install its keys after the clear
   stopGrantDeliveryPolling()

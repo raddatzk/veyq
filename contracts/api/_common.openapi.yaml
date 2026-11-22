@@ -925,7 +925,9 @@ components:
       # Shared by the account, setup and tenants specs (ADR 0157 decision 4): the two births and the rotation carry it
       # optionally as `kitRecord`, and the account's own record reads and writes it as `blob`. Its own annotation fits
       # the optional uses (`@NotBlank` would refuse an absent one); the required `KitRecordUpdate.blob` writes its own
-      # beside the `$ref`.
+      # beside the `$ref`. A new `$ref` to it states `contentEncoding: base64` beside it, as every one does now: the
+      # opacity oracle (validate_field_visibility.is_opaque, the e2e sweep's name set) reads the property, never the
+      # scalar it refers to, so a bare `$ref` reads as plaintext.
       type: string
       description: >
         The account's **kit record** (ADR 0157 decision 3): the layout of the last Emergency Kit the account made, the

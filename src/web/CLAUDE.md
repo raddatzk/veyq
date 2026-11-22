@@ -47,6 +47,10 @@ here; the server is blind.
   `src/test/guestMode.ts`'s `guardedClients` (`vi.mock('…/api/client', async (o) => (await import('…/test/guestMode'))
   .guardedClients(await o()))` — the public factories become `vi.fn`s to stub, every other one throws and is recorded)
   and assert `authenticatedCalls` stayed empty; a call is then red even where the view swallowed the error.
+- **A section that reads at mount reddens every host suite that mounts it.** A host suite that mocks the vault without
+  `masterKey` went red wholesale once `KeyRotationPanel` mounted `EmergencyKitStatus`, which reads the kit record at
+  mount (23 reds, cr-kit-layout-record). Stub the new section in the host suite (`EmergencyKitStatus: true` in
+  `KeyRotationPanel.test.ts`) and test it in its own suite.
 - **Moving markup silently disarms every negative assertion that names it.** `find(old).exists()).toBe(false)` stays green
   on a selector nothing draws any more: when Depot's uploader line moved into core's header, `FileDetail.guest.test.ts`'
   absence of `data-testid="file-uploader"` passed while asserting nothing (2026-11-03). After a move, grep the old test ids

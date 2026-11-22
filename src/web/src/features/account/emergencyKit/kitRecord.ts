@@ -16,7 +16,9 @@
 // while it holds the Master Key and writes the sealed blob afterwards, so no key is held across the person's save.
 //
 // The layout is read once per unlock and kept in memory (`kitLayoutState`, decision 6): the Settings block and the
-// shell's notice share the one read, a write here or a rotation updates it, and `clearActiveSpace` drops it with the keys.
+// shell's notice share the one read, a write here or a committed rotation sets it to current, and a rotation whose
+// outcome is unknown (or its resume) drops it (`rotateKeys.ts`). `clearActiveSpace` drops it too, but nothing in
+// production calls that: a sign-out is a document load (ADR 0070), and the memory goes with the page.
 import { computed, reactive } from 'vue'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
