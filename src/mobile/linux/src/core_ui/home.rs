@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use adw::prelude::*;
 use gtk::{gdk, glib};
 
-use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::ArrangedList, wire::Call, wire::Crop, wire::MemoryDateShown, wire::NodeRef, wire::ObjectRef, wire::QueuedItem,
+use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::ArrangedList, wire::Call, wire::Crop, wire::NodeRef, wire::ObjectRef, wire::QueuedItem,
     wire::ShellModelState, wire::ShellShown, wire::FolderRef, wire::ViewModeShown};
 use crate::core_ui::tiles::{self, Tile};
 use crate::core_ui::drop::Drops;
@@ -58,17 +58,17 @@ pub fn object_row(r: &ObjectRef) -> adw::ActionRow {
 }
 
 thread_local! {
-    /// Every Memory's and chapter's date the core unseals from the meta it holds (`Memories.Dates`), by node id; the
-    /// objects they were asked for last, and whether an ask is in flight.
-    static ROW_DATES: RefCell<HashMap<String, MemoryDateShown>> = RefCell::new(HashMap::new());
-    static DATES_ASKED: RefCell<(String, bool)> = const { RefCell::new((String::new(), false)) };
-    /// The rows and tiles drawn that show a date (a row's subtitle, a tile's second line), each told it again when the
-    /// dates arrive.
+    /// The rows' second lines an application handed (Memories' dates, `apps::memories::dates`), by node id; the objects
+    /// they were asked for last, and whether an ask is in flight.
+    static ROW_LINES: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+    static LINES_ASKED: RefCell<(String, bool)> = const { RefCell::new((String::new(), false)) };
+    /// The rows and tiles drawn that show a second line (a row's subtitle, a tile's second line), each told it again when
+    /// the lines arrive.
     static DATED_ROWS: RefCell<Vec<(String, glib::WeakRef<gtk::Widget>)>> = const { RefCell::new(Vec::new()) };
 }
 
 /// A Memory's row's second line, its date (ADR 0143 decision 5; the facts line's way of saying it), set now where it is
-/// held and again whenever the dates arrive.
+/// held and again whenever the lines arrive.
 fn dated(row: &adw::ActionRow, node_id: &str) {
     date_on(row.upcast_ref(), node_id);
 }
@@ -79,7 +79,7 @@ pub fn dated_label(line: &gtk::Label, node_id: &str) {
 }
 
 fn date_on(widget: &gtk::Widget, node_id: &str) {
-    if let Some(text) = ROW_DATES.with(|d| d.borrow().get(node_id).and_then(crate::core_ui::said::date_text)) {
+    if let Some(text) = ROW_LINES.with(|d| d.borrow().get(node_id).cloned()) {
         set_date(widget, &text);
     }
     DATED_ROWS.with(|r| {
@@ -98,38 +98,32 @@ fn set_date(widget: &gtk::Widget, text: &str) {
     }
 }
 
-/// The rows' dates asked for (`Memories.Dates`) unless they were for the objects [key] names (or [again]: a page closed
-/// back onto the list, its date maybe edited); each row drawn is told its date once they arrive.
-pub fn ask_dates(key: &str, again: bool) {
-    let ask = DATES_ASKED.with(|a| {
+/// Whether the rows' lines are to be asked for anew: not while an ask is in flight, nor for the objects [key] names
+/// again (unless [again]: a page closed back onto the list, its line maybe edited). True marks the ask in flight; the
+/// application that asks hands its answer to [lines_arrived].
+pub fn lines_asked(key: &str, again: bool) -> bool {
+    LINES_ASKED.with(|a| {
         let mut a = a.borrow_mut();
         if a.1 || (a.0 == key && !again) {
             return false;
         }
         *a = (key.to_owned(), true);
         true
-    });
-    if !ask {
-        return;
-    }
-    glib::spawn_future_local(async {
-        let answered = bridge::call(&Call::MemoriesDates).await.map(|(a, _)| a);
-        DATES_ASKED.with(|a| a.borrow_mut().1 = false);
-        let dates = match answered {
-            Ok(Answer::MemoryDates { dates }) => dates,
-            other => return eprintln!("veyq: Memories.Dates answered {other:?}"),
-        };
-        let next: HashMap<String, MemoryDateShown> = dates.into_iter().map(|d| (d.node_id, d.date)).collect();
-        eprintln!("veyq: memory dates: {} of {} dated", next.values().filter(|d| crate::core_ui::said::date_text(d).is_some()).count(), next.len());
-        ROW_DATES.with(|d| *d.borrow_mut() = next);
-        DATED_ROWS.with(|r| {
-            for (node, row) in r.borrow().iter() {
-                if let Some(row) = row.upgrade() {
-                    let text = ROW_DATES.with(|d| d.borrow().get(node).and_then(crate::core_ui::said::date_text)).unwrap_or_default();
-                    set_date(&row, &text);
-                }
+    })
+}
+
+/// The rows' lines arrived ([lines]; none: the ask failed, the lines kept): each row drawn is told its line.
+pub fn lines_arrived(lines: Option<HashMap<String, String>>) {
+    LINES_ASKED.with(|a| a.borrow_mut().1 = false);
+    let Some(lines) = lines else { return };
+    ROW_LINES.with(|d| *d.borrow_mut() = lines);
+    DATED_ROWS.with(|r| {
+        for (node, row) in r.borrow().iter() {
+            if let Some(row) = row.upgrade() {
+                let text = ROW_LINES.with(|d| d.borrow().get(node).cloned()).unwrap_or_default();
+                set_date(&row, &text);
             }
-        });
+        }
     });
 }
 

@@ -14,7 +14,7 @@
 //!
 //! An entry's receipts are a group of their own: "Add receipt" opens GTK's open dialog for images and PDFs (several at
 //! once), whose paths go to the core (`Editor.AddReceipts`: it reads each, at most a receipt's size, and holds what it
-//! takes until the save); a kept receipt opens its viewer ([crate::core_ui::receipt_viewer]), each one is taken off by its button
+//! takes until the save); a kept receipt opens its viewer ([crate::apps::expenses::receipt_viewer]), each one is taken off by its button
 //! (`Editor.DropReceipt`); what the core refused is said under the group. Nothing of a receipt is read here.
 use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
@@ -693,7 +693,7 @@ impl Inner {
                 let (w, id, name) = (Rc::downgrade(self), r.id.clone(), r.name.clone());
                 row.connect_activated(move |_| if let Some(i) = w.upgrade() {
                     eprintln!("veyq: receipt viewer open");
-                    crate::core_ui::receipt_viewer::open(&i.dialog, i.pot, &id, &name);
+                    crate::apps::expenses::receipt_viewer::open(&i.dialog, i.pot, &id, &name);
                 });
             }
             if s.editable {

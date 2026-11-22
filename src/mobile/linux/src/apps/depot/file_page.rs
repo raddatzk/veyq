@@ -1,6 +1,6 @@
 //! A file's page (Depot's file viewer; ADR 0123's Consequences, the Linux app's Depot whole), GNOME's way: the file's content in place — a picture
 //! (`gtk::Picture`, decoded by GTK and held at the core's edge at most), a text (a read-only monospace `gtk::TextView`, the
-//! cut said in an `AdwBanner`), a PDF (its pages rendered by poppler as they come into view, [crate::core_ui::receipt_viewer]'s
+//! cut said in an `AdwBanner`), a PDF (its pages rendered by poppler as they come into view, [crate::core_ui::pdf_render]'s
 //! renderer, its text selected and copied through [crate::apps::depot::pdf_text]), an audio or video played by GTK's own player (`gtk::Video` over a `gtk::MediaFile` reading the core's reader
 //! through [crate::core_ui::reader_stream], the system's GStreamer decoding it; what it cannot decode is said as not shown here), or
 //! what the core says where it shows none (`AdwStatusPage`) — and its facts beneath, one row with the uploader.
@@ -637,7 +637,7 @@ impl PdfPages {
             let far = y1 < far_from || y0 > far_to;
             if near && !rendered[i] {
                 let Some(p) = self.pdf.page(i as i32) else { continue };
-                if let Some(r) = crate::core_ui::receipt_viewer::render(&p, PDF_WIDTH * self.scale) {
+                if let Some(r) = crate::core_ui::pdf_render::render(&p, PDF_WIDTH * self.scale) {
                     let texture = gdk::MemoryTexture::new(r.width, r.height, gdk::MemoryFormat::B8g8r8a8Premultiplied, &glib::Bytes::from_owned(r.data), r.stride);
                     frame.set_paintable(Some(&texture));
                     rendered[i] = true;

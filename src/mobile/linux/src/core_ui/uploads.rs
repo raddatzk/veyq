@@ -22,7 +22,7 @@ use adw::prelude::*;
 use gtk::{gio, glib};
 
 use crate::bridge::{self, wire::Answer, wire::Call, wire::NoticeKind, wire::QueuedItem, wire::QueuedOpen, wire::QueuedWriteState, wire::Update, wire::UploadBatch,
-    wire::UploadItem, wire::UploadStatus, wire::UploadsShown, wire::Watched, wire::Why};
+    wire::UploadItem, wire::UploadStatus, wire::UploadsShown, wire::Watched};
 use crate::core_ui::home::glib_escape;
 use crate::core_ui::{header, said, words};
 
@@ -591,34 +591,15 @@ pub fn pick_folder(parent: &gtk::Window, level: Level, toasts: &adw::ToastOverla
     });
 }
 
-/// A file's Replace (the header's, on its page [file]): chosen in the core first — the replace expects the content shown
-/// now —, then GTK's open dialog picks the one file whose path goes to the core (`Upload.Replace`).
-pub fn replace(parent: &gtk::Window, file: i64, toasts: &adw::ToastOverlay) {
-    let (parent, toasts) = (parent.clone(), toasts.clone());
-    glib::spawn_future_local(async move {
-        match bridge::call(&Call::FileChooseReplace { file }).await.map(|(a, _)| a) {
-            Ok(Answer::Done) => {}
-            other => return eprintln!("veyq: File.ChooseReplace answered {other:?}"),
-        }
-        let dialog = gtk::FileDialog::builder().title(words::depot_replace_title()).modal(true).build();
-        let picked = match dialog.open_future(Some(&parent)).await {
-            Ok(picked) => picked,
-            Err(e) => return dismissed(&e, "replace"),
-        };
-        let Some(path) = local_path(&picked) else { return };
-        let answer = bridge::call(&Call::UploadReplace { file, path }).await.map(|(a, _)| a);
-        queued(&toasts, answer, "Upload.Replace");
-    });
-}
-
-fn dismissed(e: &glib::Error, what: &str) {
+/// A dialog's error said where it is no dismissal (a closed dialog is the person's answer).
+pub fn dismissed(e: &glib::Error, what: &str) {
     if !e.matches(gtk::DialogError::Dismissed) && !e.matches(gtk::DialogError::Cancelled) {
         eprintln!("veyq: the {what} dialog failed: {e}");
     }
 }
 
 /// A picked file's local path; one with none (a remote URI) or no UTF-8 does not cross the wire.
-fn local_path(file: &gio::File) -> Option<String> {
+pub fn local_path(file: &gio::File) -> Option<String> {
     let path = file.path().and_then(|p| p.to_str().map(str::to_owned));
     if path.is_none() {
         eprintln!("veyq: a picked file has no local UTF-8 path");
@@ -628,30 +609,6 @@ fn local_path(file: &gio::File) -> Option<String> {
 
 fn paths_of(picked: &gio::ListModel) -> Vec<String> {
     (0..picked.n_items()).filter_map(|i| picked.item(i).and_downcast::<gio::File>()).filter_map(|f| local_path(&f)).collect()
-}
-
-/// A link's file on screen replaced as its READ_WRITE guest (#1035): Replace chosen on its page, a file picked, and
-/// `Received.Replace` — the link's own queue, never the tenant's, so a signed-out guest replaces too.
-pub fn guest_replace(parent: &gtk::Window, received: i64, file: i64, toasts: &adw::ToastOverlay) {
-    let (parent, toasts) = (parent.clone(), toasts.clone());
-    glib::spawn_future_local(async move {
-        match bridge::call(&Call::FileChooseReplace { file }).await.map(|(a, _)| a) {
-            Ok(Answer::Done) => {}
-            other => return eprintln!("veyq: File.ChooseReplace answered {other:?}"),
-        }
-        let dialog = gtk::FileDialog::builder().title(words::depot_replace_title()).modal(true).build();
-        let picked = match dialog.open_future(Some(&parent)).await {
-            Ok(picked) => picked,
-            Err(e) => return dismissed(&e, "replace"),
-        };
-        let Some(path) = local_path(&picked) else { return };
-        let answer = bridge::call(&Call::ReceivedReplace { received, path }).await.map(|(a, _)| a);
-        // the guest declined the core's naming at the write: nothing to say, it chose so
-        if let Ok(Answer::Refused { why: Why::NotChosen }) = answer {
-            return eprintln!("veyq: Received.Replace: not chosen");
-        }
-        queued(&toasts, answer, "Received.Replace");
-    });
 }
 
 /// An upload call's answer: how many were queued on stderr, anything else said as the header says it.

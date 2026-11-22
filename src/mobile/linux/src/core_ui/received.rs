@@ -469,10 +469,11 @@ impl Inner {
                 p.act("save", &i.window, &i.root);
             }
         }));
-        // the core asks the guest's name at the replace (`GuestAccess.replaceAsking`), never this side
+        // the page's own Replace (a file's, into the link's queue); the core asks the guest's name at the replace
+        // (`GuestAccess.replaceAsking`), never this side
         add("replace", Rc::new(|i| {
-            if let Some(file) = i.held.borrow().as_ref().and_then(|(p, _)| p.file()) {
-                crate::core_ui::uploads::guest_replace(&i.window, i.received, file, &i.root);
+            if let Some((p, _)) = i.held.borrow().as_ref() {
+                p.act("replace", &i.window, &i.root);
             }
         }));
         // a row's report, by its node's id (`Received.ReportNode`)
