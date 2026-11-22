@@ -233,14 +233,14 @@ held for the screens' models but not around them:
 
 - **As built, decision 2** (2026-11-21). A plan's enum carries `@Plan` (`navigation/Plan.kt`): `HeaderAction` (core's
   ten and the pages' own — `UPLOAD`, `MUSIC`, `BANNER`, `REPLACE`, `SEND`, `OPEN_OWN_PAGE`, `REPORT_SHARED` —, serial
-  names the web's ids), `LevelTool` (`TRASH`, `VIEW`), `DrawerSection` (`NEW` first), `SettingsSection`, `SignInEntry`,
+  names the web's ids), `LevelTool` (`TRASH`, `VIEW`), `DrawerSection` (`NEW` first), `SettingsSection`, `SignInEntry`, `UnlockEntry`,
   `LinkAction`, `TileAction` and `AppKinds.Create`. The plans: `NodeHeader.Plan(buttons, menu, last)` with Delete always
   in `last` and each kind's order `AppKinds.headerOrder` (the banner, a kept link's *Open on its own page* and *Report
   shared content* among the entries, no longer a page's body buttons or Windows' entries after Delete);
   `ShellModel.levelPlan` → `LevelPlan(creates, tools)` and `drawerCreates`/`drawerSections`; `AccountSettings.State.sections`;
-  `SignInPlan.entries`; `LevelRow.plan` (`ShellModel.rowPlan`), `GalleryModel.tileActions`, `ShareSheet.rowActions`;
+  `SignInPlan.entries`, `UnlockPlan.entries` (inbox #1052); `LevelRow.plan` (`ShellModel.rowPlan`), `GalleryModel.tileActions`, `ShareSheet.rowActions`;
   a guest's level New `GuestLevel.creates`. The bridge carries each as typed entries (`ShellShown.level`,
-  `SettingsShown.sections`, `Call.RowPlan`, `Call.SignInPlan`, `GalleryRow.tileActions`, `ShownLink.actions`) and
+  `SettingsShown.sections`, `Call.RowPlan`, `Call.SignInPlan`, `Call.UnlockPlan`, `GalleryRow.tileActions`, `ShownLink.actions`) and
   generates every plan enum into `bridge.rs` and `Bridge.g.cs`. `PlansAreTheWebsTest` reads the web for the orders:
   each kind's `header.order` from its `register.ts`, core's merge order from `coreNodeActions.ts`, the Settings order
   from `sections.ts`. The owner's answers (2026-11-20), now on all four: **New** in the level's head (`LevelPlan.creates`)
