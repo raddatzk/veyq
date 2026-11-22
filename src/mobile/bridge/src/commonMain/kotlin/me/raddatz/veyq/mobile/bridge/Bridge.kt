@@ -1152,6 +1152,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             } ?: noTenant
             is Call.SignInPlan -> Answer.SignInPlan(me.raddatz.veyq.mobile.session.SignInPlan.entries(call.adding, call.camera))
             Call.UnlockPlan -> Answer.UnlockPlan(me.raddatz.veyq.mobile.session.UnlockPlan.entries(inExtension = false))
+            is Call.SecretKeyCheck -> Answer.SecretKeyChecked(session.secretKeyProblem(call.secretKey))
             is Call.HeaderOpen -> tenant.value?.models?.header?.let { make ->
                 val id = ids.incrementAndFetch()
                 headers.put(id, HeldHeader(make(call.node, call.facts, ::closeOpen), call.maxButtons))

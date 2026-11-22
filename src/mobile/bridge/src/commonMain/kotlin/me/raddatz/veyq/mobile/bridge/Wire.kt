@@ -502,6 +502,12 @@ internal sealed class Call {
     @Serializable @SerialName("Unlock.Plan") data object UnlockPlan : Call()
 
     /**
+     * Why a Secret Key field's text, as typed, holds no key (`KeyIntake.problem`, ADR 0154 decision 1): [Answer.SecretKeyChecked],
+     * asked on every edit of the sign-in's field and of every flow's. Only the problem comes back — nothing of the key.
+     */
+    @Serializable @SerialName("SecretKey.Check") data class SecretKeyCheck(val secretKey: String) : Call()
+
+    /**
      * What is asked before [SessionForgetUnlocked], always (owner 2026-11-22): one question, naming the writes made offline
      * that wait for the account the unlock shows where some do (`QueuedShown.forgetAsk`, ADR 0153 decision 2):
      * [Answer.QueuedAsked], its ask never null.
@@ -1873,6 +1879,13 @@ internal sealed class Answer {
 
     /** The sign-in's entries in their order ([Call.SignInPlan]). */
     @Serializable @SerialName("SignInPlan") data class SignInPlan(val entries: List<me.raddatz.veyq.mobile.session.SignInEntry>) : Answer()
+
+    /**
+     * A Secret Key field's text checked ([Call.SecretKeyCheck]): null where it reads as a key or a kit's token; a
+     * [me.raddatz.veyq.mobile.crypto.SecretKeyProblem.TYPO] is said under the field (`secret_key_typo`), a `MALFORMED` one
+     * says nothing while typed.
+     */
+    @Serializable @SerialName("SecretKeyChecked") data class SecretKeyChecked(val problem: me.raddatz.veyq.mobile.crypto.SecretKeyProblem?) : Answer()
 
     /** The unlock's entries in their order ([Call.UnlockPlan]). */
     @Serializable @SerialName("UnlockPlan") data class UnlockPlan(val entries: List<me.raddatz.veyq.mobile.session.UnlockEntry>) : Answer()
