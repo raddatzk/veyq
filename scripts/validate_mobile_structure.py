@@ -185,8 +185,11 @@ class PlanEnum:
 def core_main_sources() -> list[pathlib.Path]:
     """The core's main Kotlin files: every core module's main source sets — the platform's, each application's (a plan
     such as Memories' `TileAction` lives there), the composition's —, the shared test support (`:testing`) aside."""
-    return sorted(p for root in repo_layout.mobile_core_sources("Main") if not root.is_relative_to(repo_layout.MOBILE_TESTING)
-                  for p in root.rglob("*.kt"))
+    # in the order of one tree of source sets (`commonMain/kotlin/me/…`), whichever module holds a file: the order the
+    # plans had while the core was one module, so their Swift mirror (apple/generate_plans.py) is written alike
+    files = [(root, p) for root in repo_layout.mobile_core_sources("Main") if not root.is_relative_to(repo_layout.MOBILE_TESTING)
+             for p in root.rglob("*.kt")]
+    return [p for root, p in sorted(files, key=lambda rp: (rp[0].parent.name, str(rp[1].relative_to(rp[0]))))]
 
 
 def plan_enums() -> list[PlanEnum]:

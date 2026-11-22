@@ -1,24 +1,14 @@
 #!/usr/bin/env python3
-"""Guard that the apps' dependencies run application → core, never back and never application → application
-(ADR 0154 decision 3, the apps' half of ADR 0079; built by cr-apps-core-ui-layer).
+"""Guard that each platform's UI depends application → core UI, never back and never application → application
+(ADR 0154 decision 3, the apps' half of ADR 0079; built by cr-apps-core-ui-layer). The Kotlin core's own direction —
+the platform, one module per application, the composition — is the build's, held by
+`validate_mobile_module_graph.py` (ADR 0155 decision 7.1), which retired this guard's rules (c1)–(c3) over the core.
 
 **What it asserts.** The applications are not listed here: they are derived from the entries of the Kotlin core's
 `ApplicationId` (`core/…/navigation/Applications.kt`, `MEMORIES("memories")` names the package `…mobile.memories`), so
 an application added there is guarded the day it lands. Every source is read with comments and literals blanked
-(`kotlin_lexer.mask`), so a name in a KDoc is no reference. A reference is a name spelled with its package — an import
-or a qualified name —, which in Kotlin is the only way to reach another package. Rules:
+(`kotlin_lexer.mask`, `rust_lexer.mask`, `cs_mask`), so a name in a comment is no reference. Rules:
 
-- **(c) the Kotlin core** (`src/mobile/core/src/<set>Main/kotlin/me/raddatz/veyq/mobile/`, every main source set;
-  a test set is a consumer of both sides and is not read). An application's package is `…mobile.<application>` (and
-  its generated client `…mobile.api.<application>`, `core/build.gradle.kts`' `api.<application>`):
-  - **(c1)** no file of one application's package names another application's package or client — no exception;
-    what two applications share belongs to core (`blob/FileSave` moved there for this rule).
-  - **(c2)** no file outside the application packages names one, except the files of `CORE_ROOTS`, each with the
-    reason it still does: `AppKinds.kt`, the composition root, and the files whose hook behind `AppKinds` needs a
-    design of its own (handed back by the move, not built in it: inbox #1048). A listed file that is missing
-    or names no application any more is red too, so the list only shrinks.
-  - every file's `package` is its directory's: a file that declared an application's package outside its
-    directory (or core's inside one) would reach it unqualified, past (c1) and (c2).
 - **(a) and (b) a platform's UI**, switched on per platform in its phase of cr-apps-core-ui-layer (`PLATFORMS`), so
   the guard is never born red. Android: the sources of every source set but a test one, under
   `src/mobile/android/src/<set>/kotlin/me/raddatz/veyq/mobile/android/`; an application's UI is the package
@@ -73,13 +63,14 @@ or a qualified name —, which in Kotlin is the only way to reach another packag
 direction guard but the search's (`validate_mobile_search_names_no_application.py`, which this one extends to the
 rest of core): at that CR's refine the Kotlin core's `memories/GalleryModel` imported `depot.FileSave` (an application
 → application edge) and each platform was one flat directory, so nothing kept a Memories screen from drawing an
-Expenses one, as the web's `validate_web_core_imports_no_applications.py` does there.
+Expenses one, as the web's `validate_web_core_imports_no_applications.py` does there. Its rules over the Kotlin core moved
+to `validate_mobile_module_graph.py` when the core split into modules, where the compiler refuses an import the build
+graph does not carry.
 
-**Its limit.** It reads names, not types: an application's class reached through a type alias declared in core, an
-`Any` handed over and cast, or a kind spelled as a literal (`"MEMORY"`, which the mask blanks) is not seen — core's
-kind literals are a review's catch (the web's guard has a kind rule; the apps have none yet). A star import of a parent
-package (`me.raddatz.veyq.mobile.*`, then `memories.X`) is not seen either. `CORE_ROOTS` is a list of exceptions,
-held from growing only by review: a new file added there with a reason is green. The bridge module
+**Its limit.** It reads names, not types: an application's class reached through a type alias, an `Any` handed over and
+cast, or a kind spelled as a literal (`"MEMORY"`, which the mask blanks) is not seen. A platform's core UI naming a core
+application's package (`me.raddatz.veyq.mobile.memories…`, Android's `AppModel` holding a gallery) is not read: inbox
+#1056 decided it breaks ADR 0154 decision 3, and its fix is a CR of its own. The bridge module
 (`src/mobile/bridge`, the desktops' dispatch over every application) is not read: it is a host, a composition root
 by its nature. A platform whose rules are not switched on (`PLATFORMS`) is not read at all. On Linux a `#[path]`
 attribute that mounts another directory's file, an item re-exported by core under another name (`pub use`) and a
@@ -103,17 +94,9 @@ from kotlin_lexer import mask  # noqa: E402
 from rust_lexer import mask as mask_rust  # noqa: E402
 
 MOBILE = repo_layout.MOBILE
-CORE_SRC = MOBILE / "core" / "src"
-CORE_PACKAGE = "me.raddatz.veyq.mobile"
-APPLICATIONS = CORE_SRC / "commonMain/kotlin/me/raddatz/veyq/mobile/navigation/Applications.kt"
+APPLICATIONS = repo_layout.MOBILE_CORE / "src/commonMain/kotlin/me/raddatz/veyq/mobile/navigation/Applications.kt"
 ENTRY = re.compile(r"^\s*([A-Z][A-Z0-9_]*)\s*\(\s*\"([a-z][a-z0-9]*)\"\s*\)\s*,", re.MULTILINE)
 PACKAGE_DECL = re.compile(r"^\s*package\s+([\w.]+)", re.MULTILINE)
-
-# The composition root (rule c2): the one package outside the applications that names them — it installs each
-# application's part into `AppKinds` and holds what reads several (the shell's model, the drop, the guest adapters). No
-# other file names it (rule c3), so the platform and the applications never reach it.
-COMPOSITION = "composition"
-CORE_ROOTS: dict[str, str] = {}
 
 # The platforms whose UI rules (a) and (b) are on; each is switched on in its phase of cr-apps-core-ui-layer.
 PLATFORMS: dict[str, bool] = {"android": True, "apple": True, "linux": True, "windows": True}
@@ -161,63 +144,6 @@ def _rel(p: pathlib.Path) -> str:
 def _package_of(masked: str) -> str | None:
     m = PACKAGE_DECL.search(masked)
     return None if m is None else re.sub(r"\s+", "", m.group(1))
-
-
-def core_sources(core_src: pathlib.Path) -> list[pathlib.Path]:
-    out: list[pathlib.Path] = []
-    for source_set in sorted(p for p in core_src.iterdir() if p.is_dir() and p.name.endswith("Main")):
-        out += sorted((source_set / "kotlin").rglob("*.kt"))
-    return out
-
-
-def check_core(core_src: pathlib.Path, apps: list[str], roots: dict[str, str]) -> list[str]:
-    errors: list[str] = []
-    files = core_sources(core_src)
-    if not files:
-        return [f"{_rel(core_src)}: no Kotlin file under */kotlin — the guard would check nothing"]
-    named = re.compile(r"\b" + _dotted(CORE_PACKAGE) + r"\s*\.\s*(?:api\s*\.\s*)?(" + "|".join(apps) + r")\b")
-    composed = re.compile(r"\b" + _dotted(CORE_PACKAGE + "." + COMPOSITION) + r"\b")
-    seen_roots: set[str] = set()
-    for f in files:
-        rel = f.relative_to(core_src)
-        source_set_rel = pathlib.Path(*rel.parts[2:])  # under kotlin/
-        expected = ".".join(source_set_rel.parent.parts)
-        masked = mask(f.read_text(encoding="utf-8"))
-        declared = _package_of(masked)
-        if declared != expected:
-            errors.append(f"{_rel(f)}: declares package `{declared}`, its directory is `{expected}` — a package is its directory's")
-            continue
-        under = source_set_rel.parts[len(CORE_PACKAGE.split(".")):]
-        own = under[0] if len(under) > 1 and under[0] in apps else None
-        hits = [(m.group(1), m.start()) for m in named.finditer(masked)]
-        if len(under) > 1 and under[0] == COMPOSITION:
-            continue
-        for m in composed.finditer(masked):
-            errors.append(f"{_rel(f)}:{_line(masked, m.start())}: (c3) names the composition root (`{CORE_PACKAGE}.{COMPOSITION}`) — "
-                          f"the platform and the applications never reach it; it reaches them")
-        key = str(rel)
-        if own is not None:
-            for app, at in hits:
-                if app != own:
-                    errors.append(
-                        f"{_rel(f)}:{_line(masked, at)}: (c1) the application `{own}` names the application `{app}` — "
-                        f"what two applications share belongs to core",
-                    )
-        elif hits:
-            if key in roots:
-                seen_roots.add(key)
-            else:
-                for app, at in hits:
-                    errors.append(
-                        f"{_rel(f)}:{_line(masked, at)}: (c2) core names the application `{app}` — core reaches an "
-                        f"application only through AppKinds (or a CORE_ROOTS entry with its reason)",
-                    )
-    for key in sorted(roots):
-        if not (core_src / key).is_file():
-            errors.append(f"{_rel(core_src / key)}: a CORE_ROOTS entry that does not exist — remove it")
-        elif key not in seen_roots:
-            errors.append(f"{_rel(core_src / key)}: a CORE_ROOTS entry that names no application any more — remove it")
-    return errors
 
 
 def android_sources(android_src: pathlib.Path) -> list[tuple[str, pathlib.Path]]:
@@ -808,9 +734,7 @@ def check_windows(app_dir: pathlib.Path, apps: list[str]) -> list[str]:
 
 
 def check(
-    core_src: pathlib.Path = CORE_SRC,
     applications_file: pathlib.Path = APPLICATIONS,
-    roots: dict[str, str] | None = None,
     platforms: dict[str, bool] | None = None,
     android_src: pathlib.Path = ANDROID_SRC,
     linux_src: pathlib.Path = LINUX_SRC,
@@ -822,7 +746,7 @@ def check(
     apps = applications(applications_file.read_text(encoding="utf-8"))
     if not apps:
         return [f"{_rel(applications_file)}: no ApplicationId entry read — the guard would check nothing"]
-    errors = check_core(core_src, apps, CORE_ROOTS if roots is None else roots)
+    errors: list[str] = []
     on = PLATFORMS if platforms is None else platforms
     if on.get("android"):
         errors += check_android(android_src, apps)
@@ -842,12 +766,12 @@ def main() -> int:
     if errors:
         print(f"validate_mobile_ui_direction: {len(errors)} violation(s)")
         return 1
-    read = len(core_sources(CORE_SRC)) + (len(android_sources(ANDROID_SRC)) if PLATFORMS.get("android") else 0) \
+    read = (len(android_sources(ANDROID_SRC)) if PLATFORMS.get("android") else 0) \
         + (len(linux_sources(LINUX_SRC)) if PLATFORMS.get("linux") else 0)
     read += len(apple_sources(APPLE_DIR)) if PLATFORMS.get("apple") else 0
     read += len(windows_sources(WINDOWS_APP)) if PLATFORMS.get("windows") else 0
     on = ", ".join(p for p, v in PLATFORMS.items() if v) or "none"
-    print(f"validate_mobile_ui_direction: OK ({read} files; the Kotlin core, platforms on: {on})")
+    print(f"validate_mobile_ui_direction: OK ({read} files; platforms on: {on})")
     return 0
 
 

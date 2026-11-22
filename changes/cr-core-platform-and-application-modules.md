@@ -460,6 +460,40 @@ command, or `remembered`), what it costs or leaves open.
     output), within 40,960; the refine's 28,189 was measured before phase 1. Evidence: measured, `npx vitest run
     src/slice.test.ts` in `src/packages/core-js` after `pnpm run build`.
 
+24. **2026-11-22 — The module graph guard (decision 7).** `scripts/validate_mobile_module_graph.py`, beside the backend's,
+    buildless: (a) the settings' includes equal the module directories, and `:apps:*` equals `ApplicationId`'s entries both
+    ways; (b) the edges of decision 1, a test edge being one inside a `<set>Test.dependencies { }` block — and, beyond the
+    CR, the composition must `api` and `export` the platform and every application (a client would not see one it
+    forgot); (c) a package in one module, an application's only in its own, `…composition` only in `:composition`, and a
+    file's package its directory's (moved from the UI guard); `:testing` exempt; (d) the opt-in only in the core's
+    modules — including the convention's `isCoreModule()`, read for the paths it names; (e), beyond the CR: every
+    `@PlatformApi` of a common or native main set carries `@HiddenFromObjC` (decision 4's "hidden from Objective-C", held
+    by text where the header diff holds it only per run). Its first run read no edge at all — `kotlin_lexer.mask` blanks
+    string literals, and a project's path is one — and a first bite of (d) passed for the same reason: both now match the
+    raw text and keep a match only where the masked text still holds its code. Evidence: measured, the bites of entry 25.
+25. **2026-11-22 — The bites.** Each planted in the real tree, the guard run, the file restored with `/bin/cp -f` (a planted
+    file removed), `git status` clean after (`scratchpad/cs/tools/bite.py`): `implementation(project(":apps:depot"))` in
+    `apps/expenses/build.gradle.kts` → (b) "an application uses the platform alone"; `project(":apps:memories")` in
+    `core/build.gradle.kts` → (b) "the platform names no other module"; a `package me.raddatz.veyq.mobile.expenses` file
+    under `core/src/commonMain` → (c) "is the application `expenses`'s, in :core"; an `ApplicationId` entry `NOTES` → (a)
+    "has no module :apps:notes"; `PlatformApi`'s `optIn` in `bridge/build.gradle.kts` → (d) "only the core's modules do";
+    `:bridge` added to `isCoreModule()` → (d); `:testing` dropped from the settings → (a) "a build file the settings do
+    not include"; `@HiddenFromObjC` removed from `AppKinds.queuedSender` → (e). All eight red (exit 1), each with its
+    named message. The eight are pinned as `validate_guard_gaps.py` cases 108–115, so a loosened rule goes red there:
+    measured, `/usr/bin/python3 scripts/validate_guard_gaps.py` → "112 pinned case(s) hold".
+26. **2026-11-22 — What retired, what stayed.** `validate_mobile_ui_direction.py` loses (c1)–(c3) and `CORE_ROOTS`
+    (empty since phase 1) and keeps the platforms' UI rules (a)/(b). `validate_mobile_search_names_no_application.py`
+    stays, pointed at `repo_layout.MOBILE_CORE`: it says why before a build does, and docs and an ADR name it; with the
+    split it is a second check (follow-up: retire it in a doc sweep). `validate_mobile_structure.py` reads every module's
+    main sources but `:testing`, ordered as one tree of source sets (`<set>/kotlin/<path>`), so `generate_plans.py`
+    writes the plans in the order it did — measured: `Plans.swift` from phase 1's tree and from this one over the same
+    header, `diff` empty (in module-path order Memories' `TileAction` came first).
+27. **2026-11-22 — Inbox #1056, decided against ADR 0154 decision 3.** Android's core UI naming a core application's
+    package (11 files of `android/core/`, measured) breaks decision 3 — the core UI reaches an application only through
+    the platform's registry. Not fixed here (the CR changes no UI; the composition still carries every module to
+    Android); routed: the row is `refined`, its next step a CR that moves those holdings behind Android's `apps/`
+    registry and widens the UI guard's rule (a) to core application packages, and asks the same of the other platforms.
+
 ## Retrospective
 
 (Filled by the implementer.)

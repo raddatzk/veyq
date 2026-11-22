@@ -292,6 +292,22 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   107 a `features/expenses` file importing core's `NodeHeader.vue` — rejected: `validate_web_core_imports_no_applications`'
      header rule. Core draws every node page's header (ADR 0110 decision 10); an application's own header compiles and its
      page renders, and could leave out core's Report or link a person on a share page
+  108 `:apps:expenses`' build file depending on `:apps:depot` — rejected: `validate_mobile_module_graph` rule (b) (ADR
+     0155 decision 7.1: an application uses the platform alone). Gradle accepts the edge; every Depot class would then
+     compile into Expenses
+  109 `:core`'s build file depending on `:apps:memories` — rejected: `validate_mobile_module_graph` rule (b); Gradle
+     refuses it as a cycle only once it builds
+  110 a `:core` main file declaring the package `me.raddatz.veyq.mobile.expenses` — rejected: `validate_mobile_module_graph`
+     rule (c); Kotlin compiles a split package, and the platform would reach Expenses' code unqualified
+  111 an `ApplicationId` entry with no `:apps:<id>` module — rejected: `validate_mobile_module_graph` rule (a)
+  112 `:bridge`'s build file opting into `PlatformApi` — rejected: `validate_mobile_module_graph` rule (d); the bridge
+     would reach what the platform keeps from every client
+  113 the convention's `isCoreModule()` naming `:bridge` — rejected: `validate_mobile_module_graph` rule (d), the same
+     opt-in through the one place that grants it
+  114 `:testing` dropped from the mobile settings' includes — rejected: `validate_mobile_module_graph` rule (a); its
+     helpers would compile into nothing and every module's tests would fail to resolve them only at build time
+  115 a `@PlatformApi` member of `:core` without `@HiddenFromObjC` — rejected: `validate_mobile_module_graph` rule (e);
+     Swift would see a member that was `internal` before the split
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1185,6 +1201,64 @@ def forge_web_application_draws_node_header(root: pathlib.Path) -> str:
     return "a features/expenses file importing core's NodeHeader.vue (must be REJECTED — core draws every node page's header)"
 
 
+MOBILE_GRAPH = "validate_mobile_module_graph.py"
+MOBILE_DIR = "src/mobile"
+
+
+def _mobile_edit(root: pathlib.Path, rel: str, old: str, new: str) -> None:
+    f = root / MOBILE_DIR / rel
+    if not f.is_file():
+        raise ForgeError(f"{MOBILE_DIR}/{rel} is missing — re-anchor this forgery")
+    f.write_text(_sub(f.read_text(), old, new))
+
+
+def forge_mobile_application_depends_on_application(root: pathlib.Path) -> str:
+    _mobile_edit(root, "apps/expenses/build.gradle.kts", '            api(project(":core"))\n',
+                 '            api(project(":core"))\n            implementation(project(":apps:depot"))\n')
+    return ":apps:expenses' build file depending on :apps:depot (must be REJECTED — an application uses the platform alone)"
+
+
+def forge_mobile_core_depends_on_application(root: pathlib.Path) -> str:
+    _mobile_edit(root, "core/build.gradle.kts", "            implementation(libs.kotlincrypto.sha3)\n",
+                 '            implementation(libs.kotlincrypto.sha3)\n            implementation(project(":apps:memories"))\n')
+    return ":core's build file depending on :apps:memories (must be REJECTED — the platform names no application)"
+
+
+def forge_mobile_core_declares_application_package(root: pathlib.Path) -> str:
+    f = root / MOBILE_DIR / "core/src/commonMain/kotlin/me/raddatz/veyq/mobile/expenses/GuardGapProbe.kt"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("package me.raddatz.veyq.mobile.expenses\n\nclass GuardGapProbe\n")
+    return "a :core main file declaring the package me.raddatz.veyq.mobile.expenses (must be REJECTED — one module per package)"
+
+
+def forge_mobile_application_without_module(root: pathlib.Path) -> str:
+    _mobile_edit(root, "core/src/commonMain/kotlin/me/raddatz/veyq/mobile/navigation/Applications.kt",
+                 '    EXPENSES("expenses"),\n', '    EXPENSES("expenses"),\n    NOTES("notes"),\n')
+    return "an ApplicationId entry `notes` with no :apps:notes (must be REJECTED — an application's code has a module)"
+
+
+def forge_mobile_client_opts_into_platform_api(root: pathlib.Path) -> str:
+    _mobile_edit(root, "bridge/build.gradle.kts", "kotlin {\n    jvmToolchain(21)\n",
+                 'kotlin {\n    jvmToolchain(21)\n    sourceSets.all { languageSettings.optIn("me.raddatz.veyq.mobile.PlatformApi") }\n')
+    return ":bridge opting into PlatformApi (must be REJECTED — only the core's modules do)"
+
+
+def forge_mobile_convention_widened(root: pathlib.Path) -> str:
+    _mobile_edit(root, "build.gradle.kts", 'path == ":core" || path == ":composition"', 'path == ":core" || path == ":bridge" || path == ":composition"')
+    return "the convention's isCoreModule() naming :bridge (must be REJECTED — the opt-in reaches a client)"
+
+
+def forge_mobile_module_not_included(root: pathlib.Path) -> str:
+    _mobile_edit(root, "settings.gradle.kts", '":composition", ":testing", ', '":composition", ')
+    return ":testing dropped from the mobile settings' includes (must be REJECTED — a module directory compiled by nothing)"
+
+
+def forge_mobile_platform_api_shown(root: pathlib.Path) -> str:
+    _mobile_edit(root, "core/src/commonMain/kotlin/me/raddatz/veyq/mobile/AppKinds.kt",
+                 "    @PlatformApi\n    @HiddenFromObjC\n    fun queuedSender", "    @PlatformApi\n    fun queuedSender")
+    return "a @PlatformApi member without @HiddenFromObjC (must be REJECTED — Swift would see what was internal)"
+
+
 def forge_web_core_imports_second_application(root: pathlib.Path) -> str:
     _plant_depot(root, "core/node/guardGapProbe.ts", "export { FILE_KIND } from '../../features/depot/kinds'\n")
     return "a core/node file re-exporting features/depot/kinds (must be REJECTED — core depends on no application)"
@@ -1862,6 +1936,14 @@ CASES = [
     ("105", SCOPE_REKEY_ARITY, forge_root_entry_reseal_writes_a_value, False),
     ("106", "validate_request_bounds.py", forge_request_closed_object_unenforced, False),
     ("107", WEB_GUARD, forge_web_application_draws_node_header, False),
+    ("108", MOBILE_GRAPH, forge_mobile_application_depends_on_application, False),
+    ("109", MOBILE_GRAPH, forge_mobile_core_depends_on_application, False),
+    ("110", MOBILE_GRAPH, forge_mobile_core_declares_application_package, False),
+    ("111", MOBILE_GRAPH, forge_mobile_application_without_module, False),
+    ("112", MOBILE_GRAPH, forge_mobile_client_opts_into_platform_api, False),
+    ("113", MOBILE_GRAPH, forge_mobile_convention_widened, False),
+    ("114", MOBILE_GRAPH, forge_mobile_module_not_included, False),
+    ("115", MOBILE_GRAPH, forge_mobile_platform_api_shown, False),
     ("100", LINK_CLOSE_ARITY, forge_link_closed_outside_the_body, False),
     ("101", LINK_CLOSE_ARITY, forge_link_closed_by_a_bulk_update, False),
     ("85", WEB_GUARD, forge_web_core_catalog_carries_application_namespace, False),
