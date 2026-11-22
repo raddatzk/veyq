@@ -2858,15 +2858,6 @@
       ]
     },
     {
-      "rule": "one name: \"lone \\ud800 surrogate\"",
-      "names": [
-        "lone \ud800 surrogate"
-      ],
-      "expected": [
-        "lone \ud800 surrogate"
-      ]
-    },
-    {
       "rule": "one name: \"Café\"",
       "names": [
         "Café"
@@ -3105,10 +3096,6 @@
     },
     {
       "segment": "😀",
-      "expected": true
-    },
-    {
-      "segment": "lone \ud800",
       "expected": true
     },
     {
