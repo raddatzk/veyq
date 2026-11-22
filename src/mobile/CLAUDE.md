@@ -414,7 +414,12 @@ A Gradle build of its own, run through its own wrapper.
   generator's own test is `words/generate_words_selftest.py` (checks.yml `guards`). A word is added there, never in a
   platform; what the core raises is a `Notice` (`words/Notices.kt`). `apple_en` / `apple_de` give a key Apple's own form
   (Title Case on a button or menu entry). `scripts/validate_mobile_words.py` holds it; its docstring is the rule list
-  (every source a platform shows text from, and the manifests) and its limits. A test of the
+  (every source a platform shows text from, and the manifests) and its limits. The web's catalog is held to this one
+  (ADR 0136 § The web's words): `words/web.json` pairs each meaning both say (`twins`, held equal; `apart` / `open` with
+  why) and names the notices' words the web reads (`read`), which `--web` writes to
+  `src/web/src/i18n/words.generated.json` (committed); `scripts/validate_web_words.py` holds both, and goes red on a new
+  sentence of three words or more both catalogs say until it is paired. A rewording of a twin changes both catalogs, the
+  web's wording winning (ADR 0154). A test of the
   words asserts a language whose words differ from the fallback: English is gettext's `msgid`, so an English-only run
   passes over a catalog that never loaded.
   A shown value is the core's too (ADR 0154 decision 5): a size, day, moment, Memory date, amount, list, length,
