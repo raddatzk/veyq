@@ -432,15 +432,13 @@ internal sealed class ReceivedView : IDisposable
         {
             _commands.PrimaryCommands.Add(write);
         }
-        else if (s.gate == ReceivedGate.Ready && s.page is { kind: ReceivedPageKind.Level, writes: true })
+        else if (s.gate == ReceivedGate.Ready && s.page is { kind: ReceivedPageKind.Level } level && level.creates.Count > 0)
         {
-            // a READ_WRITE guest's folder (#1034): New folder and Upload files; an unnamed guest is asked its name by the
-            // core at the write (GuestLevel.createFolder, uploadAsking: ReceivedShown.naming, AskNaming)
+            // a READ_WRITE guest's folder (#1034): core's plan (GuestLevel.creates) drawn whole — New folder, Upload files,
+            // Upload folder (owner 2026-11-22); an unnamed guest is asked its name by the core at the write
+            // (GuestLevel.createFolder, uploadAsking, writer: ReceivedShown.naming, AskNaming)
             _commands.PrimaryCommands.Add(CreateAction.Menu(Words.DrawerNew(), "received-new",
-            [
-                (Words.FolderNew(), "received-new-folder", NewFolder),
-                (Words.DepotUpload(), "received-upload", PickAndUpload),
-            ]));
+                level.creates.Select(c => (Said.Key(c.word), GuestCreateId(c.create), GuestCreating(c.create)))));
         }
         if (_page?.GuestReplaces is { } file && s.gate == ReceivedGate.Ready)
         {
@@ -655,6 +653,57 @@ internal sealed class ReceivedView : IDisposable
             column.Children.Add(sent);
         }
         _content.Content = Scrolled(column);
+    }
+
+    /// <summary>What a guest's New entry <paramref name="c"/> begins; null for what a guest never makes (core's plan holds
+    /// none of them).</summary>
+    private Action? GuestCreating(Create c) => c switch
+    {
+        Create.Folder => NewFolder,
+        Create.UploadFiles => PickAndUpload,
+        Create.UploadFolder => PickFolderAndUpload,
+        Create.Pot => null,
+        Create.Memory => null,
+        Create.Chapter => null,
+        Create.Bookmark => null,
+    };
+
+    /// <summary>The automation id of a guest's New entry (the ids the passes read).</summary>
+    private static string GuestCreateId(Create c) => c switch
+    {
+        Create.Folder => "received-new-folder",
+        Create.UploadFiles => "received-upload",
+        Create.UploadFolder => "received-upload-folder",
+        Create.Pot => "received-new-pot",
+        Create.Memory => "received-new-memory",
+        Create.Chapter => "received-new-chapter",
+        Create.Bookmark => "received-new-bookmark",
+    };
+
+    /// <summary>The folder picker, the directory's path to the core (Received.UploadFolder): walked there, its folders made
+    /// and its files queued as the guest (owner 2026-11-22); every line it says, said.</summary>
+    private async void PickFolderAndUpload()
+    {
+        try
+        {
+            var picker = new FolderPicker { SuggestedStartLocation = PickerLocationId.DocumentsLibrary };
+            picker.FileTypeFilter.Add("*");
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
+            var folder = await picker.PickSingleFolderAsync();
+            if (folder is null) return;
+            if (string.IsNullOrEmpty(folder.Path))
+            {
+                Say(Spoken.Own("depot_drop_not_local", Words.DepotDropNotLocal(folder.Name)));
+                return;
+            }
+            Log.Write("guest upload folder: picked");
+            var (answer, _) = await Core.CallAsync(new Call.ReceivedUploadFolder { received = Received, path = folder.Path });
+            Uploads.Queued(answer, "Received.UploadFolder", Say);
+        }
+        catch (Exception e)
+        {
+            Log.Write($"a guest's folder upload failed ({e.GetType().Name})");
+        }
     }
 
     /// <summary>The open picker (several files), their paths to the core (Received.Upload).</summary>

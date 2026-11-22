@@ -1,4 +1,4 @@
-// Core's DEFAULT row actions rename, move and delete (owner 2026-11-01), built by `standardActionList` (`nodeHeader.ts`), the
+// Core's DEFAULT row actions share (owner 2026-11-22), rename, move and delete (owner 2026-11-01), built by `standardActionList` (`nodeHeader.ts`), the
 // builder the header's `standardNodeActions` shares - a row keeps all three as entries (a row click opens the node), where a
 // header edits the name in place and has no rename entry (ADR 0110 decision 11). Every node of every kind gets them - a folder, a Memory,
 // a Pot, a file - and no application builds them: the row's application answers its fail-closed rights for THAT node in
@@ -20,15 +20,24 @@ import { standardActionList } from './nodeHeader'
 
 type Translate = (key: string) => string
 
-/** Core's default actions for `node`'s row: the granted ones whose door `host` has, in the order rename, move, delete. The
- *  delete carries the kind's own write where its selection names one (`LevelRowSelection.remove`; none does today). */
+/** Core's default actions for `node`'s row: the granted ones whose door `host` has - its share (owner 2026-11-22: a row's
+ *  Share on every client), rename, move and delete; where each sits is the row's plan (`plans.ts`). The delete carries the
+ *  kind's own write where its selection names one (`LevelRowSelection.remove`; none does today). */
 export function standardRowActions(t: Translate, node: TreeNode, row: Pick<LevelRow, 'standard' | 'selection'>, host: NodeHost): LevelRowAction[] {
   const granted = row.standard ?? {}
   const remove = row.selection?.remove
+  const offer = granted.share
   return standardActionList(
     t,
-    { rename: !!granted.rename && !!host.rename, move: !!granted.move && !!host.move, delete: !!granted.delete && !!host.delete },
     {
+      share: !!offer && !!host.share,
+      shareLabel: granted.shareLabel,
+      rename: !!granted.rename && !!host.rename,
+      move: !!granted.move && !!host.move,
+      delete: !!granted.delete && !!host.delete,
+    },
+    {
+      ...(offer ? { share: () => host.share?.(node, offer) } : {}),
       rename: () => host.rename?.(node),
       move: () => host.move?.(node),
       remove: () => (remove ? host.delete?.(node, remove) : host.delete?.(node)),

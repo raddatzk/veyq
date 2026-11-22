@@ -1353,12 +1353,18 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.LinkConfirm -> links[call.link]?.let { taken(it.model.confirm(call.label)) } ?: noLink
             is Call.LinkEnterCode -> links[call.link]?.let { taken(it.model.enterCode(call.code)) } ?: noLink
             is Call.LinkClose -> links.remove(call.link)?.let { closeLink(it); Answer.Done } ?: noLink
-            is Call.ReceivedOpen, is Call.ReceivedPassword, is Call.ReceivedAcceptTerms, is Call.ReceivedAcceptNote, is Call.ReceivedOpenNode, is Call.ReceivedBack, is Call.ReceivedStay, is Call.ReceivedLeave, is Call.ReceivedClose, is Call.ReceivedName, is Call.ReceivedForgetGuest, is Call.ReceivedKeep, is Call.ReceivedUpload, is Call.ReceivedReplace, is Call.ReceivedNewFolder, is Call.ReceivedNamingSave, is Call.ReceivedNamingDecline, is Call.ReceivedReportNode, is Call.ReceivedReport, is Call.ReceivedKeepPlaces, is Call.ReceivedReportShown -> receivedCall(parts, call)
+            is Call.ReceivedOpen, is Call.ReceivedPassword, is Call.ReceivedAcceptTerms, is Call.ReceivedAcceptNote, is Call.ReceivedOpenNode, is Call.ReceivedBack, is Call.ReceivedStay, is Call.ReceivedLeave, is Call.ReceivedClose, is Call.ReceivedName, is Call.ReceivedForgetGuest, is Call.ReceivedKeep, is Call.ReceivedUpload, is Call.ReceivedUploadFolder, is Call.ReceivedReplace, is Call.ReceivedNewFolder, is Call.ReceivedNamingSave, is Call.ReceivedNamingDecline, is Call.ReceivedReportNode, is Call.ReceivedReport, is Call.ReceivedKeepPlaces, is Call.ReceivedReportShown -> receivedCall(parts, call)
             is Call.BookmarkOpen -> openBookmark(parts, call.node)
             is Call.BookmarkOwnPage -> bookmarks[call.bookmark]?.let { b ->
                 heldReceived(b.page.openOwnPage(tenant.value?.models?.session))
             } ?: noBookmark
             is Call.BookmarkReportShared -> bookmarks[call.bookmark]?.let { b -> heldReceived(b.page.reportShared()) } ?: noBookmark
+            is Call.RowReportShared -> tenant.value?.models?.session?.let { t ->
+                val page = me.raddatz.veyq.mobile.sharing.BookmarkPage.of(t, call.node) { link, password ->
+                    parts.received(link, queue, password, music(parts)) ?: error("no guest views in this composition")
+                }
+                heldReceived(page.reportSharedFromRow())
+            } ?: noTenant
             is Call.BookmarkClose -> bookmarks.remove(call.bookmark)?.let { b -> closeBookmark(b); Answer.Done } ?: noBookmark
             is Call.BookmarkCheck -> {
                 val r = me.raddatz.veyq.mobile.sharing.ReceivedLink.parse(call.text)
@@ -2322,6 +2328,13 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             if (sent == 0) sources.forEach { it.close() }
             taken(sent > 0)
         } ?: noReceived
+        is Call.ReceivedUploadFolder -> received[call.received]?.let { h ->
+            val level = h.screen.view.page.value as? me.raddatz.veyq.mobile.sharing.GuestPage.Level ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+            if (me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FOLDER !in level.model.creates) return Answer.Refused(Answer.Why.NOT_OFFERED)
+            val found = parts.files.walk(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
+            val r = me.raddatz.veyq.mobile.depot.DepotGuest.uploadFolder(level.model, null, call.path, found)
+            Answer.Queued(r.queued, r.said.firstOrNull(), r.said.drop(1))
+        } ?: noReceived
         is Call.ReceivedReplace -> received[call.received]?.let { h ->
             val page = h.screen.view.page.value as? me.raddatz.veyq.mobile.depot.DepotGuest.File ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
             val access = h.screen.view.access ?: return noReceived
@@ -2409,6 +2422,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is me.raddatz.veyq.mobile.sharing.GuestPage.Level -> ReceivedPage(
                 ReceivedPageKind.LEVEL, node.name, node.kind, page.model.rows.map { ReceivedRow(it.nodeId, it.kind, it.name, it.identity) },
                 null, null, null, emptyList(), writes = page.model.writes,
+                creates = page.model.creates.map { ShellShown.ShownCreate(it, it.word) },
             )
             is me.raddatz.veyq.mobile.depot.DepotGuest.File -> shown(ReceivedPageKind.FILE, file = ids.incrementAndFetch().also { filePages.put(it, page.model) })
             is me.raddatz.veyq.mobile.memories.MemoriesGuest.Gallery -> shown(ReceivedPageKind.GALLERY, gallery = ids.incrementAndFetch().also { galleries.put(it, page.model) })

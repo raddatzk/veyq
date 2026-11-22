@@ -614,10 +614,10 @@ fn paths_of(picked: &gio::ListModel) -> Vec<String> {
 /// An upload call's answer: how many were queued on stderr, anything else said as the header says it.
 pub fn queued(toasts: &adw::ToastOverlay, answer: Result<Answer, bridge::Unreadable>, what: &str) {
     match answer {
-        Ok(Answer::Queued { count, notice }) => {
+        Ok(Answer::Queued { count, notice, more }) => {
             eprintln!("veyq: {what}: {count} queued");
             // what did not read is the core's to say (Notices.notRead), never dropped unsaid
-            if let Some(n) = notice {
+            for n in notice.into_iter().chain(more) {
                 eprintln!("veyq: {what}: {}", n.msg);
                 toasts.add_toast(said::notice_toast(&n));
             }

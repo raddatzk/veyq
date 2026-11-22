@@ -336,7 +336,7 @@ private fun NotShownText() =
 /**
  * A folder of the link (core's level over the guest's tree): its rows, each opened as its kind's page, and — for a
  * READ_WRITE guest outside an identity folder (`GuestLevel.writes`, #1034; the web's `ShareTreePage`) — the level's New:
- * a folder, files uploaded here. The link is read anew after each write, so what was added is listed.
+ * a folder, files or a folder uploaded here. The link is read anew after each write, so what was added is listed.
  */
 @Composable
 private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, view: me.raddatz.veyq.mobile.sharing.GuestView, model: AppModel, snackbar: SnackbarHostState) {
@@ -345,6 +345,10 @@ private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, vie
     var naming by remember(level) { mutableStateOf(false) }
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) model.guestLevelUpload(level, uris)
+    }
+    // a folder uploaded whole as the guest (owner 2026-11-22): what it says, each line, in the snackbar
+    val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
+        if (tree != null) model.levelUploads?.guestUploadFolder(level, tree) { said -> said.forEach { snackbar.show(context, it) } }
     }
     val rows = level.rows
     // what a guest adds here (core's `GuestLevel.creates`, a plan drawn whole): offered where core's level writes; a guest
@@ -357,9 +361,9 @@ private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, vie
                 when (c) {
                     me.raddatz.veyq.mobile.AppKinds.Create.FOLDER -> naming = true
                     me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES -> pickFiles.launch(arrayOf("*/*"))
+                    me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FOLDER -> pickFolder.launch(null)
                     // never a guest's (core's `GuestLevel.creates` holds none of these): each would need its member's dialog
-                    me.raddatz.veyq.mobile.AppKinds.Create.POT, me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FOLDER,
-                    me.raddatz.veyq.mobile.AppKinds.Create.MEMORY, me.raddatz.veyq.mobile.AppKinds.Create.CHAPTER,
+                    me.raddatz.veyq.mobile.AppKinds.Create.POT, me.raddatz.veyq.mobile.AppKinds.Create.MEMORY, me.raddatz.veyq.mobile.AppKinds.Create.CHAPTER,
                     me.raddatz.veyq.mobile.AppKinds.Create.BOOKMARK -> error("a guest's level offers no ${c.name}")
                 }
             })

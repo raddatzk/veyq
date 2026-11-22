@@ -5,7 +5,8 @@ package me.raddatz.veyq.mobile.navigation
  * favourite heart (inbox #409, ADR 0068), the cover (inbox #411) and what a kept link offers (ADR 0120). The caller reads
  * its session into the inputs — on the web the `Access` and the registry (`@veyq/core-js/navigation`, held by
  * `contracts/platform/plans/v1-vectors.json`'s `rights`); a [NodeHeader.Rights] is what a header and a row then plan with.
- * The apps reach the same three through [NodeHeader.rights]' inputs (a member's pin set, the kind's cover, the page's link).
+ * The apps read the same three through [NodeHeader.rights], which answers a header's and a row's heart, cover and kept link's
+ * rename, move and delete here (an app's header is a member's, on a node, under open keys).
  */
 object CoreRights {
     /**

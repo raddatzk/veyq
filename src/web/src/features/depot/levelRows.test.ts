@@ -627,7 +627,7 @@ describe('Depot rows', () => {
   it('delete is core\'s: the row hands the node to the page\'s delete door, and Depot neither asks nor deletes', async () => {
     const h = mountSection({ nodes: [NOTES] })
     await flushPromises()
-    expect(h.source().row(NOTES)!.standard).toEqual({ rename: true, move: true, delete: true })
+    expect(h.source().row(NOTES)!.standard).toEqual({ rename: true, move: true, delete: true, share: { view: true, contribute: true, upload: false } })
     await clickAction(h.w, 'notes.txt', 'delete')
     expect(h.events.remove).toEqual([{ node: NOTES }])
     expect(confirmRequest.value, 'no question of Depot\'s own').toBeNull()
@@ -786,7 +786,8 @@ describe('Drop box rows', () => {
     await clickAction(h.w, 'Inbox', 'delete')
     expect(h.events.remove).toEqual([{ node: BOX }])
     // never renamed here, whatever the matrix says of the node
-    expect(h.source().row(BOX)!.standard).toEqual({ rename: false, move: true, delete: true })
+    // its share the upload-only link, worded as its page's (owner 2026-11-22: a row's Share on every client)
+    expect(h.source().row(BOX)!.standard).toEqual({ rename: false, move: true, delete: true, share: { view: false, contribute: false, upload: true }, shareLabel: t('depot.dropBox.share') })
     harness?.w.unmount()
     const readOnly = mountBoxes({ pending: true })
     await flushPromises()

@@ -445,8 +445,13 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
       primary: { label: t('depot.dropBox.open', { name }), onClick: () => host.open?.(node) },
       actions: [],
       // Core's move and delete, its sentence naming what goes with it; a drop box is never renamed here (its page neither).
-      ...rowRightsOf({ ...c, rename: false }),
+      ...withShareLabel(rowRightsOf({ ...c, rename: false }), t('depot.dropBox.share')),
     }
+  }
+
+  /** A drop box's row share is worded as its page's (`DropBoxDetail`'s `depot.dropBox.share`). */
+  function withShareLabel<R extends { standard: object }>(r: R, shareLabel: string): R {
+    return { ...r, standard: { ...r.standard, shareLabel } }
   }
 
   // One computed table per kind, so a render builds each row once (a row's facts open sealed meta).

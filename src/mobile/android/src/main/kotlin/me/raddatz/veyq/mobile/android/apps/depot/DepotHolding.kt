@@ -153,6 +153,17 @@ internal class DepotHolding(private val model: AppModel) : Holding(), LevelUploa
         }
     }
 
+    /** A guest's *Upload folder*: the directory walked as a member's is, handed to core's `DepotGuest.uploadFolder`. */
+    override fun guestUploadFolder(
+        level: me.raddatz.veyq.mobile.sharing.GuestLevel, tree: android.net.Uri, say: suspend (List<me.raddatz.veyq.mobile.words.Notice>) -> Unit,
+    ) {
+        scope.launch {
+            val walk = withContext(Dispatchers.IO) { treeWalk(tree) }
+            val r = withContext(Dispatchers.IO) { me.raddatz.veyq.mobile.depot.DepotGuest.uploadFolder(level, walk.shown, walk.path, walk.found) }
+            say(r.said)
+        }
+    }
+
     /** What the documents provider lists of a picked directory: its shown name (if it gives one), its id, every entry below. */
     private class TreeWalk(val shown: String?, val path: String, val found: List<FolderUpload.Found>)
 

@@ -28,6 +28,7 @@
 // every other entry sits in ONE "more" menu (a `VeyqMenu`), so a row stays readable at every width and no action is hidden
 // by a media query (a width-hidden button is a lost action). Delete and report are never row buttons.
 import type { Component, Ref } from 'vue'
+import type { NodeShareOffer } from './nodeHost'
 import type { TreeNode } from './tree'
 import type { ScopeKey } from '../../features/spaces/epochs'
 import type { Access, TreeSource } from '../access'
@@ -94,11 +95,15 @@ export interface LevelRow {
   selection?: LevelRowSelection
 }
 
-/** A node's part in core's default row actions (owner 2026-11-01): which of rename, move and delete its application grants. */
+/** A node's part in core's default row actions (owner 2026-11-01): which of rename, move and delete its application grants,
+ *  and the links its share offers (`share`, owner 2026-11-22: a row's Share on every client; absent: no share), worded
+ *  `shareLabel` where the kind names its share its own way (a drop box's). */
 export interface LevelRowStandard {
   rename?: boolean
   move?: boolean
   delete?: boolean
+  share?: NodeShareOffer
+  shareLabel?: string
 }
 
 /** A node's part in a selection of several (inbox #421, `LevelView`'s Select mode). */

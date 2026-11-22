@@ -21,7 +21,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * A node header's and a level row's plans and core's own rights against `contracts/platform/plans/v1-vectors.json`
+ * A node header's and a level row's plans, a level's New and tools, and core's own rights against `contracts/platform/plans/v1-vectors.json`
  * (ADR 0154 decision 2, ADR 0155 decision 7.2's third slice): every case on the JVM and on `macosArm64` (and on Linux and
  * Windows through `run.py test`); the web runs the same cases through `@veyq/core-js/navigation` (its
  * `plans.vectors.test.ts`). Each kind's header order is the apps' registry's ([AppKinds.headerOrder], every application
@@ -84,7 +84,22 @@ class PlanVectorsTest {
         )
     }
 
+    private fun creates(l: List<AppKinds.Create>) = JsonArray(l.map { JsonPrimitive(it.name) })
+
+    private fun levelCreates(c: JsonObject): JsonElement =
+        creates(AppKinds.createsWhere(isHome = c.getValue("at").jsonPrimitive.content == "level", bookmarks = c.flag("bookmarks")))
+
+    private fun guestCreates(c: JsonObject): JsonElement =
+        creates(me.raddatz.veyq.mobile.sharing.GuestLevel.createsFor(c.getValue("role").jsonPrimitive.content, c.flag("inIdentityFolder")))
+
+    private fun levelTools(c: JsonObject): JsonElement {
+        val views = LevelPlan.views(c.flag("mapTab"), c.flag("identityFolder"), c.getValue("rows").jsonPrimitive.int)
+        val tools = LevelPlan.of(emptyList(), c.flag("trash"), views).tools
+        return JsonArray(tools.map { JsonPrimitive(LevelTool.serializer().descriptor.getElementName(it.ordinal)) })
+    }
+
     private val answers: Map<String, (JsonObject) -> JsonElement> = mapOf("header" to ::header, "row" to ::row)
+    private val levelAnswers: Map<String, (JsonObject) -> JsonElement> = mapOf("creates" to ::levelCreates, "guest" to ::guestCreates, "tools" to ::levelTools)
     private val rightsAnswers: Map<String, (JsonObject) -> JsonElement> = mapOf("favorite" to ::favorite, "cover" to ::cover, "bookmark" to ::bookmark)
 
     /** Each kind of the apps' registry and its header order, by kind. */
@@ -105,6 +120,9 @@ class PlanVectorsTest {
     @Test fun favoriteRights() = cases(vectors["rights"]!!.jsonObject["favorite"], ::favorite, "favorite")
     @Test fun coverRights() = cases(vectors["rights"]!!.jsonObject["cover"], ::cover, "cover")
     @Test fun bookmarkRights() = cases(vectors["rights"]!!.jsonObject["bookmark"], ::bookmark, "bookmark")
+    @Test fun levelCreates() = cases(vectors["level"]!!.jsonObject["creates"], ::levelCreates, "level.creates")
+    @Test fun guestCreates() = cases(vectors["level"]!!.jsonObject["guest"], ::guestCreates, "level.guest")
+    @Test fun levelTools() = cases(vectors["level"]!!.jsonObject["tools"], ::levelTools, "level.tools")
 
     /** The web's façade reads an entry's serial name as its constant's name in lower case, `_` as `-` (`NavigationWeb.kt`). */
     @Test
@@ -122,6 +140,7 @@ class PlanVectorsTest {
         if (writing) return
         for (s in answers.keys) for (c in vectors[s]!!.jsonArray) assertTrue(c.jsonObject["expected"] !is JsonNull, "$s case without its expected: $c")
         for (s in rightsAnswers.keys) assertTrue(vectors["rights"]!!.jsonObject[s]!!.jsonArray.isNotEmpty(), "no $s cases")
+        for (s in levelAnswers.keys) assertTrue(vectors["level"]!!.jsonObject[s]!!.jsonArray.isNotEmpty(), "no level.$s cases")
     }
 
     /** The write mode (see the class): every case's answer as its `expected`, the kinds' orders the registry's. */
@@ -136,6 +155,7 @@ class PlanVectorsTest {
             when (key) {
                 "kinds" -> kindsJson()
                 "rights" -> JsonObject(value.jsonObject.mapValues { (k, v) -> recorded(v, rightsAnswers.getValue(k)) })
+                "level" -> JsonObject(value.jsonObject.mapValues { (k, v) -> recorded(v, levelAnswers.getValue(k)) })
                 else -> answers[key]?.let { recorded(value, it) } ?: value
             }
         })

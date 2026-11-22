@@ -1859,6 +1859,16 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         page.openOwnPage(shellModel?.tenant)?.let(guests::show)
     }
 
+    /** A kept link's row's *Report shared content* (core's `BookmarkPage.reportSharedFromRow`): its meta read, the link's screen with its report open. */
+    fun rowReportShared(node: me.raddatz.veyq.mobile.navigation.NodeAt) {
+        val t = shellModel?.tenant ?: return
+        val page = me.raddatz.veyq.mobile.sharing.BookmarkPage.of(t, node) { link, password -> guests.view(link, password) }
+        viewModelScope.launch {
+            val screen = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { page.reportSharedFromRow() }
+            screen?.let(guests::show)
+        }
+    }
+
     /** *Report shared content*: the kept link's screen with its report to the share's own operator open. */
     fun bookmarkReportShared(page: me.raddatz.veyq.mobile.sharing.BookmarkPage) {
         page.reportShared()?.let(guests::show)

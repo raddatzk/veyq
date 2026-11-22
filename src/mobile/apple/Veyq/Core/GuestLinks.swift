@@ -428,7 +428,7 @@ extension ObjectRef {
 
 /// A folder of the link (core's level over the guest's tree): its rows, each opened as its kind's page, and — for a named
 /// READ_WRITE guest outside an identity folder (`GuestLevel.writes`, #1034; the web's `ShareTreePage`) — the level's New:
-/// a folder, files uploaded here. The link is read anew after each write, so what was added is listed.
+/// a folder, files or a folder uploaded here. The link is read anew after each write, so what was added is listed.
 private struct GuestLevelView: View {
     @Bindable var model: AppModel
     let held: GuestHeld
@@ -437,6 +437,7 @@ private struct GuestLevelView: View {
     @State private var newName = ""
     @State private var nameProblem: String?
     @State private var pickingFiles = false
+    @State private var pickingFolder = false
     @State private var said: VeyqCore.Notice?
 
     var body: some View {
@@ -461,7 +462,7 @@ private struct GuestLevelView: View {
                 .accessibilityIdentifier("guest-level")
             }
         }
-        // what a guest adds here: a folder and files (Depot's level action); a guest makes no Memory, Pot or drop box
+        // what a guest adds here: a folder, files or a folder (Depot's level actions); a guest makes no Memory, Pot or drop box
         // offered by the core alone (`GuestLevel.writes`): a guest not named yet is asked its name at the write (`naming`)
         .createMenu(say(.drawerNew), shown: !level.creates.isEmpty) {
             // core's `GuestLevel.creates`, whole: a guest's New holds what the link lets it write here, nothing else
@@ -470,8 +471,9 @@ private struct GuestLevelView: View {
                     switch c.entry {
                     case .folder: newName = ""; nameProblem = nil; naming = true
                     case .uploadFiles: pickingFiles = true
+                    case .uploadFolder: pickingFolder = true
                     // what a guest never makes (the core offers none of them): nothing to begin
-                    case .pot, .uploadFolder, .memory, .chapter, .bookmark: break
+                    case .pot, .memory, .chapter, .bookmark: break
                     }
                 }
             }
@@ -485,6 +487,14 @@ private struct GuestLevelView: View {
                 if queued == 0 { sources.forEach { $0.close() } }
             }
         }
+        // a folder uploaded whole as the guest (owner 2026-11-22): every line it says, none dropped
+        .background(EmptyView().fileImporter(isPresented: $pickingFolder, allowedContentTypes: [.folder]) { result in
+            guard case .success(let url) = result else { return }
+            Task {
+                let lines = await model.levelUploads?.guestUploadFolder(url, level: level) ?? []
+                if !lines.isEmpty { model.notice = AppModel.Notice(text: lines.map { say(notice: $0) }.joined(separator: "\n")) }
+            }
+        })
         .folderNaming($naming, name: $newName, problem: $nameProblem) { name in
             nameAnswered(try? await AppleSharing.shared.createFolder(level: level, name: name)) { said = $0 }
         }

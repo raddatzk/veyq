@@ -278,12 +278,20 @@ export function nodeRights(access: Access, at: RightsTarget): NodeRights {
 }
 
 /** What a level row's core default actions and a selection read (`LevelRow.standard`, `LevelRow.selection`), from ONE
- *  rights answer for THAT node - so a row's rename, move and delete and its part in a selection never disagree. */
-export function rowRightsOf(r: Pick<NodeRights, 'rename' | 'move' | 'delete'>): {
-  standard: { rename: boolean; move: boolean; delete: boolean }
+ *  rights answer for THAT node - so a row's rename, move and delete and its part in a selection never disagree. The row's
+ *  share (owner 2026-11-22: a row offers Share on every client, as the apps' rows did) is the header's: the links the answer
+ *  grants, offered where it grants any (`shareOfferOf`, `sharesAny` in `nodeHost.ts`). */
+export function rowRightsOf(
+  r: Pick<NodeRights, 'rename' | 'move' | 'delete'> & Partial<Pick<NodeRights, 'share' | 'shareContribute' | 'shareUpload'>>,
+): {
+  standard: { rename: boolean; move: boolean; delete: boolean; share?: { view: boolean; contribute: boolean; upload: boolean } }
   selection: { move: boolean; delete: boolean }
 } {
-  return { standard: { rename: r.rename, move: r.move, delete: r.delete }, selection: { move: r.move, delete: r.delete } }
+  const share = { view: !!r.share, contribute: !!r.shareContribute, upload: !!r.shareUpload }
+  return {
+    standard: { rename: r.rename, move: r.move, delete: r.delete, ...(share.view || share.contribute || share.upload ? { share } : {}) },
+    selection: { move: r.move, delete: r.delete },
+  }
 }
 
 /** What a level of core's own kind offers (core's `LevelView`: its toolbar, the folder's overview card, the folders

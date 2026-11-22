@@ -562,7 +562,8 @@ class ShellModel(
 
     /**
      * A level row's menu (ADR 0154 decision 2, [LevelRow.plan]): the rights its node's header would grant it, on what a row
-     * knows — no page read it, so its kind's doors on [AppKinds.Facts]' defaults —, the report where the server takes one.
+     * knows — no page read it, so its kind's doors on [AppKinds.Facts]' defaults —, the report where the server takes one,
+     * and a kept link's share report where its link reads ([bookmarkReads]).
      * A kind this build registers no page for offers nothing.
      */
     suspend fun rowPlan(row: NodeAt): LevelRow.Plan {
@@ -573,8 +574,17 @@ class ShellModel(
             rename = kind.renames, takesCover = kind.takesCover, coverOffered = doors.coverOffered, copy = doors.copies,
             download = doors.downloads, report = reportOffered(), inGuestFolder = inIdentityFolder(row), online = online,
         )
-        return LevelRow.plan(rights)
+        return LevelRow.plan(rights, own = if (row.kind == AppKinds.BOOKMARK_KIND && bookmarkReads(row)) listOf(HeaderAction.REPORT_SHARED) else emptyList())
     }
+
+    /**
+     * Whether kept link [row]'s meta reads (ADR 0154 § Consequences, the web's `coreNodeActions.ts`: a row offers its share's
+     * report where the link reads; ADR 0155 § The rights and plans' slice, D3): its row then offers *Report shared content*,
+     * which a platform runs through `BookmarkPage.reportSharedFromRow`.
+     */
+    private suspend fun bookmarkReads(row: NodeAt): Boolean = runCatching {
+        tenant.node(row.scopeId, row.nodeId)?.let { me.raddatz.veyq.mobile.sharing.BookmarkMeta.open(tenant.account.suite, it) } != null
+    }.getOrDefault(false)
 
     /** Whether the tenant's map services were built: the Settings page offers the maps' consent
      *  ([me.raddatz.veyq.mobile.session.AccountSettings.State.sections]). */
@@ -583,16 +593,20 @@ class ShellModel(
     /**
      * The plan of the level [shell] shows (ADR 0154 decision 2, [LevelPlan]); null where it shows none (an object, a
      * person, a kept link, Search). A level of Home: New where [canCreateHere] ([createsHere]), the trash where
-     * [trashOffered], the view switch. An application's list: the view switch, unless the Memories map is its tab — its New
-     * is the drawer's.
+     * [trashOffered], the view switch where it offers more than one view ([LevelPlan.views]: not on an empty guest's
+     * identity folder). An application's list: the view switch, unless the Memories map is its tab — its New is the drawer's.
      */
     fun levelPlan(shell: Shell? = this.shell): LevelPlan? {
         val s = shell ?: return null
         if (s.searching || s.openObject != null || s.person != null || s.bookmark != null) return null
-        if (s.application != null) return LevelPlan.of(emptyList(), trash = false, views = s.selectedTab?.key != MAP_TAB)
-        if (s.space == null) return null
+        if (s.application != null) {
+            return LevelPlan.of(emptyList(), trash = false, views = LevelPlan.views(s.selectedTab?.key == MAP_TAB, identityFolder = false, rows = 1))
+        }
+        val space = s.space ?: return null
         val creates = if (s == this.shell && canCreateHere) createsHere(isHome = true, bookmarks = true) else emptyList()
-        return LevelPlan.of(creates, trash = trashOffered(s), views = true)
+        val identity = s.folderAt(space)?.let { inIdentityFolder(it) } ?: false
+        val rows = if (identity) current?.lists?.level(s)?.size ?: 0 else 0
+        return LevelPlan.of(creates, trash = trashOffered(s), views = LevelPlan.views(mapTab = false, identityFolder = identity, rows = rows))
     }
 
     /** Pins or unpins [ref], then the lists are read anew; false when it was not stored (the heart goes back). */

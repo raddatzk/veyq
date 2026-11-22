@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.depot
 
+import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.crypto.nfc
 import me.raddatz.veyq.mobile.export.ArchiveName
@@ -86,7 +87,7 @@ object FolderUpload {
         /** The folders not made, as `root/sub/…`: nothing in them went up. */
         val failedFolders: List<String> = emptyList(),
         /** One job per file whose folder was made, in the order the web queues them. */
-        val jobs: List<DepotFiles.UploadJob> = emptyList(),
+        val jobs: List<UploadQueue.Job> = emptyList(),
     )
 
     const val ROOT_TRIES = 20
@@ -133,6 +134,26 @@ object FolderUpload {
         return Plan(root, count, entries.sumOf { it.size })
     }
 
+    /** What making one folder came to ([Maker.folder]). */
+    sealed class Made<out P> {
+        class Done<P>(val folder: P) : Made<P>()
+        /** A sibling holds the name already: the top takes the next number. */
+        object Taken : Made<Nothing>()
+        object Failed : Made<Nothing>()
+    }
+
+    /**
+     * Where a planned directory is made: a member's space ([prepare], a folder by its id) or a link guest's folder
+     * ([prepareGuest], a folder by its opened node) — the plan, the top's numbering and the order are one rule for both.
+     */
+    interface Maker<P> {
+        suspend fun folder(parent: P, name: String): Made<P>
+        /** The job uploading [entry] as file [name] into [parent]. */
+        fun job(parent: P, name: String, entry: Entry): UploadQueue.Job
+        /** The node id of a folder made. */
+        fun id(folder: P): String?
+    }
+
     /**
      * Makes the folders of the directory named [rootName] ([entries]) under [parentId] (null: the space's top) of [scopeId]
      * and hands back its files as upload jobs ([Report.jobs]): the queue sends them.
@@ -145,35 +166,54 @@ object FolderUpload {
         val plan = plan(rootName, entries, tokenInput)
         if (plan.files == 0) return Report(Outcome.NOTHING, rootName)
         if (me.raddatz.veyq.mobile.session.StorageFit.fits(tenant, plan.bytes) == false) return Report(Outcome.NO_ROOM, plan.root.name, plan.bytes)
-
-        // the top: the directory's name, numbered past the level's siblings by slug, never merged into one of them
         val siblings = tenant.trees()[scopeId].orEmpty().filter { it.parentId == parentId }.mapNotNull { tokenInput(it.kind, it.name) }
+        val report = made(plan, parentId, siblings, tokenInput, object : Maker<String?> {
+            override suspend fun folder(parent: String?, name: String): Made<String?> =
+                when (val r = runCatching { FolderCreate.create(tenant, scopeId, parent, name) }.getOrNull()) {
+                    is NodeCreate.Result.Done -> Made.Done(r.created.nodeId)
+                    is NodeCreate.Result.Refused -> if (r.reason == NodeCreate.Reason.NAME_TAKEN) Made.Taken else Made.Failed
+                    null -> Made.Failed
+                }
+            override fun job(parent: String?, name: String, entry: Entry): UploadQueue.Job =
+                DepotFiles.UploadJob(tenant, scopeId, parent, entry.source, tokenInput, name)
+            override fun id(folder: String?): String? = folder
+        })
+        tenant.forgetTree()
+        return report
+    }
+
+    /**
+     * [plan] made under [parent] through [maker]: the top takes the directory's name numbered past the level's [siblings]
+     * (their slug inputs) by slug, never merged into one of them; then every folder depth first, each folder's files queued
+     * before its subfolders are made (`createFolders`); a folder not made is said with everything in it left out.
+     */
+    suspend fun <P> made(plan: Plan, parent: P, siblings: List<String>, tokenInput: (String, String) -> String?, maker: Maker<P>): Report {
         val roots = Namer(tokenInput, siblings)
-        var rootId: String? = null
+        var top: P? = null
+        var made = false
         var name = plan.root.name
         for (i in 1..ROOT_TRIES) {
             name = roots.next(FOLDER, plan.root.name)
-            when (val r = FolderCreate.create(tenant, scopeId, parentId, name)) {
-                is NodeCreate.Result.Done -> rootId = r.created.nodeId
-                is NodeCreate.Result.Refused -> if (r.reason == NodeCreate.Reason.NAME_TAKEN) continue else return Report(Outcome.ROOT_FAILED, name, plan.bytes)
+            when (val r = maker.folder(parent, name)) {
+                is Made.Done -> { top = r.folder; made = true }
+                Made.Taken -> continue
+                Made.Failed -> return Report(Outcome.ROOT_FAILED, name, plan.bytes)
             }
             break
         }
-        val top = rootId ?: return Report(Outcome.ROOT_FAILED, name, plan.bytes)
+        if (!made) return Report(Outcome.ROOT_FAILED, name, plan.bytes)
+        @Suppress("UNCHECKED_CAST") val root = top as P
 
-        // every folder depth first, each folder's files queued before its subfolders are made (`createFolders`)
-        val jobs = ArrayList<DepotFiles.UploadJob>()
+        val jobs = ArrayList<UploadQueue.Job>()
         val failedFolders = ArrayList<String>()
-        suspend fun make(dir: Dir, id: String, path: String) {
-            dir.files.forEach { (n, e) -> jobs += DepotFiles.UploadJob(tenant, scopeId, id, e.source, tokenInput, n) }
+        suspend fun make(dir: Dir, at: P, path: String) {
+            dir.files.forEach { (n, e) -> jobs += maker.job(at, n, e) }
             for (sub in dir.dirs) {
-                val made = runCatching { FolderCreate.create(tenant, scopeId, id, sub.name) }.getOrNull()
-                if (made is NodeCreate.Result.Done) make(sub, made.created.nodeId, "$path/${sub.name}")
-                else failedFolders += "$path/${sub.name}"
+                val r = maker.folder(at, sub.name)
+                if (r is Made.Done) make(sub, r.folder, "$path/${sub.name}") else failedFolders += "$path/${sub.name}"
             }
         }
-        make(plan.root, top, name)
-        tenant.forgetTree()
-        return Report(Outcome.READY, name, plan.bytes, top, failedFolders = failedFolders, jobs = jobs)
+        make(plan.root, root, name)
+        return Report(Outcome.READY, name, plan.bytes, maker.id(root), failedFolders = failedFolders, jobs = jobs)
     }
 }

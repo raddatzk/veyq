@@ -99,14 +99,19 @@ struct NodeRowMenu: ViewModifier {
     @State private var asked: HeaderAction?
     @State private var downloading = false
 
-    /// What a row's actions reach without its page: the download door (core's, every kind), the facts' defaults.
+    /// What a row's actions reach without its page: the download door (core's, every kind), the facts' defaults, and a kept
+    /// link's share report where core's plan offers it (its link reads; no page is open, so it runs from the row).
     private var contribution: HeaderContribution {
-        HeaderContribution(download: { [model, node] in await model.downloadNode(node, to: $0) })
+        HeaderContribution(download: { [model, node] in await model.downloadNode(node, to: $0) }, actions: own)
+    }
+
+    private var own: [OwnAction] {
+        [OwnAction(id: HeaderAction.reportShared, label: say(.bookmarkReportShare), systemImage: "flag") { [model, node] in model.rowReportShared(node) }]
     }
 
     private var words: NodeActionWords {
         NodeActionWords(kind: node.kind, pinned: model.favorites.contains { $0.nodeId == node.nodeId }, hasCover: model.covers[node.nodeId] != nil,
-                        offline: nil, own: [])
+                        offline: nil, own: own)
     }
 
     func body(content: Content) -> some View {

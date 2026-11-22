@@ -250,21 +250,17 @@ object AppKinds {
         BOOKMARK(me.raddatz.veyq.mobile.words.Msg.BOOKMARK_NEW),
     }
 
-    /** Home's "New": a folder, a Pot, files or a folder uploaded here. */
-    val homeCreates: List<Create> = listOf(Create.FOLDER, Create.POT, Create.UPLOAD_FILES, Create.UPLOAD_FOLDER)
-
-    /** The drawer's "New", opened on Home: a folder or a Pot. */
-    val drawerCreates: List<Create> = listOf(Create.FOLDER, Create.POT)
-
     /**
-     * What a desktop's one "New" offers where the shell is ([isHome]: a level of Home, a space's top or a folder): Home's
-     * — files and a folder uploaded there too, as on the phones —, else the drawer's; and a Memory, whose placement every
-     * level New makes into allows (a space's top, a folder: `MemoryCreate.offered`). A chapter is a Memory's page's own.
-     * [bookmarks]: the platform draws the bookmark's dialog (`sharing.BookmarkCreate`), so a kept link is offered last —
-     * each platform switches it on with its dialog (cr-app-received-links phases 7–10; inbox #1020).
+     * What a level's "New" offers where the shell is ([isHome]: a level of Home, a space's top or a folder), else the drawer's,
+     * **in the web's order** (`LevelView.vue`'s folder first, then the registry's `levelMenu` by its `order`; ADR 0154 §
+     * Consequences: where the clients differed, the web's): a folder, a Memory — whose placement every level New makes into
+     * allows (`MemoryCreate.offered`) —, on a level of Home files and a folder uploaded there, a Pot, and last a kept link
+     * where [bookmarks]: the platform draws the bookmark's dialog (`sharing.BookmarkCreate`; inbox #1020). A chapter is a
+     * Memory's page's own. Held by `contracts/platform/plans/v1-vectors.json`'s `level.creates`.
      */
     fun createsWhere(isHome: Boolean, bookmarks: Boolean = false): List<Create> =
-        (if (isHome) homeCreates else drawerCreates) + Create.MEMORY + listOfNotNull(Create.BOOKMARK.takeIf { bookmarks })
+        listOf(Create.FOLDER, Create.MEMORY) + (if (isHome) listOf(Create.UPLOAD_FILES, Create.UPLOAD_FOLDER) else emptyList()) + Create.POT +
+            listOfNotNull(Create.BOOKMARK.takeIf { bookmarks })
 
     /**
      * What core's header reads of a kind (the web's `KindRegistration`): whether it brings a share sheet, takes a cover and

@@ -163,9 +163,9 @@ class NodeHeaderTest {
 
     @Test
     fun a_levels_plan_puts_the_trash_before_the_view_switch() {
-        assertEquals(listOf(LevelTool.TRASH, LevelTool.VIEW), LevelPlan.of(emptyList(), trash = true, views = true).tools)
-        assertEquals(listOf(LevelTool.VIEW), LevelPlan.of(emptyList(), trash = false, views = true).tools)
-        assertEquals(emptyList(), LevelPlan.of(emptyList(), trash = false, views = false).tools)
+        assertEquals(listOf(LevelTool.TRASH, LevelTool.VIEW), LevelPlan.of(emptyList(), trash = true, views = ViewMode.LEVEL).tools)
+        assertEquals(listOf(LevelTool.VIEW), LevelPlan.of(emptyList(), trash = false, views = ViewMode.LEVEL).tools)
+        assertEquals(emptyList(), LevelPlan.of(emptyList(), trash = false, views = listOf(ViewMode.TILES)).tools)
     }
 
     @Test

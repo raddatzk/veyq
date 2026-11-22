@@ -415,7 +415,7 @@ impl Page {
                 // a desktop's theme and language follow the system (D3): the core offers no appearance here
                 SettingsSection::Appearance => ("appearance", vec![]),
                 SettingsSection::Maps => ("maps", vec![Some(self.maps.group().clone())]),
-                SettingsSection::Storage => ("storage", vec![self.storage(s), self.offline_items(s)]),
+                SettingsSection::Storage => ("device-storage", vec![self.storage(s), self.offline_items(s)]),
                 SettingsSection::Sessions => ("sessions", vec![self.sessions(s)]),
                 SettingsSection::Device => ("device", vec![self.device(s)]),
                 SettingsSection::SavedKeys => ("saved-keys", vec![self.saved_keys(s)]),

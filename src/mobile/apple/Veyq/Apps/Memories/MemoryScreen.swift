@@ -410,6 +410,10 @@ struct MemoryScreen: View {
                 ForEach(gallery.tileActions(row: row), id: \.self) { a in
                     switch a.entry {
                     case .mark: MarkButton(gallery: gallery, mediaId: row.mediaId, mine: state?.marks[row.mediaId]?.mine ?? false)
+                    // a link guest's own upload: core asks first (`GalleryModel.purging`, the page's question)
+                    case .delete_: Button(role: .destructive) { Task { _ = try? await gallery.trash(mediaId: row.mediaId) } } label: {
+                        Label(say(.entryDelete), systemImage: "trash")
+                    }
                     }
                 }
             }

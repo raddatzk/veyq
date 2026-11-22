@@ -70,9 +70,20 @@ object NodeHeader {
         coverOffered: Boolean, copy: Boolean, download: Boolean, report: Boolean, inGuestFolder: Boolean,
         offline: Boolean = false, online: Boolean = true, offlineOn: Boolean = false,
     ): Rights {
+        // core's three rules (`CoreRights`, the web's too): an app's header and row are a member's, on a node, under open keys;
+        // the heart where this client draws the kind (and the pin set is known), the cover where its kind and page offer one
+        // — a switched-off application's object offers none through its doors (`AppKinds.Facts.canWrite`) —, a kept link's
+        // rename, move and delete as the node's
+        val known = me.raddatz.veyq.mobile.AppKinds.header(kind) != null
+        val bookmark = CoreRights.bookmark(member = true, node = true, keys = true, rename = rename, move = true, delete = true)
         val granted = Rights(
-            favorite = favoriteKnown, share = shareable && linksOn, rename = rename, move = true,
-            cover = takesCover && coverOffered, copy = copy, download = download, report = report, delete = true, offline = offline,
+            favorite = favoriteKnown && CoreRights.favorite(member = true, node = true, known = known),
+            share = shareable && linksOn, rename = bookmark.rename, move = bookmark.move,
+            cover = CoreRights.cover(
+                member = true, keys = true, readonly = false, node = true, inIdentityFolder = inGuestFolder, applicationOn = true,
+                takesCover = takesCover && coverOffered,
+            ),
+            copy = copy, download = download, report = report, delete = bookmark.delete, offline = offline,
         )
         val narrowed = if (inGuestFolder) inIdentityFolder(granted, kind) else granted
         return if (online) narrowed else readOnly(narrowed).let { it.copy(offline = it.offline && offlineOn) }
@@ -85,7 +96,8 @@ object NodeHeader {
 
     /**
      * A core action's words in the header: the heart's by whether it is pinned, the share sheet's title of the kind, the
-     * cover's by whether one is set, a kept link's report its name's (the web's `report-name`). Null for the delete (its
+     * cover's by whether one is set, a kept link's report its name's (the web's `report-name`) and its share's report (a
+     * row's, which has no page to word it). Null for the delete (its
      * kind's own title) and for an application's own action (its page model's words: `GalleryModel.label`,
      * `FileModel.Header.label`, `BookmarkPage.label`).
      */
@@ -101,8 +113,10 @@ object NodeHeader {
             if (me.raddatz.veyq.mobile.AppKinds.reportsNameOnly(kind)) me.raddatz.veyq.mobile.words.Msg.BOOKMARK_REPORT_NAME
             else me.raddatz.veyq.mobile.words.Msg.REPORT_ACTION
         HeaderAction.OFFLINE -> me.raddatz.veyq.mobile.words.Msg.OFFLINE_AVAILABLE
+        // a kept link's row offers it with no page to word it (`ShellModel.rowPlan`): the page's word (`BookmarkPage.label`)
+        HeaderAction.REPORT_SHARED -> me.raddatz.veyq.mobile.words.Msg.BOOKMARK_REPORT_SHARE
         HeaderAction.DELETE, HeaderAction.UPLOAD, HeaderAction.MUSIC, HeaderAction.BANNER, HeaderAction.REPLACE, HeaderAction.SEND,
-        HeaderAction.OPEN_OWN_PAGE, HeaderAction.REPORT_SHARED -> null
+        HeaderAction.OPEN_OWN_PAGE -> null
     }
 
     /**

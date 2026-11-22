@@ -85,7 +85,7 @@ describe('a Pot\'s row', () => {
     expect(row).toMatchObject({ icon: 'wallet', title: 'Trip', meta: t('expenses.kindPot'), details: [{ id: 'currency', text: 'CHF' }] })
     // rename, move and delete are core's defaults (`standardRowActions.ts`): Expenses only answers them
     expect(row.actions).toEqual([])
-    expect(row.standard).toEqual({ rename: true, move: true, delete: true })
+    expect(row.standard).toEqual({ rename: true, move: true, delete: true, share: { view: true, contribute: true, upload: false } })
     expect(await actionIdsOf(h.w, 'Trip')).toEqual(['rename', 'move', 'delete'])
     await clickAction(h.w, 'Trip', 'delete')
     expect(h.events.remove.map((x) => x.node)).toEqual([pot])

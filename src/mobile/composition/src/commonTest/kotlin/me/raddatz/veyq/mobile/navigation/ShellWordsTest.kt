@@ -69,11 +69,8 @@ class ShellWordsTest {
         assertEquals(Msg.TAB_DEPOT_DROPBOX, AppKinds.tabWord(BarTab("depot.file"), "DEPOT_DROPBOX"))
         assertEquals(Msg.TAB_DEPOT_FILE, AppKinds.tabWord(BarTab("depot.file"), "FILE"))
         ApplicationId.entries.forEach { AppKinds.applicationWord(it) }
-        assertEquals(listOf(AppKinds.Create.FOLDER, AppKinds.Create.POT), AppKinds.drawerCreates)
-        assertEquals(4, AppKinds.homeCreates.size)
-        // a desktop's one New makes a Memory at every level (a space's top, a folder); a chapter only on a Memory's page
-        assertEquals(AppKinds.homeCreates + AppKinds.Create.MEMORY, AppKinds.createsWhere(isHome = true))
-        assertEquals(AppKinds.drawerCreates + AppKinds.Create.MEMORY, AppKinds.createsWhere(isHome = false))
+        // the orders are the web's, held by contracts/platform/plans/v1-vectors.json (`PlanVectorsTest`); a chapter only on a
+        // Memory's page
         assertTrue(AppKinds.Create.CHAPTER !in AppKinds.createsWhere(true) + AppKinds.createsWhere(false))
         // a kept link only where the platform draws its dialog (#1020), last, on every level
         assertTrue(AppKinds.Create.BOOKMARK !in AppKinds.createsWhere(true) + AppKinds.createsWhere(false))

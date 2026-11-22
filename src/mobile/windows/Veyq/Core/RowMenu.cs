@@ -69,6 +69,21 @@ internal static class RowMenu
         return item;
     }
 
+    /// <summary>A kept link's row's Report shared content: the link's screen with its report asked (Row.ReportShared).</summary>
+    private static async void ReportShared(NodeAt node)
+    {
+        try
+        {
+            var (answer, _) = await Core.CallAsync(new Call.RowReportShared { node = node });
+            if (answer is Answer.ReceivedOpened { received: var received }) ReceivedView.Present(received, null);
+            else Log.Write($"the kept link's row's report did not open ({answer.GetType().Name})");
+        }
+        catch (Exception e)
+        {
+            Log.Write($"the kept link's row's report did not open ({e.GetType().Name})");
+        }
+    }
+
     /// <summary>Entry <paramref name="id"/> of <paramref name="node"/>'s menu, run by a header of that node once it shows.</summary>
     private static void Run(NodeAt node, HeaderAction id)
     {
@@ -87,7 +102,9 @@ internal static class RowMenu
             if (ran || header?.Shown is not { gone: false }) return;
             ran = true;
             Log.Write($"row menu: {HeaderPlan.Wire(id)} on a {node.kind}");
-            header.Run(id, PageHooks.None);
+            // a kept link's row offers its share's report where its link reads (core's row plan): no page is open, so the
+            // core reads its meta from the node (Row.ReportShared)
+            header.Run(id, new PageHooks { ReportShared = () => ReportShared(node) });
         }, say) { UndoBar = UndoBar };
         _running = header;
     }
