@@ -83,9 +83,6 @@ pub struct GuestPage {
     /// The variant of the link's page it draws (`ReceivedPage.kind`).
     pub kind: ReceivedPageKind,
     pub body: Guest,
-    /// Whether the page's own write asks the guest's name first (`Received.Name`: a Memory's *Add photos*); else the
-    /// core asks it at the write.
-    pub add_names_first: bool,
 }
 
 /// What an application registers per kind it owns.
@@ -248,7 +245,7 @@ mod tests {
     }
 
     fn page(guest_kind: Option<ReceivedPageKind>) -> KindPage {
-        KindPage { body, guest: guest_kind.map(|kind| GuestPage { kind, body: guest, add_names_first: false }), actions: &["a", "b"], refreshes: false, facts_later: false }
+        KindPage { body, guest: guest_kind.map(|kind| GuestPage { kind, body: guest }), actions: &["a", "b"], refreshes: false, facts_later: false }
     }
 
     fn ui(id: ApplicationId) -> ApplicationUi {

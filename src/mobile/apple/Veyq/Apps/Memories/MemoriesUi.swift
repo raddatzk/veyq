@@ -60,7 +60,7 @@ enum MemoriesUi {
         switch page {
         case let gallery as MemoriesGuest.Gallery:
             AnyView(MemoryScreen(model: model, ref: .guest(gallery.node, .memories))
-                .environment(\.guestGallery, GuestGallery(canAdd: held.guest.value != nil) { c in held.open(c.nodeId) }))
+                .environment(\.guestGallery, GuestGallery { c in held.open(c.nodeId) }))
         case let up as MemoriesGuest.Uploader:
             AnyView(GuestUploaderView(model: model, held: held, up: up.model))
         default:
@@ -242,10 +242,10 @@ private struct GuestUploaderView: View {
 }
 
 /// A gallery shown to a link's guest (ADR 0150 decision 5): the member's page with a guest's rights — its chapters open
-/// inside the link (`onChapter`), it adds once it named itself (`canAdd`), and what is the account's (the Music and Map
+/// inside the link (`onChapter`), it adds where the rights let it, named or not — the core asks an unnamed guest's name
+/// at the upload (`GalleryModel.uploadAsking`, #1044) —, and what is the account's (the Music and Map
 /// views, the music player, a drop from another app, a lightbox in a window of its own, a person's profile) is not offered.
 struct GuestGallery {
-    let canAdd: Bool
     let onChapter: (NodeRef) -> Void
 }
 

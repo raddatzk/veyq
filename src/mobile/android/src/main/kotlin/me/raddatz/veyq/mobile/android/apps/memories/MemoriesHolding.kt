@@ -507,12 +507,13 @@ internal class MemoriesHolding(private val model: AppModel) : Holding() {
     /**
      * Queues the photos and videos the system's picker granted ([uris]) into [gallery]'s Memory or chapter (core's
      * `MediaUploads`: each one's tiers derived here ([MediaDerive]) while the one before it is on the wire, its bytes read at
-     * any offset; the core reads the gallery anew as each is in, the lists at the batch's end).
+     * any offset; the core reads the gallery anew as each is in, the lists at the batch's end). A link's guest not named
+     * yet is asked its name first by the core (`GalleryModel.uploadAsking`, #1044).
      */
     fun uploadMedia(gallery: GalleryModel, uris: List<android.net.Uri>) {
         scope.launch {
             val sources = withContext(Dispatchers.IO) { uris.mapNotNull { pickedMedium(it) }.map { model.source(it) } }
-            gallery.upload(sources)
+            gallery.uploadAsking(sources)
         }
     }
 

@@ -51,7 +51,7 @@ struct MemoryScreen: View {
     private var rows: [GalleryModel.Row] { state?.shown ?? [] }
     private var uploading: [UploadTile] { state?.uploading ?? [] }
     /// What the page adds (core's: the rights' upload, a chapter where it makes one).
-    private var uploads: Bool { (state?.rights.upload ?? false) && (guest?.canAdd ?? true) }
+    private var uploads: Bool { state?.rights.upload ?? false }
     /// A link's guest adds through the page's own menu (it has no node header).
     private var guestUploads: Bool { uploads && guest != nil }
     private var chapterHere: Bool { model.memories.galleryModel(node)?.creates.contains(MemoryCreate.shared.CHAPTER) ?? false }

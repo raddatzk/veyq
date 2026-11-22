@@ -120,9 +120,9 @@ internal abstract class KindBody : IDisposable
     /// <summary>The header's banner entry (HeaderAction.Banner: a Memory's Add or Change banner).</summary>
     public virtual void Banner() { }
 
-    /// <summary>A received link's guest write, first in its bar (<paramref name="write"/> asks a guest's name first
-    /// where the write needs one); null while the page offers none.</summary>
-    public virtual ICommandBarElement? GuestCreate(Action<Action> write) => null;
+    /// <summary>A received link's guest write, first in its bar; null while the page offers none. A guest not named yet
+    /// is asked its name by the core at the write (ReceivedShown.naming, ADR 0154 decision 1), never by the page.</summary>
+    public virtual ICommandBarElement? GuestCreate() => null;
 
     /// <summary>The file a received link's guest may replace (the core's FileRights), else null.</summary>
     public virtual long? GuestReplaces => null;
