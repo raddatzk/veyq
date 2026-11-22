@@ -49,6 +49,8 @@ enum DepotUi {
     })
 
     static func register(_ registry: Registry.Type) {
+        // an SVG is drawn by WebKit's image mode, closed around it (SvgPicture.swift, inbox #1059)
+        FileView.shared.drawSvgAsImage()
         registry.kind(file, DepotFiles.shared.FILE)
         registry.kind(dropBox, DepotFiles.shared.DROPBOX)
         registry.application(ApplicationUi(
