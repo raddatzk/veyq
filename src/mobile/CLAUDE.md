@@ -132,8 +132,10 @@ A Gradle build of its own, run through its own wrapper.
   appleMain's `AppleKit.scan(intake:timing:)`); Linux `account_flows.rs` (`KeyControl`, `NewPassword`); Windows
   `AccountFlows.cs` (`FlowKeyControl`, `NewPasswordField`).
 - **A received link** ([ADR 0150](../../docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md), built 2026-11-19): the web's share page in core's `sharing/` —
-  `ReceivedLink` (the web's parse, held to `contracts/platform/share-links/cases.v1.json` by `ReceivedLinkTest` and the
-  web's `bookmarkLink.test.ts`), `ShareInstance` (the link instance's `/api/setup`), `ShareGates` (password, terms, note,
+  `ReceivedLink` (the web's parse — the web draws it, ADR 0155 § The share links' slice —, held to
+  `contracts/platform/share-links/cases.v1.json` by `ShareLinkVectorsTest`, the package's `sharing.test.ts` and the web's
+  `bookmarkLink.test.ts`), `LinkDays` (a link's last end day, counted from its creation, for `LinkForm` and the web's
+  pickers), `ShareInstance` (the link instance's `/api/setup`; `embedding` is the web page's answer over the same reading), `ShareGates` (password, terms, note,
   content, the naming), `GuestTree`, `GuestView` and `GuestAccess` (the link's reads, writes and own upload queue),
   `GuestReport`, the `GuestSessions` port; *Open a link* and the screen above the shell, `OpenLink` and `GuestScreen`
   (*Keep* where a tenant is open, *Back* that asks at the root); a kept link's meta, dialog and page, `BookmarkMeta`,

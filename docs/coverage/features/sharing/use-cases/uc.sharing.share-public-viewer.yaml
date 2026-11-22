@@ -10,7 +10,8 @@ title: Share a Memory as a public viewer link (web)
 # Memories, READ role only; contributor/uploader, password protection, group/tenant sharing, persisted-shares
 # and notices are separate later slices.
 # The apps (ADR 0150, built 2026-11-19): src/mobile is no coverage surface (ADR 0040), so its tests are named here, not
-# cited — core `ReceivedLinkTest` (every case of contracts/platform/share-links/cases.v1.json parsed as the web parses it),
+# cited — core `ShareLinkVectorsTest` (every case of contracts/platform/share-links/cases.v1.json, which the web draws the
+# same Kotlin for through `@veyq/core-js/sharing`),
 # `ShareGatesTest` (the password, terms before the note before the content, a foreign major refused before any resolve,
 # the guest session in the credential store never the device store, no request of a whole visit holding K_share),
 # `GuestDoorsTest` (each kind its application's page with the guest's rights), `GuestReportTest`; bridge

@@ -1,5 +1,7 @@
 // uc.admin.capability-requirements (web) — the link rules a share dialog reads, and the last day its picker offers.
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { lastExpiryDay, linkRules } from './linkRules'
 import { setTenantCapabilities, setCapabilities } from '../../shared/state/useCapabilities'
 import { capabilityState } from '../../shared/state/capabilities'
@@ -33,5 +35,27 @@ describe('linkRules', () => {
     next.setDate(next.getDate() + 1)
     expect(endOfDay(next).getTime()).toBeGreaterThan(madeAt.getTime() + 7 * 24 * 3600 * 1000)
     expect(lastExpiryDay(null, madeAt)).toBeNull()
+  })
+})
+
+// The last day against contracts/platform/share-links/cases.v1.json (`lastDay`), which the apps' link form answers too
+// (inbox #1057: an edited link counts from when it was made). Each case names its zone; Node re-reads `TZ` when it is set.
+type DayCase = { rule: string; maxDays: number | null; madeAt: string; now: string; zone: string; lastDay: string | null }
+const dayCases = (JSON.parse(readFileSync(resolve(__dirname, '../../../../../contracts/platform/share-links/cases.v1.json'), 'utf8')) as {
+  lastDay: DayCase[]
+}).lastDay
+const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+describe('lastExpiryDay against the share-link vectors', () => {
+  const zone = process.env.TZ
+  afterEach(() => {
+    if (zone === undefined) delete process.env.TZ
+    else process.env.TZ = zone
+  })
+
+  it.each(dayCases.map((c) => [c.rule, c] as const))('%s', (_, c) => {
+    process.env.TZ = c.zone
+    const last = lastExpiryDay(c.maxDays, new Date(c.madeAt))
+    expect(last === null ? null : isoDay(last)).toBe(c.lastDay)
   })
 })

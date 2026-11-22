@@ -13,11 +13,13 @@
 // Anything else falls back to ADR 0120's open, with one line saying why ({@link EmbedRefusal}). A write's own capability
 // (`.contribute`) is not asked: the share's server refuses a write it does not allow, as on the share's own page.
 //
-// The decision is ONE pure function ({@link embeddability}) over what was read; the read ({@link readShareInstance}) only
-// fetches, through the generated client, and turns every failure into "no answer".
+// The decision is ONE pure function over what was read — the platform's Kotlin (`sharing/ShareInstance.kt`
+// `embedding`, ADR 0155 decision 7.2, drawn through `@veyq/core-js/sharing`), whose reading the apps' open of a link shares
+// (contracts/platform/share-links/cases.v1.json `embed`); {@link embeddability} only maps its answer to this page's shape.
+// The read ({@link readShareInstance}) only fetches, through the generated client, and turns every failure into "no answer".
+import * as core from '@veyq/core-js/sharing'
 import type { SetupStatus } from '../../api/generated'
 import { setupApi } from '../../api/client'
-import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_EMBEDDABLE } from '../../features/platform/capabilities'
 import { EXPECTED_MAJOR } from '../../shared/state/capabilities'
 
 /** The majors this client's embed speaks: its own, plus each older major it carries a guest adapter for — the guest
@@ -31,7 +33,7 @@ export const EMBED_MAJORS: readonly number[] = [EXPECTED_MAJOR]
  *  ones only (major 0 is pre-release and never gets an adapter). An unscheduled major widens the window past this
  *  (decision 4); these two are its floor, which is all the tripwire can know from VERSION. */
 export function olderMajorsInWindow(major: number): number[] {
-  return [major - 1, major - 2].filter((m) => m >= 1)
+  return [...core.olderMajorsInWindow(major)]
 }
 
 /** Why a share is not shown in place — each its own line on the bookmark's page (`node.bookmark.fallback.*`). */
@@ -59,15 +61,8 @@ export interface EmbedInputs {
 
 /** Whether the share may be shown in place (see the header). Pure; fails closed on every input it cannot read. */
 export function embeddability({ embedding, setup, majors }: EmbedInputs): Embeddability {
-  if (!embedding) return { embeds: false, reason: 'switchedOff' }
-  const served = setup && Array.isArray(setup.capabilities) ? setup.capabilities : null
-  const theirs = setup?.version?.major
-  if (!served || typeof theirs !== 'number') return { embeds: false, reason: 'unreachable' }
-  if (!majors.includes(theirs)) return { embeds: false, reason: 'otherVersion' }
-  const ids = new Set(served.map((c) => c?.id))
-  if (!ids.has(CORE_PUBLIC_SHARES)) return { embeds: false, reason: 'noLinks' }
-  if (!ids.has(CORE_PUBLIC_SHARES_EMBEDDABLE)) return { embeds: false, reason: 'notEmbeddable' }
-  return { embeds: true }
+  const reason = core.embedding(embedding, setup, majors)
+  return reason == null ? { embeds: true } : { embeds: false, reason: reason as EmbedRefusal }
 }
 
 /** The setup status of the instance at `apiBase` (`''`: this origin), or null for any failure — a refusal, a network

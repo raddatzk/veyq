@@ -1,6 +1,6 @@
 {
   "format": "veyq-share-links-v1",
-  "note": "The cases a received share link is checked against (ADR 0120 decision 4, ADR 0150 decision 2): the web's `parseShareLink`/`keptLink`/`hostOf`/`asksForReport` (src/web/src/core/bookmark/bookmarkLink.ts, bookmarkLink.test.ts) and the apps' core `sharing/ReceivedLink` (ReceivedLinkTest) both answer to them. `parse`: an accepted input with its normalized `link`, `origin`, `shareId` and `host`, and `report` where its fragment asks the share page to open its report dialog; a refused one with its `problem`, and `moderation` where it is a moderator's review (`#moderation`), which the app refuses with a problem of its own while the bookmark's parse calls it `noKey`. `kept`: a stored link read back — only the normalized form itself reads (`link`), anything else is null. Inputs chosen by hand from the web's test; each expectation is the web's function's answer, which the web's test checks on every run.",
+  "note": "The rules a share link is checked by, on the web and in the apps (ADR 0120 decision 4, ADR 0150 decision 2, ADR 0155 decision 7.2): the core's `sharing/` (`ReceivedLink`, `LinkDays`, `ShareInstance`) and `session/ClientWindow` answer every case, and the web draws them through `@veyq/core-js/sharing`; the core's `ShareLinkVectorsTest`, the package's `sharing.test.ts` and the web's tests read this file. `parse`: an accepted input with its normalized `link`, `origin`, `shareId` and `host`, and `report` where its fragment asks the share page to open its report dialog; a refused one with its `problem`, and `moderation` where it is a moderator's review (`#moderation`), which the app refuses with a problem of its own while the bookmark's parse calls it `noKey`. `kept`: a stored link read back — only the normalized form itself reads (`link`), anything else is null. `report`: whether a share page's fragment asks for its report dialog (`asks`), and the fragment it keeps once read (`without`). `lastDay`: the last local day (in `zone`) a link made at `madeAt` may end on under `maxDays` — a picked day is sent as its end, which must not pass `madeAt + maxDays × 24 h`, so an edited link counts from when it was made, never from `now` (when the form opens). `embed`: a share's instance as its `/api/setup` was read (`setup`; null: no answer), the majors this client speaks and this instance's `core.share-embedding` (`embedding`); `app`: whether an app opens the instance's links, `page`: whether a web page shows the share in place (null: yes, else why not). `window`: the older majors ADR 0085 decision 5's planned window keeps for a client of `major`.",
   "maxLinkLength": 2048,
   "parse": [
     {
@@ -144,6 +144,83 @@
     {
       "input": "https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
       "problem": "tooLong"
+    },
+    {
+      "input": "HTTPS://photos.example.org:443/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "link": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "origin": "https://photos.example.org",
+      "shareId": "Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "host": "photos.example.org"
+    },
+    {
+      "input": "https:photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "link": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "origin": "https://photos.example.org",
+      "shareId": "Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "host": "photos.example.org"
+    },
+    {
+      "input": "https://photos.example.org\\s\\Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "link": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "origin": "https://photos.example.org",
+      "shareId": "Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "host": "photos.example.org"
+    },
+    {
+      "input": "https://photos.exa\tmple.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "link": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "origin": "https://photos.example.org",
+      "shareId": "Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "host": "photos.example.org"
+    },
+    {
+      "input": "https://photos.example.org:/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "link": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "origin": "https://photos.example.org",
+      "shareId": "Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "host": "photos.example.org"
+    },
+    {
+      "input": "https://photos.example.org/s/%41b3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "notAShare"
+    },
+    {
+      "input": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx?#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "link": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "origin": "https://photos.example.org",
+      "shareId": "Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "host": "photos.example.org"
+    },
+    {
+      "input": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#report&k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "link": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "origin": "https://photos.example.org",
+      "shareId": "Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "host": "photos.example.org",
+      "report": true
+    },
+    {
+      "input": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc&k=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+      "link": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "origin": "https://photos.example.org",
+      "shareId": "Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "host": "photos.example.org"
+    },
+    {
+      "input": "https://photos.example.org:99999/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "notAUrl"
+    },
+    {
+      "input": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwd",
+      "problem": "noKey"
+    },
+    {
+      "input": "https://bücher.example/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "notAUrl"
+    },
+    {
+      "input": "https://:@photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "credentials"
     }
   ],
   "kept": [
@@ -162,6 +239,413 @@
     {
       "input": "  https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
       "link": null
+    }
+  ],
+  "report": [
+    {
+      "fragment": "#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc&report",
+      "asks": true,
+      "without": "#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"
+    },
+    {
+      "fragment": "#report",
+      "asks": true,
+      "without": ""
+    },
+    {
+      "fragment": "#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "asks": false,
+      "without": "#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"
+    },
+    {
+      "fragment": "",
+      "asks": false,
+      "without": ""
+    },
+    {
+      "fragment": "#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc&&report&",
+      "asks": true,
+      "without": "#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"
+    },
+    {
+      "fragment": "k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc&report",
+      "asks": true,
+      "without": "#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"
+    },
+    {
+      "fragment": "#reports",
+      "asks": false,
+      "without": "#reports"
+    },
+    {
+      "fragment": "#report&report",
+      "asks": true,
+      "without": ""
+    }
+  ],
+  "lastDay": [
+    {
+      "rule": "a new link: the day before the one its limit falls on",
+      "maxDays": 7,
+      "madeAt": "2026-10-16T12:30:00Z",
+      "now": "2026-10-16T12:30:00Z",
+      "zone": "Europe/Berlin",
+      "lastDay": "2026-10-22"
+    },
+    {
+      "rule": "an edited link counts from when it was made, not from now (inbox #1057)",
+      "maxDays": 7,
+      "madeAt": "2026-10-11T12:30:00Z",
+      "now": "2026-10-16T08:00:00Z",
+      "zone": "Europe/Berlin",
+      "lastDay": "2026-10-17"
+    },
+    {
+      "rule": "no limit in effect: no last day",
+      "maxDays": null,
+      "madeAt": "2026-10-11T12:30:00Z",
+      "now": "2026-10-16T08:00:00Z",
+      "zone": "Europe/Berlin",
+      "lastDay": null
+    },
+    {
+      "rule": "made after local midnight: the local day counts, not the UTC one",
+      "maxDays": 1,
+      "madeAt": "2026-10-16T22:30:00Z",
+      "now": "2026-10-16T22:30:00Z",
+      "zone": "Europe/Berlin",
+      "lastDay": "2026-10-17"
+    },
+    {
+      "rule": "a day limit across the end of daylight saving time: 24 hours, not a calendar day",
+      "maxDays": 1,
+      "madeAt": "2026-11-01T04:30:00Z",
+      "now": "2026-11-01T04:30:00Z",
+      "zone": "America/New_York",
+      "lastDay": "2026-10-31"
+    },
+    {
+      "rule": "across the start of daylight saving time",
+      "maxDays": 2,
+      "madeAt": "2026-03-08T09:30:00Z",
+      "now": "2026-03-08T09:30:00Z",
+      "zone": "America/Los_Angeles",
+      "lastDay": "2026-03-09"
+    },
+    {
+      "rule": "a limit at local midnight exactly: that day's end would pass it",
+      "maxDays": 7,
+      "madeAt": "2026-10-16T00:00:00Z",
+      "now": "2026-10-16T00:00:00Z",
+      "zone": "UTC",
+      "lastDay": "2026-10-22"
+    },
+    {
+      "rule": "the last millisecond of a local day, fourteen hours ahead of UTC",
+      "maxDays": 30,
+      "madeAt": "2026-12-31T09:59:59.999Z",
+      "now": "2026-12-31T09:59:59.999Z",
+      "zone": "Pacific/Kiritimati",
+      "lastDay": "2027-01-29"
+    },
+    {
+      "rule": "a link past its lifetime: its last day lies before today",
+      "maxDays": 7,
+      "madeAt": "2026-09-01T10:00:00Z",
+      "now": "2026-10-16T08:00:00Z",
+      "zone": "Europe/Berlin",
+      "lastDay": "2026-09-07"
+    }
+  ],
+  "embed": [
+    {
+      "rule": "an instance of a spoken major that lets its links be shown elsewhere",
+      "embedding": true,
+      "setup": {
+        "setupRequired": false,
+        "version": {
+          "major": 3,
+          "build": 1
+        },
+        "capabilities": [
+          {
+            "id": "core.public-shares"
+          },
+          {
+            "id": "core.public-shares.contribute"
+          },
+          {
+            "id": "core.public-shares.embeddable"
+          }
+        ],
+        "suites": [],
+        "instanceSalt": "x"
+      },
+      "majors": [
+        3
+      ],
+      "app": null,
+      "page": null
+    },
+    {
+      "rule": "an older major this client carries an adapter for",
+      "embedding": true,
+      "setup": {
+        "setupRequired": false,
+        "version": {
+          "major": 2,
+          "build": 1
+        },
+        "capabilities": [
+          {
+            "id": "core.public-shares"
+          },
+          {
+            "id": "core.public-shares.contribute"
+          },
+          {
+            "id": "core.public-shares.embeddable"
+          }
+        ],
+        "suites": [],
+        "instanceSalt": "x"
+      },
+      "majors": [
+        3,
+        2
+      ],
+      "app": null,
+      "page": null
+    },
+    {
+      "rule": "this instance switched embedding off: the page refuses, the app does not ask",
+      "embedding": false,
+      "setup": {
+        "setupRequired": false,
+        "version": {
+          "major": 3,
+          "build": 1
+        },
+        "capabilities": [
+          {
+            "id": "core.public-shares"
+          },
+          {
+            "id": "core.public-shares.contribute"
+          },
+          {
+            "id": "core.public-shares.embeddable"
+          }
+        ],
+        "suites": [],
+        "instanceSalt": "x"
+      },
+      "majors": [
+        3
+      ],
+      "app": null,
+      "page": "switchedOff"
+    },
+    {
+      "rule": "no answer",
+      "embedding": true,
+      "setup": null,
+      "majors": [
+        3
+      ],
+      "app": "unreachable",
+      "page": "unreachable"
+    },
+    {
+      "rule": "an answer without a version: not a veyq instance",
+      "embedding": true,
+      "setup": {
+        "capabilities": []
+      },
+      "majors": [
+        3
+      ],
+      "app": "unreachable",
+      "page": "unreachable"
+    },
+    {
+      "rule": "an answer without a capability list",
+      "embedding": true,
+      "setup": {
+        "version": {
+          "major": 3
+        }
+      },
+      "majors": [
+        3
+      ],
+      "app": "unreachable",
+      "page": "unreachable"
+    },
+    {
+      "rule": "a newer major",
+      "embedding": true,
+      "setup": {
+        "setupRequired": false,
+        "version": {
+          "major": 4,
+          "build": 1
+        },
+        "capabilities": [
+          {
+            "id": "core.public-shares"
+          },
+          {
+            "id": "core.public-shares.contribute"
+          },
+          {
+            "id": "core.public-shares.embeddable"
+          }
+        ],
+        "suites": [],
+        "instanceSalt": "x"
+      },
+      "majors": [
+        3
+      ],
+      "app": "otherVersion",
+      "page": "otherVersion"
+    },
+    {
+      "rule": "an older major without an adapter",
+      "embedding": true,
+      "setup": {
+        "setupRequired": false,
+        "version": {
+          "major": 2,
+          "build": 1
+        },
+        "capabilities": [
+          {
+            "id": "core.public-shares"
+          },
+          {
+            "id": "core.public-shares.contribute"
+          },
+          {
+            "id": "core.public-shares.embeddable"
+          }
+        ],
+        "suites": [],
+        "instanceSalt": "x"
+      },
+      "majors": [
+        3
+      ],
+      "app": "otherVersion",
+      "page": "otherVersion"
+    },
+    {
+      "rule": "an older major past the adapters carried",
+      "embedding": true,
+      "setup": {
+        "setupRequired": false,
+        "version": {
+          "major": 0,
+          "build": 1
+        },
+        "capabilities": [
+          {
+            "id": "core.public-shares"
+          },
+          {
+            "id": "core.public-shares.contribute"
+          },
+          {
+            "id": "core.public-shares.embeddable"
+          }
+        ],
+        "suites": [],
+        "instanceSalt": "x"
+      },
+      "majors": [
+        3,
+        2,
+        1
+      ],
+      "app": "otherVersion",
+      "page": "otherVersion"
+    },
+    {
+      "rule": "no public links: the leaf without its parent is refused too",
+      "embedding": true,
+      "setup": {
+        "setupRequired": false,
+        "version": {
+          "major": 3,
+          "build": 1
+        },
+        "capabilities": [
+          {
+            "id": "core.public-shares.embeddable"
+          }
+        ],
+        "suites": [],
+        "instanceSalt": "x"
+      },
+      "majors": [
+        3
+      ],
+      "app": "noLinks",
+      "page": "noLinks"
+    },
+    {
+      "rule": "links, but not to be shown elsewhere: the app opens them",
+      "embedding": true,
+      "setup": {
+        "setupRequired": false,
+        "version": {
+          "major": 3,
+          "build": 1
+        },
+        "capabilities": [
+          {
+            "id": "core.public-shares"
+          }
+        ],
+        "suites": [],
+        "instanceSalt": "x"
+      },
+      "majors": [
+        3
+      ],
+      "app": null,
+      "page": "notEmbeddable"
+    }
+  ],
+  "window": [
+    {
+      "major": 0,
+      "older": []
+    },
+    {
+      "major": 1,
+      "older": []
+    },
+    {
+      "major": 2,
+      "older": [
+        1
+      ]
+    },
+    {
+      "major": 3,
+      "older": [
+        2,
+        1
+      ]
+    },
+    {
+      "major": 4,
+      "older": [
+        3,
+        2
+      ]
     }
   ]
 }

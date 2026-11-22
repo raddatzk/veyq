@@ -12,16 +12,18 @@ class LinkFormTest {
 
     private val free = ShareLinks.Rules(on = true, contribute = true, passwordRequired = false, maxDays = null, dropBox = true)
     private val strict = ShareLinks.Rules(on = true, contribute = false, passwordRequired = true, maxDays = 7, dropBox = true)
-    private val today = 20_000L
+    /** Noon UTC of epoch day 20,000: [today] is the device's local day of it, whatever the zone the test runs in. */
+    private val now = 20_000L * DAY_MS + 12 * 3_600_000L
+    private val today = LocalDays.dayOf(now)
 
-    private fun link(passwordRequired: Boolean, role: String = ShareLinks.READ_WRITE) =
+    private fun link(passwordRequired: Boolean, role: String = ShareLinks.READ_WRITE, createdAt: String = "x") =
         ShareLinks.Link(
-            "s", role, enabled = true, mine = true, createdAt = "x", expiresAt = null, label = "Old", hasNote = false,
+            "s", role, enabled = true, mine = true, createdAt = createdAt, expiresAt = null, label = "Old", hasNote = false,
             passwordRequired = passwordRequired, url = null, reissueRequired = false, stopped = false, deletable = true,
         )
 
     private fun new(rules: ShareLinks.Rules = free, writeOnly: Boolean = false, uploadOffered: Boolean = false, uploadOnly: Boolean = false) =
-        LinkForm.start(rules, null, writeOnly, uploadOffered, uploadOnly, today, null)
+        LinkForm.start(rules, null, writeOnly, uploadOffered, uploadOnly, now, null)
 
     @Test
     fun a_new_link_opens_view_only_with_the_switches_a_rule_holds() {
@@ -67,12 +69,12 @@ class LinkFormTest {
         assertEquals("long enough!", on.withPassword("long enough!").submittedPassword)
         assertEquals("", new().submittedPassword, "a new link without one sends none")
 
-        val edit = LinkForm.start(free, link(passwordRequired = true), false, false, false, today, null)
+        val edit = LinkForm.start(free, link(passwordRequired = true), false, false, false, now, null)
         assertTrue(edit.withPassword)
         assertTrue(edit.canSave, "a blank field keeps the old password")
         assertNull(edit.submittedPassword)
         assertEquals("", edit.withPasswordOn(false).submittedPassword, "switched off: removed")
-        val plain = LinkForm.start(free, link(passwordRequired = false), false, false, false, today, null)
+        val plain = LinkForm.start(free, link(passwordRequired = false), false, false, false, now, null)
         assertNull(plain.submittedPassword, "an edit leaves a link without one as it is")
         assertEquals("Old", plain.label)
         assertEquals(ShareLinks.READ_WRITE, plain.role)
@@ -80,7 +82,7 @@ class LinkFormTest {
 
     @Test
     fun an_edited_end_opens_on_its_day_and_an_end_is_sent_only_when_on() {
-        val edit = LinkForm.start(free, link(passwordRequired = false), false, false, false, today, today + 3)
+        val edit = LinkForm.start(free, link(passwordRequired = false), false, false, false, now, today + 3)
         assertTrue(edit.withEnd)
         assertEquals(today + 3, edit.submittedEndDay)
         assertNull(edit.withEndOn(false).submittedEndDay)
@@ -95,5 +97,26 @@ class LinkFormTest {
 
     private object PotSessionKind {
         val POT = me.raddatz.veyq.mobile.expenses.PotSession.KIND
+    }
+
+    /** Inbox #1057: an edited link's last day counts from when it was made, as the server counts, not from today. */
+    @OptIn(kotlin.time.ExperimentalTime::class)
+    @Test
+    fun an_edited_link_counts_its_last_day_from_when_it_was_made() {
+        val madeAt = now - 5 * DAY_MS
+        val made = kotlin.time.Instant.fromEpochMilliseconds(madeAt).toString()
+        val edit = LinkForm.start(strict, link(passwordRequired = true, createdAt = made), false, false, false, now, null)
+        assertEquals(LocalDays.dayOf(madeAt) + 6, edit.lastDay)
+        assertEquals(edit.lastDay, edit.endDay)
+        assertEquals(edit.lastDay, edit.withEndDay(today + 6).endDay, "no day the server would refuse")
+
+        // a link past its lifetime: its last day lies before today, and a pick stays there (no empty range to coerce into)
+        val old = LinkForm.start(strict, link(passwordRequired = true, createdAt = kotlin.time.Instant.fromEpochMilliseconds(now - 30 * DAY_MS).toString()), false, false, false, now, null)
+        assertTrue(old.lastDay!! < today)
+        assertEquals(old.lastDay, old.withEndDay(today).endDay)
+    }
+
+    private companion object {
+        const val DAY_MS = 86_400_000L
     }
 }

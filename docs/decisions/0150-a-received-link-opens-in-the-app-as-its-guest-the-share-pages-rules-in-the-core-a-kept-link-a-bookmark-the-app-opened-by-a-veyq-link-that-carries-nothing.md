@@ -45,7 +45,10 @@ link for good**: decision 6's *Keep*.
 Core's (a link is core's, ADR 0079 decision 3), in `core/…/sharing/`:
 - **`ReceivedLink.parse(text)`** ports `parseShareLink` and `keptLink` exactly. Both clients answer to one set of cases,
   `contracts/platform/share-links/cases.v1.json` (accepted inputs with their normalized link; refused ones with their
-  problem), read by the web's `bookmarkLink.test.ts` and the core's test — the search vectors' form (ADR 0146). The app
+  problem), read by the web's `bookmarkLink.test.ts` and the core's test — the search vectors' form (ADR 0146). Since
+  2026-11-22 the web draws this very code ([ADR 0155](0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md)
+  § The share links' slice, `@veyq/core-js/sharing`): one parser, where three inputs the two had read apart now read as
+  the core did (a non-canonical key, an empty user info, a host in Unicode — each refused). The app
   refuses a `#moderation` link with a problem of its own (decision 8; the bookmark's parse calls it `noKey`, as the web
   does); `&report` is kept as a request to open the report dialog (ADR 0120 decision 6), never stored.
 - **`ShareInstance`** reads `/api/setup` of the link's origin **for every link**, this instance's too — the app is a

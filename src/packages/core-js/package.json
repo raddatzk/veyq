@@ -4,7 +4,7 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
-  "//": "The Kotlin core's modules (src/mobile/core, apps/*, composition) compiled for JavaScript, ADR 0155 decisions 3, 6 and 7.1: Gradle compiles (`build`, which runs `:composition:jsPackage` and writes `dist/` — one file per module, Kotlin's per-module names, the platform's `kotlin_veyq_mobile_core.mjs`, and one `.d.mts` for every module's exports, `veyq-mobile-composition.d.mts`; never committed), pnpm installs, bundles and tests. Its primitives are the web's own @noble/*, at @veyq/crypto's ranges so the lockfile holds one version of each. Its check runs the suite's conformance over contracts/crypto/vectors/v1.json under Node, from a binary of its own (`dist/conformance/`), never an export of the shipped module; each façade's vectors through the shipped module; and the slice check (`src/slice.test.ts`): the bundle an entry ships carries no kotlinx.serialization, coroutines, Ktor or NotOnTheWeb source, within ADR 0155's budget. One entry per façade (ADR 0155 decision 5), its code the module file that holds the façade, never the composition's own (an empty shell), its types a declaration file of its own that `:composition:jsPackage` writes (`dist/<entry>.d.mts`, exactly the façade's `@JsExport` declarations, read from its sources), so a name of one façade does not type-check through another's entry: `./search`, the platform's search, and `./tree`, the platform's node tree rules, both in `kotlin_veyq_mobile_core.mjs`. `sideEffects: false`: the compiled module imports Ktor's client for its engine's registration (an eager initializer) though no façade reaches Ktor, so a bundler may drop what nothing uses.",
+  "//": "The Kotlin core's modules (src/mobile/core, apps/*, composition) compiled for JavaScript, ADR 0155 decisions 3, 6 and 7.1: Gradle compiles (`build`, which runs `:composition:jsPackage` and writes `dist/` — one file per module, Kotlin's per-module names, the platform's `kotlin_veyq_mobile_core.mjs`, and one `.d.mts` for every module's exports, `veyq-mobile-composition.d.mts`; never committed), pnpm installs, bundles and tests. Its primitives are the web's own @noble/*, at @veyq/crypto's ranges so the lockfile holds one version of each. Its check runs the suite's conformance over contracts/crypto/vectors/v1.json under Node, from a binary of its own (`dist/conformance/`), never an export of the shipped module; each façade's vectors through the shipped module; and the slice check (`src/slice.test.ts`): the bundle an entry ships carries no kotlinx.serialization, coroutines, Ktor or NotOnTheWeb source, within ADR 0155's budget. One entry per façade (ADR 0155 decision 5), its code the module file that holds the façade, never the composition's own (an empty shell), its types a declaration file of its own that `:composition:jsPackage` writes (`dist/<entry>.d.mts`, exactly the façade's `@JsExport` declarations, read from its sources), so a name of one façade does not type-check through another's entry: `./search`, the platform's search, `./tree`, the platform's node tree rules, and `./sharing`, the platform's share-link rules, all in `kotlin_veyq_mobile_core.mjs`. `sideEffects: false`: the compiled module imports Ktor's client for its engine's registration (an eager initializer) though no façade reaches Ktor, so a bundler may drop what nothing uses.",
   "exports": {
     "./search": {
       "types": "./dist/search.d.mts",
@@ -12,6 +12,10 @@
     },
     "./tree": {
       "types": "./dist/tree.d.mts",
+      "default": "./dist/kotlin_veyq_mobile_core.mjs"
+    },
+    "./sharing": {
+      "types": "./dist/sharing.d.mts",
       "default": "./dist/kotlin_veyq_mobile_core.mjs"
     }
   },

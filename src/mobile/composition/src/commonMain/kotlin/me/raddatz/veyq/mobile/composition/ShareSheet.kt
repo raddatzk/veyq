@@ -115,10 +115,10 @@ class ShareSheet(
     /** The sheet's title: the node's links, or at a space's top level "Add files only". */
     val title: Msg get() = if (atTopLevel) Msg.SHARE_ROLE_UPLOADER else words.title
 
-    /** The top level's form: a drop box's name, a password and an end, today the core's day. */
+    /** The top level's form: a drop box's name, a password and an end, counted from now. */
     private fun uploadOnlyForm() = LinkForm.start(
         door.rules, editing = null, writeOnly = false, uploadOffered = false, uploadOnly = true,
-        today = LocalDays.dayOf(now()), editingEndDay = null,
+        now = now(), editingEndDay = null,
     )
 
     /** A drop box's own links: WRITE_ONLY only, never edited or renewed, no name of their own. */
@@ -187,7 +187,7 @@ class ShareSheet(
         if (atTopLevel) return _state.update { it.copy(form = uploadOnlyForm(), editing = null, problem = null, notice = null, fresh = null) }
         val form = LinkForm.start(
             door.rules, editing = null, writeOnly = dropBox, uploadOffered = (node.kind == NodeRef.FOLDER || memory) && door.rules.dropBox,
-            uploadOnly = false, today = LocalDays.dayOf(now()), editingEndDay = null, uploadLink = memory,
+            uploadOnly = false, now = now(), editingEndDay = null, uploadLink = memory,
         )
         _state.update { it.copy(form = form, editing = null, problem = null, notice = null) }
     }
@@ -200,7 +200,7 @@ class ShareSheet(
         val link = row.link
         val form = LinkForm.start(
             door.rules, editing = link, writeOnly = dropBox, uploadOffered = false, uploadOnly = false,
-            today = LocalDays.dayOf(now()), editingEndDay = link.expiresAt?.let(LocalDays::dayOf), uploadLink = memory,
+            now = now(), editingEndDay = link.expiresAt?.let(LocalDays::dayOf), uploadLink = memory,
         )
         _state.update { it.copy(form = form, editing = shareId, problem = null, notice = null) }
     }
