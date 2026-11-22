@@ -43,13 +43,13 @@ concurrency:
   cancel-in-progress: false
 
 # Helm for the `chart` job: the official release tarball, checked against this SHA-256 before it runs — the shape ADR
-# 0057 §6 uses for the OpenAPI generator JAR, and no setup action. Measured 2026-10-14: get.helm.sh's
-# helm-v4.0.1-linux-amd64.tar.gz.sha256sum, the tarball's own hash and the checksum in the GitHub release notes of
-# helm/helm v4.0.1 all agree. publish.yml and release.yml carry the same two lines for their chart packaging;
+# 0057 §6 uses for the OpenAPI generator JAR, and no setup action. Measured 2026-11-22: get.helm.sh's
+# helm-v4.3.2-linux-amd64.tar.gz.sha256sum, the tarball's own hash and the checksum in the GitHub release notes of
+# helm/helm v4.3.2 all agree. publish.yml and release.yml carry the same two lines for their chart packaging;
 # validate_release_identity.py holds every copy equal. Bumping it is part of cutting a release.
 env:
-  HELM_VERSION: v4.0.1
-  HELM_SHA256: e0365548f01ed52a58a1181ad310b604a3244f59257425bb1739499372bdff60
+  HELM_VERSION: v4.3.2
+  HELM_SHA256: d1c0278d46beab79582d7e50f5b3dc206944ba8e577cde618513fd07daa53983
 
 # Least-privilege default; each job widens only what it needs (see per-job permissions blocks).
 permissions:

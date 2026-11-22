@@ -49,8 +49,8 @@ permissions: {}
 # The Helm `checks.yml` and `publish.yml` pin (their comment says how the pin was checked); validate_release_identity.py
 # holds the three equal.
 env:
-  HELM_VERSION: v4.0.1
-  HELM_SHA256: e0365548f01ed52a58a1181ad310b604a3244f59257425bb1739499372bdff60
+  HELM_VERSION: v4.3.2
+  HELM_SHA256: d1c0278d46beab79582d7e50f5b3dc206944ba8e577cde618513fd07daa53983
 
 jobs:
   check:

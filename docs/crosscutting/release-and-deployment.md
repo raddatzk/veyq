@@ -156,9 +156,9 @@ writes the mirror layout `veyqctl` reads (`releases.json`, `<tag>/…`), which l
 **A release pins what it runs and what it is built from** (ADR 0057 § 6): third-party images by digest, written
 `repo:tag@sha256:…` (`validate_image_pins.py`); Dockerfile bases by their index digest; the OpenAPI generator JAR, the
 Gradle wrapper and distribution by SHA-256, the backend's dependencies by Gradle verification; the actions by commit
-SHA (`validate_action_pins.py`); Helm by its tarball's SHA-256. Dependabot's `docker`, `docker-compose` and `helm`
-ecosystems propose bumps ([`.github/dependabot.yml`](../../.github/dependabot.yml)); bumping a pin is part of cutting a
-release.
+SHA (`validate_action_pins.py`); Helm by its tarball's SHA-256. Dependabot's `docker`, `docker-compose` and
+`github-actions` ecosystems propose bumps ([`.github/dependabot.yml`](../../.github/dependabot.yml), which names the pins
+no ecosystem reaches — Helm's among them); bumping a pin is part of cutting a release.
 
 ## The two deployment targets
 
