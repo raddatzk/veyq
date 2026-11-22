@@ -679,7 +679,7 @@ private fun LazyListScope.storage(state: AccountSettings.State, context: Context
     val unavailable = state.storageUnavailable
     if (storage == null && unavailable == null) return
     item(key = "storage-divider") { HorizontalDivider(Modifier.padding(top = 16.dp)) }
-    header("storage", { stringResource(R.string.account_settings_storage) })
+    header(me.raddatz.veyq.mobile.search.SettingsSection.STORAGE.id, { stringResource(R.string.account_settings_storage) })
     if (storage == null) {
         item(key = "storage-unavailable") {
             Text(

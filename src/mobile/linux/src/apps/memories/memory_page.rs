@@ -752,7 +752,8 @@ impl Inner {
         tile
     }
 
-    /// What a tile offers beside opening it (`GalleryRow.tileActions`, ADR 0154 decision 2: the web's mark toggle), each
+    /// What a tile offers beside opening it (`GalleryRow.tileActions`, ADR 0154 decision 2: the web's mark toggle and a
+    /// link guest's own upload's delete), each
     /// entry in its order in a menu opened GNOME's way — a right click, or a long press on a touch screen.
     fn tile_menu(self: &Rc<Self>, tile: &gtk::Overlay, row: &GalleryRow) {
         if row.tile_actions.is_empty() {
@@ -774,11 +775,19 @@ impl Inner {
                             header::say(&toasts, bridge::call(&Call::MarksToggle { gallery, media_id }).await.map(|(a, _)| a), "Marks.Toggle");
                         });
                     }
+                    // a link guest's own upload: core asks first (`GalleryShown.purging`, the page's question)
+                    TileAction::Delete => {
+                        let (toasts, media_id) = (inner.toasts.clone(), media_id.clone());
+                        glib::spawn_future_local(async move {
+                            header::say(&toasts, bridge::call(&Call::GalleryTrash { gallery, media_id }).await.map(|(a, _)| a), "Gallery.Trash");
+                        });
+                    }
                 }
             });
             actions.add_action(&action);
             let word = match a {
                 TileAction::Mark => if row.mine { words::media_marks_unmark() } else { words::media_marks_mark() },
+                TileAction::Delete => words::entry_delete(),
             };
             menu.append(Some(&word), Some(&format!("tile.{name}")));
         }

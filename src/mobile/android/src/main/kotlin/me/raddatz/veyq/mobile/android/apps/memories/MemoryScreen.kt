@@ -458,6 +458,11 @@ internal fun MediaTile(
                     text = { Text(stringResource(if (mark?.mine == true) R.string.media_marks_unmark else R.string.media_marks_mark)) },
                     onClick = { menu = false; model.memories.galleryAct { gallery.toggleMark(row.mediaId) } },
                 )
+                // a link guest's own upload deleted: core asks first (`GalleryModel.purging`, the question below the grid)
+                me.raddatz.veyq.mobile.memories.TileAction.DELETE -> androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(stringResource(R.string.entry_delete), color = androidx.compose.material3.MaterialTheme.colorScheme.error) },
+                    onClick = { menu = false; model.memories.galleryAct { gallery.trash(row.mediaId) } },
+                )
             }
         }
         val p = picture

@@ -297,11 +297,12 @@ internal sealed class Uploads : IDisposable
     {
         switch (answer)
         {
-            case Answer.Queued { count: var count, notice: var n }:
+            case Answer.Queued { count: var count, notice: var n, more: var more }:
                 // what did not read is the core's to say (Notices.notRead): never dropped unsaid, as a drop the packaged
                 // app queued nothing for was (2026-11-13)
                 Log.Write($"{what}: {count} queued{(n is null ? "" : $", said {n.msg}")}");
                 if (n is not null) say(Spoken.Of(n));
+                foreach (var m in more ?? []) say(Spoken.Of(m));
                 break;
             case Answer.Said { notice: { } n }:
                 Log.Write($"{what}: said {n.msg}");

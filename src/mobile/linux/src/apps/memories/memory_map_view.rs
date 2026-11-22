@@ -413,7 +413,7 @@ impl Inner {
             let toasts = toasts.clone();
             glib::spawn_future_local(async move {
                 match bridge::call(&Call::TracksConfirm { tracks, labels }).await.map(|(a, _)| a) {
-                    Ok(Answer::Queued { count, notice }) => {
+                    Ok(Answer::Queued { count, notice, .. }) => {
                         eprintln!("veyq: Tracks.Confirm: {count} queued");
                         if let Some(n) = notice {
                             toasts.add_toast(said::notice_toast(&n));

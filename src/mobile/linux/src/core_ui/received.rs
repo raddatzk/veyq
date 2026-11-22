@@ -37,7 +37,7 @@ use gtk::{gio, glib};
 
 use crate::bridge::{
     self, Watch,
-    wire::{Answer, Call, Msg, NodeAt, ReceivedGate, ReceivedPage, ReceivedPageKind, ReceivedRefusal, ReceivedShown, Update, Watched},
+    wire::{Answer, Call, Create, Msg, NodeAt, ReceivedGate, ReceivedPage, ReceivedPageKind, ReceivedRefusal, ReceivedShown, Update, Watched},
 };
 use crate::core_ui::home::{glib_escape, kind_icon};
 use crate::core_ui::registry::{registry, GuestFrame, Page};
@@ -243,8 +243,9 @@ struct Inner {
     back: gtk::Button,
     /// The page's own write: a Memory's *Add photos*, a Pot's *Add entry*, shown where the page takes one.
     add: gtk::Button,
-    /// A READ_WRITE level's *New*: a folder, files uploaded here.
+    /// A READ_WRITE level's *New*: core's `GuestLevel.creates` ([new_menu]), a folder, files or a folder uploaded here.
     new: gtk::MenuButton,
+    new_menu: gio::Menu,
     /// A file's *Download* (Save a copy) and its *Replace*, where the file offers them.
     save: gtk::Button,
     replace: gtk::Button,
@@ -281,8 +282,6 @@ impl ReceivedView {
         add.set_visible(false);
         let menu = gtk::MenuButton::builder().icon_name("view-more-symbolic").tooltip_text(words::node_more()).visible(false).build();
         let new_menu = gio::Menu::new();
-        new_menu.append(Some(&words::folder_new()), Some("received.new-folder"));
-        new_menu.append(Some(&words::depot_upload()), Some("received.upload-files"));
         let new = crate::core_ui::create_action::create_menu(&words::drawer_new(), new_menu.upcast_ref());
         new.set_visible(false);
         new.set_widget_name("guest-new");
@@ -339,6 +338,7 @@ impl ReceivedView {
             back,
             add,
             new,
+            new_menu,
             save,
             replace,
             naming: RefCell::new(None),
@@ -464,6 +464,7 @@ impl Inner {
         // a level's New: the core asks the guest's name at the write (`GuestLevel.createFolder`, `uploadAsking`)
         add("new-folder", Rc::new(|i| i.new_folder()));
         add("upload-files", Rc::new(|i| i.pick_and_upload()));
+        add("upload-folder", Rc::new(|i| i.pick_folder_and_upload()));
         add("save", Rc::new(|i| {
             if let Some((p, _)) = i.held.borrow().as_ref() {
                 p.act("save", &i.window, &i.root);
@@ -643,8 +644,22 @@ impl Inner {
         let id = self.received;
         match p.kind {
             ReceivedPageKind::Level => {
-                // a READ_WRITE level's New (#1034): a folder and files, each the guest's write
-                self.new.set_visible(p.writes);
+                // a READ_WRITE level's New (#1034): core's plan (`GuestLevel.creates`) drawn whole, each the guest's write
+                self.new_menu.remove_all();
+                for c in &p.creates {
+                    let action = match c.create {
+                        Create::Folder => "received.new-folder",
+                        Create::UploadFiles => "received.upload-files",
+                        Create::UploadFolder => "received.upload-folder",
+                        // what a guest never makes (core's plan holds none of them): nothing to begin
+                        Create::Pot | Create::Memory | Create::Chapter | Create::Bookmark => {
+                            eprintln!("veyq: a guest's New offered {:?}", c.create);
+                            continue;
+                        }
+                    };
+                    self.new_menu.append(Some(&said::key(&c.word)), Some(action));
+                }
+                self.new.set_visible(self.new_menu.n_items() > 0);
                 if p.rows.is_empty() {
                     self.set_content(&adw::StatusPage::builder().icon_name(kind_icon(&p.node_kind)).title(glib_escape(&p.name)).vexpand(true).build());
                     return;
@@ -730,6 +745,22 @@ impl Inner {
             column.append(&group);
         }
         self.set_content(&scrolled(&column));
+    }
+
+    /// GTK's folder dialog, the directory's path to the core (`Received.UploadFolder`): walked there, its folders made and its
+    /// files queued as the guest (owner 2026-11-22); what it says, every line.
+    fn pick_folder_and_upload(self: &Rc<Self>) {
+        let (id, parent, toasts) = (self.received, self.window.clone(), self.root.clone());
+        glib::spawn_future_local(async move {
+            let dialog = gtk::FileDialog::builder().title(words::depot_upload_folder()).modal(true).build();
+            let picked = match dialog.select_folder_future(Some(&parent)).await {
+                Ok(picked) => picked,
+                Err(e) => return crate::core_ui::uploads::dismissed(&e, "folder"),
+            };
+            let Some(path) = crate::core_ui::uploads::local_path(&picked) else { return };
+            let answer = bridge::call(&Call::ReceivedUploadFolder { received: id, path }).await.map(|(a, _)| a);
+            crate::core_ui::uploads::queued(&toasts, answer, "Received.UploadFolder");
+        });
     }
 
     /// GTK's open dialog (several files), their paths to the core (`Received.Upload`).

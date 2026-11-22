@@ -1760,6 +1760,16 @@ final class AppModel {
         if let screen = page.openOwnPage(tenant: shellModel?.tenant) { guests.show(screen, self) }
     }
 
+    /// A kept link's row's *Report shared content* (core's `BookmarkPage.reportSharedFromRow`): its meta read, the link's
+    /// screen with its report open.
+    func rowReportShared(_ node: NodeAt) {
+        guard let t = shellModel?.tenant else { return }
+        let page = AppleSharing.shared.bookmarkPage(tenant: t, node: node, opener: guests.opener(self))
+        Task {
+            if let screen = try? await AppleSharing.shared.reportSharedFromRow(page: page) { guests.show(screen, self) }
+        }
+    }
+
     /// *Report shared content*: the kept link's screen with its report to the share's own operator open.
     func bookmarkReportShared(_ page: BookmarkPage) {
         if let screen = page.reportShared() { guests.show(screen, self) }

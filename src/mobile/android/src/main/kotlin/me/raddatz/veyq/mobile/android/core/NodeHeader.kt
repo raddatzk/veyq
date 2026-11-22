@@ -274,7 +274,14 @@ internal fun LevelRowMenu(node: NodeAt, model: AppModel, open: Boolean, onClose:
     val state by header.state.collectAsStateWithLifecycle()
     var plan by remember(node) { mutableStateOf<me.raddatz.veyq.mobile.navigation.LevelRow.Plan?>(null) }
     androidx.compose.runtime.LaunchedEffect(node) { plan = model.rowPlan(node) }
-    val contribution = remember(node) { HeaderContribution(download = { out -> model.downloadNode(node, out) }) }
+    // a kept link's row offers its share's report where the link reads (core's plan): no page is open, so it runs here
+    val reportShared = stringResource(R.string.bookmark_report_share)
+    val contribution = remember(node) {
+        HeaderContribution(
+            download = { out -> model.downloadNode(node, out) },
+            actions = listOf(OwnAction(Plan.REPORT_SHARED, reportShared, Icons.Outlined.Flag) { model.rowReportShared(node) }),
+        )
+    }
     val run = nodeActions(node, header, contribution, model, notices.snackbar, notices.scope)
     val p = plan ?: return
     DropdownMenu(!p.isEmpty, onClose) {

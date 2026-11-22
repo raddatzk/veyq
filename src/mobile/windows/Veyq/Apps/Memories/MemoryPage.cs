@@ -593,6 +593,8 @@ internal sealed class MemoryPage : IDisposable
             var (word, glyph, automationId, act) = a switch
             {
                 TileAction.Mark => (row.mine ? Words.MediaMarksUnmark() : Words.MediaMarksMark(), row.mine ? "\uEB51" : "\uEB52", "tile-mark", (Action)(() => ToggleMark(id))),
+                // a link guest's own upload: core asks first (GalleryShown.purging, the page's question)
+                TileAction.Delete => (Words.EntryDelete(), "\uE74D", "tile-delete", (Action)(() => TrashOwn(id))),
             };
             var item = new MenuFlyoutItem { Text = word, Icon = new FontIcon { Glyph = glyph } };
             AutomationProperties.SetAutomationId(item, automationId);
@@ -601,6 +603,23 @@ internal sealed class MemoryPage : IDisposable
         }
         if (menu.Items.Count > 0) tile.ContextFlyout = menu;
         return tile;
+    }
+
+    /// <summary>A link guest's own medium <paramref name="mediaId"/> deleted from its tile's menu (Gallery.Trash): the core
+    /// asks first (its purge question); what did not land is said.</summary>
+    private async void TrashOwn(string mediaId)
+    {
+        if (_id is not { } gallery) return;
+        try
+        {
+            var (answer, _) = await Core.CallAsync(new Call.GalleryTrash { gallery = gallery, mediaId = mediaId });
+            Log.Write($"Gallery.Trash from a tile: {answer.GetType().Name}");
+            if (answer is Answer.Said { notice: { } n }) _say(Spoken.Of(n));
+        }
+        catch (Exception e)
+        {
+            Log.Write($"Gallery.Trash from a tile failed ({e.GetType().Name})");
+        }
     }
 
     /// <summary>Medium <paramref name="mediaId"/>'s mark flipped from its tile's menu (Marks.Toggle); what did not land is said.</summary>

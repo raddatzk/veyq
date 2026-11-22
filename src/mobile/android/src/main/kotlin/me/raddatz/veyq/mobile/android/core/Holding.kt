@@ -92,6 +92,12 @@ internal interface LevelUploads {
 
     /** The directory the system's picker granted ([tree]) uploaded whole under [parentId] of [scopeId]. */
     fun uploadFolder(scopeId: String, parentId: String?, tree: android.net.Uri)
+
+    /**
+     * A READ_WRITE link guest's *Upload folder* into [level] (core's `GuestLevel.creates`, owner 2026-11-22): the directory
+     * [tree] walked and uploaded as the guest; what it says handed to [say] (each line, none dropped).
+     */
+    fun guestUploadFolder(level: me.raddatz.veyq.mobile.sharing.GuestLevel, tree: android.net.Uri, say: suspend (List<me.raddatz.veyq.mobile.words.Notice>) -> Unit)
 }
 
 /**

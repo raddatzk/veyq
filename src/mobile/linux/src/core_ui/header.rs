@@ -420,10 +420,15 @@ impl Inner {
     }
 
     /// A kept link's *Open on its own page* or ([report]) *Report shared content*: the link's screen above the shell,
-    /// opened by the core from the page's model (`Bookmark.OwnPage`, `Bookmark.ReportShared`).
+    /// opened by the core from the page's model (`Bookmark.OwnPage`, `Bookmark.ReportShared`) — or, from the kept link's row
+    /// (no page open, core's row plan offers its share report where the link reads), from the node (`Row.ReportShared`).
     fn kept_link(&self, report: bool) {
-        let Some(bookmark) = self.bookmark.get() else { return eprintln!("veyq: header kept link: the page told no id") };
-        let call = if report { Call::BookmarkReportShared { bookmark } } else { Call::BookmarkOwnPage { bookmark } };
+        let call = match (self.bookmark.get(), report) {
+            (Some(bookmark), true) => Call::BookmarkReportShared { bookmark },
+            (Some(bookmark), false) => Call::BookmarkOwnPage { bookmark },
+            (None, true) => Call::RowReportShared { node: self.node.clone() },
+            (None, false) => return eprintln!("veyq: header kept link: the page told no id"),
+        };
         glib::spawn_future_local(async move {
             match bridge::call(&call).await.map(|(a, _)| a) {
                 Ok(Answer::ReceivedOpened { received }) => crate::core_ui::received::present(received, None),

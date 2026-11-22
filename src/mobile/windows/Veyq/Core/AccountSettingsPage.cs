@@ -709,11 +709,11 @@ internal sealed class AccountSettingsPage : IDisposable
         if (s.storage is not { } st)
         {
             if (s.storageUnavailable is not { } why) return;
-            _sections.Children.Add(Anchor("storage", Heading(Words.AccountSettingsStorage())));
+            _sections.Children.Add(Anchor("device-storage", Heading(Words.AccountSettingsStorage())));
             _sections.Children.Add(Caption(Said.Key(why)));
             return;
         }
-        _sections.Children.Add(Anchor("storage", Heading(Words.AccountSettingsStorage())));
+        _sections.Children.Add(Anchor("device-storage", Heading(Words.AccountSettingsStorage())));
         DrawLimit(s, st);
         _sections.Children.Add(Card("\uE713", Words.AccountSettingsStorageLimit(), [Words.AccountSettingsStorageLimitHint()], "settings-storage-limit-card", out _limitHolder, _limit, _unit, _setLimit));
         foreach (var (glyph, title, bytes, id) in new[]
