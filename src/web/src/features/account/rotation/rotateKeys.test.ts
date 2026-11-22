@@ -134,6 +134,8 @@ import { registerMemoriesLifecycle } from '../../../test/memoriesLifecycle'
 import { listScopeMembers } from '../../spaces/members'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { kitLayoutState, layoutOf, resetKitLayout } from '../emergencyKit/kitRecord'
+import { KIT_LAYOUT } from '../emergencyKit/emergencyKit'
 import { formatSecretKey, secretKeyBytes } from '@veyq/crypto/secretKey'
 import { grantContext, grantSignatureVerifies, recipientIdentityDigest, sealGrant } from '../../spaces/grant'
 import { raiseMarks, readMarks } from '../trustMarks'
@@ -953,7 +955,7 @@ describe('what securing the account posts (decision 7, ADR 0060 Decision 2)', ()
     const srv = fakeServer({ scopes: ordinaryScopes() })
     await rotate()
     expect(Object.keys(sent(srv)).sort()).toEqual([
-      'attestationSignature', 'authPublicKey', 'deviceRegister', 'identityPins', 'identityPublicKey', 'keyChainStep',
+      'attestationSignature', 'authPublicKey', 'deviceRegister', 'identityPins', 'identityPublicKey', 'keyChainStep', 'kitRecord',
       'passwordWrap', 'recoveryWrap', 'secretKeyProofPossession', 'secretKeyProofPublicKey', 'secretKeyProofSignature',
       'stageId', 'stagedGrantsDigest', 'unreadableScopeIds', 'wrappedIdentityPrivateKey',
     ])
@@ -1825,6 +1827,21 @@ describe('the pin store and the register ride in the publish (ADR 0060 § Conseq
     expect(req.identityPins.put).toEqual([])
     expect(req.deviceRegister.revision).toBe(0)
     expect(JSON.parse(dec.decode(v1.open(registerAt(1), vault.mk!, fromB64std(req.deviceRegister.blob))))).toEqual({ devices: {}, families: {}, wraps: {} })
+  })
+
+  // ADR 0157 decision 4: the ceremony printed (and the panel had kept) the new key's kit before the publish could be
+  // pressed, so its record rides in the request — under MK', replacing the one MK sealed — and the suggestion goes.
+  it('the kit record rides in the publish under the NEW Master Key, and this unlock then knows the kit is current', async () => {
+    resetKitLayout()
+    kitLayoutState.layout = 1 // an account whose last kit was of the older layout
+    const srv = fakeServer({ scopes: ordinaryScopes() })
+    await rotate()
+    const req = sent(srv)
+    expect(layoutOf(vault.mk!, req.kitRecord)).toBe(KIT_LAYOUT)
+    expect(KIT_LAYOUT).toBeGreaterThan(1) // control: the answer above is the record's, not the no-record default
+    expect(() => v1.open({ purpose: 'kit-record' }, MK, fromB64std(req.kitRecord))).toThrow() // not under the retired key
+    expect(kitLayoutState.layout).toBe(KIT_LAYOUT)
+    resetKitLayout()
   })
 
   it('control: a first attempt that lands is the only call', async () => {

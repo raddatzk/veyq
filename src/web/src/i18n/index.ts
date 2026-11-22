@@ -786,6 +786,38 @@ const en = {
     pdfKeep3: 'Could someone else have it? Secure your account in veyq – you get a new kit.',
     pdfHelp: 'Help: {url}',
     pdfHelpUrl: 'https://veyq.app/account/forgot-password/',
+    // What each kit layout (`KIT_LAYOUT`, ADR 0157 decision 2) does better than the one before: one sentence per layout
+    // from 2, shown wherever a clearer kit is suggested. Raising KIT_LAYOUT adds its sentence here, in both languages.
+    layoutNews: {
+      2: 'The new kit labels your Secret Key “9 blocks in 3 lines”, so nobody types the first line alone.',
+    },
+    // Settings → Security: which kit the account last made (uc.account.renew-emergency-kit).
+    status: {
+      title: 'Emergency Kit',
+      sub: 'Together with your password, it gets you back into your account.',
+      current: 'Your Emergency Kit is current.',
+      older: 'A clearer Emergency Kit exists.',
+      keepsWorking: 'The kit you have keeps working: your Secret Key stays the same.',
+      make: 'Make a new kit',
+      unreadable: 'Which kit you have could not be read just now. Try again later.',
+    },
+    renew: {
+      title: 'Make a new Emergency Kit',
+      sub: 'Enter your password and your Secret Key – type it, or upload or scan your kit. The new kit carries the same Secret Key.',
+      passwordLabel: 'Password',
+      secretKeyLabel: 'Secret Key',
+      check: 'Check and make the kit',
+      refused: 'That password or Secret Key didn’t match, so no kit was made.',
+      failed: 'The check didn’t go through, so no kit was made. Check your connection and try again.',
+      done: 'Done. Once the new kit is kept safe, you can destroy the old sheet.',
+      notNoted: 'Your new kit is saved and works. veyq could not note that you made it, so it may suggest a new kit again – making one again only updates that.',
+    },
+    // The shell's one-time notice (ADR 0157 decision 5); its body is the layout's sentence and `status.keepsWorking`.
+    notice: {
+      title: 'A clearer Emergency Kit exists',
+      open: 'Go to your kit',
+      dismiss: 'Not now',
+    },
   },
   password: {
     minLength: 'Use at least 10 characters.',
@@ -3051,6 +3083,34 @@ const de: typeof en = {
     pdfKeep3: 'Könnte es jemand anderes haben? Sichere dein Konto in veyq ab – dann bekommst du ein neues Kit.',
     pdfHelp: 'Hilfe: {url}',
     pdfHelpUrl: 'https://veyq.app/de/account/forgot-password/',
+    layoutNews: {
+      2: 'Im neuen Kit steht bei deinem Secret Key „9 Blöcke in 3 Zeilen“, damit niemand nur die erste Zeile eintippt.',
+    },
+    status: {
+      title: 'Notfall-Kit',
+      sub: 'Zusammen mit deinem Passwort bringt es dich zurück in dein Konto.',
+      current: 'Dein Notfall-Kit ist aktuell.',
+      older: 'Es gibt ein übersichtlicheres Notfall-Kit.',
+      keepsWorking: 'Dein bisheriges Kit funktioniert weiter: Dein Secret Key bleibt derselbe.',
+      make: 'Neues Kit erstellen',
+      unreadable: 'Welches Kit du hast, ließ sich gerade nicht lesen. Versuch es später nochmal.',
+    },
+    renew: {
+      title: 'Neues Notfall-Kit erstellen',
+      sub: 'Gib dein Passwort und deinen Secret Key ein – tippe ihn ein, lade dein Kit hoch oder scanne es. Das neue Kit trägt denselben Secret Key.',
+      passwordLabel: 'Passwort',
+      secretKeyLabel: 'Secret Key',
+      check: 'Prüfen und Kit erstellen',
+      refused: 'Passwort oder Secret Key passen nicht, deshalb wurde kein Kit erstellt.',
+      failed: 'Die Prüfung hat nicht geklappt, deshalb wurde kein Kit erstellt. Prüfe deine Verbindung und versuche es erneut.',
+      done: 'Fertig. Sobald das neue Kit sicher verwahrt ist, kannst du das alte Blatt vernichten.',
+      notNoted: 'Dein neues Kit ist gespeichert und funktioniert. veyq konnte sich nicht merken, dass du es erstellt hast, und schlägt vielleicht wieder ein neues vor – ein erneutes Erstellen holt nur das nach.',
+    },
+    notice: {
+      title: 'Es gibt ein übersichtlicheres Notfall-Kit',
+      open: 'Zum Notfall-Kit',
+      dismiss: 'Jetzt nicht',
+    },
   },
   password: {
     minLength: 'Mindestens 10 Zeichen verwenden.',

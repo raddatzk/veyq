@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // "Secure your account" — the settings hub's security rubric (uc.account.rotate-keys, ADR 0060, cr-secure-the-account
 // decisions 7, 11, 13). Its first section is the account's email address (`EmailAddressSection`,
-// uc.account.confirm-email-address); everything below it is the ceremony that ends a compromise: the identity, the
+// uc.account.confirm-email-address), its second the account's Emergency Kit (`EmergencyKitStatus`,
+// uc.account.renew-emergency-kit); everything below them is the ceremony that ends a compromise: the identity, the
 // Master Key and the Secret Key are replaced together, a new Emergency Kit is issued, and the person stays inside every
 // space they were in. The mechanism is `rotateKeys` / `finishRotation`; this file is the ceremony around it.
 //
@@ -52,6 +53,7 @@ import PasswordBreachNotice from '../PasswordBreachNotice.vue'
 import EmailAddressSection from '../email/EmailAddressSection.vue'
 import TrustResetLink from '../trustReset/TrustResetLink.vue'
 import EmergencyKitSave from '../emergencyKit/EmergencyKitSave.vue'
+import EmergencyKitStatus from '../emergencyKit/EmergencyKitStatus.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import { resealingScopes } from '../../spaces/scopeRekey'
 
@@ -259,6 +261,8 @@ async function renewClosed() {
     <!-- The address a reset would mail, and whether it is confirmed (uc.account.confirm-email-address) — the
          rubric's first section, above the ceremony that ends a compromise. -->
     <EmailAddressSection />
+    <!-- Which Emergency Kit the account has, and a clearer one where it exists (uc.account.renew-emergency-kit). -->
+    <EmergencyKitStatus />
     <section class="settings-form">
       <div class="settings-section-header">
         <div>

@@ -60,7 +60,9 @@ export function acceptOwnership(bootstrapSecret: string): Promise<void> {
  *  the caller's per-tenant handle; `name` is the OPTIONAL real name sealed at join (ADR 0023) and `avatar` the OPTIONAL
  *  profile picture sealed alongside it (ADR 0084 decision 7), each under a fresh value key `K_tenant` wraps
  *  (`memberName.ts` `sealName`, `memberAvatar.ts` `sealAvatar`, ADR 0115) — every joiner holds `K_tenant` here, from the cold birth or its invite's grant. `birth` is set for an OWNER invite (cold-births the
- *  TENANT scope), `join` for a MEMBER invite (ADR 0111 decision 3). */
+ *  TENANT scope), `join` for a MEMBER invite (ADR 0111 decision 3). `kitRecord` is the new account's kit record, sealed
+ *  under its Master Key (`sealKitRecord`, ADR 0157 decision 4): the birth writes it with the account; a caller that
+ *  passes none (the dev seeder) births an account that reads as layout 1. */
 export function registerAndAccept(
   bootstrapSecret: string,
   userId: string,
@@ -71,6 +73,7 @@ export function registerAndAccept(
   avatar?: SealedMemberAvatar,
   join?: MemberJoin,
   email?: string,
+  kitRecord?: string,
 ): Promise<TenantActivatedWithUser> {
   return tenantsApi().registerAndAcceptTenantInvite({
     registerAndAcceptRequest: {
@@ -92,6 +95,7 @@ export function registerAndAccept(
       ...name,
       ...avatar,
       epoch: profileEpoch(birth, join),
+      ...(kitRecord !== undefined ? { kitRecord } : {}),
     },
   })
 }

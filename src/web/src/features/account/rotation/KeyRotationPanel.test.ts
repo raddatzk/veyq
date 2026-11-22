@@ -72,6 +72,7 @@ const stubs = {
   VeyqPassword: field,
   SecretKeyField: field,
   EmailAddressSection: true,
+  EmergencyKitStatus: true, // its own suite: EmergencyKitStatus.test.ts
   TrustResetLink: true,
   PasswordBreachNotice: true,
 }

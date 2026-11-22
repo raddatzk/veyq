@@ -64,6 +64,25 @@ describe('checkColdCredential (a locked vault, too)', () => {
     expect((stale as ColdCredentialRefused).reason).toBe('credentialRejected')
   }, PRODUCTION_ARGON_TIMEOUT_MS * 2)
 
+  // ADR 0157 decision 5: the address change seals the kit record with the Master Key the proof opened — handed to `use`
+  // once the proof passed, zeroed after it, locked vault or not; a refusal hands nothing.
+  it('hands the proven Master Key to `use` before zeroing it, with the vault locked and unlocked', async () => {
+    for (const vault of [null, MK]) {
+      held.mk = vault
+      let seen: number[] = []
+      let handed: Uint8Array | undefined
+      await checkColdCredential(PASSWORD, formatSecretKey(SECRET_KEY), (mk) => {
+        handed = mk
+        seen = [...mk]
+      })
+      expect(seen, vault ? 'unlocked' : 'locked').toEqual([...MK])
+      expect(handed!.every((b) => b === 0), 'zeroed after use').toBe(true)
+    }
+    const use = vi.fn()
+    await refusal(checkColdCredential(PASSWORD, formatSecretKey(SECRET_KEY).slice(0, 20), use))
+    expect(use).not.toHaveBeenCalled()
+  }, PRODUCTION_ARGON_TIMEOUT_MS * 2)
+
   it('refuses a typed key that does not read as one — a typo or not a key at all — before anything is fetched', async () => {
     const right = formatSecretKey(SECRET_KEY)
     const typo = right.slice(0, -1) + (right.endsWith('A') ? 'B' : 'A')

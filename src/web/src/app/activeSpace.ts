@@ -24,6 +24,7 @@ import { refreshMyInvitations, clearMyInvitations } from '../features/spaces/inv
 import { isUnlocked } from './vault'
 import { handleTenantSuspended } from './tenantSuspension'
 import { TrustStateRefused, refusalMessageKey } from '../features/account/trustMarks'
+import { resetKitLayout } from '../features/account/emergencyKit/kitRecord'
 
 export type SpaceStatus = 'idle' | 'loading' | 'ready' | 'no-tenant' | 'error'
 
@@ -241,6 +242,7 @@ export function clearActiveSpace(): void {
   resetCovers() // …nor the decrypted covers (core's, inbox #411)
   resetPeopleDirectory() // …nor the decrypted names and the profile pictures' object URLs (core's, ADR 0084)
   resetSearchIndex() // …nor the search's documents of every space (core's, ADR 0125 decision 2)
+  resetKitLayout() // …nor what the kit record said (ADR 0157 decision 6): the next unlock reads it again
   registry.scopeReset() // …nor what an application decrypted (Memories' covers)
 }
 

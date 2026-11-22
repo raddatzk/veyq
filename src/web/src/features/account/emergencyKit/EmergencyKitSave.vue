@@ -3,6 +3,8 @@
 // shows the raw Secret Key: the user downloads the kit PDF, then confirms they stored it — only then is it
 // "ready". The parent owns the follow-on action button and gates it on the v-model (ready = downloaded AND
 // confirmed). Renders the kit PDF in the user's language, then saves it. Pass the intro copy via the default slot.
+// `kept` is emitted once, when the kit was saved and confirmed kept: a host that writes the account's kit record with a
+// `PUT` (the address change, the renewal) writes then, never at render (ADR 0157 decision 4).
 import { ref, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
@@ -13,6 +15,7 @@ import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
 const props = defineProps<{ email: string; secretKey: string }>()
 const ready = defineModel<boolean>({ default: false })
+const emit = defineEmits<{ kept: [] }>()
 const { t, locale } = useI18n()
 
 const downloaded = ref(false)
@@ -20,8 +23,13 @@ const confirmed = ref(false)
 const failed = ref(false)
 
 // Ready only once the kit is both downloaded and confirmed-saved (the confirm stays disabled until download).
+let kept = false
 watchEffect(() => {
   ready.value = downloaded.value && confirmed.value
+  if (ready.value && !kept) {
+    kept = true
+    emit('kept')
+  }
 })
 
 async function download() {

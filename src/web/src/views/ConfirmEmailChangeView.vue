@@ -10,7 +10,8 @@
 // pasted, or imported from the old kit), and the kit — EmergencyKitSave's, with the address the server now holds — is
 // offered ONLY once they pass the shared cold-credential check against the stored floor (`checkColdCredential`, the
 // request's check, usable with a locked vault). A kit printed from a mistyped key fails exactly when it is needed, so
-// a key that does not pass prints nothing.
+// a key that does not pass prints nothing. The check seals the account's kit record with the Master Key it opened
+// (ADR 0157 decision 4) and the record is written once the kit was saved and kept — never at render.
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -28,6 +29,7 @@ import { secretKeyReady } from '../shared/ui/secretKeyEntry'
 import VeyqPassword from '../shared/ui/VeyqPassword.vue'
 import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.vue'
 import { ColdCredentialRefused, checkColdCredential } from '../features/account/coldCredential'
+import { sealKitRecord, writeKitRecord } from '../features/account/emergencyKit/kitRecord'
 import { useAsyncAction } from '../shared/state/useAsyncAction'
 
 const { t } = useI18n()
@@ -42,13 +44,20 @@ const secretKey = ref('')
 const checkedKey = ref('')
 const kitError = ref('')
 const kitReady = ref(false)
+// The kit record of the kit printed from `checkedKey`, sealed by the check that passed it: written when that kit is kept.
+let kitRecord: string | null = null
 
 const { run: checkKit, pending: checking } = useAsyncAction(
   async () => {
     kitError.value = ''
     checkedKey.value = ''
+    kitRecord = null
     const key = secretKey.value.trim()
-    await checkColdCredential(kitPassword.value, key)
+    let sealed: string | null = null
+    await checkColdCredential(kitPassword.value, key, (mk) => {
+      sealed = sealKitRecord(mk)
+    })
+    kitRecord = sealed
     checkedKey.value = key
     kitPassword.value = ''
   },
@@ -61,7 +70,17 @@ const { run: checkKit, pending: checking } = useAsyncAction(
 
 function onKeyInput(value: string) {
   secretKey.value = value
-  if (value.trim() !== checkedKey.value) checkedKey.value = ''
+  if (value.trim() !== checkedKey.value) {
+    checkedKey.value = ''
+    kitRecord = null
+  }
+}
+
+/** The new kit was saved and kept: the account's record now says its layout. Best-effort — the kit is valid either way,
+ *  and a record that did not land only leaves a suggestion of a kit the person already has (uc.account.renew-emergency-kit E3). */
+function onKitKept() {
+  const sealed = kitRecord
+  if (sealed) void writeKitRecord(sealed).catch(() => undefined)
 }
 
 async function consumeFragment() {
@@ -137,7 +156,7 @@ onUnmounted(() => window.removeEventListener('hashchange', consumeFragment))
               :loading="checking"
             />
           </form>
-          <EmergencyKitSave v-if="checkedKey" v-model="kitReady" :email="newEmail" :secret-key="checkedKey" />
+          <EmergencyKitSave v-if="checkedKey" v-model="kitReady" :email="newEmail" :secret-key="checkedKey" @kept="onKitKept" />
         </section>
 
         <VeyqButton :label="t('emailConfirm.toSettings')" icon="cog" @click="router.push('/settings/security')" />
