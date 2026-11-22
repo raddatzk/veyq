@@ -6,6 +6,9 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+// A bare instance on purpose: this test compiles the generated words alone, mounts no component, and must not see the
+// real catalog's own keys (realI18n's).
+// eslint-disable-next-line no-restricted-imports
 import { createI18n } from 'vue-i18n'
 import generated from './words.generated.json'
 
