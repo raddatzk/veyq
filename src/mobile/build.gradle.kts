@@ -46,6 +46,8 @@ val vectors = rootDir.resolve("../../contracts/crypto/vectors/v1.json").canonica
 val kitFixtures = rootDir.resolve("../web/src/features/account/emergencyKit/__fixtures__").canonicalFile
 // The import cases and the web's download both clients answer to (ADR 0152 decision 4), on the JVM and Apple.
 val importCases = rootDir.resolve("../../contracts/export/import-cases").canonicalFile
+// The kinds' facts the registry answers (`KindsContractTest`, inbox #1061), on the JVM.
+val kinds = rootDir.resolve("../../contracts/platform/kinds").canonicalFile
 val utf8procNormalizationTest = rootDir.resolve("build/utf8proc/NormalizationTest.txt")
 
 subprojects {
@@ -217,8 +219,8 @@ subprojects {
             tasks.matching { it.name.startsWith("compile") || it.name.endsWith("SourcesJar") }.configureEach { dependsOn(generateApi) }
         }
 
-        // What every module's tests read: the crypto vectors, the kit's fixtures, the import cases, a live run's
-        // environment (`VEYQ_LIVE`, …), the search's opt-in volume measurement (`VEYQ_MEASURE`).
+        // What every module's tests read: the crypto vectors, the kit's fixtures, the import cases, the kinds' facts, a live
+        // run's environment (`VEYQ_LIVE`, …), the search's opt-in volume measurement (`VEYQ_MEASURE`).
         tasks.withType<Test>().configureEach {
             systemProperty("veyq.vectors", vectors.absolutePath)
             systemProperty("veyq.repoRoot", rootDir.resolve("../..").canonicalPath)
@@ -234,6 +236,7 @@ subprojects {
             inputs.file(vectors).withPropertyName("vectors")
             inputs.dir(kitFixtures).withPropertyName("kitFixtures")
             inputs.dir(importCases).withPropertyName("importCases")
+            inputs.dir(kinds).withPropertyName("kinds")
         }
         tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
             environment("VEYQ_VECTORS", vectors.absolutePath)
