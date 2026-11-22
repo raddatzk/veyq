@@ -9,10 +9,12 @@ name: Publish
 # `$GITHUB_SHA`'s. This file runs no pipeline and builds nothing: it publishes only when that commit's newest Checks
 # push run concluded `success` with its gate and every lane leg on both architectures green, and refuses, red and named,
 # otherwise — a run still going, red, or cancelled by hand included (re-run it, or push again; this file never starts
-# Checks). Written once, never replaced: a commit that already carries its `snapshot-` tag publishes nothing, with a
-# notice. Two triggers, and no other: the weekly `schedule` (on `main` only: GitHub runs a schedule on the default
-# branch alone) and a `workflow_dispatch` (Actions → Publish → Run workflow, on `main` or `release/<major>.x`).
-# The weekly run also deletes old staging images (`staging-retention`).
+# Checks). Written once, never replaced: a commit that already carries its `snapshot-` tag — or its release's `v` tag,
+# since a release deletes the snapshot tag — publishes nothing, with a notice. Two triggers, and no other: the weekly
+# `schedule` (on `main` only: GitHub runs a schedule on the default branch alone) and a `workflow_dispatch` (Actions →
+# Publish → Run workflow, on `main` or `release/<major>.x`). A snapshot of `main` also gets its release draft
+# (`release-draft`), which the owner reads before running Release. The weekly run also deletes old staging images
+# (`staging-retention`).
 #
 # This file signs SNAPSHOTS. Keyless signing names the workflow file that holds the signing job, so a snapshot's
 # identity is `.github/workflows/publish.yml` on `main` or `release/<major>.x`. A release is a promotion of a snapshot,
@@ -366,6 +368,66 @@ jobs:
           gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
             --raw-field "ref=refs/tags/${tag}" --raw-field "sha=${COMMIT}" > /dev/null
           echo "refs/tags/${tag} now names ${COMMIT}"
+
+  # The release draft (cr-release-draft-from-publish): the snapshot's notes, gathered from the `## Release note` section
+  # of every pull request merged since the last release, as the one draft release.yml promotes — so the owner reads it
+  # and runs Release (the run stays the owner's: nothing here starts it, and a draft starts no workflow). On `main` only:
+  # a fix release on `release/<major>.x` is drafted by hand, beside no second draft. scripts/release_notes.py decides
+  # (create, update its own untouched draft, or leave a draft a person edited); the one write is this job's own line,
+  # and it never publishes (`draft: true` is the payload's, checked before the write). It runs no third-party code:
+  # the script is the standard library and `gh`.
+  release-draft:
+    name: Write the release draft
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - checks-run
+      - snapshot-tag
+    if: ${{ !cancelled() && needs.snapshot-tag.result == 'success' && github.ref_name == 'main' }}
+    permissions:
+      contents: write # listing and writing a draft release (GitHub lists drafts only to push access)
+      pull-requests: read # each merged pull request's release note
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The range runs from the last release tag to the snapshot's commit: the whole history and every tag.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Decide the draft
+        id: plan
+        env:
+          VERSION: ${{ needs.checks-run.outputs.version }}
+          COMMIT: ${{ needs.checks-run.outputs.commit }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 scripts/release_notes.py draft --repository "$GITHUB_REPOSITORY" --version "$VERSION" \
+            --commit "$COMMIT" --branch "$GITHUB_REF_NAME" --out "${RUNNER_TEMP}/draft" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "action=$(jq -r .action "${RUNNER_TEMP}/draft/plan.json")" >> "$GITHUB_OUTPUT"
+          echo "draft_id=$(jq -r .draft_id "${RUNNER_TEMP}/draft/plan.json")" >> "$GITHUB_OUTPUT"
+
+      # The one write: a draft created, or this script's own untouched draft moved onto the new snapshot. Never
+      # `draft: false` — publishing is release.yml's alone.
+      - name: Write the draft
+        if: steps.plan.outputs.action == 'create' || steps.plan.outputs.action == 'update'
+        env:
+          ACTION: ${{ steps.plan.outputs.action }}
+          DRAFT_ID: ${{ steps.plan.outputs.draft_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          payload="${RUNNER_TEMP}/draft/payload.json"
+          if [[ "$(jq -r .draft "$payload")" != "true" ]]; then
+            echo "::error::the payload is not a draft — publishing is release.yml's alone" >&2
+            exit 1
+          fi
+          if [[ "$ACTION" == "create" ]]; then
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/releases" --input "$payload" --jq .html_url
+          else
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${DRAFT_ID}" --input "$payload" --jq .html_url
+          fi
 
   # The staging images Checks pushes (`build-<sha>-<arch>`, one per push, image and architecture) are deleted 30 days
   # after their push, unless the commit is a branch tip — far beyond the week between two scheduled snapshots, and the
