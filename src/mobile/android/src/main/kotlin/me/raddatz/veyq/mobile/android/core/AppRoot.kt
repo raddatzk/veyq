@@ -66,7 +66,7 @@ fun AppRoot(model: AppModel) {
                 onKit = model::readKit, onClearKit = model::clearKit, onScanKit = model::scanKit, kitScan = kitScan, onCloseKitScan = model::closeKitScan,
                 onScanFromTrusted = model::scanFromTrusted, onShowForSignIn = model::showForSignIn, onOpenLink = model.guests::ask,
             )
-            is Screen.Unlock -> UnlockScreen(s, model::unlock, model::otherAccount, onOpenLink = model.guests::ask)
+            is Screen.Unlock -> UnlockScreen(s, model::unlock, model::otherAccount, onForget = model::forgetUnlocked, onOpenLink = model.guests::ask)
             is Screen.Signed -> offer?.let { OfferScreen(it, trustWorking, model::answerOffer) }
                 ?: settings?.let { SettingsScreen(it, model.settingsActions, maps, at = settingsAt, onAt = model::settingsAtSeen) }
                 ?: s.managing?.let { ManageScreen(it, model) } ?: ShellScreen(s, model)
@@ -261,10 +261,12 @@ private fun StartingScreen() {
 
 /**
  * An account this device trusts (ADR 0123 decision 8): the password alone for a password-trusted one, a button that
- * asks for the person's authentication again for a remembered one; and the way to another account.
+ * asks for the person's authentication again for a remembered one; then the core's entries under it (`UnlockPlan`,
+ * ADR 0154 decision 2), whole and in their order — the way to another account, *Open a link*, and *Stop trusting this
+ * device* in the error colour (inbox #1052), asked first by the core where writes made offline wait.
  */
 @Composable
-fun UnlockScreen(state: Screen.Unlock, onUnlock: (String) -> Unit, onOther: () -> Unit, onOpenLink: (() -> Unit)? = null) {
+fun UnlockScreen(state: Screen.Unlock, onUnlock: (String) -> Unit, onOther: () -> Unit, onForget: () -> Unit, onOpenLink: (() -> Unit)? = null) {
     var password by rememberSaveable { mutableStateOf("") }
     val remembered = state.record.method == me.raddatz.veyq.mobile.session.TrustedDevice.Method.DEVICE_KEY
     // a remembered account's words follow its record's level: the presence level asks again; at LOGIN nothing asks, so
@@ -296,19 +298,26 @@ fun UnlockScreen(state: Screen.Unlock, onUnlock: (String) -> Unit, onOther: () -
                 visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
         }
         state.error?.let { Text(say(it), color = MaterialTheme.colorScheme.error) }
-        Button(
-            onClick = { onUnlock(password) },
-            enabled = !state.working,
-            shape = MaterialTheme.shapes.small,
-            colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
-            modifier = Modifier.fillMaxWidth().height(44.dp),
-        ) {
-            if (state.working) CircularProgressIndicator(Modifier.height(20.dp)) else Text(stringResource(if (login) R.string.unlock_retry else R.string.unlock_submit))
+        for (entry in me.raddatz.veyq.mobile.session.UnlockPlan.entries(inExtension = false)) when (entry) {
+            me.raddatz.veyq.mobile.session.UnlockEntry.SUBMIT -> Button(
+                onClick = { onUnlock(password) },
+                enabled = !state.working,
+                shape = MaterialTheme.shapes.small,
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
+                modifier = Modifier.fillMaxWidth().height(44.dp),
+            ) {
+                if (state.working) CircularProgressIndicator(Modifier.height(20.dp)) else Text(stringResource(if (login) R.string.unlock_retry else R.string.unlock_submit))
+            }
+            me.raddatz.veyq.mobile.session.UnlockEntry.OTHER_ACCOUNT ->
+                androidx.compose.material3.TextButton(onClick = onOther, enabled = !state.working, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.unlock_other))
+                }
+            me.raddatz.veyq.mobile.session.UnlockEntry.OPEN_LINK -> onOpenLink?.let { OpenLinkButton(it) }
+            me.raddatz.veyq.mobile.session.UnlockEntry.FORGET ->
+                androidx.compose.material3.TextButton(onClick = onForget, enabled = !state.working, modifier = Modifier.fillMaxWidth().testTag("unlock-forget")) {
+                    Text(stringResource(R.string.manage_forget_device), color = MaterialTheme.colorScheme.error)
+                }
         }
-        androidx.compose.material3.TextButton(onClick = onOther, enabled = !state.working, modifier = Modifier.fillMaxWidth()) {
-            Text(stringResource(R.string.unlock_other))
-        }
-        onOpenLink?.let { OpenLinkButton(it) }
     }
 }
 
