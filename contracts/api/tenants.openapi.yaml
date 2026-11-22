@@ -1900,8 +1900,9 @@ paths:
       description: >
         What this tenant offers (ADR 0088 decision 3): every register entry that is active at the instance level AND
         at this tenant's level, along the whole path, in catalog order. A client reads it after sign-in for the tenant
-        of the space it opened and soft-gates on it as on the pre-auth manifest of `GET /api/setup`, which carries the
-        instance level alone. A tenant only narrows, so this set is a subset of that manifest. The same for every
+        of the space it opened and soft-gates on it as on the pre-auth manifest of `GET /api/setup`, which carries this
+        same set when asked on the tenant's domain and the instance level on a host that claims no tenant. A tenant
+        only narrows, so this set is a subset of the instance level. The same for every
         member of the tenant; every member may read it. The gates follow the same set (`422 capability_disabled`).
         Beside it, `applicationErasures` names the day each switched-off application's content in the tenant is
         erased (uc.platform.erase-switched-off-application), which the banner at the top of veyq shows.

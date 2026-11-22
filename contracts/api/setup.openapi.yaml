@@ -18,7 +18,8 @@ info:
     **Cross-origin** ([ADR 0121](../../docs/decisions/0121-a-received-share-is-browsed-in-place-through-its-own-api.md)
     decision 3). `GET /api/setup` answers any origin while `core.public-shares.embeddable` is effective at the instance
     level: another instance's client reads it to decide whether this instance's links can be browsed in place (its
-    major and its capabilities). A CORS preflight is answered `204` and every answer carries
+    major and its capabilities). The grant stays the instance's while the list is the domain's tenant's, so a tenant that
+    switched `.embeddable` off is still readable and tells the reader so by the entry's absence. A CORS preflight is answered `204` and every answer carries
     `Access-Control-Allow-Origin: *` and `Cross-Origin-Resource-Policy: cross-origin`, exactly as the guest share
     operations do (`sharing.openapi.yaml` § Cross-origin); never `Access-Control-Allow-Credentials`. `/api/setup/owner`
     stays same-origin. A preflight is HTTP, not an operation, so no `options` is declared here.
@@ -144,14 +145,17 @@ components:
         capabilities:
           type: array
           description: >
-            The instance's ACTIVE capability manifest (ADR 0032, ADR 0088), the instance level only: a tenant owner's
-            narrowing is delivered after sign-in (`getTenantCapabilities`). The abilities this build supports,
+            The ACTIVE capability manifest (ADR 0032, ADR 0088) of the domain the request arrived on: for a tenant's
+            domain that tenant's effective set (the instance level ANDed with the tenant owner's switches, as
+            `getTenantCapabilities` delivers it after sign-in), for a host that claims no tenant the instance level
+            alone (inbox #1067: another instance reads it to decide whether a link of this domain may be embedded,
+            ADR 0121 decision 4). The abilities this build supports,
             sourced from the catalog contracts/platform/capabilities.json, minus the ids the Server Owner switched
             off (`setInstanceCapability`, which acts without a restart). An id is listed only when it and every ancestor entry
             are active (the AND along the path), so a switched-off parent drops its children too; the server
             computes that, and a client reads each leaf id without ANDing. Pre-auth, identity-free and identical
-            for every caller (operator-blind-safe) — it advertises only instance-wide abilities, never per-user
-            data. A client soft-gates each optional feature on the presence of its id (absent => hidden). The
+            for every caller of one domain (operator-blind-safe) — it advertises only what the instance or the
+            domain's tenant serves, never per-user data. A client soft-gates each optional feature on the presence of its id (absent => hidden). The
             wire shape is intentionally [{ id }]; the catalog's serves[]/source metadata stays off the wire.
           items: { $ref: "#/components/schemas/Capability" }
           example:

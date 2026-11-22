@@ -6,7 +6,8 @@ import jakarta.enterprise.context.ApplicationScoped
 /**
  * Computes the **active** capability set (ADR 0032, ADR 0088), at the instance level and for a tenant. It is read in
  * places that together make switching off honest:
- *  - the **setup manifest** (pre-auth, the instance level alone), and the **tenant's set** a member reads after sign-in
+ *  - the **setup manifest** (pre-auth, for the tenant whose domain it is asked on, the instance level on any other host —
+ *    `SetupHandler.state`, inbox #1067), and the **tenant's set** a member reads after sign-in
  *    (`GET /api/tenants/{tenantId}/capabilities`) — UX hints the client soft-gates on;
  *  - each feature's **gate** (the hard `422 capability_disabled` — the server is the authority, so a stale or
  *    ignoring client still cannot use a switched-off capability).
@@ -19,8 +20,8 @@ import jakarta.enterprise.context.ApplicationScoped
  *
  * **Every gate names its tenant** ([isActive]'s `tenantId` has no default): the tenant of the scope the request acts
  * in, so a switch reaches that tenant's content and no other's. `null` asks the instance level alone, which is the
- * whole answer for the pre-auth manifest and for an entry outside [CapabilityIds.TENANT_SWITCHABLE] (a tenant row for
- * one is never stored, and would be ignored here).
+ * whole answer for the pre-auth manifest on a host that claims no tenant and for an entry outside
+ * [CapabilityIds.TENANT_SWITCHABLE] (a tenant row for one is never stored, and would be ignored here).
  *
  * [switches] and [tenantSwitches] are asked on every call and the registry keeps nothing, so a switch flipped through
  * the Admin API or by a tenant owner acts without a restart; what is cached, and how a write reaches it, is
@@ -34,7 +35,7 @@ class CapabilityRegistry(
     private val requirementValues: CapabilityRequirementValues,
     private val services: ExternalServiceAddresses,
 ) {
-    /** The instance's active capability ids, in [CapabilityIds.ADVERTISED] order — the pre-auth manifest. */
+    /** The instance's active capability ids, in [CapabilityIds.ADVERTISED] order — the instance level alone. */
     val active: List<String>
         get() = active(null)
 

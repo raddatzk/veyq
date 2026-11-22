@@ -9,6 +9,7 @@ import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.GROUP_SPACE
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES_CONTRIBUTE
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES_DROP_BOX
+import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.PUBLIC_SHARES_EMBEDDABLE
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds.REMEMBER_DEVICE
 import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchFixtures
 import me.raddatz.veyq.core.platform.capabilities.TenantCapabilitySwitchEntity
@@ -117,7 +118,8 @@ class TenantCapabilitySwitchesSliceTest {
             .body("capabilities.id", not(hasItem(PUBLIC_SHARES)))
             .body("capabilities.id", not(hasItem(PUBLIC_SHARES_DROP_BOX))) // the AND along the path
             .body("capabilities.id", hasItems(GROUP_SPACE, REMEMBER_DEVICE))
-        // The pre-auth manifest is the instance level alone: the tenant's switch is not in it.
+        // Asked on a host that claims no tenant, the pre-auth manifest is the instance level: the tenant's switch is not
+        // in it. Asked on the tenant's own domain it is (the next test).
         given().`when`().get("/api/setup").then().statusCode(200).body("capabilities.id", hasItem(PUBLIC_SHARES))
 
         val register = given().header("Authorization", bearer(t.owner)).`when`().get("/api/tenants/${t.id}/capability-switches")
@@ -131,6 +133,32 @@ class TenantCapabilitySwitchesSliceTest {
         setSwitch(t.owner, t.id, PUBLIC_SHARES, false).then().statusCode(200).body("effective", equalTo(true))
         setSwitch(t.owner, t.id, PUBLIC_SHARES, false).then().statusCode(200) // the state it has: no change, same answer
         assertEquals(0L, QuarkusTransaction.requiringNew().call { TenantCapabilitySwitchEntity.count() })
+    }
+
+    /**
+     * Inbox #1067: a tenant owner switched *Links shown on other servers* off, and the setup manifest asked on that
+     * tenant's domain went on listing `core.public-shares.embeddable`, so another instance's page embedded the share. The
+     * manifest answers for the tenant whose domain serves the request (ADR 0088 decision 3, ADR 0121 decision 4); the
+     * next request after the switch reads it, and switched back on, it is listed again.
+     */
+    @Test
+    fun theSetupManifestOnATenantsDomainFollowsThatTenantsSwitchAtOnce() {
+        val t = ownedTenant()
+        val other = ownedTenant()
+        fun manifestOn(tenantId: String): List<String> =
+            given().header("X-Forwarded-Host", "t-$tenantId.example.com").`when`().get("/api/setup")
+                .then().statusCode(200).extract().jsonPath().getList("capabilities.id")
+
+        assertEquals(CapabilityIds.ADVERTISED, manifestOn(t.id), "nothing switched: the tenant's domain serves every id")
+
+        setSwitch(t.owner, t.id, PUBLIC_SHARES_EMBEDDABLE, true).then().statusCode(200).body("effective", equalTo(false))
+        assertEquals(CapabilityIds.ADVERTISED - PUBLIC_SHARES_EMBEDDABLE, manifestOn(t.id), "switched off: the next manifest")
+        // Controls: another tenant's domain and a host that claims no tenant are not narrowed by it.
+        assertEquals(CapabilityIds.ADVERTISED, manifestOn(other.id), "another tenant's domain")
+        given().`when`().get("/api/setup").then().statusCode(200).body("capabilities.id", equalTo(CapabilityIds.ADVERTISED))
+
+        setSwitch(t.owner, t.id, PUBLIC_SHARES_EMBEDDABLE, false).then().statusCode(200).body("effective", equalTo(true))
+        assertEquals(CapabilityIds.ADVERTISED, manifestOn(t.id), "switched back on: listed again")
     }
 
     @Test
