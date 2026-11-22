@@ -91,3 +91,19 @@ Each entry: question, options, choice and why, evidence (measured with its comma
   exporter and folder upload keep across a directory. *Options:* an opaque handle per directory; an external interface
   (`has`, `add`) a `Set<string>` satisfies. *Choice:* the external interface — the callers keep their sets, no handle to
   track; the core's `ArchiveName.of` takes its own small `Taken` interface, a `MutableSet` adapter on the apps.
+- **D6 — Where the core and the web answered apart, the web's answer won** (ADR 0154's rule; each a vector case now). The
+  core's `Sniff` had no SVG rule (#1059's half: added); read a Matroska file by `"matroska"` anywhere in its first 64 bytes
+  where the web reads the EBML `DocType` element in the first KiB (`ebmlDocType`, ported: a DocType past byte 64 is Matroska,
+  a `matroska` that is not the DocType is WebM); and said only whether a head is text, not in which encoding (`textEncoding`).
+  `DownloadName`'s table lacked the six audio rows the web added for music tracks (ADR 0135), so an app's track download got
+  no extension. And the core's `extensionOf`, `HAS_EXTENSION` and `trim` read the JVM's white space (`\s` ASCII on the JVM,
+  `isWhitespace` elsewhere): JavaScript's set now (`JsText`), so `a.b c` has no extension on any client. *Evidence:*
+  measured, the vectors recorded from the web (phase 2) answered by the core (`:core:jvmTest --tests '*FileFactsVectorsTest*'`:
+  10 tests, 0 failures) and rewritten by it byte for byte (`VEYQ_WRITE_VECTORS=1 …`, `cmp` against phase 2's file). *Cost:* an
+  app user sees a Matroska/WebM file read as the web reads it, and a track saved as `.mp3`.
+- **D7 — No `Regex`, `HashMap` or `Pair` on the path.** `Sniff`'s sets became `when`s, its UTF-8 reading one loop without a
+  `Pair` per byte, `extensionOf`/`hasExtension`/the SVG prolog/`ArchiveName`'s forbidden, reserved and trailing rules hand loops
+  (ADR 0155's traps). The apps' API stays (`Sniff.isText`, `DownloadName.of`, `ArchiveName.of(name, MutableSet)`).
+- **D8 — The bites (phase 3).** Each planted in the core, `:core:jvmTest --tests '*FileFactsVectorsTest*'` red (exit 1), restored
+  with `/bin/cp -f`: `SVG_SKIPS = 17` (the seventeen-comments case), the `audio/mpeg` row renamed (the track case), `¹`
+  dropped from the device names (`COM¹`).
