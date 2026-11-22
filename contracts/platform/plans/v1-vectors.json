@@ -1,0 +1,3205 @@
+{
+  "format": "veyq-plans-v1-vectors",
+  "note": "Conformance vectors for ADR 0154's node plans and core's own rights over a node: each kind's header order (`kinds`), a node header's plan (`header`: the rights its page and core grant, the kind's order, the page's own entries and, on an app, how many buttons fit (`maxButtons`, absent: all) -> buttons, the menu, the menu's last group), a level row's menu (`row`: rights and own entries -> the menu and its last group), and core's favourite, cover and bookmark rights (`rights`, every combination of their inputs). Entries are `HeaderAction`'s serial names. Each case names its rule (`rule`). Inputs chosen by hand; every `expected` first recorded from the web's TypeScript, where it can express the case, and read against its rule before commit.",
+  "kinds": [
+    {
+      "kind": "CHAPTER",
+      "header": [
+        "favorite",
+        "upload",
+        "share",
+        "music",
+        "download",
+        "banner",
+        "move",
+        "copy"
+      ]
+    },
+    {
+      "kind": "DEPOT_DROPBOX",
+      "header": [
+        "favorite",
+        "share",
+        "download",
+        "move",
+        "copy"
+      ]
+    },
+    {
+      "kind": "EXPENSES_POT",
+      "header": [
+        "favorite",
+        "share",
+        "download",
+        "move",
+        "copy"
+      ]
+    },
+    {
+      "kind": "FILE",
+      "header": [
+        "favorite",
+        "download",
+        "share",
+        "replace",
+        "move",
+        "copy"
+      ]
+    },
+    {
+      "kind": "FOLDER",
+      "header": [
+        "favorite",
+        "share",
+        "download",
+        "move",
+        "copy"
+      ]
+    },
+    {
+      "kind": "MEMORY",
+      "header": [
+        "favorite",
+        "upload",
+        "share",
+        "music",
+        "download",
+        "banner",
+        "move",
+        "copy"
+      ]
+    },
+    {
+      "kind": "SHARE_BOOKMARK",
+      "header": [
+        "open-own-page",
+        "favorite",
+        "move"
+      ]
+    }
+  ],
+  "header": [
+    {
+      "rule": "a member's folder: core's around the standard ones, in the kind's order",
+      "rights": {
+        "favorite": true,
+        "share": true,
+        "rename": false,
+        "move": true,
+        "cover": false,
+        "copy": true,
+        "download": true,
+        "report": true,
+        "delete": true,
+        "offline": false
+      },
+      "order": [
+        "favorite",
+        "share",
+        "download",
+        "move",
+        "copy"
+      ],
+      "own": [],
+      "expected": {
+        "buttons": [
+          "favorite",
+          "share",
+          "download"
+        ],
+        "menu": [],
+        "last": [
+          "move",
+          "copy",
+          "report",
+          "delete"
+        ]
+      }
+    },
+    {
+      "rule": "a Memory: its page's upload, banner and music among them; the banner in the last group",
+      "rights": {
+        "favorite": true,
+        "share": true,
+        "rename": false,
+        "move": true,
+        "cover": false,
+        "copy": true,
+        "download": true,
+        "report": true,
+        "delete": true,
+        "offline": false
+      },
+      "order": [
+        "favorite",
+        "upload",
+        "share",
+        "music",
+        "download",
+        "banner",
+        "move",
+        "copy"
+      ],
+      "own": [
+        "upload",
+        "banner",
+        "music"
+      ],
+      "expected": {
+        "buttons": [
+          "favorite",
+          "upload",
+          "share",
+          "music",
+          "download"
+        ],
+        "menu": [],
+        "last": [
+          "banner",
+          "move",
+          "copy",
+          "report",
+          "delete"
+        ]
+      }
+    },
+    {
+      "rule": "a Memory whose banner is drawn already: no banner entry",
+      "rights": {
+        "favorite": true,
+        "share": true,
+        "rename": false,
+        "move": true,
+        "cover": false,
+        "copy": true,
+        "download": true,
+        "report": true,
+        "delete": true,
+        "offline": false
+      },
+      "order": [
+        "favorite",
+        "upload",
+        "share",
+        "music",
+        "download",
+        "banner",
+        "move",
+        "copy"
+      ],
+      "own": [
+        "upload",
+        "music"
+      ],
+      "expected": {
+        "buttons": [
+          "favorite",
+          "upload",
+          "share",
+          "music",
+          "download"
+        ],
+        "menu": [],
+        "last": [
+          "move",
+          "copy",
+          "report",
+          "delete"
+        ]
+      }
+    },
+    {
+      "rule": "a chapter: the Memory's order",
+      "rights": {
+        "favorite": true,
+        "share": true,
+        "rename": false,
+        "move": true,
+        "cover": false,
+        "copy": true,
+        "download": true,
+        "report": true,
+        "delete": true,
+        "offline": false
+      },
+      "order": [
+        "favorite",
+        "upload",
+        "share",
+        "music",
+        "download",
+        "banner",
+        "move",
+        "copy"
+      ],
+      "own": [
+        "upload",
+        "banner"
+      ],
+      "expected": {
+        "buttons": [
+          "favorite",
+          "upload",
+          "share",
+          "download"
+        ],
+        "menu": [],
+        "last": [
+          "banner",
+          "move",
+          "copy",
+          "report",
+          "delete"
+        ]
+      }
+    },
+    {
+      "rule": "a file: its replace beside the share",
+      "rights": {
+        "favorite": true,
+        "share": true,
+        "rename": false,
+        "move": true,
+        "cover": false,
+        "copy": true,
+        "download": true,
+        "report": true,
+        "delete": true,
+        "offline": false
+      },
+      "order": [
+        "favorite",
+        "download",
+        "share",
+        "replace",
+        "move",
+        "copy"
+      ],
+      "own": [
+        "replace"
+      ],
+      "expected": {
+        "buttons": [
+          "favorite",
+          "download",
+          "share",
+          "replace"
+        ],
+        "menu": [],
+        "last": [
+          "move",
+          "copy",
+          "report",
+          "delete"
+        ]
+      }
+    },
+    {
+      "rule": "a drop box",
+      "rights": {
+        "favorite": true,
+        "share": true,
+        "rename": false,
+        "move": true,
+        "cover": false,
+        "copy": true,
+        "download": true,
+        "report": true,
+        "delete": true,
+        "offline": false
+      },
+      "order": [
+        "favorite",
+        "share",
+        "download",
+        "move",
+        "copy"
+      ],
+      "own": [],
+      "expected": {
+        "buttons": [
+          "favorite",
+          "share",
+          "download"
+        ],
+        "menu": [],
+        "last": [
+          "move",
+          "copy",
+          "report",
+          "delete"
+        ]
+      }
+    },
+    {
+      "rule": "a Pot",
+      "rights": {
+        "favorite": true,
+        "share": true,
+        "rename": false,
+        "move": true,
+        "cover": false,
+        "copy": true,
+        "download": true,
+        "report": true,
+        "delete": true,
+        "offline": false
+      },
+      "order": [
+        "favorite",
+        "share",
+        "download",
+        "move",
+        "copy"
+      ],
+      "own": [],
+      "expected": {
+        "buttons": [
+          "favorite",
+          "share",
+          "download"
+        ],
+        "menu": [],
+        "last": [
+          "move",
+          "copy",
+          "report",
+          "delete"
+        ]
+      }
+    },
+    {
+      "rule": "a kept link that reads: its own page first, its name's report then its share's, the delete last",
+      "rights": {
+        "favorite": true,
+        "share": false,
+        "rename": false,
+        "move": true,
+        "cover": false,
+        "copy": false,
+        "download": false,
+        "report": true,
+        "delete": true,
+        "offline": false
+      },
+      "order": [
+        "open-own-page",
+        "favorite",
+        "move"
+      ],
+      "own": [
+        "open-own-page",
+        "report-shared"
+      ],
+      "expected": {
+        "buttons": [
+          "open-own-page",
+          "favorite"
+        ],
+        "menu": [],
+        "last": [
+          "move",
+          "report",
+          "report-shared",
+          "delete"
+        ]
+      }
+    },
+    {
+      "rule": "a kept link whose link does not read: its name's report alone",
+      "rights": {
+        "favorite": true,
+        "share": false,
+        "rename": false,
+        "move": true,
+        "cover": false,
+        "copy": false,
+        "download": false,
+        "report": true,
+        "delete": true,
+        "offline": false
+      },
+      "order": [
+        "open-own-page",
+        "favorite",
+        "move"
+      ],
+      "own": [],
+      "expected": {
+        "buttons": [
+          "favorite"
+        ],
+        "menu": [],
+        "last": [
+          "move",
+          "report",
+          "delete"
+        ]
+      }
+    },
+    {
+      "rule": "a kept link on an instance that takes no report: its share's report still",
+      "rights": {
+        "favorite": true,
+        "share": false,
+        "rename": false,
+        "move": true,
+        "cover": false,
+        "copy": false,
+        "download": false,
+        "report": false,
+        "delete": true,
+        "offline": false
+      },
+      "order": [
+        "open-own-page",
+        "favorite",
+        "move"
+      ],
+      "own": [
+        "open-own-page",
+        "report-shared"
+      ],
+      "expected": {
+        "buttons": [
+          "open-own-page",
+          "favorite"
+        ],
+        "menu": [],
+        "last": [
+          "move",
+          "report-shared",
+          "delete"
+        ]
+      }
+    },
+    {
+      "rule": "a READ guest's folder: the download and the report",
+      "rights": {
+        "favorite": false,
+        "share": false,
+        "rename": false,
+        "move": false,
+        "cover": false,
+        "copy": false,
+        "download": true,
+        "report": true,
+        "delete": false,
+        "offline": false
+      },
+      "order": [
+        "favorite",
+        "share",
+        "download",
+        "move",
+        "copy"
+      ],
+      "own": [],
+      "expected": {
+        "buttons": [
+          "download"
+        ],
+        "menu": [],
+        "last": [
+          "report"
+        ]
+      }
+    },
+    {
+      "rule": "a READ_WRITE guest's folder: the move too",
+      "rights": {
+        "favorite": false,
+        "share": false,
+        "rename": false,
+        "move": true,
+        "cover": false,
+        "copy": false,
+        "download": true,
+        "report": true,
+        "delete": false,
+        "offline": false
+      },
+      "order": [
+        "favorite",
+        "share",
+        "download",
+        "move",
+        "copy"
+      ],
+      "own": [],
+      "expected": {
+        "buttons": [
+          "download"
+        ],
+        "menu": [],
+        "last": [
+          "move",
+          "report"
+        ]
+      }
+    },
+    {
+      "rule": "a space pending deletion: what reads, and the share (listing links is a read)",
+      "rights": {
+        "favorite": true,
+        "share": true,
+        "rename": false,
+        "move": false,
+        "cover": false,
+        "copy": false,
+        "download": true,
+        "report": true,
+        "delete": false,
+        "offline": false
+      },
+      "order": [
+        "favorite",
+        "share",
+        "download",
+        "move",
+        "copy"
+      ],
+      "own": [],
+      "expected": {
+        "buttons": [
+          "favorite",
+          "share",
+          "download"
+        ],
+        "menu": [],
+        "last": [
+          "report"
+        ]
+      }
+    },
+    {
+      "rule": "a space's top level: no node, no order",
+      "rights": {
+        "favorite": false,
+        "share": true,
+        "rename": false,
+        "move": false,
+        "cover": false,
+        "copy": false,
+        "download": false,
+        "report": false,
+        "delete": false,
+        "offline": false
+      },
+      "order": [],
+      "own": [],
+      "expected": {
+        "buttons": [
+          "share"
+        ],
+        "menu": [],
+        "last": []
+      }
+    },
+    {
+      "rule": "nothing granted: nothing offered",
+      "rights": {
+        "favorite": false,
+        "share": false,
+        "rename": false,
+        "move": false,
+        "cover": false,
+        "copy": false,
+        "download": false,
+        "report": false,
+        "delete": false,
+        "offline": false
+      },
+      "order": [
+        "favorite",
+        "share",
+        "download",
+        "move",
+        "copy"
+      ],
+      "own": [],
+      "expected": {
+        "buttons": [],
+        "menu": [],
+        "last": []
+      }
+    },
+    {
+      "rule": "an order lists the actions it names first, every other one follows in the merge order",
+      "rights": {
+        "favorite": true,
+        "share": true,
+        "rename": false,
+        "move": true,
+        "cover": false,
+        "copy": true,
+        "download": true,
+        "report": true,
+        "delete": true,
+        "offline": false
+      },
+      "order": [
+        "open-own-page",
+        "favorite",
+        "move"
+      ],
+      "own": [
+        "music",
+        "upload"
+      ],
+      "expected": {
+        "buttons": [
+          "favorite",
+          "share",
+          "music",
+          "upload",
+          "download"
+        ],
+        "menu": [],
+        "last": [
+          "move",
+          "copy",
+          "report",
+          "delete"
+        ]
+      }
+    },
+    {
+      "rule": "an app's folder: rename, cover and \"Available offline\" in the menu, two buttons fit",
+      "rights": {
+        "favorite": true,
+        "share": true,
+        "rename": true,
+        "move": true,
+        "cover": true,
+        "copy": true,
+        "download": true,
+        "report": true,
+        "delete": true,
+        "offline": true
+      },
+      "order": [
+        "favorite",
+        "share",
+        "download",
+        "move",
+        "copy"
+      ],
+      "own": [],
+      "maxButtons": 2,
+      "expected": null
+    },
+    {
+      "rule": "a phone's file: send in the menu, three buttons fit",
+      "rights": {
+        "favorite": true,
+        "share": true,
+        "rename": true,
+        "move": true,
+        "cover": false,
+        "copy": true,
+        "download": true,
+        "report": true,
+        "delete": true,
+        "offline": false
+      },
+      "order": [
+        "favorite",
+        "download",
+        "share",
+        "replace",
+        "move",
+        "copy"
+      ],
+      "own": [
+        "replace",
+        "send"
+      ],
+      "maxButtons": 3,
+      "expected": null
+    },
+    {
+      "rule": "no button fits: every one in the menu, in order, the last group apart",
+      "rights": {
+        "favorite": true,
+        "share": true,
+        "rename": false,
+        "move": true,
+        "cover": false,
+        "copy": true,
+        "download": true,
+        "report": true,
+        "delete": true,
+        "offline": false
+      },
+      "order": [
+        "favorite",
+        "upload",
+        "share",
+        "music",
+        "download",
+        "banner",
+        "move",
+        "copy"
+      ],
+      "own": [
+        "upload",
+        "banner",
+        "music"
+      ],
+      "maxButtons": 0,
+      "expected": null
+    }
+  ],
+  "row": [
+    {
+      "rule": "a folder's row: rename and move first, core's after the heart and the cover, report and delete last",
+      "rights": {
+        "favorite": true,
+        "share": false,
+        "rename": true,
+        "move": true,
+        "cover": true,
+        "copy": true,
+        "download": true,
+        "report": true,
+        "delete": true,
+        "offline": false
+      },
+      "own": [],
+      "expected": {
+        "menu": [
+          "rename",
+          "move",
+          "favorite",
+          "copy",
+          "cover",
+          "download"
+        ],
+        "last": [
+          "report",
+          "delete"
+        ]
+      }
+    },
+    {
+      "rule": "a file's row: no cover",
+      "rights": {
+        "favorite": true,
+        "share": false,
+        "rename": true,
+        "move": true,
+        "cover": false,
+        "copy": true,
+        "download": true,
+        "report": true,
+        "delete": true,
+        "offline": false
+      },
+      "own": [],
+      "expected": {
+        "menu": [
+          "rename",
+          "move",
+          "favorite",
+          "copy",
+          "download"
+        ],
+        "last": [
+          "report",
+          "delete"
+        ]
+      }
+    },
+    {
+      "rule": "a kept link's row that reads: its share's report after its name's",
+      "rights": {
+        "favorite": true,
+        "share": false,
+        "rename": true,
+        "move": true,
+        "cover": false,
+        "copy": false,
+        "download": false,
+        "report": true,
+        "delete": true,
+        "offline": false
+      },
+      "own": [
+        "report-shared"
+      ],
+      "expected": {
+        "menu": [
+          "rename",
+          "move",
+          "favorite"
+        ],
+        "last": [
+          "report",
+          "report-shared",
+          "delete"
+        ]
+      }
+    },
+    {
+      "rule": "a READ_WRITE guest's row: the move, the download, the report",
+      "rights": {
+        "favorite": false,
+        "share": false,
+        "rename": false,
+        "move": true,
+        "cover": false,
+        "copy": false,
+        "download": true,
+        "report": true,
+        "delete": false,
+        "offline": false
+      },
+      "own": [],
+      "expected": {
+        "menu": [
+          "move",
+          "download"
+        ],
+        "last": [
+          "report"
+        ]
+      }
+    },
+    {
+      "rule": "a READ guest's row",
+      "rights": {
+        "favorite": false,
+        "share": false,
+        "rename": false,
+        "move": false,
+        "cover": false,
+        "copy": false,
+        "download": true,
+        "report": true,
+        "delete": false,
+        "offline": false
+      },
+      "own": [],
+      "expected": {
+        "menu": [
+          "download"
+        ],
+        "last": [
+          "report"
+        ]
+      }
+    },
+    {
+      "rule": "a space pending deletion",
+      "rights": {
+        "favorite": true,
+        "share": false,
+        "rename": false,
+        "move": false,
+        "cover": false,
+        "copy": false,
+        "download": true,
+        "report": true,
+        "delete": false,
+        "offline": false
+      },
+      "own": [],
+      "expected": {
+        "menu": [
+          "favorite",
+          "download"
+        ],
+        "last": [
+          "report"
+        ]
+      }
+    },
+    {
+      "rule": "nothing granted",
+      "rights": {
+        "favorite": false,
+        "share": false,
+        "rename": false,
+        "move": false,
+        "cover": false,
+        "copy": false,
+        "download": false,
+        "report": false,
+        "delete": false,
+        "offline": false
+      },
+      "own": [],
+      "expected": {
+        "menu": [],
+        "last": []
+      }
+    },
+    {
+      "rule": "an app's row: the share among the standard ones",
+      "rights": {
+        "favorite": true,
+        "share": true,
+        "rename": true,
+        "move": true,
+        "cover": true,
+        "copy": true,
+        "download": true,
+        "report": true,
+        "delete": true,
+        "offline": false
+      },
+      "own": [],
+      "expected": null
+    },
+    {
+      "rule": "an app's row of a node kept offline",
+      "rights": {
+        "favorite": true,
+        "share": false,
+        "rename": true,
+        "move": true,
+        "cover": false,
+        "copy": false,
+        "download": true,
+        "report": true,
+        "delete": true,
+        "offline": true
+      },
+      "own": [],
+      "expected": null
+    }
+  ],
+  "rights": {
+    "favorite": [
+      {
+        "member": false,
+        "node": false,
+        "known": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "node": false,
+        "known": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "node": true,
+        "known": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "node": true,
+        "known": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "node": false,
+        "known": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "node": false,
+        "known": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "node": true,
+        "known": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "node": true,
+        "known": true,
+        "expected": true
+      }
+    ],
+    "cover": [
+      {
+        "member": false,
+        "keys": false,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": false,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": false,
+        "keys": true,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": false,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": false,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": true
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": false,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": true,
+        "node": false,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": false,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": false,
+        "takesCover": true,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": false,
+        "expected": false
+      },
+      {
+        "member": true,
+        "keys": true,
+        "readonly": true,
+        "node": true,
+        "inIdentityFolder": true,
+        "applicationOn": true,
+        "takesCover": true,
+        "expected": false
+      }
+    ],
+    "bookmark": [
+      {
+        "member": false,
+        "node": false,
+        "keys": false,
+        "rename": false,
+        "move": false,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": false,
+        "keys": false,
+        "rename": false,
+        "move": false,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": false,
+        "keys": false,
+        "rename": false,
+        "move": true,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": false,
+        "keys": false,
+        "rename": false,
+        "move": true,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": false,
+        "keys": false,
+        "rename": true,
+        "move": false,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": false,
+        "keys": false,
+        "rename": true,
+        "move": false,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": false,
+        "keys": false,
+        "rename": true,
+        "move": true,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": false,
+        "keys": false,
+        "rename": true,
+        "move": true,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": false,
+        "keys": true,
+        "rename": false,
+        "move": false,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": false,
+        "keys": true,
+        "rename": false,
+        "move": false,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": false,
+        "keys": true,
+        "rename": false,
+        "move": true,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": false,
+        "keys": true,
+        "rename": false,
+        "move": true,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": false,
+        "keys": true,
+        "rename": true,
+        "move": false,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": false,
+        "keys": true,
+        "rename": true,
+        "move": false,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": false,
+        "keys": true,
+        "rename": true,
+        "move": true,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": false,
+        "keys": true,
+        "rename": true,
+        "move": true,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": true,
+        "keys": false,
+        "rename": false,
+        "move": false,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": true,
+        "keys": false,
+        "rename": false,
+        "move": false,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": true,
+        "keys": false,
+        "rename": false,
+        "move": true,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": true,
+        "keys": false,
+        "rename": false,
+        "move": true,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": true,
+        "keys": false,
+        "rename": true,
+        "move": false,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": true,
+        "keys": false,
+        "rename": true,
+        "move": false,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": true,
+        "keys": false,
+        "rename": true,
+        "move": true,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": true,
+        "keys": false,
+        "rename": true,
+        "move": true,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": true,
+        "keys": true,
+        "rename": false,
+        "move": false,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": true,
+        "keys": true,
+        "rename": false,
+        "move": false,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": true,
+        "keys": true,
+        "rename": false,
+        "move": true,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": true,
+        "keys": true,
+        "rename": false,
+        "move": true,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": true,
+        "keys": true,
+        "rename": true,
+        "move": false,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": true,
+        "keys": true,
+        "rename": true,
+        "move": false,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": true,
+        "keys": true,
+        "rename": true,
+        "move": true,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": false,
+        "node": true,
+        "keys": true,
+        "rename": true,
+        "move": true,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": false,
+        "keys": false,
+        "rename": false,
+        "move": false,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": false,
+        "keys": false,
+        "rename": false,
+        "move": false,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": false,
+        "keys": false,
+        "rename": false,
+        "move": true,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": false,
+        "keys": false,
+        "rename": false,
+        "move": true,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": false,
+        "keys": false,
+        "rename": true,
+        "move": false,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": false,
+        "keys": false,
+        "rename": true,
+        "move": false,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": false,
+        "keys": false,
+        "rename": true,
+        "move": true,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": false,
+        "keys": false,
+        "rename": true,
+        "move": true,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": false,
+        "keys": true,
+        "rename": false,
+        "move": false,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": false,
+        "keys": true,
+        "rename": false,
+        "move": false,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": false,
+        "keys": true,
+        "rename": false,
+        "move": true,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": false,
+        "keys": true,
+        "rename": false,
+        "move": true,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": false,
+        "keys": true,
+        "rename": true,
+        "move": false,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": false,
+        "keys": true,
+        "rename": true,
+        "move": false,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": false,
+        "keys": true,
+        "rename": true,
+        "move": true,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": false,
+        "keys": true,
+        "rename": true,
+        "move": true,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": true,
+        "keys": false,
+        "rename": false,
+        "move": false,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": true,
+        "keys": false,
+        "rename": false,
+        "move": false,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": false,
+          "delete": true
+        }
+      },
+      {
+        "member": true,
+        "node": true,
+        "keys": false,
+        "rename": false,
+        "move": true,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": true,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": true,
+        "keys": false,
+        "rename": false,
+        "move": true,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": false,
+          "move": true,
+          "delete": true
+        }
+      },
+      {
+        "member": true,
+        "node": true,
+        "keys": false,
+        "rename": true,
+        "move": false,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": true,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": true,
+        "keys": false,
+        "rename": true,
+        "move": false,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": true,
+          "move": false,
+          "delete": true
+        }
+      },
+      {
+        "member": true,
+        "node": true,
+        "keys": false,
+        "rename": true,
+        "move": true,
+        "delete": false,
+        "expected": {
+          "open": false,
+          "rename": true,
+          "move": true,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": true,
+        "keys": false,
+        "rename": true,
+        "move": true,
+        "delete": true,
+        "expected": {
+          "open": false,
+          "rename": true,
+          "move": true,
+          "delete": true
+        }
+      },
+      {
+        "member": true,
+        "node": true,
+        "keys": true,
+        "rename": false,
+        "move": false,
+        "delete": false,
+        "expected": {
+          "open": true,
+          "rename": false,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": true,
+        "keys": true,
+        "rename": false,
+        "move": false,
+        "delete": true,
+        "expected": {
+          "open": true,
+          "rename": false,
+          "move": false,
+          "delete": true
+        }
+      },
+      {
+        "member": true,
+        "node": true,
+        "keys": true,
+        "rename": false,
+        "move": true,
+        "delete": false,
+        "expected": {
+          "open": true,
+          "rename": false,
+          "move": true,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": true,
+        "keys": true,
+        "rename": false,
+        "move": true,
+        "delete": true,
+        "expected": {
+          "open": true,
+          "rename": false,
+          "move": true,
+          "delete": true
+        }
+      },
+      {
+        "member": true,
+        "node": true,
+        "keys": true,
+        "rename": true,
+        "move": false,
+        "delete": false,
+        "expected": {
+          "open": true,
+          "rename": true,
+          "move": false,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": true,
+        "keys": true,
+        "rename": true,
+        "move": false,
+        "delete": true,
+        "expected": {
+          "open": true,
+          "rename": true,
+          "move": false,
+          "delete": true
+        }
+      },
+      {
+        "member": true,
+        "node": true,
+        "keys": true,
+        "rename": true,
+        "move": true,
+        "delete": false,
+        "expected": {
+          "open": true,
+          "rename": true,
+          "move": true,
+          "delete": false
+        }
+      },
+      {
+        "member": true,
+        "node": true,
+        "keys": true,
+        "rename": true,
+        "move": true,
+        "delete": true,
+        "expected": {
+          "open": true,
+          "rename": true,
+          "move": true,
+          "delete": true
+        }
+      }
+    ]
+  }
+}
