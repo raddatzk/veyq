@@ -21,7 +21,9 @@ area's tone: what a person sees, never a class name), under any of three bold he
     - …
 
 or the single word `none` when nobody using or running veyq would notice the change (CI, docs, a refactor). HTML
-comments are ignored, so the pull request template's guidance may stay in place. Dependabot's pull requests need none.
+comments are ignored, so the pull request template's guidance may stay in place; the section ends at the next `#`/`##`
+heading or at a thematic break (`---`), below which a body may close with lines that are no note (an attribution).
+Dependabot's pull requests need none.
 
 **check** — `release-note.yml` runs it on every pull request event: red, naming what is wrong, unless the body has a
 usable note or the author is Dependabot. It reads the body from the event file only (never from a `${{ }}` expression
@@ -66,7 +68,7 @@ import subprocess
 import sys
 
 NOTE_HEADING = re.compile(r"^##\s+release\s+notes?\s*$", re.IGNORECASE)
-NEXT_SECTION = re.compile(r"^#{1,2}\s")
+NEXT_SECTION = re.compile(r"^(?:#{1,2}\s|\s{0,3}(?:-\s*){3,}$|\s{0,3}(?:\*\s*){3,}$|\s{0,3}(?:_\s*){3,}$)")
 COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 SUBHEADING = re.compile(r"^\*\*(.+?)\*\*\s*$")
 HEADINGS = ("What is new", "Fixed", "What an operator must act on")
@@ -87,7 +89,9 @@ class Refused(Exception):
 # ---- the note in a pull request ---------------------------------------------------------------------------------------
 
 def section(body: str | None) -> str | None:
-    """The text under `## Release note`, up to the next `#`/`##` heading, comments removed; None without the heading."""
+    """The text under `## Release note`, up to the next `#`/`##` heading or thematic break (`---`), comments removed;
+    None without the heading. The break lets a body end in a line that is no note — the attribution line every pull
+    request a Claude session opens must end with sits below one."""
     lines = COMMENT.sub("", (body or "").replace("\r\n", "\n")).split("\n")
     for i, line in enumerate(lines):
         if NOTE_HEADING.match(line.strip()):

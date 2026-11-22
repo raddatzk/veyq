@@ -4,8 +4,8 @@
 - Built: partly (not built: decision 3's lanes L2 and L3, decision 5's rerun of moved lanes — a promotion refuses an
   input it cannot compare instead — and the retention job, decision 6, decision 7; decision 5's snapshot — weekly and
   by dispatch since its amendment of 2026-11-07, per green push before — its attestations, its `snapshot-` tag and the
-  promotion `release.yml` are built; one snapshot of a push was published on GitHub, the weekly and the dispatched one
-  have not run yet)
+  promotion `release.yml` are built, and since its amendment of 2026-11-22 the release draft Publish writes — its first
+  run on GitHub owed)
 - Date: 2026-10-16
 - Model: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md)
 
@@ -198,6 +198,26 @@ several, or one on another tag is refused (`scripts/promote.py` check 1). A save
      name a commit that no attestation names, and the promotion counts the version from the tagged commit). The cost:
      a snapshot can lag `main`'s tip by its docs-only commits, and a C older than the 30 days its run's artifacts are
      kept cannot be published — re-run its Checks run, or push.
+   - **Amended 2026-11-22 (owner, cr-release-draft-from-publish): Publish writes the release draft; the release stays
+     the owner's click.** The owner asked for the release to be half-automatic: the draft is there every Monday, the
+     owner reads it and runs `release.yml`. A fully automatic release was weighed and declined by the owner — the
+     *Run workflow* click is the one deliberate "this is fit for operators", and a draft starts no workflow anyway
+     (GitHub runs none for a draft's events, and a published immutable release takes no files, so the draft cannot be
+     the trigger). So a snapshot of **`main`** gets a job `release-draft` after its tag, holding exactly `contents:
+     write` (drafts are listed and written only with push access) and `pull-requests: read`, signing and tagging
+     nothing; `scripts/release_notes.py` decides and the job's one create-or-edit line writes, never `draft: false`.
+     The notes come from the **pull requests**: since features land on `main` only as squashed pull requests once
+     releasable, each commit since the last `v<major>.*` tag is one pull request, and each carries a `## Release note`
+     section in the release's words, or `none` (`release-note.yml` checks every pull request; Dependabot's are exempt
+     and become one line). Rejected: commit titles (engineering language, never what the notes said) and a model
+     called in CI (a closed vendor and a secret in the release path, for text the owner reads anyway). `release.yml`'s
+     rule of exactly one draft is kept by the job: it moves its own **untouched** draft (a hash marker over its body)
+     onto the newer snapshot, creates one where none exists, and leaves an edited one — by a person, or carrying the
+     promotion's refusal — and any second draft alone, with a notice. A fix release on `release/<major>.x` and the first
+     release of a major are drafted by hand. With it, a commit that carries a **release tag** `v<major>.<minor>` counts
+     as published too: `release.yml` deletes the snapshot tag once it released the commit, so the schedule of
+     2026-11-16 made the already released `b7dda2de` a snapshot again (`snapshot-1.247`, beside `v1.247`), and a draft
+     would have followed it.
 
 6. **The backup archive.** Every release publishes the L1 run's capture (ADR 0056's tool, test data only) **with its
    object pool** (`--objects-to`: a capture's store leg is only its index, ADR 0056 §3) as a signed OCI artifact

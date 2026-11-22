@@ -113,8 +113,10 @@ which no guard reads.
 
 ## Releasing: a snapshot promoted
 
-A release is a snapshot promoted (ADR 0091 decision 5); nothing is built again. The owner saves a **draft** GitHub
-Release on a `snapshot-<major>.<minor>` tag, with the notes, and starts `release.yml` (*Run workflow*) on the branch
+A release is a snapshot promoted (ADR 0091 decision 5); nothing is built again. Publish writes the **draft** GitHub
+Release on the `snapshot-<major>.<minor>` tag of each snapshot it makes on `main`, its notes gathered from the `## Release
+note` section of every pull request since the last release (`publish.yml` › `release-draft`, `scripts/release_notes.py`;
+it keeps the one draft the promotion needs and never overwrites one a person edited); the owner reads it, edits it, and starts `release.yml` (*Run workflow*) on the branch
 the snapshot came from; the click path is [`infra/README.md`](../../infra/README.md) § Cutting a release. GitHub starts
 no workflow for a draft, which is why the dispatch starts it. Its jobs, each holding only what it writes, in group
 `veyq-release`:

@@ -1,7 +1,7 @@
 ---
 id: cr-release-draft-from-publish
 title: The weekly Publish writes the release draft with its notes; the owner reads it and runs the release
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0091", "0057"]
 invariants:
@@ -167,6 +167,20 @@ Section 4 above. **Done when:** the trust chain is green and no doc still tells 
 3. One Publish dispatch on `main`: the draft appears with notes from the pull requests since `v1.249`; the owner
    reads it and runs Release. Then the next Monday's schedule: a draft again, or the notice that nothing changed.
 **Done when:** a release was promoted from a draft Publish wrote, and a Monday with nothing new wrote nothing.
+
+## Progress (2026-11-22, branch `claude/sunday-snapshot-release-d7cccd`)
+
+- **Phase 1** built: `snapshot.published_by()`; bite (snapshot-only filter) red on three cases.
+- **Phase 2** built: `scripts/release_notes.py` + selftest (nine bites red), `release-note.yml`, the PR template, the
+  `docs/ai/README.md` rule. The promised injection bite found **no** guard: a `${{ github.event.pull_request.body }}`
+  in a run line was green everywhere — so `scripts/validate_workflow_injection.py` is new (ten probes: eight red, the
+  `env:` form and repository-owned contexts green).
+- **Phase 3** built: `publish.yml` › `release-draft`; `validate_release_identity.py` taught the one exception (seven
+  bites red). On the way it closed a gap: its file-wide "only release.yml writes a GitHub Release" scan matched
+  `gh api -X POST …releases` but not `--method POST` — now both.
+- **Phase 4** done: ADR 0091 decision 5 amended, `infra/README.md`, `release-and-deployment.md`, the headers of
+  `release.yml`, `publish.yml`, `promote.py`, the stage map's budgets, inbox #460.
+- **Phase 5** owed, on GitHub, each step on the owner's go.
 
 ## Decisions (mine, at refine — 2026-11-22)
 

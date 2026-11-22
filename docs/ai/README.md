@@ -132,7 +132,8 @@ Five rules follow:
    note** — a `## Release note` section in the release's own words (Use-area tone), or `none` when nobody using or
    running veyq would notice: the Monday release draft is gathered from those sections, so it is written by whoever
    built the change, while the context is fresh (`.github/pull_request_template.md`, `release-note.yml`; the form is
-   `scripts/release_notes.py`'s docstring).
+   `scripts/release_notes.py`'s docstring). A line that is no note below it — the attribution a session's pull request
+   ends with — sits below a `---`, which ends the section.
 
    **A live parallel session is a hazard for WRITES too, and this one bites harder than a stale count.** A checkout
    can still be shared — the main checkout carries IntelliJ and every session started without a worktree — and

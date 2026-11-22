@@ -69,6 +69,13 @@ check(rn.verdict("## Release note\n\n**Changed**\n- x\n", "someone") != "", "an 
 check(rn.verdict("## Release note\n\n**Fixed**\nprose, no item\n", "someone") != "", "prose under a heading passes")
 check(rn.verdict("## Release note\n\n**fixed:**\n- x\n", "someone") == "", "a heading's case or a colon refuses the note")
 check(rn.verdict("", "dependabot[bot]") == "", "Dependabot's pull request needs a note")
+ATTRIBUTION = "\n---\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n"
+check(rn.verdict("## Release note\n\nnone\n" + ATTRIBUTION, "someone") == "",
+      "a `none` note above a thematic break and the attribution line is refused")
+check(rn.parse(rn.section(NOTE.replace("## What changed", ATTRIBUTION + "## What changed")) or "")
+      == rn.parse(rn.section(NOTE) or ""), "a thematic break does not end the section")
+check(rn.verdict("## Release note\n\nnone\n\n🤖 Generated with x\n", "someone") != "",
+      "prose after the note without a break is taken as part of `none`")
 check(rn.verdict("", "dependabot-impostor") != "", "an author that only looks like Dependabot is exempt")
 
 with tempfile.TemporaryDirectory(prefix="release_notes_event_") as tmp:
