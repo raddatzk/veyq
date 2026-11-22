@@ -502,8 +502,9 @@ internal sealed class Call {
     @Serializable @SerialName("Unlock.Plan") data object UnlockPlan : Call()
 
     /**
-     * What is asked before [SessionForgetUnlocked] while writes made offline wait for the account the unlock shows
-     * (`QueuedShown.forgetAsk`, ADR 0153 decision 2): [Answer.QueuedAsked], none where nothing waits.
+     * What is asked before [SessionForgetUnlocked], always (owner 2026-11-22): one question, naming the writes made offline
+     * that wait for the account the unlock shows where some do (`QueuedShown.forgetAsk`, ADR 0153 decision 2):
+     * [Answer.QueuedAsked], its ask never null.
      */
     @Serializable @SerialName("Unlock.ForgetAsk") data object UnlockForgetAsk : Call()
 

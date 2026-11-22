@@ -959,6 +959,22 @@
     "en": "Use another account",
     "de": "Anderes Konto verwenden"
   },
+  "unlock_forget_confirm": {
+    "note": "the unlock's Stop trusting this device, always asked (owner 2026-11-22); confirmed by manage_forget_device. The account is forgotten on this device only",
+    "en": "This device forgets this account. To sign in here again, you’ll need your Secret Key.",
+    "de": "Dieses Gerät vergisst dieses Konto. Um dich hier wieder anzumelden, brauchst du deinen Secret Key."
+  },
+  "unlock_forget_confirm_writes_lost": {
+    "note": "unlock_forget_confirm while changes made offline wait for the account, one ask in place of two: its words, then offline_writes_lost's; {1} how many are deleted; confirmed by offline_stop_trusting_anyway",
+    "en": {
+      "one": "This device forgets this account. To sign in here again, you’ll need your Secret Key. One change made offline has not been sent yet. It will be deleted.",
+      "other": "This device forgets this account. To sign in here again, you’ll need your Secret Key. {1:int} changes made offline have not been sent yet. They will be deleted."
+    },
+    "de": {
+      "one": "Dieses Gerät vergisst dieses Konto. Um dich hier wieder anzumelden, brauchst du deinen Secret Key. Eine offline gemachte Änderung ist noch nicht gesendet. Sie wird gelöscht.",
+      "other": "Dieses Gerät vergisst dieses Konto. Um dich hier wieder anzumelden, brauchst du deinen Secret Key. {1:int} offline gemachte Änderungen sind noch nicht gesendet. Sie werden gelöscht."
+    }
+  },
   "unlock_prompt_title": {
     "en": "Unlock veyq",
     "de": "veyq entsperren"

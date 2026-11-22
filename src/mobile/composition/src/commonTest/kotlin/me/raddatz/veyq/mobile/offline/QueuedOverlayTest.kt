@@ -45,9 +45,25 @@ import kotlin.test.assertTrue
  *
  * Bite (one edit, seen red, then restored): the gallery's own offline check left beside `queues` (`takesUploads` back to
  * `current.offline == null`) → [a_gallery_offline_shows_a_queued_medium_as_a_waiting_tile_a_trash_and_a_mark_in_place] red.
+ * `QueuedShown.forgetAsk` back to the loss's ask (`ask(QueuedLoss.STOP_TRUSTING, waiting)`, nothing asked while none
+ * waits) → [the_unlocks_forget_is_always_asked_and_says_whether_writes_wait] red.
  */
 class QueuedOverlayTest {
     init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
+    /**
+     * The unlock's *Stop trusting this device* (inbox #1052, owner 2026-11-22): asked every time, in one question — the
+     * Secret Key it will take to sign in here again, and, where writes made offline wait, how many go with the account.
+     */
+    @Test
+    fun the_unlocks_forget_is_always_asked_and_says_whether_writes_wait() {
+        val plain = assertNotNull(QueuedShown.forgetAsk(0), "nothing waits: still asked")
+        assertEquals(Notice(Msg.UNLOCK_FORGET_CONFIRM), plain.question)
+        assertEquals(Msg.MANAGE_FORGET_DEVICE, plain.confirm)
+        val waiting = assertNotNull(QueuedShown.forgetAsk(2))
+        assertEquals(Notice(Msg.UNLOCK_FORGET_CONFIRM_WRITES_LOST, 2), waiting.question, "one question names the writes, not a second ask")
+        assertEquals(QueuedLoss.STOP_TRUSTING.confirm, waiting.confirm)
+    }
 
     private val played = mutableListOf<PlayedTenant>()
 
