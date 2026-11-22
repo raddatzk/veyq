@@ -119,3 +119,55 @@ cost. The refine's entries first.
   web's: how many of a header's `buttons` fit (ADR 0110, measured), and which row entries are drawn inline — at most two
   marked `first` (the heart, a file's download), taken from the plan's menu in its order, the rest of the menu after them:
   "how many fit inline is the platform's" (ADR 0154 decision 2).
+- **D7 — The vectors' writer moved from the web to the core.** Phase 2 recorded every case the web's TypeScript can express
+  (a header with no rename, cover, offline or send and every button fitting; a row with no share or offline) with the
+  web's test's write mode; the three app-only header cases and two row cases were left `null`. Phase 3's `PlanVectorsTest`
+  (`:composition`, common: the JVM and `macosArm64`) rewrote the file: byte for byte the same but the five `null`s filled,
+  each read against its rule (measured: `diff` of the two writes). The web test's write mode left with phase 5. *Cost:* none.
+- **D8 — Core's rights are three functions over plain inputs** (`navigation/CoreRights.kt`). *Options:* `NodeHeader.rights`
+  (the apps' reading of their doors) widened with the web's inputs; a `Viewer`/`Target` model of the web's `Access`; three
+  functions over booleans the caller reads. *Choice:* the third — the web's `Access` is a browser session (a guest's link,
+  a pending deletion, the switch of an application) the apps read through their doors, so the rule is the conjunction and
+  the reading stays each platform's. The vectors enumerate every combination (8, 128 and 64 cases); before phase 3 the
+  web's TypeScript answered all 200, after it the core's (measured, `plans.vectors.test.ts`, `PlanVectorsTest`). The apps do
+  not call `CoreRights` yet: their `NodeHeader.rights` takes the same answers from their doors (favoriteKnown, coverOffered).
+  *Cost:* until the apps read through it too, the three rules live once in the core but are read by the web alone.
+- **D9 — The web hands the plan presence, not flags.** *Q:* how does the web say what a node grants? *Options:* a rights
+  object computed beside the actions; the actions the page and core's action builders already gate. *Choice:* the actions —
+  each standard or core action's presence is its `NodeHeader.Rights` flag, every other one the page's own entry, in its
+  order; the adapter (`core/node/plans.ts`) draws the plan's ids with the web's own action objects. One answer per action
+  (its builder's rights function), no second flag list to keep equal to it. The `placement` and `menuOnly` fields leave the
+  web's action model: where an action sits is the plan's. `withStandardRowActions` stays as the union of a row's defaults
+  and the application's own (an own action of a default's id replaces it), its order no longer meaningful.
+- **D10 — `HeaderAction` is no longer `@Serializable`; its serial names stay.** The façade's first build put
+  `kotlinx-serialization-core` into the module (the slice check red for all four entries; 43,721 B gz): an `@Serializable`
+  enum's companion holds a lazy `createAnnotatedEnumSerializer`, built with the entries, so reaching any entry reaches the
+  library. *Options:* keep it and give up the slice; a hand-written serializer; drop the annotation. *Choice:* drop it —
+  kotlinx.serialization serializes an enum at its use site (the bridge's `HeaderShown.PlanAction`) with its `@SerialName`s
+  on every target. *Evidence:* `:bridge:generateBindings` wrote `bridge.rs`, `Bridge.g.cs` and the samples byte-identical
+  before and after (`diff -r`); `PlanVectorsTest` reads the names through a use-site carrier on the JVM, `macosArm64` and
+  Windows (`serializer<HeaderAction>()` found none on Kotlin/Native, measured); the structure guard and Apple's
+  `generate_plans.py` read `@SerialName` from the source as before. *Cost:* `HeaderAction.serializer()` is gone (no caller).
+- **D11 — The plans' rules written as loops over the granted entries.** With serialization gone the module measured
+  38,773 B gz, own code 3,381 = 3.66× (`NodeHeader` 6.8 KB unminified: `Pair`s, a `Placement` class, `withIndex` +
+  `associate` (a `LinkedHashMap`), `toSet`, `sortedBy`, the ten-field data class `Rights` and the `Plan` data classes on the
+  path; attributed by diffing an unminified bundle with and without the façade). `NodeHeader.planInto(granted, …)` and
+  `LevelRow.planInto` now take the entries a `Rights` grants (`NodeHeader.granted`: each right one entry of its name,
+  `RIGHTS`) and write three lists; `plan(rights, …)` wraps them for the apps, its signature and answers unchanged
+  (`NodeHeaderTest`, the vectors). The façade reads the shape's flags by the entries' ids, so no `Rights` or `Plan` is built
+  on its path. *Evidence:* 37,145 B gz, own code **1,753 B gz = 1.90×** the 923 deleted (measured, `slice.test.ts`). *Cost:*
+  none on the apps' behaviour; `Placement` is gone (nothing outside `NodeHeader` used it).
+- **D12 — The gate** (phase 4; Node 22.23.3, macOS arm64, Kotlin 2.4.21):
+  - size: the deleted TypeScript re-measured on the sources at `068051ab6` (the functions bundled alone, every other import
+    external, gzip -9; `rights-scratch/measure-ts.mjs`): **2,145 B min / 923 B gz** (`nodeHeader.ts`' five, `levelRow.ts`'
+    three, the three rights functions; `withStandardRowActions` stays, simplified, so it is not counted). ADR 0155's row had
+    estimated 1,388 with the standard builders, which stay. The platform module with every entry **35,392 → 37,145 B gz**,
+    own code 1,753 = **1.90×** (R = 3.0 allows 2,769); the running budget 38,634;
+  - time (`rights-scratch/bench.ts`, median of 15 after 3 warm-ups, the answers compared first): a level's 10,000 row menus
+    1.78× (12.3 → 22.0 ms), 10,000 Memory headers 2.12× (16.2 → 34.4 ms), `favoriteRights` 1.10×, `coverRights` 1.31×,
+    `bookmarkRights` 1.03× over 10,000 nodes — each within 2.5× and 100 ms;
+  - bites: `LevelRow.LEAD` reversed turns the package's `navigation.test.ts` (five row cases) and the web's
+    `plans.vectors.test.ts` red; an unknown id read as `SHARE` turns both packages' unknown-entry tests red; the running
+    budget at a deleted 300 B gz red; `plans.ts` without its whole-plan check turns `plans.whole.test.ts` red; the
+    pre-fix banner slot turned `PlanVectorsTest` red (phase 3). Each restored with `/bin/cp -f`;
+  - delivery: three `:composition:jsPackage --rerun-tasks` builds, one digest of `dist/` (`3b2e311b…`).

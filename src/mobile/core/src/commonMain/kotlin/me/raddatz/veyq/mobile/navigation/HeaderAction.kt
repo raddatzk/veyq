@@ -2,7 +2,6 @@ package me.raddatz.veyq.mobile.navigation
 
 
 import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 
 /**
  * A node's action (ADR 0154 decision 2, ADR 0110): every entry its header's [NodeHeader.Plan] and its row's menu
@@ -17,7 +16,6 @@ import kotlinx.serialization.Serializable
  * its own.
  */
 @Plan
-@Serializable
 enum class HeaderAction(val slot: NodeHeader.Slot) {
     @SerialName("favorite") FAVORITE(NodeHeader.Slot.ANY),
     @SerialName("share") SHARE(NodeHeader.Slot.ANY),

@@ -1,6 +1,7 @@
 package me.raddatz.veyq.mobile.navigation
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -38,9 +39,13 @@ class PlanVectorsTest {
     private val vectors = Json.parseToJsonElement(readRepoFile(FILE).decodeToString()).jsonObject
     private val writing = testEnv("VEYQ_WRITE_VECTORS") == "1"
 
-    private val byName: Map<String, HeaderAction> =
-        HeaderAction.entries.associateBy { HeaderAction.serializer().descriptor.getElementName(it.ordinal) }
-    private fun id(a: HeaderAction): String = HeaderAction.serializer().descriptor.getElementName(a.ordinal)
+    /** An entry as a wire type carries it (the bridge's `HeaderShown.PlanAction`): the enum's serializer at its use site, the
+     *  one every platform has (Kotlin/Native finds none by type for an enum that is not itself `@Serializable`). */
+    @Serializable private class Carried(val id: HeaderAction)
+
+    private val entryNames = Carried.serializer().descriptor.getElementDescriptor(0)
+    private val byName: Map<String, HeaderAction> = HeaderAction.entries.associateBy { entryNames.getElementName(it.ordinal) }
+    private fun id(a: HeaderAction): String = entryNames.getElementName(a.ordinal)
     private fun actions(j: JsonElement?): List<HeaderAction> = j!!.jsonArray.map { byName.getValue(it.jsonPrimitive.content) }
     private fun ids(l: List<HeaderAction>) = JsonArray(l.map { JsonPrimitive(id(it)) })
     private fun JsonObject.flag(k: String) = getValue(k).jsonPrimitive.boolean
