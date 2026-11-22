@@ -94,11 +94,33 @@ class PlanVectorsTest {
 
     private fun levelTools(c: JsonObject): JsonElement {
         val views = LevelPlan.views(c.flag("mapTab"), c.flag("identityFolder"), c.getValue("rows").jsonPrimitive.int)
-        val tools = LevelPlan.of(emptyList(), c.flag("trash"), views).tools
+        val tools = LevelPlan.of(emptyList(), c.flag("trash"), views, select = c.flag("select")).tools
         return JsonArray(tools.map { JsonPrimitive(LevelTool.serializer().descriptor.getElementName(it.ordinal)) })
     }
 
-    private val answers: Map<String, (JsonObject) -> JsonElement> = mapOf("header" to ::header, "row" to ::row)
+    /** A level's selection's bar ([LevelSelection.bar], [LevelSelection.offered]): numbers and entries, no words. */
+    private fun selection(c: JsonObject): JsonElement {
+        val rows = c.getValue("rows").jsonArray.map { it.jsonObject }.associate {
+            it.getValue("id").jsonPrimitive.content to LevelSelection.Rights(it.flag("move"), it.flag("copy"), it.flag("report"), it.flag("delete"))
+        }
+        fun strings(k: String) = c.getValue(k).jsonArray.map { it.jsonPrimitive.content }
+        val bar = LevelSelection.bar(rows, strings("selected"), strings("shown"))
+        val names = SelectionAction.serializer().descriptor
+        return JsonObject(linkedMapOf(
+            "offered" to JsonPrimitive(LevelSelection.offered(rows.values)),
+            "count" to JsonPrimitive(bar.count),
+            "hidden" to JsonPrimitive(bar.hidden),
+            "entries" to JsonArray(bar.entries.map {
+                JsonObject(linkedMapOf(
+                    "action" to JsonPrimitive(names.getElementName(it.action.ordinal)),
+                    "enabled" to JsonPrimitive(it.enabled),
+                    "cannot" to JsonPrimitive(it.cannot),
+                ))
+            }),
+        ))
+    }
+
+    private val answers: Map<String, (JsonObject) -> JsonElement> = mapOf("header" to ::header, "row" to ::row, "selection" to ::selection)
     private val levelAnswers: Map<String, (JsonObject) -> JsonElement> = mapOf("creates" to ::levelCreates, "guest" to ::guestCreates, "tools" to ::levelTools)
     private val rightsAnswers: Map<String, (JsonObject) -> JsonElement> = mapOf("favorite" to ::favorite, "cover" to ::cover, "bookmark" to ::bookmark)
 
@@ -123,6 +145,7 @@ class PlanVectorsTest {
     @Test fun levelCreates() = cases(vectors["level"]!!.jsonObject["creates"], ::levelCreates, "level.creates")
     @Test fun guestCreates() = cases(vectors["level"]!!.jsonObject["guest"], ::guestCreates, "level.guest")
     @Test fun levelTools() = cases(vectors["level"]!!.jsonObject["tools"], ::levelTools, "level.tools")
+    @Test fun selection() = cases(vectors["selection"], ::selection, "selection")
 
     /** The web's façade reads an entry's serial name as its constant's name in lower case, `_` as `-` (`NavigationWeb.kt`). */
     @Test
@@ -162,7 +185,7 @@ class PlanVectorsTest {
         writeRepoFile(FILE, stringify(out, "") + "\n")
     }
 
-    /** [e] as JavaScript's `JSON.stringify(e, null, 2)` writes it (`TreeVectorsTest.stringify`; no number is written here). */
+    /** [e] as JavaScript's `JSON.stringify(e, null, 2)` writes it (`TreeVectorsTest.stringify`; a number is an integer here). */
     private fun stringify(e: JsonElement, indent: String): String {
         val inner = "$indent  "
         return when (e) {

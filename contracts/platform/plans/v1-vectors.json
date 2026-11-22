@@ -1,6 +1,6 @@
 {
   "format": "veyq-plans-v1-vectors",
-  "note": "Conformance vectors for ADR 0154's node plans and core's own rights over a node: each kind's header order (`kinds`), a node header's plan (`header`: the rights its page and core grant, the kind's order, the page's own entries and, on an app, how many buttons fit (`maxButtons`, absent: all) -> buttons, the menu, the menu's last group), a level row's menu (`row`: rights and own entries -> the menu and its last group), and core's favourite, cover and bookmark rights (`rights`, every combination of their inputs). Entries are `HeaderAction`'s serial names. Each case names its rule (`rule`). Inputs chosen by hand; every `expected` first recorded from the web's TypeScript, where it can express the case, and read against its rule before commit. A level's plan (`level`): New's entries where they are offered (`creates`: a member's level or the drawer, the kept link where the platform draws its dialog; `guest`: a link guest's level by its role), in the web's order (`LevelView.vue`'s folder first, then the registry's `levelMenu` by `order`), and the level's tools (`tools`: the trash where offered, the view switch only where the level offers more than one view, the web's `showViews`). Entries of `creates` and `guest` are `AppKinds.Create`'s names, of `tools` `LevelTool`'s serial names.",
+  "note": "Conformance vectors for ADR 0154's node plans and core's own rights over a node: each kind's header order (`kinds`), a node header's plan (`header`: the rights its page and core grant, the kind's order, the page's own entries and, on an app, how many buttons fit (`maxButtons`, absent: all) -> buttons, the menu, the menu's last group), a level row's menu (`row`: rights and own entries -> the menu and its last group), and core's favourite, cover and bookmark rights (`rights`, every combination of their inputs). Entries are `HeaderAction`'s serial names. Each case names its rule (`rule`). Inputs chosen by hand; every `expected` first recorded from the web's TypeScript, where it can express the case, and read against its rule before commit. A level's plan (`level`): New's entries where they are offered (`creates`: a member's level or the drawer, the kept link where the platform draws its dialog; `guest`: a link guest's level by its role), in the web's order (`LevelView.vue`'s folder first, then the registry's `levelMenu` by `order`), and the level's tools (`tools`: Select where the level's rows allow a selection's action (`select`, the web's `canSelect`), the trash where offered, the view switch only where the level offers more than one view, the web's `showViews`). Entries of `creates` and `guest` are `AppKinds.Create`'s names, of `tools` `LevelTool`'s serial names. A level's selection (`selection`, inbox #1049): each row's rights (`rows`: whether it moves, copies, is reported and deleted with the selection), the selected ids and the ids the tab on screen shows -> whether Select is offered, how many of the level are selected, how many of them the tab hides, and the bar's entries in order (an action shown where some row allows it, `enabled` where some selected row does, `cannot` how many selected it does not reach; `SelectionAction`'s serial names): the web's `selectionBar` and the core's `LevelSelection.bar`.",
   "kinds": [
     {
       "kind": "CHAPTER",
@@ -3359,7 +3359,21 @@
     ],
     "tools": [
       {
+        "rule": "a member's level whose rows allow a selection's action: Select first, then the trash and the view switch",
+        "select": true,
+        "trash": true,
+        "mapTab": false,
+        "identityFolder": false,
+        "rows": 3,
+        "expected": [
+          "select",
+          "trash",
+          "view"
+        ]
+      },
+      {
         "rule": "a member's level: the trash, then the view switch",
+        "select": false,
         "trash": true,
         "mapTab": false,
         "identityFolder": false,
@@ -3371,6 +3385,7 @@
       },
       {
         "rule": "an empty level outside a guest's identity folder still switches its view",
+        "select": false,
         "trash": true,
         "mapTab": false,
         "identityFolder": false,
@@ -3382,6 +3397,7 @@
       },
       {
         "rule": "an empty guest's identity folder offers one view at most: no switch",
+        "select": false,
         "trash": false,
         "mapTab": false,
         "identityFolder": true,
@@ -3390,6 +3406,7 @@
       },
       {
         "rule": "a guest's identity folder with rows switches its view",
+        "select": false,
         "trash": false,
         "mapTab": false,
         "identityFolder": true,
@@ -3400,6 +3417,7 @@
       },
       {
         "rule": "offline: no trash",
+        "select": false,
         "trash": false,
         "mapTab": false,
         "identityFolder": false,
@@ -3410,6 +3428,7 @@
       },
       {
         "rule": "the Memories map tab shows no list: no switch",
+        "select": false,
         "trash": false,
         "mapTab": true,
         "identityFolder": false,
@@ -3417,5 +3436,505 @@
         "expected": []
       }
     ]
-  }
+  },
+  "selection": [
+    {
+      "rule": "a member's level: every action shown and enabled for what is selected",
+      "rows": [
+        {
+          "id": "a",
+          "move": true,
+          "copy": true,
+          "report": true,
+          "delete": true
+        },
+        {
+          "id": "b",
+          "move": true,
+          "copy": true,
+          "report": true,
+          "delete": true
+        },
+        {
+          "id": "c",
+          "move": true,
+          "copy": true,
+          "report": true,
+          "delete": true
+        }
+      ],
+      "selected": [
+        "a",
+        "b"
+      ],
+      "shown": [
+        "a",
+        "b",
+        "c"
+      ],
+      "expected": {
+        "offered": true,
+        "count": 2,
+        "hidden": 0,
+        "entries": [
+          {
+            "action": "move",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "copy",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "report",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "delete",
+            "enabled": true,
+            "cannot": 0
+          }
+        ]
+      }
+    },
+    {
+      "rule": "nothing selected yet: every action the level allows shown, none enabled",
+      "rows": [
+        {
+          "id": "a",
+          "move": true,
+          "copy": true,
+          "report": true,
+          "delete": true
+        },
+        {
+          "id": "b",
+          "move": true,
+          "copy": true,
+          "report": true,
+          "delete": true
+        }
+      ],
+      "selected": [],
+      "shown": [
+        "a",
+        "b"
+      ],
+      "expected": {
+        "offered": true,
+        "count": 0,
+        "hidden": 0,
+        "entries": [
+          {
+            "action": "move",
+            "enabled": false,
+            "cannot": 0
+          },
+          {
+            "action": "copy",
+            "enabled": false,
+            "cannot": 0
+          },
+          {
+            "action": "report",
+            "enabled": false,
+            "cannot": 0
+          },
+          {
+            "action": "delete",
+            "enabled": false,
+            "cannot": 0
+          }
+        ]
+      }
+    },
+    {
+      "rule": "a guest's folder among the selection is not deleted as a node: the delete says one of two it cannot reach",
+      "rows": [
+        {
+          "id": "a",
+          "move": true,
+          "copy": true,
+          "report": true,
+          "delete": false
+        },
+        {
+          "id": "b",
+          "move": true,
+          "copy": true,
+          "report": true,
+          "delete": true
+        }
+      ],
+      "selected": [
+        "a",
+        "b"
+      ],
+      "shown": [
+        "a",
+        "b"
+      ],
+      "expected": {
+        "offered": true,
+        "count": 2,
+        "hidden": 0,
+        "entries": [
+          {
+            "action": "move",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "copy",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "report",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "delete",
+            "enabled": true,
+            "cannot": 1
+          }
+        ]
+      }
+    },
+    {
+      "rule": "every selected row refuses the delete: shown (another row allows it) but not enabled",
+      "rows": [
+        {
+          "id": "a",
+          "move": true,
+          "copy": true,
+          "report": true,
+          "delete": false
+        },
+        {
+          "id": "b",
+          "move": true,
+          "copy": true,
+          "report": true,
+          "delete": true
+        }
+      ],
+      "selected": [
+        "a"
+      ],
+      "shown": [
+        "a",
+        "b"
+      ],
+      "expected": {
+        "offered": true,
+        "count": 1,
+        "hidden": 0,
+        "entries": [
+          {
+            "action": "move",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "copy",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "report",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "delete",
+            "enabled": false,
+            "cannot": 1
+          }
+        ]
+      }
+    },
+    {
+      "rule": "a READ guest's level: the report only, which names no row it cannot reach",
+      "rows": [
+        {
+          "id": "a",
+          "move": false,
+          "copy": false,
+          "report": true,
+          "delete": false
+        },
+        {
+          "id": "b",
+          "move": false,
+          "copy": false,
+          "report": true,
+          "delete": false
+        }
+      ],
+      "selected": [
+        "a"
+      ],
+      "shown": [
+        "a",
+        "b"
+      ],
+      "expected": {
+        "offered": true,
+        "count": 1,
+        "hidden": 0,
+        "entries": [
+          {
+            "action": "report",
+            "enabled": true,
+            "cannot": 0
+          }
+        ]
+      }
+    },
+    {
+      "rule": "a selected row the report does not reach: the report, unlike the others, says nothing it cannot reach",
+      "rows": [
+        {
+          "id": "a",
+          "move": true,
+          "copy": true,
+          "report": false,
+          "delete": true
+        },
+        {
+          "id": "b",
+          "move": true,
+          "copy": true,
+          "report": true,
+          "delete": true
+        }
+      ],
+      "selected": [
+        "a",
+        "b"
+      ],
+      "shown": [
+        "a",
+        "b"
+      ],
+      "expected": {
+        "offered": true,
+        "count": 2,
+        "hidden": 0,
+        "entries": [
+          {
+            "action": "move",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "copy",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "report",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "delete",
+            "enabled": true,
+            "cannot": 0
+          }
+        ]
+      }
+    },
+    {
+      "rule": "no row allows anything (offline, the report not published): no Select",
+      "rows": [
+        {
+          "id": "a",
+          "move": false,
+          "copy": false,
+          "report": false,
+          "delete": false
+        }
+      ],
+      "selected": [],
+      "shown": [
+        "a"
+      ],
+      "expected": {
+        "offered": false,
+        "count": 0,
+        "hidden": 0,
+        "entries": []
+      }
+    },
+    {
+      "rule": "a kind this build does not copy: no copy where no row copies",
+      "rows": [
+        {
+          "id": "a",
+          "move": true,
+          "copy": false,
+          "report": true,
+          "delete": true
+        },
+        {
+          "id": "b",
+          "move": true,
+          "copy": false,
+          "report": true,
+          "delete": true
+        }
+      ],
+      "selected": [
+        "a",
+        "b"
+      ],
+      "shown": [
+        "a",
+        "b"
+      ],
+      "expected": {
+        "offered": true,
+        "count": 2,
+        "hidden": 0,
+        "entries": [
+          {
+            "action": "move",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "report",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "delete",
+            "enabled": true,
+            "cannot": 0
+          }
+        ]
+      }
+    },
+    {
+      "rule": "the tab hides a selected row: counted, and said as hidden",
+      "rows": [
+        {
+          "id": "a",
+          "move": true,
+          "copy": true,
+          "report": true,
+          "delete": true
+        },
+        {
+          "id": "b",
+          "move": true,
+          "copy": true,
+          "report": true,
+          "delete": true
+        },
+        {
+          "id": "c",
+          "move": true,
+          "copy": true,
+          "report": true,
+          "delete": true
+        }
+      ],
+      "selected": [
+        "a",
+        "c"
+      ],
+      "shown": [
+        "a",
+        "b"
+      ],
+      "expected": {
+        "offered": true,
+        "count": 2,
+        "hidden": 1,
+        "entries": [
+          {
+            "action": "move",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "copy",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "report",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "delete",
+            "enabled": true,
+            "cannot": 0
+          }
+        ]
+      }
+    },
+    {
+      "rule": "a selected node that left the level counts nowhere",
+      "rows": [
+        {
+          "id": "a",
+          "move": true,
+          "copy": true,
+          "report": true,
+          "delete": true
+        },
+        {
+          "id": "b",
+          "move": true,
+          "copy": true,
+          "report": true,
+          "delete": true
+        }
+      ],
+      "selected": [
+        "a",
+        "gone"
+      ],
+      "shown": [
+        "a",
+        "b"
+      ],
+      "expected": {
+        "offered": true,
+        "count": 1,
+        "hidden": 0,
+        "entries": [
+          {
+            "action": "move",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "copy",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "report",
+            "enabled": true,
+            "cannot": 0
+          },
+          {
+            "action": "delete",
+            "enabled": true,
+            "cannot": 0
+          }
+        ]
+      }
+    }
+  ]
 }

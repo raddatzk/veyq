@@ -67,6 +67,40 @@ export function useSelection(): Selection {
   }
 }
 
+/** The actions of a selection's bar, in its order (the apps' `SelectionAction`, inbox #1049). */
+export const SELECTION_ACTIONS = ['move', 'copy', 'report', 'delete'] as const
+export type SelectionActionId = (typeof SELECTION_ACTIONS)[number]
+
+/** What one node of the level lets its selection do: its rights answer joined with the page's door for each action. */
+export type SelectionRights = Readonly<Record<SelectionActionId, boolean>>
+
+/** One action of the bar: shown, `enabled` where some selected node allows it, `cannot` of the selected it does not reach. */
+export interface SelectionEntry {
+  action: SelectionActionId
+  enabled: boolean
+  cannot: number
+}
+
+/**
+ * The bar of a level's selection (`LevelView.vue`), over numbers only — the rule `contracts/platform/plans/v1-vectors.json`'s
+ * `selection` cases hold here and in the apps' core (`LevelSelection.bar`): an action is shown where some node of the level
+ * allows it (`rows`, every node at the level, whichever tab shows), enabled where some SELECTED node does, and says how many
+ * of the selected it cannot reach (the report says nothing: anyone who sees a node reports it). `count` is how many of the
+ * level are selected (an id no longer there counts nowhere), `hidden` how many of them the tab on screen (`shown`) hides;
+ * `offered` whether the level offers Select at all.
+ */
+export function selectionBar(
+  rows: ReadonlyMap<string, SelectionRights>, selected: Iterable<string>, shown: Iterable<string>,
+): { offered: boolean; count: number; hidden: number; entries: SelectionEntry[] } {
+  const chosen = [...new Set(selected)].filter((id) => rows.has(id))
+  const on = new Set(shown)
+  const entries = SELECTION_ACTIONS.filter((a) => [...rows.values()].some((r) => r[a])).map((a) => {
+    const reach = chosen.filter((id) => rows.get(id)![a]).length
+    return { action: a, enabled: reach > 0, cannot: a === 'report' ? 0 : chosen.length - reach }
+  })
+  return { offered: entries.length > 0, count: chosen.length, hidden: chosen.filter((id) => !on.has(id)).length, entries }
+}
+
 /** Several names or nouns as one phrase of `locale` ("“a”, “b” and “c”" / "„a“, „b“ und „c“"), for the selection's
  *  questions and summaries. */
 export function joinList(locale: string, items: readonly string[]): string {

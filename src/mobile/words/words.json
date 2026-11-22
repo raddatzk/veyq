@@ -6823,5 +6823,235 @@
     "note": "the Linux app's AppStream description, its second paragraph",
     "en": "It is a preview: Memories and the settings are not in the app yet; the web holds them.",
     "de": "Sie ist eine Vorschau: Erinnerungen und die Einstellungen sind noch nicht in der App; das Web enthält sie."
+  },
+  "select_action": {
+    "note": "A level's Select tool (the web's node.select.action, inbox #1049).",
+    "en": "Select",
+    "de": "Auswählen"
+  },
+  "select_bar": {
+    "note": "The selection bar's name for assistive technology (the web's node.select.bar).",
+    "en": "Selection",
+    "de": "Auswahl"
+  },
+  "select_all": {
+    "en": "All",
+    "de": "Alle"
+  },
+  "select_none": {
+    "en": "None",
+    "de": "Keine"
+  },
+  "select_count": {
+    "en": "{1:int} selected",
+    "de": "{1:int} ausgewählt"
+  },
+  "select_count_hidden": {
+    "en": "{1:int} selected, {2:int} of them not shown in this tab",
+    "de": "{1:int} ausgewählt, davon {2:int} in diesem Tab nicht sichtbar"
+  },
+  "select_cannot_move": {
+    "en": {
+      "one": "{1:int} of {2:int} cannot be moved.",
+      "other": "{1:int} of {2:int} cannot be moved."
+    },
+    "de": {
+      "one": "{1:int} von {2:int} kann nicht verschoben werden.",
+      "other": "{1:int} von {2:int} können nicht verschoben werden."
+    }
+  },
+  "select_cannot_copy": {
+    "en": {
+      "one": "{1:int} of {2:int} cannot be copied.",
+      "other": "{1:int} of {2:int} cannot be copied."
+    },
+    "de": {
+      "one": "{1:int} von {2:int} kann nicht kopiert werden.",
+      "other": "{1:int} von {2:int} können nicht kopiert werden."
+    }
+  },
+  "select_cannot_delete": {
+    "en": {
+      "one": "{1:int} of {2:int} cannot be deleted.",
+      "other": "{1:int} of {2:int} cannot be deleted."
+    },
+    "de": {
+      "one": "{1:int} von {2:int} kann nicht gelöscht werden.",
+      "other": "{1:int} von {2:int} können nicht gelöscht werden."
+    }
+  },
+  "select_quoted": {
+    "note": "A name in a selection's list of names (the web's node.move.many.quoted, node.deleteMany.quoted).",
+    "en": "“{1}”",
+    "de": "„{1}“"
+  },
+  "select_reason": {
+    "note": "One node of a selection that was not moved or deleted, with why (the web's node.move.many.reason).",
+    "en": "“{1}”: {2}",
+    "de": "„{1}“: {2}"
+  },
+  "select_summary": {
+    "note": "A selection's outcome followed by what it left (the web's toast joins the two with a space).",
+    "en": "{1} {2}",
+    "de": "{1} {2}"
+  },
+  "move_many_title": {
+    "en": {
+      "one": "Move {1:int} item",
+      "other": "Move {1:int} items"
+    },
+    "de": {
+      "one": "{1:int} Eintrag verschieben",
+      "other": "{1:int} Einträge verschieben"
+    }
+  },
+  "move_many_hint": {
+    "en": "Open the place they should go to and choose “Move here”. Everything inside them moves along and stays readable.",
+    "de": "Öffne den Ort, an den sie sollen, und wähle „Hierher verschieben“. Alles darin wird mitverschoben und bleibt lesbar."
+  },
+  "move_many_empty": {
+    "en": "No place here can take them.",
+    "de": "Hier gibt es keinen Ort, der sie aufnehmen kann."
+  },
+  "move_many_here_current": {
+    "en": "They are all already here.",
+    "de": "Sie sind alle schon hier."
+  },
+  "move_many_here_self": {
+    "en": "“{1}” can’t be moved into itself.",
+    "de": "„{1}“ kann nicht in sich selbst verschoben werden."
+  },
+  "move_many_here_inside": {
+    "en": "“{1}” can’t be moved into something inside it.",
+    "de": "„{1}“ kann nicht in etwas verschoben werden, das darin liegt."
+  },
+  "move_many_here_identity": {
+    "en": "Nothing can be moved into a guest’s folder.",
+    "de": "In den Ordner einer Person lässt sich nichts verschieben."
+  },
+  "move_many_here_kind": {
+    "en": "This place can’t hold “{1}”.",
+    "de": "Dieser Ort kann „{1}“ nicht aufnehmen."
+  },
+  "move_many_moved": {
+    "en": "{1:int} moved to “{2}”.",
+    "de": "{1:int} nach „{2}“ verschoben."
+  },
+  "move_many_none_moved": {
+    "en": "Nothing was moved.",
+    "de": "Nichts wurde verschoben."
+  },
+  "move_many_not_moved": {
+    "note": "The web's node.move.many.notMoved heading, its lines after it.",
+    "en": "Not moved: {1}",
+    "de": "Nicht verschoben: {1}"
+  },
+  "move_many_undo_failed": {
+    "en": "Could not be moved back: {1}. Please move them yourself.",
+    "de": "Konnte nicht zurückverschoben werden: {1}. Bitte verschiebe sie selbst."
+  },
+  "move_many_identity_confirm": {
+    "en": "{1} become ordinary folders: the guests who sent them can no longer add anything to them, and they cannot be moved back into the drop box. Everything in them stays readable for you.",
+    "de": "{1} werden gewöhnliche Ordner: Die Personen, die sie eingeworfen haben, können nichts mehr hinzufügen, und sie lassen sich nicht zurück in den Briefkasten verschieben. Alles darin bleibt für dich lesbar."
+  },
+  "copy_many_title": {
+    "en": {
+      "one": "Copy {1:int} item",
+      "other": "Copy {1:int} items"
+    },
+    "de": {
+      "one": "{1:int} Eintrag kopieren",
+      "other": "{1:int} Einträge kopieren"
+    }
+  },
+  "copy_many_hint": {
+    "en": "Open the place the copies should go to and choose “Copy here”. Everything inside them is copied along.",
+    "de": "Öffne den Ort, an den die Kopien sollen, und wähle „Hierher kopieren“. Alles darin wird mitkopiert."
+  },
+  "copy_many_copied": {
+    "en": "{1:int} copied to “{2}”.",
+    "de": "{1:int} nach „{2}“ kopiert."
+  },
+  "copy_many_here_self": {
+    "en": "“{1}” can’t be copied into itself.",
+    "de": "„{1}“ kann nicht in sich selbst kopiert werden."
+  },
+  "copy_many_here_inside": {
+    "en": "“{1}” can’t be copied into something inside it.",
+    "de": "„{1}“ kann nicht in etwas kopiert werden, das darin liegt."
+  },
+  "copy_many_here_identity": {
+    "en": "Nothing can be copied into a guest’s folder.",
+    "de": "In den Ordner einer Person lässt sich nichts kopieren."
+  },
+  "copy_many_here_kind": {
+    "en": "This place can’t hold “{1}”.",
+    "de": "Dieser Ort kann „{1}“ nicht aufnehmen."
+  },
+  "delete_many_title": {
+    "en": {
+      "one": "Delete {1:int} item",
+      "other": "Delete {1:int} items"
+    },
+    "de": {
+      "one": "{1:int} Eintrag löschen",
+      "other": "{1:int} Einträge löschen"
+    }
+  },
+  "delete_many_copy": {
+    "en": {
+      "one": "{1:int} selected item moves to the trash, with everything inside it. The selection includes {2}. You can restore it from there until it is removed for good.",
+      "other": "{1:int} selected items move to the trash, with everything inside them. The selection includes {2}. You can restore them from there until they are removed for good."
+    },
+    "de": {
+      "one": "{1:int} ausgewählter Eintrag kommt mit allem, was darin liegt, in den Papierkorb. Die Auswahl umfasst {2}. Dort lässt sich der Eintrag wiederherstellen, bis er endgültig entfernt wird.",
+      "other": "{1:int} ausgewählte Einträge kommen mit allem, was darin liegt, in den Papierkorb. Die Auswahl umfasst {2}. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird."
+    }
+  },
+  "delete_many_moved": {
+    "en": {
+      "one": "{1:int} item moved to the trash.",
+      "other": "{1:int} items moved to the trash."
+    },
+    "de": {
+      "one": "{1:int} Eintrag liegt jetzt im Papierkorb.",
+      "other": "{1:int} Einträge liegen jetzt im Papierkorb."
+    }
+  },
+  "delete_many_none": {
+    "en": "Nothing was deleted.",
+    "de": "Nichts wurde gelöscht."
+  },
+  "delete_many_not_deleted": {
+    "note": "The web's node.deleteMany.notDeleted heading, its lines after it.",
+    "en": "Not deleted: {1}",
+    "de": "Nicht gelöscht: {1}"
+  },
+  "delete_many_undo_failed": {
+    "en": "Could not be restored: {1}. You can restore them from the trash.",
+    "de": "Konnte nicht wiederhergestellt werden: {1}. Du kannst sie aus dem Papierkorb wiederherstellen."
+  },
+  "node_a_folder": {
+    "note": "A folder's noun with its article (the web's node.aFolder).",
+    "en": "a folder",
+    "de": "einen Ordner"
+  },
+  "report_items": {
+    "en": {
+      "one": "You are reporting {1:int} item.",
+      "other": "You are reporting {1:int} items."
+    },
+    "de": {
+      "one": "Du meldest {1:int} Element.",
+      "other": "Du meldest {1:int} Elemente."
+    }
+  },
+  "report_too_many": {
+    "en": "You selected {1:int} items. One report holds at most 100.",
+    "de": "Du hast {1:int} Elemente ausgewählt. Eine Meldung umfasst höchstens 100."
+  },
+  "report_enclosing": {
+    "en": "Report the folder that holds them instead",
+    "de": "Stattdessen den Ordner melden, der sie enthält"
   }
 }

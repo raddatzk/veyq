@@ -7,12 +7,16 @@ import me.raddatz.veyq.mobile.AppKinds
 
 /**
  * A level's tools (ADR 0154 decision 2; the web's `LevelView` tools row, owner 2026-11-04): beside the tabs, in the web's
- * order — the space's trash, then the view switch. The web's Select stands before them there; the apps' levels select
- * nothing yet (no level selection is built), so it is no entry until one is (inbox #1049).
+ * order — Select, the space's trash, then the view switch.
  */
 @Plan
 @Serializable
 enum class LevelTool {
+    /**
+     * Select (inbox #421, #1049): turns the level's Select mode on and off ([LevelSelection]; `ShellModel.selectStart`,
+     * `selectCancel`) — a check on every row and tile, and the selection's bar.
+     */
+    @SerialName("select") SELECT,
     /** The space's node trash (`ShellModel.trashSheet`): every application's deleted nodes, the level's own. */
     @SerialName("trash") TRASH,
     /** The view switch, rows or tiles (`ViewMode.LEVEL`, ADR 0149 decision 8): governs the whole list. */
@@ -30,12 +34,13 @@ data class LevelPlan(val creates: List<AppKinds.Create>, val tools: List<LevelTo
     companion object {
         /**
          * The plan of a level: [creates] New's entries where New is offered (`ShellModel.createsHere` under
-         * `canCreateHere`); the trash where [trash] (the web's `trashOffered`: a member's space, online, not in a guest's
+         * `canCreateHere`); Select where [select] (the web's `canSelect`: some row of the level allows an action of a
+         * selection, [LevelSelection.offered], and the level draws its own rows); the trash where [trash] (the web's `trashOffered`: a member's space, online, not in a guest's
          * folder); the view switch where the level offers more than one view ([views], [LevelPlan.views]: the web's
          * `showViews`, `views.length > 1`).
          */
-        fun of(creates: List<AppKinds.Create>, trash: Boolean, views: List<ViewMode>): LevelPlan =
-            LevelPlan(creates, listOfNotNull(LevelTool.TRASH.takeIf { trash }, LevelTool.VIEW.takeIf { views.size > 1 }))
+        fun of(creates: List<AppKinds.Create>, trash: Boolean, views: List<ViewMode>, select: Boolean = false): LevelPlan =
+            LevelPlan(creates, listOfNotNull(LevelTool.SELECT.takeIf { select }, LevelTool.TRASH.takeIf { trash }, LevelTool.VIEW.takeIf { views.size > 1 }))
 
         /**
          * The views a level offers (the web's `LevelView` `views`): none on the Memories map tab ([mapTab], which shows no
