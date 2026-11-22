@@ -436,9 +436,8 @@ Measured before the decision (2026-11-20):
     functions over booleans the caller reads. *Choice:* the third — the web's `Access` is a browser session (a guest's link,
     a pending deletion, the switch of an application) the apps read through their doors, so the rule is the conjunction and
     the reading stays each platform's. The vectors enumerate every combination (8, 128 and 64 cases); before phase 3 the
-    web's TypeScript answered all 200, after it the core's (measured, `plans.vectors.test.ts`, `PlanVectorsTest`). The apps do
-    not call `CoreRights` yet: their `NodeHeader.rights` takes the same answers from their doors (favoriteKnown, coverOffered).
-    *Cost:* until the apps read through it too, the three rules live once in the core but are read by the web alone.
+    web's TypeScript answered all 200, after it the core's (measured, `plans.vectors.test.ts`, `PlanVectorsTest`). Since 2026-11-22 the
+    apps read through it too (`NodeHeader.rights`, ADR 0154 § As built: the plans aligned, P11).
   - **D9 — The web hands the plan presence, not flags.** *Q:* how does the web say what a node grants? *Options:* a rights
     object computed beside the actions; the actions the page and core's action builders already gate. *Choice:* the actions —
     each standard or core action's presence is its `NodeHeader.Rights` flag, every other one the page's own entry, in its
@@ -487,7 +486,7 @@ Measured before the decision (2026-11-20):
     guard's own blind spots) and would have to except the registry's `header.order` arrays, the one place two serial names
     stand together legitimately (data held by the vectors). *Evidence:* `plans.whole.test.ts` bitten (the check removed: red).
     *Cost:* a component that filters the plan's answer after the adapter is not seen by a static rule; none does.
-  - **D14 — Left, each named:** a row's Share (the apps offer it, the web does not; the owner's question, each client keeps
+  - **D14 — Left, each named** (since settled or named anew, [ADR 0154](0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md) § As built: the plans aligned): a row's Share (the apps offer it, the web does not; the owner's question, each client keeps
     its own until answered); a kept link's share report on the apps' rows (`ShellModel.rowPlan` hands no `own`; the web's,
     by ADR 0154's rule); New's order (the web's Folder, Memory, Upload files, Upload folder, Pot, Bookmark against the core's
     Folder, Pot, Upload files, Upload folder, Memory, Bookmark — ADR 0154's rule says the web's; a level's plan, not this

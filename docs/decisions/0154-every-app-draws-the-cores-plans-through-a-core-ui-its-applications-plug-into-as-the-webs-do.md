@@ -424,6 +424,110 @@ held for the screens' models but not around them:
   storage sizes and session dates, the trash's and a link's days, the gallery's day chip ("March 12" / "12. März"); the
   iPhone's the same, the owner's.
 
+- **As built: the plans aligned** (2026-11-22, branch `claude/plans-align`; owner mandate 2026-11-21, answers 2026-11-22:
+  a row's *Share* on every client, a READ_WRITE link guest's *Upload folder* in New on every client). ADR 0155 § The
+  rights and plans' slice's D3 and D14 deviations, each settled in the core so all four apps follow, by this ADR's rule
+  (the web's unless an owner answer says otherwise); `contracts/platform/plans/v1-vectors.json` gained a `level` section
+  both sides read. The decision log, kept by its implementer (question, options, choice and why, evidence, cost):
+  - **P1 — Pin the level's plan in the vectors first.** *Q:* where do New's order, a guest's New and the level's tools get
+    held on both sides? *Options:* each client's own test; a new vectors file; a `level` section of
+    `contracts/platform/plans/v1-vectors.json`. *Choice:* the `level` section (`creates`, `guest`, `tools`), answered by the
+    core's `PlanVectorsTest` (and its write mode) and on the web by `plans.vectors.test.ts`' New-order case over the real
+    registry (`LevelView.vue`'s folder first, then `registry.levelMenu()`); the row case "an app's row: the share among the
+    standard ones" renamed for owner answer 1, as it is now every client's. The web has no core-drawn level plan, so `guest`
+    and `tools` are written from the web's rules by hand (`LevelView.vue` lines 175, 259–281; `canUploadFolder`) and read
+    against them. *Evidence:* measured, `:composition:jvmTest --tests '*PlanVectorsTest*'` green; bitten (below). *Cost:*
+    the web's `tools` and `guest` rules are pinned in prose and cases, not by a web test (it draws no core plan there).
+  - **P2 — New's order is the web's** (D14; ADR 0154's rule). `AppKinds.createsWhere` builds Folder, Memory, (on a level
+    of Home) Upload files, Upload folder, Pot, then the kept link; `homeCreates`/`drawerCreates` gone (their only readers
+    were the function and one test). The drawer's New follows: Folder, Memory, Pot, Bookmark. *Evidence:* the vectors'
+    `level.creates`; the web's case reads its registry. *Cost:* every app's New and the drawer's reorder (owner-visible,
+    settled by the rule).
+  - **P3 — The view switch's gate is the web's `showViews`** (D14). *Q:* is "unless the map tab" the same rule? *Options:*
+    keep `views: Boolean`; port the web's rule. *Choice:* `LevelPlan.of(…, views: List<ViewMode>)` offers the switch only
+    where more than one view is offered, and `LevelPlan.views(mapTab, identityFolder, rows)` is the web's: none on the map
+    tab, none on an empty guest's identity folder (the web's `hideEmptyTabs` lists no folders there, so one view at most),
+    rows and tiles everywhere else. `ShellModel.levelPlan` reads the folder's identity and its rows. *Evidence:* measured
+    in `LevelView.vue`; the vectors' `level.tools`. *Cost:* a member's empty guest folder loses its (useless) switch on the
+    apps.
+  - **P4 — A READ_WRITE guest's *Upload folder* (owner answer 2).** *Q:* where does a guest's folder upload live, given a
+    platform's walk yields Depot's `FolderUpload.Found` and the core UI may not reach an application? *Options:* move the
+    walk vocabulary to `:core`; a core hook (`AppKinds`) beside `guestLevelUploads`; Depot's own entry
+    (`DepotGuest.uploadFolder`) reached through each platform's existing application seam. *Choice:* the third — the
+    web's is Depot's too (`features/depot/levelRows.ts` `uploadFolder` over `guestUpload.beginTree`). `FolderUpload.made`
+    is now the one plan-and-order for both (a `Maker` over a member's folder ids or a guest's opened nodes, the top numbered
+    past its siblings); `GuestLevel.writer()` (`@PlatformApi`) asks the name through core's one naming flow and hands Depot
+    the access, the folder and its siblings; each file is a `LevelUpload` with its planned name. Android and Apple reach it
+    through their `LevelUploads` seam (Depot's holding), Linux and Windows through the bridge's new `Received.UploadFolder`;
+    `ReceivedPage.creates` carries `GuestLevel.creates` so the desktops draw the plan instead of a fixed two-entry menu.
+    `Answer.Queued.more` carries every line a folder upload says. *Evidence:* compiled (`:composition:compileTestKotlinJvm`,
+    `:bridge:compileKotlinJvm`); the plan rule bitten through the vectors. Once the batch settled, the folders that hold nothing
+    are taken back deepest first (`GuestLevel.Writer.takeBackEmpty`, the web's guest-only `takeBackEmptyFolders`: a guest
+    cannot trash), none below which a refusal that is not final could still land a file on a retry. *Cost:* no storage check
+    for a guest (the web's skips it too: a guest reads no tenant's room).
+  - **P5 — A row's Share on the web (owner answer 1).** `rowRightsOf` hands the row the links its rights answer grants
+    (`LevelRowStandard.share`, a drop box's worded `depot.dropBox.share` as its page's), `standardRowActions` offers it
+    where the page has the share door, and the plan (`LevelRow.plan`) places it as the apps' rows already did. *Evidence:*
+    `LevelView.test.ts` (a folder row: favorite, rename, move, share, delete; its click opens the share door with the
+    row's offer). *Cost:* every member's row grows one entry.
+  - **P6 — A kept link's row's *Report shared content*** (D3/D14). `ShellModel.rowPlan` hands `REPORT_SHARED` as the row's
+    own entry where the kept link's meta reads (the web's `coreNodeActions.ts` condition); `NodeHeader.label` words it (a
+    row has no page); `BookmarkPage.reportSharedFromRow` reads the meta and opens the link's screen with its report. Android
+    and Apple run it from the row menu's own entry, Linux's header and Windows' `RowMenu` through the bridge's new
+    `Row.ReportShared`. *Cost:* opening a kept link's row menu decrypts its meta once.
+  - **P7 — Settings: the two `storage` ids** (D14). The web's `storage` is the tenant owner's storage section (its search
+    vectors' `storage` with "S3"), the apps' is "Storage on this device": the apps' section is now `device-storage`
+    (Android's anchor reads the core's id; Linux's and Windows' anchors renamed). *Cost:* a stored deep link to the apps'
+    `storage` section (none is stored: the anchors are in-memory) would miss.
+  - **P8 — Settings: the profile's and appearance's gates** (D14). Profile: the web gates it on a tenant
+    (`activeSpace.tenantId`); every app session is a tenant's (`TenantSession`), so the gate holds always — the same answer,
+    no change. Maps: the web lists it always ("a consent must be withdrawable wherever it was given"); the apps list it once
+    the tenant's map services are built, which every platform does when the shell opens (Apple's `AppModel`, Android's
+    `AppModel`, the bridge for the desktops) — the same answer while Settings can show, no change. Appearance: the web offers
+    it everywhere, the apps on the phones only (Mac, Linux and Windows follow the system's appearance and language). The rule
+    says the web's; the owner's 2026-11-09 rule says the platform's guidelines as far as possible, and adding it means a
+    theme and language choice on three desktops — **an owner question**, unchanged until answered.
+  - **P9 — The sign-in's entries** (D14). The web's sign-in has a locked entry (§E3: sign in without unlocking, to sign out
+    everywhere), *Forgot password* (the recovery flow) and, with a live session, *Sign out*; the apps' have Cancel while
+    adding and *Open a link* (owner 2026-11-20, ADR 0154 § Consequences). The rule settles that the apps gain the first two,
+    but each is an account flow the apps do not have (recovery, the locked sign-out), not a plan entry, and the account and
+    Secret Key area is another session's work in parallel. *Choice:* not moved here; a follow-up CR. The third is the
+    apps' `UnlockPlan` (a live session's own screen: *Other account*, *Forget*), no difference to align.
+  - **P10 — Delete on a guest's own photo tile** (D14). `TileAction.DELETE` where the rights delete a guest's own media
+    only and the medium is its own (`GalleryModel.deletes`), the web's `isOwnMedia` overlay; it runs `GalleryModel.trash`,
+    which asks first and purges (`purging`, each platform's question). Drawn on all four. *Cost:* the apps know a guest's
+    own uploads for the session only (`MemoriesGuest`' in-memory set), the web per device and identity (`ownShareMedia.ts`,
+    localStorage) — the tile offers the delete in the session that uploaded it; follow-up.
+  - **P11 — The apps read through `CoreRights`** (D8/D14). `NodeHeader.rights` (both the header's and the row's) answers the
+    heart by `CoreRights.favorite` (a member's, on a node, of a kind this client draws, and the pin set known), the cover by
+    `CoreRights.cover` and a kept link's rename, move and delete by `CoreRights.bookmark`; an app's header is a member's, on
+    a node, under open keys, and a switched-off application's object offers no cover through its doors
+    (`AppKinds.Facts.canWrite`). *Evidence:* `NodeHeaderTest`, `PlanVectorsTest` green. *Cost:* the apps read no pending
+    deletion yet (`readonly` false): the web's narrowing of a space pending deletion has no app twin — follow-up.
+  - **P12 — #1049, a level's Select.** *Q:* fits this CR? Measured by the Explore map: no selection model in the core,
+    `MoveSheet` and `NodeTrash` single-node, each platform's level a pick mode and an action bar of its own — roughly
+    1.5–2.5k lines over the core, the bridge and four platforms. *Choice:* its own CR, refined
+    (`changes/cr-level-selection.md`); `LevelTool` keeps no `SELECT` until it is built (an entry fails every platform's
+    build until drawn).
+  - **P13 — #1062, numbered sibling names.** *Q:* fits cleanly? A row's and a header's name are `NodeRef.name` and
+    `FolderRef.name`, which the rename dialog prefills and the move and collision checks read; numbering them in place would
+    prefill "Anna (2)". A display name beside the name touches every row, tile, title and breadcrumb drawing on four apps.
+    *Choice:* not here; inbox #1062 keeps its row with this measurement as its next step.
+  - **P14 — The bites and the pass.** Each restored with `/bin/cp -f`: `createsWhere` with the Pot before the Memory turns
+    `PlanVectorsTest`'s `level.creates` red; `GuestLevel.createsFor` without *Upload folder* its `level.guest`;
+    `LevelPlan.views` without the identity-folder case its `level.tools` (the `size > 1` gate alone bit nothing: `views`
+    offers none or two, so the rule lives in `views`); a guest folder upload's files sent into the level instead of their
+    folder turns `GuestDoorsTest` red; the web's row share switched off turns `LevelView.test.ts` red, Memories' New
+    `order` 45 turns `plans.vectors.test.ts`' New-order case red. `VEYQ_WRITE_VECTORS=1` rewrites the vectors byte for
+    byte. The take-back of a guest's empty folders is held by no test (the played share answers no `abandonShareNode`).
+    **The browser pass** (one throwaway, headless system Chrome, a Vite of this tree against one of `335f70170`): New,
+    the folder's header buttons and menu, the level inside and Settings identical; a folder row's menu gains *Share*
+    after *Move to…*, which opens the folder's share dialog; no console error. This was also ADR 0155's rights and plans'
+    slice's owed pass: the core-drawn header (cover, rename, favorite, share, download | move, copy, report, delete) and
+    row menus rendered and acted. **Not clicked on the apps:** a guest's *Upload folder*, a kept link row's *Report shared
+    content* and a guest tile's delete on every platform (Android, Linux and Windows built and their tests green, Apple
+    both builds green); the passes are the coordinator's and the owner's.
+
 ## Alternatives considered
 
 - **Hold the structure by passes and a checklist.** Rejected: the four apps drifted under exactly that (the audit's
