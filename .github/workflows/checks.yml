@@ -250,6 +250,36 @@ jobs:
         working-directory: tests/e2e
         run: pnpm run check
 
+  kotlin-core:
+    name: Kotlin core tests on the JVM (src/mobile)
+    # The Kotlin core's own tests (inbox #1085): every module's `jvmTest` — the platform's, each application's, the
+    # composition's, the test support's and the bridge's, selected by task name so a module added to the build is in
+    # without an edit here. They hold the core to the contracts the web and the backend change too — the crypto vectors,
+    # the plans' and the tree's vectors, the import cases, the kinds' facts — which `frontend`'s conformance under Node
+    # covers only in part. A JDK is all it needs: `:android` configures without an Android SDK (no `local.properties`,
+    # no `ANDROID_HOME`; measured 2026-11-22) and none of its tasks is in the graph, no device, no Xcode. The live cases
+    # skip without `VEYQ_LIVE`. The budget is an estimate until the first run replaces it.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # src/mobile's Gradle build compiles its JVM side for 21 (`jvmToolchain(21)`) and provisions no JDK itself.
+      - name: Set up Java
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Validate the Gradle wrapper JAR
+        uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - name: Run the core's JVM tests
+        working-directory: src/mobile
+        run: ./gradlew --no-daemon jvmTest
+
   webp-encoder:
     name: WebP encoder rebuilds byte for byte
     # The client's WebP encoder is libwebp built by us and committed (ADR 0127 decision 2); this rebuild is what ties the
@@ -1405,6 +1435,7 @@ jobs:
       - backend
       - backend-races
       - frontend
+      - kotlin-core
       - webp-encoder
       - chart
       - web-e2e
@@ -1424,6 +1455,7 @@ jobs:
       && needs.backend.result == 'success'
       && needs.backend-races.result == 'success'
       && needs.frontend.result == 'success'
+      && needs.kotlin-core.result == 'success'
       && needs.webp-encoder.result == 'success'
       && needs.chart.result == 'success'
       && needs.web-e2e.result == 'success'
