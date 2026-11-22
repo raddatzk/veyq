@@ -305,8 +305,22 @@ Measured before the decision (2026-11-20):
     `displayNamesOf` takes an order, `endsIdentity` the tree); `TreeSource` gained `facts()`; the time gate binds a rule as
     the web calls it (a keystroke on a held generation), a generation's build only the 100 ms.
   - *Left:* Depot's `DepotFiles.collision` and Memories' `MemoryCreate.check` keep their own loops (over the same
-    `AppKinds.tokenInput`); the apps' level and header plans do not hand the numbered name on yet (inbox #1062); a guest
-    moves nothing in the apps (inbox #1063).
+    `AppKinds.tokenInput`); a guest moves nothing in the apps (inbox #1063).
+  - *The numbered name in the apps* (inbox #1062, built 2026-11-22, branch `claude/sibling-names-1062`): the core's plans
+    hand it on **beside** the name — `NodeRef.label` set by `Home.level`, `FolderRef.label` by `asFolder` and `Shell.at`
+    (and read anew by `Shell.relabelled` on each of `ShellModel`'s rebuilds: an older sibling restored renumbers the path),
+    `GuestLevel.Row.label` and `GuestLevel.title` in node-id order (a guest is served no creation instant), the bridge's
+    `ReceivedRow.displayName` and `ReceivedPage.title`; each null where the name is the label, so a `copy(name = …)`
+    never carries a stale one, and a constructor property, so the bridge's generated Rust and C# carry it. The name stays
+    what a rename prefills, a move and a collision check read, a report names and an AutomationId keys. Android, Apple,
+    Linux and Windows draw it on a folder's row and tile, Home's title and a guest's rows and title (no app draws a
+    breadcrumb of Home's path). **Only folders are numbered, everywhere:** the web's level numbered folders among folders,
+    but its breadcrumb (`browse.ts displayNameOf`) and a guest's `nameOf` among every sibling, so a folder `Rom` beside a
+    Memory `Rom` — legal, a name is unique among its application's siblings only — read `Rom (2)` in the breadcrumb and
+    `Rom` in the list it was picked from; both now number among the sibling folders (`browse.test.ts`). Equal names of one
+    class arise among folders alone (a drop box's guests'). The web already draws `displayNamesOf` from the core, so
+    decision 7.2's swap needs nothing more. Owed: the four apps' click pass over a drop box with two `Anna`s (member and
+    guest).
 - **The share links' slice** (decision 7.2's second, built 2026-11-22, branch `claude/share-links-slice`). A received
   link's check, its host, its report link and the share page's `&report` (`ReceivedLink`), a link's last end day under a
   tenant's limit (`LinkDays`, new) and an instance's embeddability (`ShareInstance.refusal` for the apps' open,
