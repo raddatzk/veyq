@@ -45,6 +45,14 @@ One meaning per word, in docs, code and the wiki (EN+DE):
 | **journal** (*Tagebuch*) | the markdown text of a Memory or a Chapter, written together ([ADR 0133](0133-a-memorys-journal-is-a-sealed-crdt-log-whose-snapshots-only-members-write.md)); a function of Memories, not an application | a dated list of entries (a Chapter is already the day) |
 | **bookmark** (*Lesezeichen*) | a node that keeps a public link someone sent, opened where the share lives ([ADR 0120](0120-a-received-link-is-kept-as-a-bookmark-node-that-opens-and-reports-where-the-share-lives.md)) | a **favorite** (*Favorit*), a member's private pin of a node |
 | **`K_node`** (identifier `kNode`) | the random content key every node carries — a Memory, a Chapter, a folder, a Depot file or drop box — wrapped under its parent's key (ADR 0012, ADR 0080) | `K_mem`, which named it when only a Memory had a key; the wire labels (seal purposes, derivation info strings) never carried the name and do not change |
+| **cover** (*Cover*) | the picture shown for a node: a folder's, a Memory's, a Pot's (owner 2026-11-22) | *Titelbild* |
+| **track** (*Titel*) | one piece of a Memory's or a Chapter's music (owner 2026-11-22) | *Track* in German, which there names only a GPX track on a Memory's map |
+| **tenant** (*Tenant*) | one instance's household or organization ([architecture](../architecture/README.md)); stays English in German (owner 2026-11-22) | a German translation |
+
+**The owner's copy answers of 2026-11-22**, beside the three words above (they settled the pairs ADR 0136 § The web's
+words left open): the step that saves the Emergency Kit is **"Notfall-Kit sichern"** in German on every client (the
+web's wording); and a text that quotes a screen quotes its title as the screen is named — "Add a device", never
+"add a device".
 
 **Depot is the second application's name** (*Depot* in English and German alike). It says "where I put things
 safely" without promising more. Its code id follows the product name (`depot`), so the product never has two

@@ -281,7 +281,7 @@ const de: typeof en = {
     delete: 'Kasse löschen',
     deleteConfirm: '„{name}“ und alle ihre Einträge kommen in den Papierkorb.',
     copyLoss: 'Den Verlauf jedes Eintrags und die gelöschten Einträge: Eine Kopie beginnt jeden Eintrag mit seiner aktuellen Fassung.',
-    copyLossCover: 'Das Titelbild einer Kasse.',
+    copyLossCover: 'Das Cover einer Kasse.',
     loading: 'Kasse wird geladen…',
     loadFailed: 'Die Kasse konnte nicht geladen werden. Bitte versuche es erneut.',
     baseCurrency: 'Basiswährung',

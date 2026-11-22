@@ -447,7 +447,7 @@ const de: typeof en = {
     meta: {
       conflict: 'Jemand anderes hat das inzwischen geändert. Jetzt steht dort diese Version — speichere erneut, um sie zu ersetzen.',
       unreadable:
-        'Die Angaben dieser Erinnerung (Datum, Ort, Titelbild) lassen sich nicht öffnen: Sie sind beschädigt oder wurden durch etwas ersetzt, das diese App nicht geschrieben hat. Sie lassen sich nicht ändern, deshalb wurde nichts gespeichert, und ein erneuter Versuch hilft nicht. Ihre Fotos sind davon nicht betroffen.',
+        'Die Angaben dieser Erinnerung (Datum, Ort, Cover) lassen sich nicht öffnen: Sie sind beschädigt oder wurden durch etwas ersetzt, das diese App nicht geschrieben hat. Sie lassen sich nicht ändern, deshalb wurde nichts gespeichert, und ein erneuter Versuch hilft nicht. Ihre Fotos sind davon nicht betroffen.',
     },
     // Wer dabei war (ADR 0083, uc.memory.participants): anonyme Mitglieds-IDs, in den Details der Erinnerung versiegelt; nur für Mitglieder.
     participants: {
