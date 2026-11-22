@@ -687,7 +687,24 @@
       ],
       "own": [],
       "maxButtons": 2,
-      "expected": null
+      "expected": {
+        "buttons": [
+          "favorite",
+          "share"
+        ],
+        "menu": [
+          "download",
+          "rename",
+          "cover",
+          "offline"
+        ],
+        "last": [
+          "move",
+          "copy",
+          "report",
+          "delete"
+        ]
+      }
     },
     {
       "rule": "a phone's file: send in the menu, three buttons fit",
@@ -716,7 +733,24 @@
         "send"
       ],
       "maxButtons": 3,
-      "expected": null
+      "expected": {
+        "buttons": [
+          "favorite",
+          "download",
+          "share"
+        ],
+        "menu": [
+          "replace",
+          "rename",
+          "send"
+        ],
+        "last": [
+          "move",
+          "copy",
+          "report",
+          "delete"
+        ]
+      }
     },
     {
       "rule": "no button fits: every one in the menu, in order, the last group apart",
@@ -748,7 +782,23 @@
         "music"
       ],
       "maxButtons": 0,
-      "expected": null
+      "expected": {
+        "buttons": [],
+        "menu": [
+          "favorite",
+          "upload",
+          "share",
+          "music",
+          "download"
+        ],
+        "last": [
+          "banner",
+          "move",
+          "copy",
+          "report",
+          "delete"
+        ]
+      }
     }
   ],
   "row": [
@@ -950,7 +1000,21 @@
         "offline": false
       },
       "own": [],
-      "expected": null
+      "expected": {
+        "menu": [
+          "rename",
+          "move",
+          "favorite",
+          "share",
+          "copy",
+          "cover",
+          "download"
+        ],
+        "last": [
+          "report",
+          "delete"
+        ]
+      }
     },
     {
       "rule": "an app's row of a node kept offline",
@@ -967,7 +1031,19 @@
         "offline": true
       },
       "own": [],
-      "expected": null
+      "expected": {
+        "menu": [
+          "rename",
+          "move",
+          "favorite",
+          "download",
+          "offline"
+        ],
+        "last": [
+          "report",
+          "delete"
+        ]
+      }
     }
   ],
   "rights": {

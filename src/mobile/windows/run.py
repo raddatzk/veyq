@@ -325,6 +325,9 @@ def test(pattern: str | None) -> int:
     # and the node tree's vectors (TreeVectorsTest), read the same way
     tree_vectors = Path("contracts/platform/tree/v1-vectors.json")
     copy_to([ROOT / tree_vectors], remote / "repo" / PureWindowsPath(tree_vectors.parent))
+    # and the node plans' vectors (PlanVectorsTest), read the same way
+    plan_vectors = Path("contracts/platform/plans/v1-vectors.json")
+    copy_to([ROOT / plan_vectors], remote / "repo" / PureWindowsPath(plan_vectors.parent))
     env = {"VEYQ_VECTORS": str(remote / VECTORS.name), "VEYQ_NORMALIZATION_TEST": str(remote / NORMALIZATION_TEST.name),
            "VEYQ_REPO_ROOT": str(remote / "repo")}
     forward: list[str] | None = None

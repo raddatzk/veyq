@@ -37,8 +37,11 @@ enum class HeaderAction(val slot: NodeHeader.Slot) {
     @SerialName("upload") UPLOAD(NodeHeader.Slot.ANY),
     /** A Memory's music played or stopped (ADR 0142 decision 6). */
     @SerialName("music") MUSIC(NodeHeader.Slot.ANY),
-    /** A Memory's banner added or changed (ADR 0144 decision 5): a menu entry, as the web's `menuOnly`. */
-    @SerialName("banner") BANNER(NodeHeader.Slot.MENU),
+    /**
+     * A Memory's banner added or changed (ADR 0144 decision 5): never a button, an entry of the menu's last group, as the web's
+     * `menuOnly` (ADR 0154 § Consequences: where the apps and the web differed, the web's; cr-web-rights-and-plans-on-the-core).
+     */
+    @SerialName("banner") BANNER(NodeHeader.Slot.LAST),
     /** A file's content replaced, or the first upload into an empty one (`FileModel`). */
     @SerialName("replace") REPLACE(NodeHeader.Slot.ANY),
     /** A file's copy handed to another app through the system's share sheet (a phone's, `FileRights.send`). */
