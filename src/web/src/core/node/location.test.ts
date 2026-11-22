@@ -339,11 +339,22 @@ describe('equal sibling slugs', () => {
     ])
     expect(breadcrumbOf(t, ANNA_1, 'Root', TENANT_SCOPE).at(-1)!.name).toBe('Anna')
   })
+
+  // A Memory `Seb` beside an older folder `Seb`: two addresses (`#seb/`, `#memories/seb`), so its crumb reads `Seb`, as its row does.
+  it('does not number a Memory against a folder of the same name', () => {
+    const FOLDER = 'd1000000-0000-4000-8000-000000000000'
+    const MEMORY = 'd2000000-0000-4000-8000-000000000000'
+    const t = [node(FOLDER, 'Seb', null, FOLDER_KIND, 1), node(MEMORY, 'Seb', null, MEMORY_KIND, 2)]
+    const crumbs = breadcrumbOf(t, MEMORY, 'Root', TENANT_SCOPE)
+    expect(crumbs.map((c) => c.name)).toEqual(['Root', 'Seb'])
+    expect(crumbs.at(-1)!.hash).toMatch(/memories\/seb$/)
+    expect(breadcrumbOf(t, FOLDER, 'Root', TENANT_SCOPE).at(-1)!.name).toBe('Seb')
+  })
 })
 
 // The one numbering of equal sibling names (inbox #393): display only, in the order the caller gives.
 describe('displayNamesOf', () => {
-  const s = (id: string, name: string, createdAt: number) => ({ id, name, createdAt })
+  const s = (id: string, name: string, createdAt: number, kind: NodeKind = FOLDER_KIND) => ({ id, name, createdAt, kind })
   it('keeps a unique name, and numbers a repeated one from (2) in the given order', () => {
     const siblings = [s('c', 'Anna', 3), s('a', 'Anna', 1), s('b', 'Ben', 2), s('d', 'Anna', 2)]
     expect(Object.fromEntries(displayNamesOf(siblings, (n) => n.name, compareByCreation))).toEqual({
@@ -352,6 +363,16 @@ describe('displayNamesOf', () => {
     // a guest's view has no creation time: node-id order
     expect(Object.fromEntries(displayNamesOf(siblings, (n) => n.name, compareById))).toEqual({
       a: 'Anna', c: 'Anna (2)', d: 'Anna (3)', b: 'Ben',
+    })
+  })
+
+  // A folder and a Memory of one name have two addresses (`#seb/`, `#memories/seb`): neither is numbered. Only a second
+  // node of the same class is, as `segmentsOf` numbers its URL segment - which the server refuses (`slug_taken`) everywhere
+  // but among a drop box's guest folders; the pure rule is pinned here for both classes all the same.
+  it('numbers equal names within the class the URL numbers them in, not across kinds', () => {
+    const siblings = [s('f', 'Seb', 1), s('m', 'Seb', 2, MEMORY_KIND), s('m2', 'Seb', 3, MEMORY_KIND), s('f2', 'Seb', 4)]
+    expect(Object.fromEntries(displayNamesOf(siblings, (n) => n.name, compareByCreation))).toEqual({
+      f: 'Seb', m: 'Seb', m2: 'Seb (2)', f2: 'Seb (2)',
     })
   })
 })
