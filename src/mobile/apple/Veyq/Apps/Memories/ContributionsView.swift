@@ -13,7 +13,7 @@ final class ContributionsHeld {
         self.model = model
         self.gallery = gallery
         // core calls the watch on its threads: @Sendable (src/mobile/CLAUDE.md § Traps)
-        state = CoreState({ model.current }) { changed in AppleMemories.shared.watch(flow: model.state) { @Sendable _ in changed() } }
+        state = CoreState({ model.current }) { changed in ApplePlatform.shared.watch(flow: model.state) { @Sendable _ in changed() } }
     }
 
     /// The buckets read (anew).

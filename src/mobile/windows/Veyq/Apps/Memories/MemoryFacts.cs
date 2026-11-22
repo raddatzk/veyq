@@ -27,7 +27,7 @@ internal static class MemoryFacts
     /// nothing to show (no date, no place, and nothing to edit).</summary>
     public static UIElement? Line(Window window, long gallery, GalleryShown s)
     {
-        var date = RowDates.DateText(s.date);
+        var date = MemoryDates.DateText(s.date);
         // a place armed at birth whose name the photos have yet to give says so (uc.memory.place A1), as the phones' line does
         var place = s.place ?? (s.placePending ? Words.MemoryPlacePending() : null);
         if (date is null && place is null && !s.editsFacts) return null;
@@ -222,7 +222,7 @@ internal sealed class DateEditor
             if (MemoryFacts.Day(_to.Date) != s.to) _to.Date = MemoryFacts.Picked(s.to);
             _from.Visibility = s.mode == DateMode.Auto ? Visibility.Collapsed : Visibility.Visible;
             _to.Visibility = s.mode == DateMode.Range ? Visibility.Visible : Visibility.Collapsed;
-            var auto = RowDates.DateText(s.auto);
+            var auto = MemoryDates.DateText(s.auto);
             _auto.Text = auto ?? "";
             _auto.Visibility = s.mode == DateMode.Auto && auto is not null ? Visibility.Visible : Visibility.Collapsed;
             _hint.Text = auto is null ? Words.MemoryDateAutoEmpty() : Words.MemoryDateAutoHint();

@@ -4,7 +4,8 @@
   app and decision 6's structure guard (2026-11-21), decisions 4 and 5 on every app and the rest of decision 6, the
   duration and formatter rule `platform-format` (2026-11-21; each § Consequences). Decision 6's shared plan fixture
   each platform's tests draw was not built: the compilers' exhaustiveness and the structure guard hold it (§ Consequences).
-  Decision 3 on Android down to the core applications' packages (inbox #1056, 2026-11-22; § Consequences)
+  Decision 3 on Android down to the core applications' packages (inbox #1056, 2026-11-22) and on Apple, Linux and
+  Windows (inbox #1066, 2026-11-22; § Consequences)
 - Date: 2026-11-20
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -171,11 +172,10 @@ held for the screens' models but not around them:
   actions and `facts_later`, Windows' `KindBody`: the hero slot, tabs, the header's commands, `FactsWhenRead`).
   **Left in the core UI on purpose, named:** the header's hero is still placed by each desktop page inside its own
   scroll (a slot the frame fills: lifting it out of the scroll changes what is drawn, the structure CR's); the link
-  bar's file and music actions on Apple (header actions over core-Kotlin models); kind literals for glyphs, the
-  rows' dates (Android's are Memories' `rowLines` now) and `TREE_PAGES`; Apple's `AppModel` methods per application and the holders it stores for Memories
-  (`Core/AppModelHeld.swift`: a stored property cannot live in an application's extension; Android's left its core UI,
-  below, and Apple's are inbox #1066); Windows'
-  WRITE_ONLY upload page and the bookmark page (core kinds); Linux's `home::ask_dates` (a bridge call).
+  kind literals for glyphs and actions' names (strings, the guard's limit) and `TREE_PAGES`; Windows'
+  WRITE_ONLY upload page and the bookmark page (core kinds). What was named here as left — Apple's link bar's file and
+  music actions, Apple's `AppModel` methods per application and Memories' holders, the rows' dates, Linux's
+  `home::ask_dates` — left the core UIs with inbox #1056 (Android) and #1066 (Apple, Linux, Windows), below.
   **The guard**, `scripts/validate_mobile_ui_direction.py` (its docstring the rules and limits): (a) no core UI file
   names an application but the composition root; (b) no application names another's; (c) in the Kotlin core no
   application package names another's package or generated client (`blob/FileSave` moved out of `depot/` for it), and no
@@ -209,6 +209,25 @@ held for the screens' models but not around them:
   it: no core UI file names a core application's package or generated API (`…mobile.api.<application>`), and (b) no
   application another core application's. Behaviour-preserving but for one place: the link bar draws a Memory's music
   before *Keep* now (it was after). The decision log is ADR 0156's, entries 29–37.
+- **As built, decision 3 on Apple's, Linux's and Windows' core applications** (inbox #1066, 2026-11-22). The new rule (c)
+  of the UI guard measured 200 violations on the tree before (Apple 184 in 19 files, Linux 9 in 4, Windows 7 in 3), 0
+  after. **Apple** takes Android's shape: each application registers a `Holding` (`Core/Holding.swift`, a protocol whose
+  defaults are its extension) as `ApplicationUi.holding`; `AppModel` builds them once in registration order and an
+  application reaches its own through `model.memories`/`model.depot`/`model.expenses` (`AppModel.held(T.self)`). The core
+  UI asks the tenant's moments (`leave`, `shown`, `locked`, `signedOut`, `listsRead`) and the flows (`rowLines`,
+  `trashed`, `moveSheet`, `addHereTarget`/`addHere`, `drop`, `pickUp` of a share's handoff, `takesDrop`, `openQueued` of a
+  held write, `adopt`/`release` of a link's page, `editing`, `levelUploads` with the tray's `TrayShown`, `deriver`).
+  `ApplicationUi.shell` is what an application presents over the shell (Depot's uploads' alert, "Send a Copy…", Replace's
+  picker), `KindPage.guestActions` the link bar's per-kind actions. What the core UI asked of `AppleMemories`/`AppleDepot`
+  for itself (a state watched, a picked file's source, a folder's walk) is the composition's `ApplePlatform`. Memories'
+  holders, tiers, music measure, date text and world view moved into `Apps/Memories/`. **Linux**: Depot's Replace (a
+  member's and a guest's, the guest's through `Page::act`) into `apps/depot/replace.rs`; the receipt viewer into
+  `apps/expenses/`, its page rendering core's `pdf_render`; a Memory's date and its ask into `apps/memories/dates.rs`,
+  `home.rs` holding only the rows' lines. **Windows**: `RowLines` over `ApplicationUi.RowLines` (Memories' `MemoryDates`);
+  Depot's `FileReplace`, the guest's asked of the page (`KindBody.GuestReplace`, `GuestHost.Received`). The guard's (c):
+  on Apple an index of each application module's Kotlin exports, on the desktops the wire's serial names owned by prefix
+  (`WIRE_APPLICATIONS`; an unclassified prefix is red). Behaviour-preserving by reading (no pass yet). The decision log is
+  ADR 0156's, entries 38–50.
 - **The passes (decision 3).** Behaviour-preserving, so each platform's pass checked that every kind still reaches its
   page through the registry with its header and body. Throwaways, erased after. Android (an API 36 emulator): New pot
   and New Memory (registered creates), a Memory's, a Pot's and a folder's page, the drawer's Expenses and Memories lists

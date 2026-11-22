@@ -4,10 +4,9 @@ import SwiftUI
 import UniformTypeIdentifiers
 import VeyqCore
 
-// What the app's model holds for an application's open sheet or window (ADR 0154 decision 3): Memories' participants
-// picker and banner dialog, the banner's decoded pictures, a Mac's lightbox window's value. Stored properties of
-// `AppModel` (core UI), so their types are the core UI's, beside it — as `AppModel`'s per-application methods stay core's
-// on every platform; drawn by Memories (`MemoryCuration.swift`, `MemoryScreen.swift`).
+// What Memories holds for its open sheet or window (ADR 0154 decision 3, inbox #1066): the participants picker and the
+// banner dialog, the banner's decoded pictures, a Mac's lightbox window's value — held by its `MemoriesHolding`, drawn by
+// `MemoryCuration.swift` and `MemoryScreen.swift`.
 
 /// The open gallery's participants picker (core's `ParticipantsPicker`), held by the app's model while its sheet shows.
 @MainActor
@@ -19,7 +18,7 @@ final class ParticipantsEdit: Identifiable {
     init(picker: ParticipantsPicker, gallery: GalleryModel) {
         self.picker = picker
         self.gallery = gallery
-        state = CoreState({ picker.current }) { changed in AppleMemories.shared.watch(flow: picker.state) { @Sendable _ in changed() } }
+        state = CoreState({ picker.current }) { changed in ApplePlatform.shared.watch(flow: picker.state) { @Sendable _ in changed() } }
         load()
     }
 
@@ -130,7 +129,7 @@ final class BannerEdit: Identifiable {
     init(editor: BannerEditor, gallery: GalleryModel) {
         self.editor = editor
         self.gallery = gallery
-        state = CoreState({ editor.current }) { changed in AppleMemories.shared.watch(flow: editor.state) { @Sendable _ in changed() } }
+        state = CoreState({ editor.current }) { changed in ApplePlatform.shared.watch(flow: editor.state) { @Sendable _ in changed() } }
         Task { [weak self] in
             let data = (try? await AppleMemories.shared.bannerPicture(gallery: gallery)).map { $0 as Data }
             self?.now = BannerPicture.of(data)

@@ -59,21 +59,6 @@ enum IsoDay {
     }
 }
 
-/// How a Memory's date reads (the web's `memoryDateRange`): a day, a range, "Since …", numeric; nil without one.
-enum MemoryDateText {
-    static func date(_ day: String?) -> Date? { IsoDay.date(day) }
-    static func day(_ date: Date) -> String { IsoDay.iso(date) }
-
-    static func text(_ d: MemoryDate) -> String? {
-        guard let from = d.from, !from.isEmpty, IsoDay.date(from) != nil else { return nil }
-        if d.mode == .ongoing { return say(.memoryDateSince, Shown.shared.memoryDay(iso: from, language: shownLanguage)) }
-        return Shown.shared.dayRange(from: from, to: d.to, language: shownLanguage)
-    }
-
-    /// A Memories row's second line: its range, or nothing.
-    static func row(_ d: MemoryDate) -> String? { text(d) }
-}
-
 /// Waits the `ms` the core named — a notice's life (`NoticeKind.lifeMs`), "copied" (`Notice.COPIED_MS`), "nothing plays"
 /// (`Notice.NOTHING_PLAYS_MS`) —; throws once the calling task is cancelled. The app holds no duration of its own (ADR 0154
 /// decision 4).

@@ -446,7 +446,7 @@ internal sealed class ReceivedView : IDisposable
         {
             // a guest's Replace (#1035) where the core's FileRights offer it: on the link's own queue, signed in or out; an
             // unnamed guest is asked its name by the core at the write (Received.Replace waits on AskNaming's answer)
-            _commands.PrimaryCommands.Add(Command(Words.DepotReplace(), "received-replace", Symbol.Upload, () => Replace(file)));
+            _commands.PrimaryCommands.Add(Command(Words.DepotReplace(), "received-replace", Symbol.Upload, () => _page?.GuestReplace(file)));
         }
         var offers = ReceivedText.Offers(s, _mode);
         if (offers.Keep) _commands.SecondaryCommands.Add(Command(Words.LinkKeep(), "received-keep", Symbol.SaveLocal, Keep));
@@ -570,6 +570,7 @@ internal sealed class ReceivedView : IDisposable
                     Say = Say,
                     Said = _notices,
                     Node = node,
+                    Received = Received,
                     OpenNode = id => Act.Send(new Call.ReceivedOpenNode { received = Received, node = id }),
                     Changed = () => DrawCommands(_shown),
                 });
@@ -681,33 +682,6 @@ internal sealed class ReceivedView : IDisposable
         catch (Exception e)
         {
             Log.Write($"a guest's upload failed ({e.GetType().Name})");
-        }
-    }
-
-    /// <summary>A READ_WRITE guest's Replace of the file on screen (#1035): chosen on its page (File.ChooseReplace), the
-    /// file picked, queued on the link's own queue (Received.Replace) — never a tenant's Upload.Replace.</summary>
-    private async void Replace(long file)
-    {
-        try
-        {
-            var (chosen, _) = await Core.CallAsync(new Call.FileChooseReplace { file = file });
-            if (chosen is not Answer.Done)
-            {
-                Log.Write($"File.ChooseReplace answered {chosen.GetType().Name}");
-                return;
-            }
-            var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.DocumentsLibrary };
-            picker.FileTypeFilter.Add("*");
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
-            var picked = await picker.PickSingleFileAsync();
-            if (picked is null || string.IsNullOrEmpty(picked.Path)) return;
-            var (answer, _) = await Core.CallAsync(new Call.ReceivedReplace { received = Received, path = picked.Path });
-            Log.Write($"a guest's replace: {answer.GetType().Name}");
-            Uploads.Queued(answer, "Received.Replace", Say);
-        }
-        catch (Exception e)
-        {
-            Log.Write($"a guest's replace failed ({e.GetType().Name})");
         }
     }
 

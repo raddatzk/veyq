@@ -20,7 +20,7 @@ an application added there is guarded the day it lands. Every source is read wit
   - **(c)** no core UI file names a core application's package (`me.raddatz.veyq.mobile.<application>`, the module
     `:apps:<application>`, or its generated API `…mobile.api.<application>`) — but the composition root: what the core UI
     holds of an application (its pages' models, its uploads) the application holds itself, in the `Holding` it registers,
-    and the core UI asks every holding (inbox #1056).
+    and the core UI asks every holding (inbox #1056). Each platform has its (c), below (inbox #1066).
   - fail closed: a directory under `apps/` that is no application, an application without a file under `apps/`,
     a composition root that is missing or does not name every application's package, and a `package` that is not
     its directory's are each red. Kotlin's packages make the import the whole edge: a symbol of another package is
@@ -32,7 +32,14 @@ an application added there is guarded the day it lands. Every source is read wit
   the members its top-level `extension`s add (a `.member` reference), and reads every other file for them, its own
   declarations aside:
   - **(a)** no core UI file names an application's declaration — but the composition root, `Veyq/Applications.swift`.
-  - **(b)** no application names another's.
+  - **(b)** no application names another's, nor another core application's Kotlin export.
+  - **(c)** no core UI file names a core application's Kotlin export through the framework: what each module under
+    `src/mobile/apps/<application>/` hands Objective-C (`kotlin_exports`: its non-private, non-internal top-level classes,
+    interfaces, objects and type aliases and each file's `…Kt` facade, and its top-level extensions as a `.member(` call —
+    `AppleSessions.openReceipt`), less what the platform or the composition declares under the same name; one marked
+    `@HiddenFromObjC` or `@PlatformApi` is none. What the core UI held of an application lives in the `Holding` the
+    application registers (`Core/Holding.swift`), and what it asked of an application's Apple object for itself
+    (watching a state, a picked file's source) is the composition's `ApplePlatform`.
   - fail closed: a directory under `Apps/` that is no application, an application without a file, a composition root
     that is missing or names nothing of an application, and a top-level name declared by two sides (an overload of a
     core function in an application, which the index cannot tell from core's) are each red.
@@ -46,7 +53,14 @@ an application added there is guarded the day it lands. Every source is read wit
   `crate::apps` alone, `crate::apps::{…}` — every one:
   - **(a)** no core UI file names `apps` — but the composition root, `src/applications.rs`, which calls each
     application's `register` (the web's `applications.ts`).
-  - **(b)** no file of one application names another's module (nor `apps` without its own name after it).
+  - **(b)** no file of one application names another's module (nor `apps` without its own name after it), nor another
+    application's part of the wire.
+  - **(c)** no core UI file names an application's part of the bridge's wire (`wire_applications`): a call's, answer's or
+    update's variant whose serial name's prefix is the application's (`Pot.Open` → `Call::PotOpen`, `WIRE_APPLICATIONS`),
+    or a type or variant without one that starts with such a prefix (`GalleryShown`, `MemoryDates`) — read where the wire
+    is named, `wire::X` (a `use` group's members too) or `Call::`/`Answer::`/`Update::`/`Watched::`/`HostRequest::`/
+    `HostReply::X`. The host's bridge module (`src/bridge/`) mirrors the whole wire and is not read for it, as the Kotlin
+    bridge is not. Fail closed: a dotted prefix of the wire in neither `WIRE_APPLICATIONS` nor `WIRE_PLATFORM` is red.
   - fail closed: a file under `apps/` outside an application's directory, an application without a file under
     `apps/<application>/`, and a composition root that is missing or names some application nowhere are each red.
   Windows: every `.cs` under `src/mobile/windows/Veyq/` (no `bin/`, `obj/`), read with comments and literals blanked
@@ -57,7 +71,11 @@ an application added there is guarded the day it lands. Every source is read wit
   - **(a)** no file but the composition root names `Veyq.Apps` — spelled whole, or `Apps.<x>` as a namespace of
     `Veyq` reaches it from any file below `Veyq` —, and no `.xaml` does.
   - **(b)** no file of one application's UI names another's: `Veyq.Apps.<other>` or `Apps.<other>`, or `<Other>.`
-    alone, which reaches the sibling namespace from inside `Veyq.Apps`.
+    alone, which reaches the sibling namespace from inside `Veyq.Apps`; nor another application's part of the wire.
+  - **(c)** no core UI file names an application's part of the wire, as Linux's (c) reads it: a variant
+    (`Call.FileChooseReplace`) or — the generated `Veyq.Bridge.Wire` imported everywhere — a type bare
+    (`MemoryDateShown`); a name that is a prefix alone (`File`, `Date`) is read only as a variant (.NET's `File`, a
+    member's `Date`).
   - fail closed: every `namespace` a file declares (file-scoped or a block) is its folder's, so no file reaches an
     application unqualified from outside it; a `global using` naming `Veyq.Apps` anywhere, or a project's `<Using
     Include="Veyq.Apps…">`, is red (it would import an application into every file); a folder under `Apps/` that is no
@@ -75,10 +93,13 @@ graph does not carry.
 **Its limit.** It reads names, not types: an application's class reached through a type alias, an `Any` handed over and
 cast, or a kind spelled as a literal (`"MEMORY"`, which the mask blanks) is not seen; on Android a core application's
 type reached without its name — an inferred `val` holding what a composition function returns (`ShellModel.fileModel`) —
-is not either. Apple's core UI naming a core application's Kotlin type through the framework (`GalleryModel` in
-`AppModel.swift`) is not read: Swift sees one flat module of bridged names, and inbox #1066 asks it there. The bridge module
-(`src/mobile/bridge`, the desktops' dispatch over every application) is not read: it is a host, a composition root
-by its nature. A platform whose rules are not switched on (`PLATFORMS`) is not read at all. On Linux a `#[path]`
+is not either. Apple's (c) reads names, not Swift's resolution: a Kotlin nested type spelled concatenated
+(`GalleryModelState` for `GalleryModel.State`) and an application's extension property (a `.member` without a call) are
+not seen. The desktops' (c) reads the wire's serial names: a type the wire carries from an application's package as a
+field (`PotView.SettleRow`) is owned by no prefix and is not seen, nor is a prefix-less name that starts with a platform
+prefix (`PersonMemoriesShown`, Memories' section of a person's page); a shared answer is named in `WIRE_SHARED`. The
+bridge module (`src/mobile/bridge`, the desktops' dispatch over every application) is not read: it is a host, a
+composition root by its nature. A platform whose rules are not switched on (`PLATFORMS`) is not read at all. On Linux a `#[path]`
 attribute that mounts another directory's file, an item re-exported by core under another name (`pub use`) and a
 macro that expands to a path are not seen; a kind literal (`"EXPENSES_POT"`, blanked) is not either. Apple's index sees names,
 not Swift's resolution: a member an application adds inside a type it declares is reached only through that type
@@ -230,6 +251,92 @@ def check_android(android_src: pathlib.Path, apps: list[str]) -> list[str]:
     return errors
 
 
+# ------------------------------------------------------------------------------------------------ the desktops' wire, (c)
+
+WIRE = MOBILE / "bridge/src/commonMain/kotlin/me/raddatz/veyq/mobile/bridge/Wire.kt"
+# Each serial-name prefix of the bridge's wire (`@SerialName("Pot.Open")`), by the application whose model it reaches; a
+# prefix the core's own models answer is the platform's. A prefix in neither is red: the table is read whole, never guessed.
+WIRE_APPLICATIONS: dict[str, tuple[str, ...]] = {
+    "memories": ("Gallery", "Lightbox", "Tracks", "Track", "Banner", "Music", "Buckets", "Bucket", "Participants", "Participant",
+                 "Date", "Place", "CaptureTime", "Filter", "Chip", "Marks", "Mark", "Memory", "Memories", "Medium", "Grid"),
+    "expenses": ("Pot", "PotSettings", "PotCreate", "Editor", "Receipt", "Entry"),
+    "depot": ("File", "DropBox"),
+}
+WIRE_PLATFORM = (
+    "AddressChange", "Audio", "Avatar", "Bookmark", "Controls", "Cover", "Erasure", "Header", "Home", "Import", "KeyRotation",
+    "Kit", "Link", "Manage", "Map", "MapState", "Media", "Move", "Net", "Notice", "PasswordChange", "Pdf", "Person",
+    "Picture", "Player", "Profile", "Queued", "Reader", "Received", "Report", "Row", "Save", "Scan", "Search", "Session",
+    "Settings", "Share", "Shell", "SignIn", "Store", "Trash", "Trust", "Unlock", "Upload", "View", "Words",
+)
+# A name of the wire that starts with an application's prefix yet is shared: Depot's `File.Pages` answers with the
+# receipt viewer's `ReceiptPages` (a PDF's page budget), so it is no one application's.
+WIRE_SHARED = frozenset({"ReceiptPages"})
+WIRE_SERIAL = re.compile(r'@SerialName\("([A-Z][A-Za-z0-9]*)(?:\.([A-Z][A-Za-z0-9]*))?"\)')
+
+
+def _owner_by_prefix(name: str, apps: list[str]) -> str | None:
+    """The application whose wire prefix [name] starts with at a word's boundary (`GalleryShown` → memories, not
+    `Filter`'s `File`), the longest prefix deciding; None for the platform's."""
+    best: tuple[int, str] | None = None
+    for app in apps:
+        for prefix in WIRE_APPLICATIONS.get(app, ()):
+            if name.startswith(prefix) and (len(name) == len(prefix) or not name[len(prefix)].islower()):
+                if best is None or len(prefix) > best[0]:
+                    best = (len(prefix), app)
+    for prefix in WIRE_PLATFORM:
+        if name.startswith(prefix) and (len(name) == len(prefix) or not name[len(prefix)].islower()):
+            if best is not None and len(prefix) >= best[0]:
+                return None
+    return None if best is None else best[1]
+
+
+def wire_applications(apps: list[str], wire: pathlib.Path = WIRE) -> tuple[dict[str, str], list[str]]:
+    """The host names the desktops' generated wire gives each application's part, by name → application: a call's,
+    answer's or update's variant (`Pot.Open` → `PotOpen`) by its prefix, and a type or variant without one
+    (`GalleryShown`, `MemoryDates`) by the prefix it starts with. With the errors: a dotted prefix the table does not
+    classify, or the wire not read."""
+    if not wire.is_file():
+        return {}, [f"{_rel(wire)}: not found — rule (c) of the desktops reads the wire's serial names"]
+    owned: dict[str, str] = {}
+    errors: list[str] = []
+    classified = set(WIRE_PLATFORM) | {p for app in apps for p in WIRE_APPLICATIONS.get(app, ())}
+    masked = mask(wire.read_text(encoding="utf-8"))
+    raw = wire.read_text(encoding="utf-8")
+    for m in WIRE_SERIAL.finditer(raw):
+        if masked[m.start()] != "@":  # in a comment
+            continue
+        prefix, verb = m.group(1), m.group(2)
+        if verb is not None and prefix not in classified:
+            errors.append(f"{_rel(wire)}:{_line(raw, m.start())}: the wire prefix `{prefix}.` is in no application's and not the platform's (`WIRE_APPLICATIONS`/`WIRE_PLATFORM`)")
+            continue
+        name = prefix + (verb or "")
+        owner = next((a for a in apps if prefix in WIRE_APPLICATIONS.get(a, ())), None) if verb else _owner_by_prefix(name, apps)
+        if owner is not None and name not in WIRE_SHARED:
+            owned[name] = owner
+    for app in apps:
+        if app not in WIRE_APPLICATIONS:
+            errors.append(f"{_rel(wire)}: the application `{app}` has no wire prefixes in `WIRE_APPLICATIONS` — rule (c) would miss it")
+    return owned, errors
+
+
+RUST_WIRE_REF = re.compile(
+    r"\b(?:wire\s*::\s*|(?:Call|Answer|Update|Watched|HostRequest|HostReply)\s*::\s*)([A-Z]\w*)|\bwire\s*::\s*\{([^}]*)\}"
+)
+
+
+def rust_wire_names(masked: str) -> list[tuple[str, int]]:
+    """The wire's host names a Rust file names: through `wire::` (a `use` group's members too) or a call's, answer's or
+    update's variant (`Call::PotOpen`)."""
+    out: list[tuple[str, int]] = []
+    for m in RUST_WIRE_REF.finditer(masked):
+        if m.group(1):
+            out.append((m.group(1), m.start(1)))
+        else:
+            for g in re.finditer(r"\b([A-Z]\w*)", m.group(2)):
+                out.append((g.group(1), m.start(2) + g.start(1)))
+    return out
+
+
 def rust_module(rel: pathlib.Path) -> list[str]:
     """The module path of the crate's file at [rel] (under `src/`): `lib.rs`/`main.rs` the root, `x/mod.rs` the module x."""
     parts = list(rel.with_suffix("").parts)
@@ -300,11 +407,13 @@ def linux_sources(linux_src: pathlib.Path) -> list[pathlib.Path]:
     return sorted(linux_src.rglob("*.rs")) if linux_src.is_dir() else []
 
 
-def check_linux(linux_src: pathlib.Path, apps: list[str]) -> list[str]:
+def check_linux(linux_src: pathlib.Path, apps: list[str], wire: pathlib.Path = WIRE) -> list[str]:
     errors: list[str] = []
     files = linux_sources(linux_src)
     if not files:
         return [f"{_rel(linux_src)}: no Rust file — the guard would check nothing"]
+    owned, wire_errors = wire_applications(apps, wire)
+    errors += wire_errors
     root = linux_src / LINUX_ROOT
     populated: set[str] = set()
     for f in files:
@@ -319,6 +428,22 @@ def check_linux(linux_src: pathlib.Path, apps: list[str]) -> list[str]:
         if f == root:
             continue
         masked = mask_rust(f.read_text(encoding="utf-8"))
+        # (c): the host's bridge module (`src/bridge/`) mirrors the whole wire, a host of every application as the Kotlin
+        # bridge is; every other file names an application's part of the wire only inside that application
+        if rel.parts[0] != "bridge":
+            for name, at in rust_wire_names(masked):
+                target = owned.get(name)
+                if target is None or target == own:
+                    continue
+                if own is None:
+                    errors.append(
+                        f"{_rel(f)}:{_line(masked, at)}: (c) the core UI names `{name}`, the core application {target}'s part of "
+                        f"the wire — it reaches an application only through the registry its composition root `{LINUX_ROOT}` fills",
+                    )
+                else:
+                    errors.append(
+                        f"{_rel(f)}:{_line(masked, at)}: (b) the application `{own}` names `{name}`, {target}'s part of the wire",
+                    )
         for path, at in rust_paths(masked, rust_module(rel)):
             if not path or path[0] != "apps":
                 continue
@@ -349,6 +474,70 @@ def check_linux(linux_src: pathlib.Path, apps: list[str]) -> list[str]:
 
 
 # ---------------------------------------------------------------------------------------------------------------- Apple
+
+KOTLIN_MODIFIERS = (
+    r"(?:(?:public|protected|abstract|open|sealed|data|enum|annotation|inline|value|const|expect|actual|external|suspend"
+    r"|operator|infix|tailrec|fun(?=\s+interface))\s+)*"
+)
+KOTLIN_TOP = re.compile(
+    r"^((?:@[\w.]+(?:\([^)\n]*\))?\s*\n?)*)(?:(private|internal)\s+)?" + KOTLIN_MODIFIERS
+    + r"(class|interface|object|typealias|fun|val|var)\s+(?:<[^>\n]*>\s*)?(?:([\w.<>?, ]+?)\.)?([A-Za-z_]\w*)",
+    re.MULTILINE,
+)
+KOTLIN_HIDDEN = re.compile(r"@(?:HiddenFromObjC|PlatformApi)\b")
+
+
+def kotlin_exports(module: pathlib.Path) -> tuple[set[str], set[str]]:
+    """The names a Kotlin module of the core hands Swift through the framework: its non-private, non-internal top-level
+    classes, interfaces, objects and type aliases and each file's facade (`GalleryModelKt`, which holds its top-level
+    functions), as `top`; the names of its top-level extension functions and properties (`AppleSessions.openReceipt`
+    reached as `.openReceipt`), as `members`. A declaration marked `@HiddenFromObjC` or `@PlatformApi` (hidden from
+    Objective-C, ADR 0156 decision 4) is no export. Test source sets are not read."""
+    top: set[str] = set()
+    members: set[str] = set()
+    src = module / "src"
+    if not src.is_dir():
+        return top, members
+    for source_set in sorted(p for p in src.iterdir() if p.is_dir() and "test" not in p.name.lower()):
+        for f in sorted(source_set.rglob("*.kt")):
+            masked = mask(f.read_text(encoding="utf-8"))
+            facade = False
+            for m in KOTLIN_TOP.finditer(masked):
+                annotations, visibility, kind, receiver, name = m.groups()
+                if visibility or KOTLIN_HIDDEN.search(annotations or ""):
+                    continue
+                if kind in ("fun", "val", "var"):
+                    if receiver:
+                        members.add(name)
+                    else:
+                        facade = True
+                else:
+                    top.add(name)
+            if facade:
+                top.add(f.stem[:1].upper() + f.stem[1:] + "Kt")
+    return top, members
+
+
+def core_application_exports(apps: list[str], mobile: pathlib.Path = MOBILE) -> dict[str, tuple[set[str], set[str]]]:
+    """Per application, what its core module (`src/mobile/apps/<application>`) hands Swift (`kotlin_exports`), less what
+    the platform or the composition hands under the same name (Kotlin/Native renames one of a clashing pair, and a member
+    name the platform also declares is no application's mark)."""
+    platform_top: set[str] = set()
+    platform_members: set[str] = set()
+    for module in (mobile / "core", mobile / "composition"):
+        t, ms = kotlin_exports(module)
+        platform_top |= t
+        platform_members |= ms
+        src = module / "src"
+        if src.is_dir():  # any function or property the platform names: a member call of that name is no application's
+            for f in src.rglob("*.kt"):
+                platform_members |= set(re.findall(r"\b(?:fun|val|var)\s+(?:<[^>\n]*>\s*)?(?:[\w.<>?, ]+?\.)?([a-z_]\w*)", mask(f.read_text(encoding="utf-8"))))
+    out: dict[str, tuple[set[str], set[str]]] = {}
+    for app in apps:
+        t, ms = kotlin_exports(mobile / "apps" / app)
+        out[app] = (t - platform_top, ms - platform_members)
+    return out
+
 
 _SWIFT_CODE = re.compile(r'//|/\*|#+"|"""|["`{}()]')
 _SWIFT_BLOCK = re.compile(r"/\*|\*/")
@@ -485,7 +674,7 @@ def apple_sources(apple_dir: pathlib.Path) -> list[pathlib.Path]:
     return out
 
 
-def check_apple(apple_dir: pathlib.Path, apps: list[str]) -> list[str]:
+def check_apple(apple_dir: pathlib.Path, apps: list[str], mobile: pathlib.Path = MOBILE) -> list[str]:
     errors: list[str] = []
     paths = apple_sources(apple_dir)
     if not paths:
@@ -522,7 +711,8 @@ def check_apple(apple_dir: pathlib.Path, apps: list[str]) -> list[str]:
                 f"cannot tell them apart; what two sides use belongs to the core UI, an application's own takes its own name",
             )
     for app in apps:
-        index[app]["members"] -= core_declared
+        # an application's `AppModel.<id>` (its holding) shares its name with `ApplicationId.<id>`, which core names freely
+        index[app]["members"] -= core_declared | set(apps)
     for app in apps:
         if not any(own == app for own, _ in files):
             errors.append(f"{_rel(apple_dir / APPLE_APPS / app.capitalize())}: the application `{app}` has no UI file under {APPLE_APPS}/")
@@ -555,6 +745,41 @@ def check_apple(apple_dir: pathlib.Path, apps: list[str]) -> list[str]:
                         errors.append(
                             f"{where}: (b) the application `{own}` names `{m.group(1)}`, {app}'s — what two applications "
                             f"draw belongs to the core UI",
+                        )
+    # (c): the core applications' Kotlin types as the framework hands them to Swift (one flat module, no imports)
+    exports = core_application_exports(apps, mobile)
+    for app in apps:
+        if not exports[app][0]:
+            errors.append(f"{_rel(mobile / 'apps' / app)}: no Kotlin export of `{app}` read — rule (c) would check nothing")
+    kotlin_patterns = {
+        app: (
+            re.compile(r"(?<![\w.])(" + "|".join(sorted(map(re.escape, exports[app][0]))) + r")\b") if exports[app][0] else None,
+            re.compile(r"\.(" + "|".join(sorted(map(re.escape, exports[app][1]))) + r")\s*\(") if exports[app][1] else None,
+        )
+        for app in apps
+    }
+    for own, sf in files:
+        if sf.path == root:
+            continue
+        for app in apps:
+            if app == own:
+                continue
+            for pattern in kotlin_patterns[app]:
+                if pattern is None:
+                    continue
+                for m in pattern.finditer(sf.masked):
+                    if m.group(1) in sf.declared:
+                        continue
+                    where = f"{_rel(sf.path)}:{_line(sf.masked, m.start())}"
+                    if own is None:
+                        errors.append(
+                            f"{where}: (c) the core UI names `{m.group(1)}`, the core application {app}'s (Kotlin, through the "
+                            f"framework) — what it holds of an application the application holds in the `Holding` it registers",
+                        )
+                    else:
+                        errors.append(
+                            f"{where}: (b) the application `{own}` names `{m.group(1)}`, the core application {app}'s — what "
+                            f"two applications share belongs to the platform",
                         )
     if not root.is_file():
         errors.append(f"{_rel(root)}: the composition root is missing — each application registers there")
@@ -679,11 +904,22 @@ def windows_sources(app_dir: pathlib.Path, suffix: str = ".cs") -> list[pathlib.
     return sorted(p for p in app_dir.rglob(f"*{suffix}") if not {"bin", "obj"} & set(p.relative_to(app_dir).parts))
 
 
-def check_windows(app_dir: pathlib.Path, apps: list[str]) -> list[str]:
+CS_WIRE_VARIANT = re.compile(r"(?<![\w.])(?:Call|Answer|Update|Watched|HostRequest|HostReply)\s*\.\s*([A-Z]\w*)")
+CS_DECLARED = re.compile(r"\b(?:class|struct|record|enum|interface|delegate\s+\w+)\s+([A-Z]\w*)")
+
+
+def check_windows(app_dir: pathlib.Path, apps: list[str], wire: pathlib.Path = WIRE) -> list[str]:
     errors: list[str] = []
     files = windows_sources(app_dir)
     if not files:
         return [f"{_rel(app_dir)}: no C# file — the guard would check nothing"]
+    owned, wire_errors = wire_applications(apps, wire)
+    errors += wire_errors
+    # a type is named bare, but a name that is a prefix alone (`File`, `Date`, `Music`: an update's variant) is also .NET's
+    # or a member's: those are read only as a variant (`Update.File`)
+    prefixes = {p for ps in WIRE_APPLICATIONS.values() for p in ps}
+    bare = sorted(n for n in owned if n not in prefixes)
+    owned_bare = re.compile(r"(?<![\w.])(" + "|".join(map(re.escape, bare)) + r")\b") if bare else None
     folders = {_pascal(a): a for a in apps}
     apps_ref = re.compile(
         r"(?<![\w.])(?:global\s*::\s*)?(?:" + _dotted(WINDOWS_ROOT + ".Apps") + r"|Apps(?=\s*\.))(?:\s*\.\s*(\w+))?",
@@ -714,6 +950,26 @@ def check_windows(app_dir: pathlib.Path, apps: list[str]) -> list[str]:
             populated.add(own)
         if f == root:
             continue
+        # (c): an application's part of the wire — a variant (`Call.PotOpen`) or a type (`MemoryDateShown`) — named only
+        # inside that application (the generated `Veyq.Bridge.Wire` is imported everywhere, so a type is named bare)
+        own_app = folders.get(own) if own else None
+        declared_here = set(CS_DECLARED.findall(masked))
+        seen_at: set[int] = set()
+        hits = [(m.group(1), m.start(1)) for m in CS_WIRE_VARIANT.finditer(masked)]
+        if owned_bare is not None:
+            hits += [(m.group(1), m.start(1)) for m in owned_bare.finditer(masked)]
+        for name, at in sorted(hits, key=lambda h: h[1]):
+            target = owned.get(name)
+            if target is None or target == own_app or at in seen_at or name in declared_here:
+                continue
+            seen_at.add(at)
+            if own is None:
+                errors.append(
+                    f"{_rel(f)}:{_line(masked, at)}: (c) the core UI names `{name}`, the core application {target}'s part of the "
+                    f"wire — it reaches an application only through the registry its composition root `{WINDOWS_COMPOSITION}` fills",
+                )
+            else:
+                errors.append(f"{_rel(f)}:{_line(masked, at)}: (b) the application `{own}` names `{name}`, {target}'s part of the wire")
         for m in apps_ref.finditer(masked):
             target = m.group(1)
             spelled = f"{WINDOWS_ROOT}.Apps{'.' + target if target else ''}"

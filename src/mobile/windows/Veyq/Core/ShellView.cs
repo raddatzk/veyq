@@ -403,7 +403,7 @@ internal sealed class ShellView
         // the rows' dates: asked when the objects change, and again when a page closes back onto a list (an edited date)
         var back = _openBefore && state.shell.openObject is null;
         _openBefore = state.shell.openObject is not null;
-        RowDates.Ask($"{shown.connection}\n{shown.tenant.tenantId}\n{string.Join(",", state.lists.objects.Select(o => o.nodeId))}", back, Redraw);
+        RowLines.Ask($"{shown.connection}\n{shown.tenant.tenantId}\n{string.Join(",", state.lists.objects.Select(o => o.nodeId))}", back, Redraw);
         if (first && shown.drawerOpensAtStart && _nav.DisplayMode != NavigationViewDisplayMode.Expanded) _nav.IsPaneOpen = true;
     }
 
@@ -714,7 +714,6 @@ internal sealed class ShellView
         // read at the call: the header of the node on screen then
         Facts = (facts, file, gallery) => _header?.Facts(facts, file, gallery),
         Changed = DrawCommands,
-        Replace = id => _uploads.Replace(id, Say),
         RefreshLists = RefreshLists,
     };
 

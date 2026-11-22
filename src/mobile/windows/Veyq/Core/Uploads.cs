@@ -293,33 +293,6 @@ internal sealed class Uploads : IDisposable
         }
     }
 
-    /// <summary>A file's Replace (the header's, on its page <paramref name="file"/>): chosen in the core first — the replace
-    /// expects the content shown now —, then the open picker picks the one file whose path goes to the core
-    /// (Upload.Replace).</summary>
-    public async void Replace(long file, Action<Spoken> say)
-    {
-        try
-        {
-            var (chosen, _) = await Core.CallAsync(new Call.FileChooseReplace { file = file });
-            if (chosen is not Answer.Done)
-            {
-                Log.Write($"File.ChooseReplace answered {chosen.GetType().Name}");
-                return;
-            }
-            var picker = new FileOpenPicker { SuggestedStartLocation = PickerLocationId.DocumentsLibrary };
-            picker.FileTypeFilter.Add("*");
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
-            var picked = await picker.PickSingleFileAsync();
-            if (picked is null || string.IsNullOrEmpty(picked.Path)) return;
-            var (answer, _) = await Core.CallAsync(new Call.UploadReplace { file = file, path = picked.Path });
-            Queued(answer, "Upload.Replace", say);
-        }
-        catch (Exception e)
-        {
-            Log.Write($"replace failed: {e.GetType().Name}: {e.Message}");
-        }
-    }
-
     internal static void Queued(Answer answer, string what, Action<Spoken> say)
     {
         switch (answer)

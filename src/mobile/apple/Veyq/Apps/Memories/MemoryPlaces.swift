@@ -23,13 +23,13 @@ struct MemoryFactsLine: View {
         HStack(spacing: 16) {
             if date != nil || editable {
                 fact(date ?? say(.memoryDateNone), symbol: "calendar", muted: date == nil, help: say(.memoryDateEdit)) {
-                    dateEditor = model.dateEditor(gallery)
+                    dateEditor = model.memories.dateEditor(gallery)
                 }
             }
             if place != nil || editable {
                 let name = place.map { $0.pending ? say(.memoryPlacePending) : $0.name } ?? say(.memoryPlaceSet)
                 fact(name, symbol: "mappin.and.ellipse", muted: place == nil || place?.pending == true, help: say(.memoryPlaceEdit)) {
-                    placeEditor = model.placeEditor(gallery)
+                    placeEditor = model.memories.placeEditor(gallery)
                 }
             }
             Spacer(minLength: 0)
@@ -298,9 +298,9 @@ struct MemoriesMapTab: View {
     @State private var pins: MemoriesMap?
 
     var body: some View {
-        MemoriesPinMap(model: model, pins: pins) { model.openPin($0) }
+        MemoriesPinMap(model: model, pins: pins) { model.memories.openPin($0) }
             .navigationTitle(Names.application(.memories))
-            .task(id: model.listsRevision) { pins = await model.memoriesMap() }
+            .task(id: model.listsRevision) { pins = await model.memories.memoriesMap() }
     }
 }
 

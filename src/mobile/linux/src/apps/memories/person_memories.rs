@@ -50,7 +50,7 @@ struct Inner {
 
 /// A row's second line: its date, its place and the group it lies in, as the Memories list says each.
 pub fn row_subtitle(row: &PersonRowShown) -> String {
-    let date = row.date.as_ref().and_then(crate::core_ui::said::date_text);
+    let date = row.date.as_ref().and_then(crate::apps::memories::dates::date_text);
     let group = row.group_name.as_ref().map(said::piece);
     said::joined(&[date, row.place.clone(), group].into_iter().flatten().filter(|s| !s.is_empty()).collect::<Vec<_>>())
 }

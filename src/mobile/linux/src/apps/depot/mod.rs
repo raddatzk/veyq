@@ -1,9 +1,11 @@
 //! Depot on Linux (ADR 0154 decision 3): a file's page ([file_page], a PDF's text selected through [pdf_text]) and a
-//! drop box's page for a member ([drop_box]). Depot's uploads, its drop and a download's import are the core UI's (the
-//! tray, New's uploads, a drop onto any level). [register] hands each page to the core UI's registry.
+//! drop box's page for a member ([drop_box]), a file's Replace, a member's and a link guest's ([replace]). Depot's uploads,
+//! its drop and a download's import are the core UI's (the tray, New's uploads, a drop onto any level). [register] hands
+//! each page to the core UI's registry.
 pub mod drop_box;
 pub mod file_page;
 pub mod pdf_text;
+pub mod replace;
 
 use adw::prelude::*;
 
@@ -11,7 +13,7 @@ use crate::apps::depot::drop_box::DropBoxPage;
 use crate::apps::depot::file_page::FilePage;
 use crate::bridge::wire::{ApplicationId, NodeAt, ObjectRef, ReceivedPage, ReceivedPageKind};
 use crate::core_ui::registry::{ApplicationUi, Frame, GuestFrame, GuestPage, KindPage, Page, Registry};
-use crate::core_ui::{received, uploads};
+use crate::core_ui::received;
 
 /// Depot's kinds and its application into [registry].
 pub fn register(registry: &mut Registry) {
@@ -42,7 +44,7 @@ impl Page for FilePage {
             "file-save" | "save" => self.save(window, toasts),
             "file-replace" => {
                 if let Some(id) = self.id() {
-                    uploads::replace(window, id, toasts);
+                    replace::member(window, id, toasts);
                 }
             }
             _ => {}
@@ -69,6 +71,7 @@ fn file(o: &ObjectRef, frame: &Frame) -> Box<dyn Page> {
 fn guest_file(p: &ReceivedPage, frame: &GuestFrame) -> Option<Box<dyn Page>> {
     let file = p.file?;
     let page = FilePage::opened(&frame.node, file);
+    let received = frame.received;
     let (save, replace) = (frame.save.downgrade(), frame.replace.downgrade());
     page.on_facts(move |facts, _| {
         if let Some(save) = save.upgrade() {
@@ -78,7 +81,35 @@ fn guest_file(p: &ReceivedPage, frame: &GuestFrame) -> Option<Box<dyn Page>> {
             replace.set_visible(received::replace_offered(facts.can_write));
         }
     });
-    Some(Box::new(page))
+    Some(Box::new(GuestFile { page, received }))
+}
+
+/// A file on a guest's screen: the member's page, its *Replace* the link's own (`replace::guest`, `Received.Replace`).
+struct GuestFile {
+    page: FilePage,
+    received: i64,
+}
+
+impl Page for GuestFile {
+    fn widget(&self) -> gtk::Widget {
+        Page::widget(&self.page)
+    }
+
+    /// The link bar's *Download* (`save`) is the page's; its *Replace* goes into the link's own queue.
+    fn act(&self, action: &str, window: &gtk::Window, toasts: &adw::ToastOverlay) {
+        match action {
+            "replace" => {
+                if let Some(file) = self.page.id() {
+                    replace::guest(window, self.received, file, toasts);
+                }
+            }
+            other => Page::act(&self.page, other, window, toasts),
+        }
+    }
+
+    fn file(&self) -> Option<i64> {
+        self.page.id()
+    }
 }
 
 impl Page for DropBoxPage {

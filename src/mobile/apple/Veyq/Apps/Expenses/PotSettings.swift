@@ -21,7 +21,7 @@ struct PotSettingsTab: View {
     @State private var renamingCategory: String?
     @State private var categoryName = ""
 
-    private var saving: Bool { model.pot?.saving == true }
+    private var saving: Bool { model.expenses.pot?.saving == true }
 
     /// The currencies offered, by code: core's one table (the web's `Intl`).
     private static var currencies: [String] { Currencies.shared.known }
@@ -45,7 +45,7 @@ struct PotSettingsTab: View {
             }
         }
         .scrollContentBackground(.hidden)
-        .task(id: model.pot?.ref.nodeId) { model.openSettings() }
+        .task(id: model.expenses.pot?.ref.nodeId) { model.expenses.openSettings() }
         .alert(say(.peopleRename, renaming?.name ?? ""), isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField(say(.peopleName), text: $renameTo)
             Button(say(.entrySave)) {
@@ -68,7 +68,7 @@ struct PotSettingsTab: View {
         .confirmationDialog(
             erasing.map { $0.named ? say(.peopleDelete, $0.name) : say(.peopleRemove, $0.name) } ?? "",
             isPresented: Binding(get: { erasing != nil && !confirming }, set: { shown in
-                if !shown { DispatchQueue.main.async { if !confirming { model.cancelErase() } } }
+                if !shown { DispatchQueue.main.async { if !confirming { model.expenses.cancelErase() } } }
             }),
             titleVisibility: .visible
         ) {
@@ -76,9 +76,9 @@ struct PotSettingsTab: View {
                 Button(p.named ? say(.peopleDeleteAccept) : say(.peopleRemoveAccept), role: .destructive) {
                     // shown closed at once; core's question ends when the erase was sent
                     confirming = true
-                    Task { _ = await model.settingsWrite { try await $0.erase() }; confirming = false }
+                    Task { _ = await model.expenses.settingsWrite { try await $0.erase() }; confirming = false }
                 }
-                Button(say(.signinCancel), role: .cancel) { model.cancelErase() }
+                Button(say(.signinCancel), role: .cancel) { model.expenses.cancelErase() }
             }
         } message: {
             if let p = erasing {
@@ -118,7 +118,7 @@ struct PotSettingsTab: View {
                 } else if view.canChangeSettings {
                     Text(say(.settingsCurrencyHint))
                 }
-                if !view.ready, let notice = model.settingsState?.notice { Text(say(notice: notice)).foregroundStyle(Role.danger) }
+                if !view.ready, let notice = model.expenses.settingsState?.notice { Text(say(notice: notice)).foregroundStyle(Role.danger) }
             }
         }
     }
@@ -153,7 +153,7 @@ struct PotSettingsTab: View {
             VStack(alignment: .leading, spacing: 4) {
                 if view.deletedPeople > 0 { Text(say(.peopleDeletedSummary, view.deletedPeople)) }
                 if view.settleFirst { Text(say(.peopleSettleFirst)) }
-                if let notice = model.settingsState?.notice { Text(say(notice: notice)).foregroundStyle(Role.danger) }
+                if let notice = model.expenses.settingsState?.notice { Text(say(notice: notice)).foregroundStyle(Role.danger) }
             }
         }
     }
@@ -178,7 +178,7 @@ struct PotSettingsTab: View {
                     .disabled(saving)
             }
             if p.canErase {
-                Button { model.askErase(p.id) } label: { Image(systemName: "trash") }
+                Button { model.expenses.askErase(p.id) } label: { Image(systemName: "trash") }
                     .buttonStyle(.borderless)
                     .foregroundStyle(Role.danger)
                     .accessibilityLabel(p.named ? say(.peopleDelete, p.name) : say(.peopleRemove, p.name))
@@ -227,9 +227,9 @@ struct PotSettingsTab: View {
         }
     }
 
-    private var erasing: PotSettings.Asked? { model.settingsState?.asking }
+    private var erasing: PotSettings.Asked? { model.expenses.settingsState?.asking }
 
     private func write(_ op: @escaping @MainActor (PotSettings) async throws -> KotlinBoolean, then done: @escaping () -> Void) {
-        Task { if await model.settingsWrite(op) { done() } }
+        Task { if await model.expenses.settingsWrite(op) { done() } }
     }
 }

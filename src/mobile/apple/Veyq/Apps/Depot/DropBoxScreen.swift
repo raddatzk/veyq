@@ -59,7 +59,7 @@ struct DropBoxScreen: View {
         }
         .navigationTitle(ref.name)
         .task(id: ref.nodeId) {
-            guard box.page == nil, let page = model.dropBoxPage(NodeAt(scopeId: ref.scopeId, nodeId: ref.nodeId, kind: ref.kind, name: ref.name)) else { return }
+            guard box.page == nil, let page = model.depot.dropBoxPage(NodeAt(scopeId: ref.scopeId, nodeId: ref.nodeId, kind: ref.kind, name: ref.name)) else { return }
             box.start(page)
         }
         .onDisappear { box.stop() }

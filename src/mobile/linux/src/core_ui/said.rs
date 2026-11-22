@@ -9,7 +9,7 @@ use std::sync::OnceLock;
 
 use gtk::glib;
 
-use crate::bridge::wire::{Answer, Call, DateMode, MemoryDateShown, Notice, NoticeArg, NoticeKind, Piece};
+use crate::bridge::wire::{Answer, Call, Notice, NoticeArg, NoticeKind, Piece};
 use crate::core_ui::words::{self, Arg};
 
 /// What the core answers once for every notice and line ([start]): its lifetimes, the words that live as `SAID` or
@@ -181,15 +181,6 @@ fn arg_text(a: &NoticeArg) -> String {
     }
 }
 
-/// A Memory's date as its facts line, its row and a person's row say it: the core's one day or range, "Since …" for an
-/// ongoing one; none without a day.
-pub fn date_text(d: &MemoryDateShown) -> Option<String> {
-    if d.text.is_empty() {
-        return None;
-    }
-    Some(if d.mode == DateMode::Ongoing { words::memory_date_since(&d.text) } else { d.text.clone() })
-}
-
 // glibc's numeric conventions of the locale (`localeconv`, the C standard's `struct lconv` in glibc's field order), read
 // up to its first field, the one used here: the separator a person types, never a value shown.
 #[repr(C)]
@@ -229,18 +220,6 @@ mod tests {
             said_words: vec!["download_done".into(), "profile_saved".into()], undo_words: vec!["trash_moved".into()],
             separator: format!(" {} ", '\u{b7}'),
         }
-    }
-
-    fn d(mode: DateMode, text: &str) -> MemoryDateShown {
-        MemoryDateShown { mode, from: Some("2026-05-01".into()), to: None, text: text.into() }
-    }
-
-    /// A date is said as the core's text, "Since …" for an ongoing one; without a day it is not said.
-    #[test]
-    fn a_memorys_date_is_the_cores_text_or_since() {
-        assert_eq!(date_text(&d(DateMode::Auto, "")), None);
-        assert_eq!(date_text(&d(DateMode::Range, "05/01/2026 – 05/03/2026")).as_deref(), Some("05/01/2026 – 05/03/2026"));
-        assert_eq!(date_text(&d(DateMode::Ongoing, "05/01/2026")), Some(words::memory_date_since("05/01/2026")));
     }
 
     /// A word this app raises itself lives as the core's table says; one it does not name is held; a line is joined by

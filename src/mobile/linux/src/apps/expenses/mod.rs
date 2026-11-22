@@ -1,12 +1,13 @@
 //! Expenses on Linux (ADR 0154 decision 3): an open Pot ([pot]) with its Settings ([pot_settings]), the entry editor
-//! ([entry_editor]) with an entry's history ([entry_history]), and New pot ([pot_create]). A receipt's picture is the core
-//! UI's (`receipt_viewer`, which a file's PDF and the Emergency Kit draw too). [register] hands each to the core UI's
-//! registry.
+//! ([entry_editor]) with an entry's history ([entry_history]), New pot ([pot_create]) and a receipt opened
+//! ([receipt_viewer], its PDF's pages drawn by the core UI's `pdf_render`, as a file's and the Emergency Kit's). [register]
+//! hands each to the core UI's registry.
 pub mod entry_editor;
 pub mod entry_history;
 pub mod pot;
 pub mod pot_create;
 pub mod pot_settings;
+pub mod receipt_viewer;
 
 use std::rc::Rc;
 

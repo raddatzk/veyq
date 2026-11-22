@@ -6,6 +6,7 @@
 pub mod banner;
 pub mod contributions;
 pub mod curation;
+pub mod dates;
 pub mod gallery_filter;
 pub mod lightbox;
 pub mod memories_map;
@@ -26,7 +27,7 @@ use crate::apps::memories::memory_page::{offers_chapter, MemoryPage};
 use crate::apps::memories::person_memories::PersonMemories;
 use crate::bridge::{self, wire::ApplicationId, wire::Call, wire::Create, wire::Facts, wire::NodeAt, wire::ObjectRef, wire::ReceivedPage,
     wire::ReceivedPageKind, wire::ShellShown};
-use crate::core_ui::home::{self, glib_escape};
+use crate::core_ui::home::glib_escape;
 use crate::core_ui::registry::{ApplicationList, ApplicationUi, CreateDialog, Frame, GuestFrame, GuestPage, KindPage, Page, PersonSection, Registry};
 use crate::core_ui::{create_action, said, words};
 
@@ -143,7 +144,7 @@ impl ApplicationList for MemoriesList {
 
     fn around(&self, list: gtk::Widget, shown: &ShellShown, back_from_page: bool) -> gtk::Widget {
         let key = shown.list.as_ref().map(|l| l.all.iter().chain(&l.favorites).chain(&l.recent).map(|o| o.node_id.as_str()).collect::<Vec<_>>().join(","));
-        home::ask_dates(&key.unwrap_or_default(), back_from_page);
+        dates::ask(&key.unwrap_or_default(), back_from_page);
         if shown.tabs.len() > 1 {
             // the bar's places above the list, as the Map tab and the Pot draw them
             let column = gtk::Box::builder().orientation(gtk::Orientation::Vertical).build();

@@ -40,7 +40,7 @@ struct ImportSheet: View {
         .task {
             guard state == nil else { return }
             let d = dialog
-            state = CoreState({ d.current }) { changed in AppleMemories.shared.watch(flow: d.state) { @Sendable _ in changed() } }
+            state = CoreState({ d.current }) { changed in ApplePlatform.shared.watch(flow: d.state) { @Sendable _ in changed() } }
         }
         .onChange(of: st.step) { _, step in
             // done: the imported line is the shell's to say once the sheet is gone (the web's toast)

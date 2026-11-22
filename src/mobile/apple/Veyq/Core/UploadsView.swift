@@ -13,7 +13,7 @@ struct UploadsButton: View {
     private var queued: [QueuedItem] { model.queued?.items.value ?? [] }
 
     var body: some View {
-        if let state = model.depotState?.queue, !state.batches.isEmpty || !queued.isEmpty {
+        if let state = model.levelUploads?.tray?.queue, !state.batches.isEmpty || !queued.isEmpty {
             Button { open = true } label: { glyph(state: state, failed: Int(state.failed)) }
                 .accessibilityLabel(say(.uploadTitle))
                 .accessibilityValue(state.active > 0 ? say(.uploadActive, state.active) : "")
@@ -58,7 +58,7 @@ private struct UploadsList: View {
             List {
                 // the writes made offline, each under the place it writes into (ADR 0153 decision 5)
                 QueuedTraySections(model: model, items: queued)
-                ForEach(model.depotState?.queue.batches ?? [], id: \.id) { batch in
+                ForEach(model.levelUploads?.tray?.queue.batches ?? [], id: \.id) { batch in
                     Section {
                         ForEach(batch.items, id: \.id) { item in UploadRow(model: model, item: item) }
                     } header: {
@@ -66,7 +66,7 @@ private struct UploadsList: View {
                             Text(batch.label)
                             Spacer()
                             if batch.finished {
-                                Button(say(.uploadClose)) { model.depot?.acknowledge(batchId: batch.id) }.font(.footnote)
+                                Button(say(.uploadClose)) { model.levelUploads?.acknowledge(batch.id) }.font(.footnote)
                             }
                         }
                     }
@@ -78,13 +78,13 @@ private struct UploadsList: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    if (model.depotState?.queue.active ?? 0) > 0 {
-                        Button(say(.uploadCancelAll), role: .destructive) { model.depot?.cancelAll() }
+                    if (model.levelUploads?.tray?.queue.active ?? 0) > 0 {
+                        Button(say(.uploadCancelAll), role: .destructive) { model.levelUploads?.cancelAll() }
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { dismiss() } }
             }
-            .onChange(of: (model.depotState?.queue.batches.isEmpty ?? true) && queued.isEmpty) { _, empty in if empty { dismiss() } }
+            .onChange(of: (model.levelUploads?.tray?.queue.batches.isEmpty ?? true) && queued.isEmpty) { _, empty in if empty { dismiss() } }
         }
     }
 }
@@ -106,11 +106,11 @@ private struct UploadRow: View {
             }
             Spacer()
             if item.active {
-                Button { model.depot?.cancel(id: item.id) } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
+                Button { model.levelUploads?.cancel(item.id) } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }
                     .buttonStyle(.borderless)
                     .accessibilityLabel(say(.signinCancel))
             } else if item.retryable {
-                Button { model.depot?.retry(id: item.id) } label: { Image(systemName: "arrow.clockwise") }
+                Button { model.levelUploads?.retry(item.id) } label: { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.borderless)
                     .accessibilityLabel(say(.uploadRetry))
             }

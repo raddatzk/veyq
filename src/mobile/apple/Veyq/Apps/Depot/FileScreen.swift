@@ -13,7 +13,7 @@ struct FileScreen: View {
     let ref: ObjectRef
 
     private var node: NodeAt { ref.at }
-    private var state: FileModel.State? { model.fileState(node) }
+    private var state: FileModel.State? { model.depot.fileState(node) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -41,7 +41,7 @@ struct FileScreen: View {
         .padding()
         .navigationTitle(ref.name)
         // the model is the shell's while the page is shown; asking for it here opens it
-        .task(id: ref) { _ = model.fileModel(node) }
+        .task(id: ref) { _ = model.depot.fileModel(node) }
     }
 }
 

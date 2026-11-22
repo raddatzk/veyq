@@ -2,7 +2,7 @@
 //! decision 3, a drawn page's pixels riding in beside the host's reply): the core reads the file the open dialog picked by
 //! its path, decides what needs drawing (`KitImport`: a kit found in the file's bytes needs none) and asks this host —
 //! `Pdf.Pages`, `Pdf.Page`, `Picture.Luma` — on its own thread, answered at once from there. A PDF is drawn by poppler-glib
-//! (as a receipt's, [crate::core_ui::receipt_viewer::render]), opened from the path, a picture decoded by GTK (`gdk::Texture`);
+//! (as a receipt's, [crate::core_ui::pdf_render::render]), opened from the path, a picture decoded by GTK (`gdk::Texture`);
 //! each drawing goes back as its luminance, packed row after row. Nothing is written anywhere: the drawing is memory
 //! only, and the bytes this side made of it are zeroed once handed over (cairo's own surfaces are let go, not zeroed).
 use gtk::{cairo, gdk, glib};
@@ -54,7 +54,7 @@ pub fn pdf_page(path: &str, page: i32, width: i32) -> Result<Luma, String> {
     }
     let pdf = open(path)?;
     let p = pdf.page(page - 1).ok_or_else(|| format!("no page {page}"))?;
-    let mut drawn = crate::core_ui::receipt_viewer::render(&p, width).ok_or("the page did not draw")?;
+    let mut drawn = crate::core_ui::pdf_render::render(&p, width).ok_or("the page did not draw")?;
     let luma = luminance(&drawn.data, drawn.width, drawn.height, drawn.stride);
     drawn.data.fill(0);
     Ok(luma)

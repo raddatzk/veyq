@@ -23,7 +23,7 @@ struct PotScreen: View {
 
     var body: some View {
         Group {
-            if let state = model.pot, state.ref == ref, let view = state.view {
+            if let state = model.expenses.pot, state.ref == ref, let view = state.view {
                 if !view.ready {
                     PotSettingsTab(model: model, view: view)
                 } else {
@@ -33,14 +33,14 @@ struct PotScreen: View {
                         case "expenses.overview": OverviewList(model: model, view: view)
                         case "expenses.settings": PotSettingsTab(model: model, view: view)
                         default: EntriesList(view: view, onAdd: {
-                            if model.openEditor(nil) { editing = Editing(entryId: nil) }
+                            if model.expenses.openEditor(nil) { editing = Editing(entryId: nil) }
                         }, onOpen: { id in
-                            if model.openEditor(id) { editing = Editing(entryId: id) }
+                            if model.expenses.openEditor(id) { editing = Editing(entryId: id) }
                         }, onOpenDeleted: { viewing = $0 })
                         }
                     }
                 }
-            } else if let state = model.pot, state.ref == ref, state.failed {
+            } else if let state = model.expenses.pot, state.ref == ref, state.failed {
                 // offline, a Pot this device does not keep says so (no failure: the cloud crossed out), else the open
                 // failed (core's words)
                 let why = state.failure ?? .potOpenFailed
@@ -51,39 +51,39 @@ struct PotScreen: View {
         }
         .navigationTitle(ref.name)
         // An open Pot says its currency under its name (the web's header subtitle).
-        .navigationSubtitle(model.pot?.ref == ref ? model.pot?.view?.currency.map { say(.potInCurrency, $0) } ?? "" : "")
-        .task(id: ref.nodeId) { model.loadPot(ref) }
+        .navigationSubtitle(model.expenses.pot?.ref == ref ? model.expenses.pot?.view?.currency.map { say(.potInCurrency, $0) } ?? "" : "")
+        .task(id: ref.nodeId) { model.expenses.loadPot(ref) }
         // Live while the Pot is on screen and the app active: what another device writes shows up (core's `LivePoll`).
-        .task(id: LiveKey(nodeId: ref.nodeId, loaded: model.pot?.view != nil, active: phase == .active)) {
-            if model.pot?.view != nil, phase == .active { await model.livePot() }
+        .task(id: LiveKey(nodeId: ref.nodeId, loaded: model.expenses.pot?.view != nil, active: phase == .active)) {
+            if model.expenses.pot?.view != nil, phase == .active { await model.expenses.livePot() }
         }
-        .refreshable { await model.refreshPot() }
+        .refreshable { await model.expenses.refreshPot() }
         // Files shared to veyq and placed here: a new expense with them as its receipts, where entries may be added.
-        .task(id: ShareKey(waiting: model.incoming != nil, loaded: model.pot?.ref == ref && model.pot?.view != nil)) {
+        .task(id: ShareKey(waiting: model.incoming != nil, loaded: model.expenses.pot?.ref == ref && model.expenses.pot?.view != nil)) {
             // Only while the shell still shows this Pot: files given back (its editor closed unsaved) move the shell Home first.
-            guard model.incoming != nil, model.shell.openObject == ref, model.pot?.ref == ref, let view = model.pot?.view, PotShare.shared.goesInto(view: view),
-                  view.currency != nil, let taken = await model.takeShare() else { return }
-            guard model.openEditor(nil, pending: taken.pending) else { model.returnShare(); return }
+            guard model.incoming != nil, model.shell.openObject == ref, model.expenses.pot?.ref == ref, let view = model.expenses.pot?.view, PotShare.shared.goesInto(view: view),
+                  view.currency != nil, let taken = await model.expenses.takeShare() else { return }
+            guard model.expenses.openEditor(nil, pending: taken.pending) else { model.returnShare(); return }
             editing = Editing(entryId: nil, fromShare: true)
             sharing = true
         }
         // the tray's *Open* of a held entry: its editor over the newer version, once this Pot is read
-        .task(id: HeldKey(write: model.heldOpen?.write, loaded: model.pot?.ref == ref && model.pot?.view != nil)) {
-            guard let held = model.heldOpen, held.pot == ref.nodeId, model.pot?.ref == ref, model.pot?.view != nil else { return }
-            model.heldOpen = nil
-            if await model.openHeldEditor(held.write) { editing = Editing(entryId: held.entry) }
+        .task(id: HeldKey(write: model.expenses.heldOpen?.write, loaded: model.expenses.pot?.ref == ref && model.expenses.pot?.view != nil)) {
+            guard let held = model.expenses.heldOpen, held.pot == ref.nodeId, model.expenses.pot?.ref == ref, model.expenses.pot?.view != nil else { return }
+            model.expenses.heldOpen = nil
+            if await model.expenses.openHeldEditor(held.write) { editing = Editing(entryId: held.entry) }
         }
         .sheet(item: $editing, onDismiss: {
-            model.closeEditor()
+            model.expenses.closeEditor()
             // A share's editor closed without its save: its files wait again in the pick mode (a save ended the share).
             if sharing { sharing = false; model.returnShare() }
         }) { e in
-            if let view = model.pot?.view {
+            if let view = model.expenses.pot?.view {
                 EntryEditorSheet(model: model, view: view, entryId: e.entryId, onSaved: e.fromShare ? { sharing = false; model.shareSaved() } : nil)
             }
         }
         .sheet(item: $viewing) { row in
-            if let view = model.pot?.view { DeletedEntrySheet(model: model, view: view, row: row) }
+            if let view = model.expenses.pot?.view { DeletedEntrySheet(model: model, view: view, row: row) }
         }
     }
 }
@@ -195,7 +195,7 @@ private struct OverviewList: View {
 
     private func record(_ payments: [PotView.SettleRow]) {
         // dated the core's today (`PotModel.record`)
-        Task { await model.recordSettleUp(payments) }
+        Task { await model.expenses.recordSettleUp(payments) }
     }
 
 
@@ -232,18 +232,18 @@ private struct OverviewList: View {
                             Text(money(t.amount, view.currency, view.minorUnits)).fontWeight(.semibold)
                             // a payment never queues: *Record* where the core offers it (`canRecord`), never by `canWrite`
                             if view.canRecord {
-                                Button(say(.balancesRecord)) { record([t]) }.buttonStyle(.borderless).disabled(model.pot?.saving == true)
+                                Button(say(.balancesRecord)) { record([t]) }.buttonStyle(.borderless).disabled(model.expenses.pot?.saving == true)
                             }
                         }
                         .listRowBackground(Role.surface)
                     }
                     if view.canRecordAll {
-                        Button(say(.balancesRecordAll)) { record(view.settleUp) }.disabled(model.pot?.saving == true).listRowBackground(Role.surface)
+                        Button(say(.balancesRecordAll)) { record(view.settleUp) }.disabled(model.expenses.pot?.saving == true).listRowBackground(Role.surface)
                     }
                 } header: {
                     SectionLabel(title: say(.potSettleUp))
                 } footer: {
-                    if let message = model.pot?.message { Text(potRefusal(message)).foregroundStyle(Role.danger) }
+                    if let message = model.expenses.pot?.message { Text(potRefusal(message)).foregroundStyle(Role.danger) }
                 }
             }
             if !view.byCategory.isEmpty {

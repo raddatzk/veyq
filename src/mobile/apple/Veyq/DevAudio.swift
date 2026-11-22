@@ -7,7 +7,7 @@ import os
 /// Debug builds only — the music's format matrix (ADR 0142 decision 9), reached without a sign-in: started with
 /// `VEYQ_DEV_AUDIO_MATRIX=<dir>` in its environment, the app runs every file of that directory through the path a track
 /// plays by — its bytes behind a core `RangeReader` cut into a sealed blob's frames, typed by `Sniff.stream` as an upload
-/// types it, loaded and played 1.5 s by an `AVDeck` — and reads its length as the upload's `AssetMeasure` does. One line
+/// types it, loaded and played 1.5 s by an `AVDeck` — and reads its length as the upload's measure does (`AssetLength`). One line
 /// per file to the unified log (`veyq-audio:`), then `veyq-audio: done`. A release build compiles none of it.
 enum DevAudio {
     static var requested: String? {
@@ -34,7 +34,7 @@ enum DevAudio {
             let url = URL(fileURLWithPath: dir).appendingPathComponent(name)
             guard let data = try? Data(contentsOf: url) else { continue }
                         let mime = AppleAudio.shared.mime(data: data) ?? "none"
-            let measured = await AssetMeasure.durationMs(of: AVURLAsset(url: url))
+            let measured = await AssetLength.ms(of: AVURLAsset(url: url))
             let events = Events()
             let apple = AVDeck(events: events)
             let deck = AppleAudio.shared.deck(apple: apple)

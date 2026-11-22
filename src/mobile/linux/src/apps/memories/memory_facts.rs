@@ -19,7 +19,7 @@ use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::DateMode, wire:
 use crate::core_ui::home::glib_escape;
 use crate::core_ui::raster_map::RasterMap;
 use crate::core_ui::typed::Typed;
-use crate::core_ui::said::date_text;
+use crate::apps::memories::dates::date_text;
 use crate::core_ui::words;
 
 /// Whether the level picker's rows must be drawn anew: a lookup at another spot answers the same levels with other names

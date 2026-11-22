@@ -11,6 +11,7 @@ namespace Veyq.Core;
 
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -19,7 +20,7 @@ using ApplicationId = Veyq.Bridge.Wire.ApplicationId;
 
 /// <summary>What the frame hands a kind's page in the shell: the window, how an action went (under the bar), the bar a
 /// notice with an action stands in (a trash's Undo), a Save a copy's progress, the header's facts once the page read
-/// them, the CommandBar drawn anew, a replace of a file's content queued, the shell's lists read anew.</summary>
+/// them, the CommandBar drawn anew, the shell's lists read anew.</summary>
 internal sealed class PageHost
 {
     public required Window Window { get; init; }
@@ -28,18 +29,19 @@ internal sealed class PageHost
     public required Action<long> Saving { get; init; }
     public required Action<Facts?, long?, long?> Facts { get; init; }
     public required Action Changed { get; init; }
-    public required Action<long> Replace { get; init; }
     public required Action RefreshLists { get; init; }
 }
 
 /// <summary>What a received link's screen hands a kind's guest page: the window, how an action went, its own bar, the
-/// node as the link names it, a node of the link opened (a chapter's row), and its CommandBar drawn anew.</summary>
+/// node as the link names it, the link on screen (its id, a guest write's own queue), a node of the link opened (a
+/// chapter's row), and its CommandBar drawn anew.</summary>
 internal sealed class GuestHost
 {
     public required Window Window { get; init; }
     public required Action<Spoken> Say { get; init; }
     public required NoticeBar Said { get; init; }
     public required NodeAt Node { get; init; }
+    public required long Received { get; init; }
     public required Action<string> OpenNode { get; init; }
     public required Action Changed { get; init; }
 }
@@ -125,6 +127,10 @@ internal abstract class KindBody : IDisposable
     /// <summary>The file a received link's guest may replace (the core's FileRights), else null.</summary>
     public virtual long? GuestReplaces => null;
 
+    /// <summary>A received link's guest replaces <paramref name="file"/> (its bar's Replace, offered by
+    /// <see cref="GuestReplaces"/>), on the link's own queue.</summary>
+    public virtual void GuestReplace(long file) { }
+
     public abstract void Dispose();
 }
 
@@ -185,6 +191,8 @@ internal sealed class ApplicationUi
     public Func<ListHost, ApplicationList>? List { get; init; }
     public IReadOnlyDictionary<Create, Action<CreateHost>> Creates { get; init; } = new Dictionary<Create, Action<CreateHost>>();
     public Func<Window, PersonSection>? PersonSection { get; init; }
+    /// <summary>The second line its rows say, by node id (Memories' dates; `RowLines`); null where its ask failed.</summary>
+    public Func<Task<IReadOnlyDictionary<string, string>?>>? RowLines { get; init; }
 }
 
 internal sealed class Registry

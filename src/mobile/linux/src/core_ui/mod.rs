@@ -9,7 +9,7 @@
 //! services ([map_services]) over the core's raster map ([raster_map]), the account's flows ([account_flows],
 //! [profile_edit], [safety]), the uploads ([uploads]) with drag and drop ([drop]) and a download's import
 //! ([import_dialog]), a running save's banner ([saving]), a picture held at the core's edge ([picture]), a medium played
-//! from the core's reader ([player] over [reader_stream]), a receipt's or a PDF's picture ([receipt_viewer]), a picked
+//! from the core's reader ([player] over [reader_stream]), a PDF's page drawn from memory ([pdf_render]), a picked
 //! medium's tiers ([media_tiers]), the account's music — its bar ([music_bar]), its decks and the desktop's media controls
 //! ([music_host]) —, a text field's rule ([typed]), a QR scan's camera ([qr_camera]), an Emergency Kit's pages drawn for
 //! the core ([kit_drawing]), and, in a debug build, [dev_login] and the harnesses [dev_scan] and [dev_settings]. It names
@@ -37,6 +37,7 @@ pub mod move_sheet;
 pub mod music_bar;
 pub mod music_host;
 pub mod person_page;
+pub mod pdf_render;
 pub mod picture;
 pub mod places;
 pub mod player;
@@ -44,7 +45,6 @@ pub mod profile_edit;
 pub mod qr_camera;
 pub mod raster_map;
 pub mod reader_stream;
-pub mod receipt_viewer;
 pub mod received;
 pub mod registry;
 pub mod report;
