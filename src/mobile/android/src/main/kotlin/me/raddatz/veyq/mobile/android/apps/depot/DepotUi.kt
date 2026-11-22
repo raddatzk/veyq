@@ -183,6 +183,8 @@ internal object DepotUi {
         registry.kind(file, me.raddatz.veyq.mobile.depot.DepotFiles.FILE)
         registry.kind(dropBox, me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX)
         registry.application(ApplicationUi(ApplicationId.DEPOT, holding = DepotHeld))
+        // an SVG is drawn by the WebView's image mode, closed around it (SvgPicture.kt, inbox #1059)
+        me.raddatz.veyq.mobile.depot.FileView.drawSvgAsImage()
     }
 }
 
