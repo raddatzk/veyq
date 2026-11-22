@@ -344,6 +344,59 @@ and what it costs.
   and `DropBoxes` are files the split moves or re-homes right now; building beside it would conflict, and `KindFacts`
   must be read from the split's registry rather than grow a second one. Cost: the slice starts after the split's phase 4.
 
+*Implementation (2026-11-22, branch `claude/node-tree` from `961f96c1f`, the split merged; each entry as above).*
+
+- **D15 — Re-grounding phases 2–3 against the merged split.** Read: ADR 0156 and its log, the merged tree. What changed
+  against this CR: the platform's module file is `kotlin_veyq_mobile_core.mjs` (not `veyq-mobile-core.mjs`) and the
+  package's one `.d.mts` is `veyq-mobile-composition.d.mts`, both written by `:composition:jsPackage` (not `:core`'s); the
+  parked branch's entry writer (`cbf54e21e`) read `:core`'s façades and re-exported from the one module, so it is rebuilt in
+  `:composition`, reading every core module's `jsMain/**/web/` and re-exporting from that module's file. `AppKinds` is the
+  registry and each application answers through `ApplicationKinds`; `NodeCreate.kt` holds no collision (the inventory was
+  wrong): the app's twins are `NodeRename`, `NodeMove.move`, Memories' `MemoryCreate.check` and Depot's
+  `DepotFiles.collision`, the last two folding through `AppKinds.tokenInput` (so through `KindFacts` once it reads it).
+  Evidence: measured, `git grep -n "tokenInput(it.kind, it.name)" -- src/mobile`. Cost: none.
+- **D16 — Phase 1's writer is the web test's write mode, not a script under `src/web/scripts/`.** The kind table is read
+  from the web's registry, which only a DOM test environment fills (`src/test/setup.ts` registers the applications in a
+  `beforeAll` behind `typeof window`); a `tsx` script would have to load every application's Vue modules. Deleted in phase 2
+  as planned (one file, one writer: the core's `TreeVectorsTest`). Evidence: read. Cost: none after phase 2.
+- **D17 — The kind table is written sorted by kind.** The web registers core, Memories, Depot, Expenses; the apps install
+  Depot, Expenses, Memories (`AppComposition.applications`): sorted, both sides compare and the core writes one order.
+  Evidence: measured, the core's rewrite left `git diff contracts/platform/tree/` empty. Cost: none.
+- **D18 — The order's common rule is a sort key.** Each name becomes one string whose UTF-16 order is the rule's (white
+  space, then a table of ICU 78's punctuation, symbols and currency signs in its primary order — 115 characters, the quotes
+  it reads as one folded first —, an unlisted one after its group by code unit, a run of ASCII digits as its length without
+  leading zeros then its digits, a letter by its code unit after NFKD, combining marks dropped, lower case, and `ß`, `æ`,
+  `œ`, `ø`, `ł`, `đ`, `ð` read as the collator reads them); equal keys fall to creation, then id. One key per name per call,
+  then native string comparison, so a 10,000-name level folds 10,000 times, not per comparison. Evidence: measured, a
+  JavaScript prototype of the key against `Intl.Collator('en'|'de', { numeric: true, sensitivity: 'base' })` under Node
+  22.23.3 (ICU 78.3): 0 of 25,600 ordered pairs of the corpus' 160 names differ, 0 of 90,000 pairs of 300 random names over a
+  60-character pool (`npx -y node@22 proto.mjs`, scratch); the Kotlin answers every `order` case (`TreeVectorsTest`, JVM).
+  Cost: the table in the module; the residual named in `LevelOrder`'s doc (a script or digit the table does not reach, a
+  dotless `ı`). No visible change on the corpus (D5's list is empty).
+- **D19 — A place the tree does not read takes nothing.** Against D13: the web's TypeScript asked an unread place as the
+  scope root, the app refused it (`NodeMoveTest` holds the app's). The browser never lists an unread place, the server
+  decides anyway, and failing closed is the registry's own answer for an unknown kind; so `MovePlan.hereBlock` refuses
+  (`kind`). No vector case: phase 1's TypeScript would answer otherwise and each commit's web check stays green;
+  `TreeRulesTest.aPlaceTheTreeDoesNotReadTakesNothing` holds it. Cost: none visible.
+- **D20 — The applications' kind facts are data.** `ApplicationKinds.tokenInput`/`placement` are replaced by `kindFacts`
+  (each kind's route, folding, placement); `AppKinds.facts` is built at install (core's two kinds and every part's, by kind),
+  `AppKinds.tokenInput` and `placement` read it, and the install refuses a part whose facts are not its kinds;
+  `AppCompositionTest` asks one facts entry per kind. Evidence: measured, `./gradlew :core:jvmTest :apps:*:jvmTest
+  :composition:jvmTest` green, `TreeVectorsTest.kinds` (the apps' table equals the file's). Cost: the header's
+  `ApplicationKinds` protocol loses two members and gains one property (the header diff, phase 2).
+- **D21 — `NodeMove` keeps its API and adapts.** Its `PlacementAllows`, `Block` and `Place` stay (Swift, Android, the bridge
+  and `MoveSheet`'s door read them); `start`, `trail`, `places`, `hereBlock`, `inIdentityFolder` call `MovePlan` over a
+  `TreeFacts` of the given `NodeRef`s, so `MovePlan` takes the placement as a function (the door's or `KindFacts`'). Cost: a
+  `TreeFacts` built per call on the apps (a list's size, the apps' trees).
+- **D22 — `Naming.slugify` as loops, `fnv1a` without `Long`.** The web's collision folds every sibling's name through
+  `slugify`: the per-call `Regex` and the `Map<Char, String>` became loops with the same output (held by
+  `v1.json#name_folding` on both sides); `UInt.toString(radix)` goes through `Long`, so the unsigned value is printed in base
+  36 through a `Double` (exact below 2^53). Evidence: measured, the crypto vectors green on the JVM. Cost: none.
+- **D23 — Two forms of the collision rule, one comparison.** `SiblingNames.colliding` over a `TreeFacts` and the
+  `KindFacts` (the web: each sibling's input folded once per tree generation and kind table, so a keystroke compares strings),
+  and over a list the caller holds with the registry's `tokenInput` (the apps' `NodeRename`, `NodeMove.move`: null for a kind
+  the build does not know, which meets nothing, as before). Cost: a second entry point, one rule.
+
 ## Questions for the owner
 
 None: every choice above is technical. The ways this reaches the owner are a missed number (phase 3's probe or decision

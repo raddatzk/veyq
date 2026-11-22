@@ -1,6 +1,9 @@
 package me.raddatz.veyq.mobile.session
 
 import me.raddatz.veyq.mobile.navigation.NodeRef
+import me.raddatz.veyq.mobile.tree.MovePlan
+import me.raddatz.veyq.mobile.tree.SiblingNames
+import me.raddatz.veyq.mobile.tree.TreeFacts
 
 /**
  * A node moved elsewhere in its space, core's for every kind (the web's `core/node/move.ts` and `moveNode`, inbox #358): a
@@ -12,7 +15,8 @@ import me.raddatz.veyq.mobile.navigation.NodeRef
  * trail up to the scope root ([trail]), lists only the children one may go into or move into ([places]: a folder, the way
  * down, or a node whose kind takes the moved one), and says per place why "Move here" cannot be chosen ([hereBlock]). The
  * places mirror the server's rules — the kind's placement, which each application answers ([placementAllows]), and no cycle —
- * and the server decides; its refusals are worded by [Outcome].
+ * and the server decides; its refusals are worded by [Outcome]. The rules are the platform's [MovePlan], the web's too
+ * (`@veyq/core-js/tree`); this object adapts them to the apps' [NodeRef] and holds the write.
  */
 object NodeMove {
     /** Why "Move here" cannot be chosen at a place (for [ITSELF] and [INSIDE] also why a listed place cannot be opened). */
@@ -49,70 +53,50 @@ object NodeMove {
         fun allows(kind: String, parentKind: String?): Boolean
     }
 
-    /** Where the browser opens: the place the node is in, else the scope root (null). */
-    fun start(tree: List<NodeRef>, moved: NodeRef): String? = moved.parentId?.takeIf { p -> tree.any { it.nodeId == p } }
+    /** [tree] as the platform's rules read it ([TreeFacts]). */
+    private fun facts(tree: List<NodeRef>): TreeFacts =
+        TreeFacts(tree.map { TreeFacts.Node(it.nodeId, it.parentId, it.kind, it.name, it.createdAt, it.identity) })
 
-    /** The trail from the scope root (null) down to [at], both included: the breadcrumb's places. */
+    private fun moved(n: NodeRef): List<MovePlan.Moved> = listOf(MovePlan.Moved(n.nodeId, n.kind, n.parentId, n.name))
+
+    private fun block(b: MovePlan.Block): Block = when (b) {
+        MovePlan.Block.SELF -> Block.ITSELF
+        MovePlan.Block.INSIDE -> Block.INSIDE
+        MovePlan.Block.CURRENT -> Block.CURRENT
+        MovePlan.Block.IDENTITY_FOLDER -> Block.IDENTITY_FOLDER
+        MovePlan.Block.KIND -> Block.KIND
+    }
+
+    /** Where the browser opens: the place the node is in, else the scope root (null) — the platform's [MovePlan.start]. */
+    fun start(tree: List<NodeRef>, moved: NodeRef): String? = MovePlan.start(facts(tree), null, moved(moved))
+
+    /** The trail from the scope root (null) down to [at], both included: the breadcrumb's places ([MovePlan.trail]). */
     fun trail(tree: List<NodeRef>, at: String?): List<NodeRef?> {
         val byId = tree.associateBy { it.nodeId }
-        val out = ArrayList<NodeRef?>()
-        val seen = HashSet<String>()
-        var id = at
-        while (id != null && seen.add(id)) {
-            val n = byId[id] ?: break
-            out.add(0, n)
-            id = n.parentId
-        }
-        out.add(0, null)
-        return out
+        return listOf<NodeRef?>(null) + MovePlan.trail(facts(tree), null, at).drop(1).mapNotNull { id -> id?.let { byId[it] } }
     }
 
     /**
      * The places listed at [at] (null: the scope root): a folder always (the way down), else a node whose kind takes the moved
-     * one, in the tree's order; the moved node itself and what lies below it are listed blocked — they cannot be opened.
+     * one, in the tree's order; the moved node itself and what lies below it are listed blocked ([MovePlan.places]).
      */
-    fun places(tree: List<NodeRef>, moved: NodeRef, at: String?, allows: PlacementAllows): List<Place> =
-        tree.filter { it.parentId == at && (it.kind == FOLDER || allows.allows(moved.kind, it.kind)) && !inIdentityFolder(tree, it.nodeId) }
-            .map { Place(it, within(tree, moved, it.nodeId)) }
+    fun places(tree: List<NodeRef>, moved: NodeRef, at: String?, allows: PlacementAllows): List<Place> {
+        val byId = tree.associateBy { it.nodeId }
+        return MovePlan.places(allows::allows, facts(tree), moved(moved), guest = false, at = at)
+            .map { Place(byId.getValue(it.node.id), it.blocked?.let(::block)) }
+    }
 
     /** Why [moved] cannot be moved — or, with [copy], copied — to [at] (null: the scope root), or null where it can. A copy
-     *  may go where its original is (it takes the next free name there, the web's `moveHereBlockOf(…, 'copy')`). */
-    fun hereBlock(tree: List<NodeRef>, moved: NodeRef, at: String?, allows: PlacementAllows, copy: Boolean = false): Block? {
-        if (at != null) within(tree, moved, at)?.let { return it }
-        if (inIdentityFolder(tree, at)) return Block.IDENTITY_FOLDER
-        if (!copy && moved.parentId == at) return Block.CURRENT
-        val kind = at?.let { a -> tree.firstOrNull { it.nodeId == a }?.kind ?: return Block.KIND }
-        return if (allows.allows(moved.kind, kind)) null else Block.KIND
-    }
+     *  may go where its original is (it takes the next free name there) — the platform's [MovePlan.hereBlock]. */
+    fun hereBlock(tree: List<NodeRef>, moved: NodeRef, at: String?, allows: PlacementAllows, copy: Boolean = false): Block? =
+        MovePlan.hereBlock(allows::allows, facts(tree), moved(moved), guest = false, at = at, copy = copy)?.let(::block)
 
-    /** Whether [id] (null: the scope root) is a guest's identity folder or lies in one (the web's `inIdentityFolder`). */
-    fun inIdentityFolder(tree: List<NodeRef>, id: String?): Boolean {
-        val byId = tree.associateBy { it.nodeId }
-        val seen = HashSet<String>()
-        var n = id?.let { byId[it] }
-        while (n != null && seen.add(n.nodeId)) {
-            if (n.identity) return true
-            n = n.parentId?.let { byId[it] }
-        }
-        return false
-    }
+    /** Whether [id] (null: the scope root) is a guest's identity folder or lies in one. */
+    fun inIdentityFolder(tree: List<NodeRef>, id: String?): Boolean = facts(tree).inIdentityFolder(id)
 
-    /** Whether moving [node] ends a guest's folder (the web's `endsIdentity`): its identity link goes with the move, the
+    /** Whether moving [node] ends a guest's folder ([MovePlan.endsIdentity]): its identity link goes with the move, the
      *  guest adds nothing to it any more, and nothing brings it back into the drop box — asked before it is sent. */
     fun endsIdentity(node: NodeRef): Boolean = node.identity
-
-    /** Whether [id] is [moved] or lies below it (bounded: a served parent cycle stops instead of spinning). */
-    private fun within(tree: List<NodeRef>, moved: NodeRef, id: String): Block? {
-        if (id == moved.nodeId) return Block.ITSELF
-        val byId = tree.associateBy { it.nodeId }
-        val seen = HashSet<String>()
-        var n = byId[id]
-        while (n != null && seen.add(n.nodeId)) {
-            if (n.nodeId == moved.nodeId) return Block.INSIDE
-            n = n.parentId?.let { byId[it] }
-        }
-        return null
-    }
 
     enum class Outcome {
         MOVED,
@@ -155,9 +139,9 @@ object NodeMove {
         val refs = tree.map { it.asNode() }
         if (to != null && tree.none { it.id == to }) return Result(Outcome.GONE)
         if (hereBlock(refs, node.asNode(), to, allows) != null) return Result(Outcome.BLOCKED)
-        val input = tokenInput(node.kind, node.name) ?: return Result(Outcome.FAILED)
-        // A node at the destination that folds to the same input: said by name before anything is sent (`planMove`).
-        tree.firstOrNull { it.parentId == to && it.id != nodeId && tokenInput(it.kind, it.name) == input }
+        tokenInput(node.kind, node.name) ?: return Result(Outcome.FAILED)
+        // A node at the destination that folds to the same input: said by name before anything is sent ([MovePlan.plan]).
+        SiblingNames.colliding(tree.filter { it.parentId == to }, { it.id }, { it.kind }, { it.name }, node.kind, node.name, nodeId, tokenInput)
             ?.let { return Result(Outcome.NAME_TAKEN, taken = it) }
         val ended = NodePlacement.place(tenant, scopeId, nodeId, parentOf = { to }, nameOf = { it.name }, tokenInput = tokenInput, waitsMs = waitsMs)
         return Result(

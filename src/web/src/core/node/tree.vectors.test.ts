@@ -1,14 +1,10 @@
 // @vitest-environment happy-dom
 // The node tree's rules against contracts/platform/tree/v1-vectors.json: a level's order, the numbering of equal names, a
 // name's sibling collision and the move's plan, every case through the web's own functions over the real registry
-// (`src/test/setup.ts` registers the applications, as `main.ts` does). The core's TreeVectorsTest answers the same cases.
-//
-// **The write mode is here, until the core takes it over**: `VEYQ_WRITE_VECTORS=1 pnpm exec vitest run
-// src/core/node/tree.vectors.test.ts` under Node 22 records every case's `expected`, the registry's kind table and the ICU
-// the order was read from, written as `JSON.stringify(vectors, null, 2)` writes it. Read each changed case against its rule
-// before committing it.
+// (`src/test/setup.ts` registers the applications, as `main.ts` does), whose kind table must be the file's. The core
+// records the vectors (its TreeVectorsTest's write mode, ADR 0155 § Consequences) and answers the same cases.
 import { describe, expect, it } from 'vitest'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { registry } from '../applications/registry'
 import { fileNameSlug } from '../../shared/naming'
@@ -22,7 +18,6 @@ import { memberTreeOf, treeNode } from '../../test/models'
 
 const FILE = resolve(__dirname, '../../../../../contracts/platform/tree/v1-vectors.json')
 const vectors = JSON.parse(readFileSync(FILE, 'utf8')) as any
-const writing = process.env.VEYQ_WRITE_VECTORS === '1'
 
 type Entry = { id: string; name: string; createdAt: number | null }
 const nodeOf = (e: Entry): TreeNode => treeNode({ id: e.id, name: e.name, createdAt: e.createdAt ?? 0 })
@@ -94,18 +89,13 @@ const answers: Record<string, (c: any) => unknown> = {
 
 describe('the tree vectors (contracts/platform/tree/v1-vectors.json)', () => {
   it('the registry\'s kinds are the vectors\' kind table', () => {
-    if (writing) return
     expect(kindTable()).toEqual(vectors.kinds)
   })
 
   for (const [section, answer] of Object.entries(answers)) {
     describe(section, () => {
       ;(vectors[section] as any[]).forEach((c, i) => {
-        it(`#${i} ${c.rule}`, () => {
-          const got = answer(c)
-          if (writing) c.expected = got
-          else expect(got).toEqual(c.expected)
-        })
+        it(`#${i} ${c.rule}`, () => expect(answer(c)).toEqual(c.expected))
       })
     })
   }
@@ -126,15 +116,3 @@ describe('the tree vectors (contracts/platform/tree/v1-vectors.json)', () => {
   })
 })
 
-if (writing) {
-  // after every case above has run: the file as it was, the answers, the kind table and the ICU written in
-  describe('write', () => {
-    it('writes the vectors', () => {
-      const { format, note, ...rest } = vectors
-      delete rest.icu
-      delete rest.kinds
-      const file = { format, note, icu: process.versions.icu, kinds: kindTable(), ...rest }
-      writeFileSync(FILE, `${JSON.stringify(file, null, 2)}\n`)
-    })
-  })
-}

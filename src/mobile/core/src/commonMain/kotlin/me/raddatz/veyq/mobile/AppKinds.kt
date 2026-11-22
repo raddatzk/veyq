@@ -1,7 +1,7 @@
 package me.raddatz.veyq.mobile
 
 import kotlin.native.HiddenFromObjC
-import me.raddatz.veyq.mobile.crypto.Naming
+import me.raddatz.veyq.mobile.tree.KindFacts
 import me.raddatz.veyq.mobile.navigation.HeaderAction as H
 import me.raddatz.veyq.mobile.session.NodeRekey
 
@@ -40,6 +40,8 @@ object AppKinds {
         }
         val kinds = parts.flatMap { it.kinds }
         check(kinds.size == kinds.toSet().size && kinds.none { it in CORE }) { "a node kind owned twice: $kinds" }
+        check(parts.all { p -> p.kindFacts.map { it.kind }.sorted() == p.kinds.sorted() }) { "an application's kind facts are not its kinds" }
+        held = KindFacts((CORE_FACTS + parts.flatMap { it.kindFacts }).sortedBy { it.kind })
         installed = parts
     }
 
@@ -47,6 +49,19 @@ object AppKinds {
     internal val kept: List<me.raddatz.veyq.mobile.offline.ApplicationKept> get() = applications.mapNotNull { it.kept }
 
     private val CORE = setOf("FOLDER", "SHARE_BOOKMARK")
+
+    /** Core's own kinds' facts: a folder and a kept link fold as containers, at the root or in a folder, under no route. */
+    private val CORE_FACTS = CORE.map { KindFacts.Kind(it, null, KindFacts.Folding.NAME, root = true, parents = listOf(FOLDER)) }
+
+    @kotlin.concurrent.Volatile
+    private var held: KindFacts? = null
+
+    /**
+     * Every kind's facts as the platform's tree rules read them (`tree/KindFacts`: route slug, folding, placement), core's
+     * and every application's, by kind — the table the web builds from its own registry, both held to
+     * `contracts/platform/tree/v1-vectors.json`'s `kinds`.
+     */
+    val facts: KindFacts get() = held ?: error("AppKinds read before the applications were installed (composition's AppComposition.install)")
     /**
      * Each write that may be queued offline and the sender that takes it through its online path (ADR 0153 decision 3,
      * [me.raddatz.veyq.mobile.offline.Queued]): core's node writes here; an application's rows are its own senders.
@@ -66,10 +81,7 @@ object AppKinds {
      * rule — a file's stricter `fileNameSlug`, else `slugify` — behind its application's route slug where it claimed one,
      * pinned by `v1.json#name_folding`); null for a kind this build does not know, whose names it then does not write.
      */
-    fun tokenInput(kind: String, name: String): String? = when (kind) {
-        FOLDER, SHARE_BOOKMARK -> Naming.slugify(name)
-        else -> applications.firstNotNullOfOrNull { it.tokenInput(kind, name) }
-    }
+    fun tokenInput(kind: String, name: String): String? = facts.takeIf { it.knows(kind) }?.tokenInput(kind, name)
 
     /**
      * How the app re-keys a node of a kind (ADR 0114): core's kinds and Depot's with nothing of their own under the node's
@@ -187,12 +199,7 @@ object AppKinds {
      * backend's `NodeKindRules`): a folder, a Pot, a Memory, a Depot file and drop box and a kept link at the space's top or
      * in a folder, a chapter in a Memory; a kind this build does not know nowhere. A hint: the server decides.
      */
-    val placement = me.raddatz.veyq.mobile.session.NodeMove.PlacementAllows { kind, parent ->
-        when (kind) {
-            FOLDER, SHARE_BOOKMARK -> parent == null || parent == FOLDER
-            else -> applications.firstNotNullOfOrNull { it.placement(kind, parent) } ?: false
-        }
-    }
+    val placement = me.raddatz.veyq.mobile.session.NodeMove.PlacementAllows { kind, parent -> facts.placementAllows(kind, parent) }
 
     /**
      * A kind's header priority (the web's `header.order` of its descriptor, `NodeHeader.plan`): the actions listed first, in

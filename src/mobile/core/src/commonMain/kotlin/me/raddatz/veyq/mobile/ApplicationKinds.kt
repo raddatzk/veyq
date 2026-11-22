@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile
 
+import me.raddatz.veyq.mobile.tree.KindFacts
 import kotlin.native.HiddenFromObjC
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.blob.UploadSource
@@ -61,8 +62,9 @@ interface ApplicationKinds {
     @HiddenFromObjC
     fun queuedSender(q: Queued): QueuedSender? = null
 
-    /** [AppKinds.tokenInput] for its kinds. */
-    fun tokenInput(kind: String, name: String): String? = null
+    /** Its kinds' facts as the platform's tree rules read them ([AppKinds.facts]): each kind's route slug, its name's folding
+     *  for the slug token, its placement. One entry per kind of [kinds]. */
+    val kindFacts: List<KindFacts.Kind> get() = emptyList()
 
     /** [AppKinds.rekeys] for its kinds. */
     fun rekey(kind: String): NodeRekey.ContentRekey? = null
@@ -90,9 +92,6 @@ interface ApplicationKinds {
 
     /** How its kinds import a download, for one run ([AppKinds.imports]); null where none does. */
     fun imports(deletedName: String, uuid: () -> String, deriver: Derivation.Deriver?, now: () -> Long): SubtreeImport.Kinds? = null
-
-    /** Whether a node of [kind] may be placed under a parent of kind [parent] (null: a space's top); null for another's kind. */
-    fun placement(kind: String, parent: String?): Boolean? = null
 
     /** [AppKinds.headerOrder] for its kinds. */
     fun headerOrder(kind: String): List<HeaderAction>? = null

@@ -47,9 +47,8 @@ class AppCompositionTest {
         val roles = listOf("READ", "READ_WRITE", "WRITE_ONLY")
         for (kind in kinds) {
             fun once(what: String, answers: Int) = assertTrue(answers <= 1, "$what of $kind answered by $answers parts")
-            once("tokenInput", parts.count { it.tokenInput(kind, "x") != null })
+            once("kindFacts", parts.count { p -> p.kindFacts.any { it.kind == kind } })
             once("rekey", parts.count { it.rekey(kind) != null })
-            once("placement", parts.count { it.placement(kind, null) != null })
             once("headerOrder", parts.count { it.headerOrder(kind) != null })
             once("header", parts.count { it.header(kind) != null })
             once("doors", parts.count { it.doors(kind, AppKinds.Facts()) != null })
@@ -63,8 +62,7 @@ class AppCompositionTest {
         }
         // an application's own kind is named, folded and placed by its own part
         for (part in parts) for (kind in part.kinds) {
-            assertTrue(part.tokenInput(kind, "x") != null, "$kind has no slug rule")
-            assertTrue(part.placement(kind, null) != null, "$kind has no placement")
+            assertTrue(part.kindFacts.any { it.kind == kind }, "$kind has no facts (folding, route, placement)")
             assertTrue(part.header(kind) != null, "$kind has no header")
         }
     }
