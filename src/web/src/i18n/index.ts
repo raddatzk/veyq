@@ -634,7 +634,7 @@ const en = {
     signInTitle: 'Sign in with a QR code',
     signInOpening: 'Preparing a code…',
     signInIntro: 'Scan this with a device you are already signed in on.',
-    signInScanHint: 'On that device, open “add a device” and choose to scan. It will then show you a six-digit number.',
+    signInScanHint: 'On that device, open “Add a device” and choose to scan. It will then show you a six-digit number.',
     signInCodeField: 'The six-digit number your other device shows',
     // The honesty this copy owes: there is exactly one attempt, and it is structural — the channel has no way
     // to carry a refusal back here (ADR 0059 §6). Saying so is what stops someone waiting at a dead screen.
@@ -4160,7 +4160,7 @@ const de: typeof en = {
       },
       losses: 'Was nicht mitkommt:',
       lossAlways: 'Freigaben, Favoriten, der Papierkorb und die ursprünglichen Hochladezeiten. Die Kopie gehört dir.',
-      lossFolderCover: 'Das Titelbild eines Ordners.',
+      lossFolderCover: 'Das Cover eines Ordners.',
       notice: 'Alles wird auf diesem Gerät kopiert und neu gespeichert: Ein großer Ordner braucht so lange wie sein Hochladen und belegt seinen Platz doppelt.',
       noRoom: 'Für diese Kopie ist nicht genug Speicherplatz frei ({size}). Schaffe Platz oder frag, wer deinen Bereich betreibt.',
       copying: 'Kopiere … {done} von {total} Einträgen',

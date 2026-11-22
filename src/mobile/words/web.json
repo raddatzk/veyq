@@ -214,6 +214,7 @@
     "kit_pdf_step3": ["kit.pdfStep3"],
     "kit_pdf_title": ["kit.pdfTitle"],
     "kit_pdf_where": ["kit.pdfWhere"],
+    "kit_save_title": ["tenant.join.saveKitTitle"],
     "left_out_not_copyable": ["node.copy.reason.not_copyable"],
     "left_out_nothing": ["export.reason.nothing_to_export", "node.copy.reason.nothing_to_export"],
     "link_answer_refused": ["pairing.answerRefused"],
@@ -258,6 +259,7 @@
     "link_sign_in_gone_hint": ["pairing.signInGoneHint"],
     "link_sign_in_intro": ["pairing.signInIntro"],
     "link_sign_in_opening": ["pairing.signInOpening"],
+    "link_sign_in_scan_hint": ["pairing.signInScanHint"],
     "link_sign_in_send": ["pairing.signInSend"],
     "link_sign_in_waiting": ["pairing.signInWaiting", "pairing.waiting"],
     "link_slide": ["pairing.slide"],
@@ -833,10 +835,7 @@
     {"app": "share_guest_not_you_title", "web": "depot.dropBox.guestStartOver", "why": "a dialog's question (with ?) against the action that answers it"},
     {"app": "signin_kit_held", "web": "rotation.secretKeyHint", "why": "a row's value (no full stop) against a hint sentence"}
   ],
-  "open": [
-    {"app": "kit_save_title", "web": "tenant.join.saveKitTitle", "why": "owner: the apps' own step title (Speichere dein Notfall-Kit, words.json's note cites a CR owner question) against the web's join step (Notfall-Kit sichern) — one wording, and which?"},
-    {"app": "link_sign_in_scan_hint", "web": "pairing.signInScanHint", "why": "owner: the web quotes the screen's title in lower case (“add a device”), the app as the title reads (“Add a device”); the web-wins rule would quote a title wrongly"}
-  ],
+  "open": [],
   "read": [
     "copy_done",
     "copy_failed",

@@ -302,7 +302,7 @@ const de: typeof en = {
       replaceFileConfirm: 'Den Inhalt von „{name}“ durch „{file}“ ersetzen? Er ändert sich für alle, die diesen Link haben, auch für die Person, der die Datei gehört. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
     },
     dropBox: {
-      copyLoss: 'Ein Briefkasten wird ein gewöhnlicher Ordner, die Ordner der Personen darin gewöhnliche Ordner: keine Links, niemand kann mehr einwerfen, kein Titelbild.',
+      copyLoss: 'Ein Briefkasten wird ein gewöhnlicher Ordner, die Ordner der Personen darin gewöhnliche Ordner: keine Links, niemand kann mehr einwerfen, kein Cover.',
       kind: 'Briefkasten',
       people: 'Noch niemand | 1 Person | {count} Personen',
       aDropBox: 'einen Briefkasten',

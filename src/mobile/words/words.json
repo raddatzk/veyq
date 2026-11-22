@@ -2733,7 +2733,7 @@
   },
   "copy_loss_dropbox": {
     "en": "A drop box becomes an ordinary folder, its people’s folders ordinary folders: no links, nobody can drop files into it, no cover.",
-    "de": "Ein Briefkasten wird ein gewöhnlicher Ordner, die Ordner der Personen darin gewöhnliche Ordner: keine Links, niemand kann mehr einwerfen, kein Titelbild."
+    "de": "Ein Briefkasten wird ein gewöhnlicher Ordner, die Ordner der Personen darin gewöhnliche Ordner: keine Links, niemand kann mehr einwerfen, kein Cover."
   },
   "copy_loss_memory": {
     "en": "Who was there, and who added each photo.",
@@ -2741,7 +2741,7 @@
   },
   "copy_loss_folder_cover": {
     "en": "A folder’s cover.",
-    "de": "Das Titelbild eines Ordners."
+    "de": "Das Cover eines Ordners."
   },
   "copy_left_out": {
     "en": "Left out, because this version cannot copy them:",
@@ -2773,7 +2773,7 @@
   },
   "copy_loss_cover": {
     "en": "A Pot’s cover.",
-    "de": "Das Titelbild einer Kasse."
+    "de": "Das Cover einer Kasse."
   },
   "copy_done": {
     "en": "“{1}” is copied to “{2}”.",
@@ -2832,7 +2832,7 @@
   },
   "cover_failed": {
     "en": "The cover could not be saved. Please try again.",
-    "de": "Das Titelbild konnte nicht gespeichert werden. Bitte versuche es noch einmal."
+    "de": "Das Cover konnte nicht gespeichert werden. Bitte versuche es noch einmal."
   },
   "create_new": {
     "en": "New",
@@ -5699,7 +5699,7 @@
   },
   "memory_meta_unreadable": {
     "en": "This Memory’s details (date, place, cover) can’t be opened: they are damaged, or were replaced by something this app didn’t write. They can’t be changed, so nothing was saved, and trying again won’t help. Its photos are not affected.",
-    "de": "Die Angaben dieser Erinnerung (Datum, Ort, Titelbild) lassen sich nicht öffnen: Sie sind beschädigt oder wurden durch etwas ersetzt, das diese App nicht geschrieben hat. Sie lassen sich nicht ändern, deshalb wurde nichts gespeichert, und ein erneuter Versuch hilft nicht. Ihre Fotos sind davon nicht betroffen."
+    "de": "Die Angaben dieser Erinnerung (Datum, Ort, Cover) lassen sich nicht öffnen: Sie sind beschädigt oder wurden durch etwas ersetzt, das diese App nicht geschrieben hat. Sie lassen sich nicht ändern, deshalb wurde nichts gespeichert, und ein erneuter Versuch hilft nicht. Ihre Fotos sind davon nicht betroffen."
   },
   "people_profile": {
     "en": "Profile",
@@ -5848,9 +5848,9 @@
     "de": "Gerade wurden zu viele Bestätigungen gesendet. Versuche es später erneut."
   },
   "kit_save_title": {
-    "note": "The apps' own (CR owner question 4): the step that saves the kit through the system's save dialog.",
+    "note": "The step that saves the kit through the system's save dialog, worded as the web's (owner 2026-11-22).",
     "en": "Save your Emergency Kit",
-    "de": "Speichere dein Notfall-Kit"
+    "de": "Notfall-Kit sichern"
   },
   "kit_saved_confirm": {
     "note": "The apps' own: the checkbox enabled once the core wrote the file the person chose.",
