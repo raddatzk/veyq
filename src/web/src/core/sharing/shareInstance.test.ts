@@ -1,6 +1,7 @@
 // Whether a bookmark's page shows its share in place (ADR 0121 decision 4): each refusal beside the pass it differs from by
 // one input, so a check that stopped refusing is red on its own row.
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, it, expect } from 'vitest'
 import type { SetupStatus } from '../../api/generated'
@@ -33,6 +34,25 @@ describe('embeddability', () => {
     ['links, but not to be shown elsewhere', { setup: setup(MAJOR, ['core.public-shares']) }, 'notEmbeddable'],
   ])('refuses: %s', (_name, change, reason) => {
     expect(embeddability({ ...PASS, ...change })).toEqual({ embeds: false, reason })
+  })
+})
+
+// The same decision against contracts/platform/share-links/cases.v1.json (`embed`, `window`), which the apps' core answers
+// too: `page` is this page's answer, `app` the apps' (they ask neither this instance's switch nor `.embeddable`).
+type EmbedCase = { rule: string; embedding: boolean; setup: unknown; majors: number[]; page: string | null }
+const vectors = JSON.parse(readFileSync(resolve(__dirname, '../../../../../contracts/platform/share-links/cases.v1.json'), 'utf8')) as {
+  embed: EmbedCase[]
+  window: { major: number; older: number[] }[]
+}
+
+describe('embeddability against the share-link vectors', () => {
+  it.each(vectors.embed.map((c) => [c.rule, c] as const))('%s', (_, c) => {
+    const verdict = embeddability({ embedding: c.embedding, setup: c.setup as SetupStatus | null, majors: c.majors })
+    expect(verdict).toEqual(c.page === null ? { embeds: true } : { embeds: false, reason: c.page })
+  })
+
+  it.each(vectors.window.map((c) => [c.major, c.older] as const))('the window of major %i: %j', (major, older) => {
+    expect(olderMajorsInWindow(major)).toEqual(older)
   })
 })
 

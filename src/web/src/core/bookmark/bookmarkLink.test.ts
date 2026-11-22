@@ -9,7 +9,13 @@ import { asksForReport, hostOf, keptLink, parseShareLink, reportLinkOf, withoutR
 
 type Accepted = { input: string; link: string; origin: string; shareId: string; host: string; report?: boolean }
 type Refused = { input: string; problem: string; moderation?: boolean }
-type Cases = { format: string; maxLinkLength: number; parse: (Accepted | Refused)[]; kept: { input: string; link: string | null }[] }
+type Cases = {
+  format: string
+  maxLinkLength: number
+  parse: (Accepted | Refused)[]
+  kept: { input: string; link: string | null }[]
+  report: { fragment: string; asks: boolean; without: string }[]
+}
 
 const FILE = resolve(__dirname, '../../../../../contracts/platform/share-links/cases.v1.json')
 const cases = JSON.parse(readFileSync(FILE, 'utf8')) as Cases
@@ -53,6 +59,13 @@ describe('keptLink', () => {
   it('reads back nothing that is no string', () => {
     expect(keptLink(42)).toBeNull()
     expect(keptLink(undefined)).toBeNull()
+  })
+})
+
+describe('a share page\'s fragment', () => {
+  it.each(cases.report.map((c) => [JSON.stringify(c.fragment).slice(0, 40), c] as const))('%s: asks for the report dialog or not, and keeps the rest', (_, c) => {
+    expect(asksForReport(c.fragment)).toBe(c.asks)
+    expect(withoutReport(c.fragment)).toBe(c.without)
   })
 })
 
