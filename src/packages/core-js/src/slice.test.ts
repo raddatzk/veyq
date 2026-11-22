@@ -26,6 +26,7 @@ const ENTRIES: Record<string, { control: string }> = {
   tree: { control: 'tree/LevelOrder.kt' },
   sharing: { control: 'sharing/ReceivedLink.kt' },
   navigation: { control: 'navigation/NodeHeader.kt' },
+  files: { control: 'blob/Sniff.kt' },
 }
 
 /**
@@ -48,6 +49,10 @@ const SLICES: { slice: string; deletedGz: number; allowed?: { ratio: number; own
   { slice: 'the share links\' rules', deletedGz: 1_253 },
   // the rights and the node plans (ADR 0155 decision 7.2.3, § The rights and plans' slice): nodeHeader.ts' placeCoreActions, mergeHeaderActions, isMenuOnly, orderHeaderActions, partitionHeaderActions, levelRow.ts' mergeRowActions, ROW_MENU_LEAD, splitRowActions, favoriteRights, coverRights, bookmarkRights - 2,145 B min / 923 B gz, measured on sources.
   { slice: 'the rights and the node plans', deletedGz: 923 },
+  // the file facts (ADR 0155 decision 7.2.4, § The file facts' slice): sniff.ts' sniffImage, sniffText, claimsText, claimsSvg,
+  // sniffSvg, sniffStream, sniffPdf, extensionOf, meta.ts' downloadName and MIME_TO_EXT, archiveName.ts' exports -
+  // 5,815 B min / 2,539 B gz, measured on sources.
+  { slice: 'the file facts', deletedGz: 2_539 },
 ]
 const BUDGET_GZ = Math.floor(SEARCH_ALONE_GZ + SLICES.reduce((n, s) => n + (s.allowed?.ratio ?? R) * s.deletedGz, 0))
 
