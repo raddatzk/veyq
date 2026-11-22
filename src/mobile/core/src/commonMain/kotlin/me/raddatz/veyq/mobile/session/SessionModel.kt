@@ -129,6 +129,44 @@ class SessionModel<A : Connection, T : Any>(
 
         /** The sign-in from a link's [grant] on [server] ([VeyqAccount.linked]); enrols no trust. */
         suspend fun linked(server: String, grant: PairingGrant): A = throw UnsupportedOperationException("this door links no device")
+
+        /**
+         * The login alone on [server] (uc.account.sessions E3, [VeyqAccount.signInLocked]): no key material read, nothing
+         * unlocked and nothing kept on this device. Fails as [signIn] does on a wrong password.
+         */
+        suspend fun signInLocked(server: String, email: String, password: String): LockedSession =
+            throw UnsupportedOperationException("this door signs in no locked session")
+
+        /** The recovery link asked for [email] on [server] (uc.account.recover-access step 1, [VeyqAccount.requestRecovery]). */
+        suspend fun requestRecovery(server: String, email: String): RecoveryAsked =
+            throw UnsupportedOperationException("this door asks for no recovery link")
+    }
+
+    /**
+     * A session signed in without unlocking (uc.account.sessions E3): what it can do needs a session only. Its tokens live
+     * in this object's memory alone — never in the device's store — and end with [drop].
+     */
+    interface LockedSession {
+        /** Every session family of the account but this one revoked (`revokeOtherSessionFamilies`); throws when it was not. */
+        suspend fun revokeOthers()
+
+        /** This session signed out (`logout`); throws when the server did not confirm it. */
+        suspend fun logout()
+
+        /** The tokens forgotten and the HTTP client closed; nothing sent. */
+        fun drop()
+    }
+
+    /** What asking for a recovery link came to (the web's `RecoverView.askForLink`). */
+    enum class RecoveryAsked {
+        /** Answered 202: a link is on its way if the address is a member here — the same answer either way (ADR 0004). */
+        SENT,
+
+        /** `503 mail_unavailable`: this tenant sends no mail, so no link was minted (ADR 0055 §4). */
+        MAIL_UNAVAILABLE,
+
+        /** Anything else: not reached, refused, rate-limited. */
+        FAILED,
     }
 
     /**
@@ -155,7 +193,10 @@ class SessionModel<A : Connection, T : Any>(
 
         /**
          * The full sign-in, with the Secret Key; [server] and [email] filled in where a trusted device's record knew them,
-         * or a kit read ([kit]) — whose Secret Key the model holds, never this state.
+         * or a kit read ([kit]) — whose Secret Key the model holds, never this state. [notice] is what the way here left to
+         * say that is no error (every device signed out, [signOutEverywhere]). [keepsNothing]: reached by the locked
+         * sign-in's way back ([lockedBack]) — the sign-in then enrols no trust and makes no offer (uc.account.sessions E3),
+         * and the form says so (`locked_back_hint`).
          */
         @Serializable @SerialName("SignIn")
         data class SignIn(
@@ -165,6 +206,37 @@ class SessionModel<A : Connection, T : Any>(
             val server: String? = null,
             val email: String? = null,
             val kit: KitShown? = null,
+            @Serializable(with = MsgKey::class) val notice: Msg? = null,
+            val keepsNothing: Boolean = false,
+        ) : Gate()
+
+        /**
+         * Signed in to [server] as [email] without unlocking (uc.account.sessions E3, [signInLocked]): no list, one action —
+         * every device signed out, this one included ([signOutEverywhere]) — and the way back to the sign-in ([lockedBack]);
+         * [LockedPlan] names them. The session is the model's, in memory only.
+         */
+        @Serializable @SerialName("Locked")
+        data class Locked(
+            val server: String,
+            val email: String,
+            val adding: Boolean = false,
+            val working: Boolean = false,
+            @Serializable(with = MsgKey::class) val error: Msg? = null,
+        ) : Gate()
+
+        /**
+         * *Reset your password* (uc.account.recover-access steps 1–2, [forgotPassword]): the link asked for [email] on
+         * [server] ([requestRecovery]); [sent] once the server took the ask. The mailed link opens the web's page, which
+         * finishes the reset (ADR 0148 decision 6, ADR 0150 § O). [RecoverPlan] names its entries.
+         */
+        @Serializable @SerialName("Recover")
+        data class Recover(
+            val server: String? = null,
+            val email: String? = null,
+            val adding: Boolean = false,
+            val working: Boolean = false,
+            val sent: Boolean = false,
+            @Serializable(with = MsgKey::class) val error: Msg? = null,
         ) : Gate()
 
         /** An account this device trusts: the password alone (DEVICE), or the person's authentication (DEVICE_KEY). */
@@ -288,21 +360,23 @@ class SessionModel<A : Connection, T : Any>(
     suspend fun signIn(server: String, email: String, password: String, secretKey: String): Opened<A, T>? {
         started = true // a sign-in (the dev login among them) decides where the app is; the start does not run after it
         val adding = (current as? Gate.SignIn)?.adding == true
+        // the locked sign-in's way back: nothing kept at any tier (uc.account.sessions E3) — no trust, no offer
+        val keepsNothing = (current as? Gate.SignIn)?.keepsNothing == true
         val typed = secretKey.isNotBlank()
         val kit = if (typed) null else (current as? Gate.SignIn)?.kit
         // this call's copy of the key, zeroed by the door: the held one stays for a retry until the sign-in succeeds
         val key = if (typed) EmergencyKit.read(door.primitives, secretKey)?.secretKey else intake.heldCopy()
-        show(Gate.SignIn(working = true, adding = adding, server = server, email = email, kit = kit))
+        show(Gate.SignIn(working = true, adding = adding, server = server, email = email, kit = kit, keepsNothing = keepsNothing))
         return try {
             val account = if (key != null) door.signInWithKey(origin(server), email, password, key)
             else door.signIn(origin(server), email, password, secretKey)
-            door.trust(account, password)
+            if (!keepsNothing) door.trust(account, password)
             add(account)
-            offer = offerFor(account)
+            offer = if (keepsNothing) null else offerFor(account)
             val (held, tenant) = connections.current!!
             openTenant(held, tenant)
         } catch (e: Exception) {
-            show(Gate.SignIn(error = words(reasonOf(e)), adding = adding, server = server, email = email, kit = kit))
+            show(Gate.SignIn(error = words(reasonOf(e)), adding = adding, server = server, email = email, kit = kit, keepsNothing = keepsNothing))
             null
         } finally {
             key?.fill(0)
@@ -512,6 +586,132 @@ class SessionModel<A : Connection, T : Any>(
         }
         locked()
         return true
+    }
+
+    /** The session [signInLocked] holds while [Gate.Locked] shows; null otherwise. */
+    private var lockedSession: LockedSession? = null
+
+    /**
+     * The sign-in's *I don't have my Secret Key with me* (uc.account.sessions E3, the web's `LoginView.enterLocked`): the
+     * login alone ([Door.signInLocked]) — no unlock attempted, nothing enrolled, nothing kept on this device — and then
+     * [Gate.Locked]. A held kit's key ends here (the locked state needs none). A login that fails stays on the sign-in with
+     * why, as a sign-in's does. Nothing outside the sign-in, nor with the server, the email or the password blank.
+     */
+    suspend fun signInLocked(server: String, email: String, password: String) {
+        val state = current as? Gate.SignIn ?: return
+        if (state.working || server.isBlank() || email.isBlank() || password.isEmpty()) return
+        show(state.copy(working = true, error = null, notice = null))
+        try {
+            val session = door.signInLocked(origin(server), email.trim(), password)
+            lockedSession?.drop()
+            lockedSession = session
+            show(Gate.Locked(server = server, email = email.trim(), adding = state.adding))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            show(state.copy(working = false, error = words(reasonOf(e)), notice = null))
+        }
+    }
+
+    /**
+     * The locked state's one action (the web's `LockedSignOut.signOutEverywhere`; the platform asked first with
+     * `locked_confirm`): every other session family revoked first — the urgent half, and the one that needs the session —
+     * then this one signed out. A revoke that fails stops there and says so (nothing was cut off; the session stays for a
+     * retry). A sign-out of this device that fails says so too and keeps the session, so the action can be run again (the
+     * revoke is idempotent). Once both went through, the sign-in says every device was signed out.
+     */
+    suspend fun signOutEverywhere() {
+        val state = current as? Gate.Locked ?: return
+        val session = lockedSession ?: return
+        if (state.working) return
+        show(state.copy(working = true, error = null))
+        try {
+            session.revokeOthers()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            show(state.copy(working = false, error = Msg.ACCOUNT_SETTINGS_REVOKE_FAILED))
+            return
+        }
+        try {
+            session.logout()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            show(state.copy(working = false, error = Msg.LOCKED_DONE_STILL_HERE))
+            return
+        }
+        session.drop()
+        lockedSession = null
+        show(Gate.SignIn(adding = state.adding, server = state.server, email = state.email, notice = Msg.LOCKED_DONE))
+    }
+
+    /**
+     * The locked state's way back (*I have my Secret Key after all*): the sign-in again with the Secret Key, keeping
+     * nothing on this device ([Gate.SignIn.keepsNothing]). Unlike the web, which unlocks over the session it holds, the app
+     * signs in anew — its sign-in is one login and unlock — so the locked session is signed out here first (best effort;
+     * its tokens are forgotten either way).
+     */
+    suspend fun lockedBack() {
+        val state = current as? Gate.Locked ?: return
+        if (state.working) return
+        endLocked()
+        show(Gate.SignIn(adding = state.adding, server = state.server, email = state.email, keepsNothing = true))
+    }
+
+    /** The locked session signed out (best effort) and forgotten. */
+    private suspend fun endLocked() {
+        val session = lockedSession ?: return
+        lockedSession = null
+        try {
+            session.logout()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            println("veyq: the locked session was not signed out: $e")
+        } finally {
+            session.drop()
+        }
+    }
+
+    /**
+     * The sign-in's *Forgot your password?* (uc.account.recover-access step 1): *Reset your password* with the form's
+     * [server] and [email]. A held kit's key ends (the request needs none). Nothing outside the sign-in.
+     */
+    fun forgotPassword(server: String?, email: String?) {
+        val state = current as? Gate.SignIn ?: return
+        if (state.working) return
+        show(Gate.Recover(server = server?.takeIf { it.isNotBlank() }, email = email?.trim()?.takeIf { it.isNotBlank() }, adding = state.adding))
+    }
+
+    /**
+     * The link asked for (the web's `requestRecovery`, [Door.requestRecovery]) at [server] — the request's host names the
+     * tenant whose relay mails it (ADR 0054 §4). The same answer for a known and an unknown address ([Gate.Recover.sent]);
+     * a tenant that sends no mail says so; anything else asks for a retry. Nothing with the server or the email blank.
+     */
+    suspend fun requestRecovery(server: String, email: String) {
+        val state = current as? Gate.Recover ?: return
+        if (state.working || state.sent || server.isBlank() || email.isBlank()) return
+        show(state.copy(server = server, email = email.trim(), working = true, error = null))
+        val asked = try {
+            door.requestRecovery(origin(server), email.trim())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            RecoveryAsked.FAILED
+        }
+        val now = current as? Gate.Recover ?: return // left while it was asked
+        show(when (asked) {
+            RecoveryAsked.SENT -> now.copy(working = false, sent = true)
+            RecoveryAsked.MAIL_UNAVAILABLE -> now.copy(working = false, error = Msg.RECOVERY_MAIL_UNAVAILABLE)
+            RecoveryAsked.FAILED -> now.copy(working = false, error = Msg.RECOVERY_REQUEST_FAILED)
+        })
+    }
+
+    /** *Reset your password*'s Back: the sign-in again, its server and email kept. */
+    fun backToSignIn() {
+        val state = current as? Gate.Recover ?: return
+        show(Gate.SignIn(adding = state.adding, server = state.server, email = state.email))
     }
 
     /** From the unlock to the full sign-in, for another account. */
@@ -882,6 +1082,10 @@ class AccountDoor(
     override fun setDeclined(account: VeyqAccount, declined: Boolean) = device.setDeclined(account.key, declined)
     override fun relay(server: String): DeviceLink.Relay = HttpRelay.of(server, client)
     override suspend fun linked(server: String, grant: PairingGrant): VeyqAccount = VeyqAccount.linked(primitives, server, grant, device, client)
+    override suspend fun signInLocked(server: String, email: String, password: String): SessionModel.LockedSession =
+        VeyqAccount.signInLocked(primitives, server, email, password, client)
+    override suspend fun requestRecovery(server: String, email: String): SessionModel.RecoveryAsked =
+        VeyqAccount.requestRecovery(server, email, client)
 }
 
 /** What a change of this device's trust came to (ADR 0123 decision 8): [DONE]; the person [CANCELLED] the prompt (an offer stays); the
