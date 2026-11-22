@@ -46,8 +46,8 @@ concurrency:
 # Helm for the chart packaging in `snapshot`: the same pin as checks.yml's and release.yml's;
 # validate_release_identity.py holds every copy equal.
 env:
-  HELM_VERSION: v4.0.1
-  HELM_SHA256: e0365548f01ed52a58a1181ad310b604a3244f59257425bb1739499372bdff60
+  HELM_VERSION: v4.3.2
+  HELM_SHA256: d1c0278d46beab79582d7e50f5b3dc206944ba8e577cde618513fd07daa53983
 
 # Least-privilege default; each job widens only what it needs (see per-job permissions blocks).
 permissions:

@@ -299,6 +299,10 @@ updates:
   # standing beside a v7 SHA; a full-version tag never moves, so it is always rewritten.
   # Reached by no ecosystem: an action's `with:` inputs. checks.yml's `cosign-release` (the cosign the publish signs
   # with) is bumped by hand; scripts/validate_release_identity.py holds it to src/tools/veyqctl.py's COSIGN_MIN_VERSION.
+  # Reached by no ecosystem either: the Helm the chart is checked and packaged with, `HELM_VERSION` + `HELM_SHA256` in the
+  # `env:` of checks.yml, publish.yml and release.yml (a version in `env:` and the SHA-256 of a downloaded tarball, which
+  # no ecosystem reads). Bumped by hand at a release (infra/README.md § Cutting a release); it sat at v4.0.1 from
+  # 2026-10-14 to 2026-11-22 while Helm 4.1.4 shipped three security fixes, because nothing proposed it.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
