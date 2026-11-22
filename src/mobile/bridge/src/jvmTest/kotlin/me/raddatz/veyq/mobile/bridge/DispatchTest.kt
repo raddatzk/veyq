@@ -247,6 +247,7 @@ class DispatchTest {
         val sealed = java.util.concurrent.ConcurrentHashMap<String, Pair<ByteArray, ByteArray>>()
         val declined = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
         val passwords = java.util.concurrent.CopyOnWriteArrayList<String>()
+        @Volatile var waiting = 0
     }
 
     /**
@@ -302,6 +303,8 @@ class DispatchTest {
         override suspend fun spaces(session: String) = listOf(SpaceRef(session, "SHARED", session))
         override suspend fun signOut(account: Acc) { kept.records.removeIf { it.key == account.key && it.method == TrustedDevice.Method.DEVICE_KEY } }
         override suspend fun forgetDevice(account: Acc) { kept.records.removeIf { it.key == account.key } }
+        override suspend fun forgetRecord(record: TrustedDevice) { kept.records.removeIf { it.key == record.key } }
+        override fun waiting(record: TrustedDevice) = kept.waiting
         override fun staySignedIn() = kept.keys.staySignedIn
         override fun declined(account: Acc) = account.key in kept.declined
         override fun setDeclined(account: Acc, declined: Boolean) { if (declined) kept.declined += account.key else kept.declined -= account.key }
@@ -443,6 +446,22 @@ class DispatchTest {
         assertEquals(Answer.Done, c.ask(Call.SessionOtherAccount))
         assertEquals(Update.Session(Gate.SignIn()), gate2.until { (it as Update.Session).takeIf { u -> u.gate is Gate.SignIn } })
         c.shutdown()
+
+        // "Stop trusting this device" from the unlock (inbox #1052): asked first while writes wait, then forgotten here, the sign-in next
+        val d = started(kept)
+        val gate3 = d.watching(Watched.Session)
+        assertEquals(Answer.Done, d.ask(Call.SessionStart))
+        gate3.until { (it as Update.Session).gate as? Gate.Unlock }
+        assertEquals(Answer.QueuedAsked(null), d.ask(Call.UnlockForgetAsk), "nothing waits: nothing is asked")
+        kept.waiting = 2
+        val asked = (d.ask(Call.UnlockForgetAsk) as Answer.QueuedAsked).ask
+        assertEquals(Msg.OFFLINE_STOP_TRUSTING_ANYWAY, asked?.confirm)
+        assertEquals(Notice(Msg.OFFLINE_WRITES_LOST, 2), asked?.question)
+        assertEquals(Answer.Done, d.ask(Call.SessionForgetUnlocked))
+        assertEquals(Update.Session(Gate.SignIn()), gate3.until { (it as Update.Session).takeIf { u -> u.gate is Gate.SignIn } })
+        assertTrue(kept.records.isEmpty(), "the record outlived its forget")
+        assertEquals(Answer.Refused(Answer.Why.NOT_OFFERED), d.ask(Call.SessionForgetUnlocked), "outside the unlock nothing is forgotten")
+        d.shutdown()
     }
 
     @Test
@@ -831,6 +850,16 @@ class DispatchTest {
                 ),
             ),
             b.ask(Call.SignInPlan(adding = true, camera = false)),
+        )
+        // the unlock's plan too (inbox #1052): the ways in, then Stop trusting this device last — the desktops have no extension
+        assertEquals(
+            Answer.UnlockPlan(
+                listOf(
+                    me.raddatz.veyq.mobile.session.UnlockEntry.SUBMIT, me.raddatz.veyq.mobile.session.UnlockEntry.OTHER_ACCOUNT,
+                    me.raddatz.veyq.mobile.session.UnlockEntry.OPEN_LINK, me.raddatz.veyq.mobile.session.UnlockEntry.FORGET,
+                ),
+            ),
+            b.ask(Call.UnlockPlan),
         )
         // a row's menu is the shell's: none without a tenant open
         assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(Call.RowPlan(NodeAt("s", "f1", "FOLDER", "Trip"))))

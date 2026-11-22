@@ -845,6 +845,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             Call.SessionNotNow -> if (session.notNow()) Answer.Done else Answer.Refused(Answer.Why.NO_OFFER)
             is Call.SessionUnlock -> opened(session.unlock(call.password))
             Call.SessionOtherAccount -> Answer.Done.also { session.otherAccount() }
+            Call.SessionForgetUnlocked -> if (session.forgetUnlocked()) Answer.Done else Answer.Refused(Answer.Why.NOT_OFFERED)
+            Call.UnlockForgetAsk -> Answer.QueuedAsked(me.raddatz.veyq.mobile.composition.QueuedShown.forgetAsk(session))
             Call.SessionAddServer -> Answer.Done.also { session.addServer() }
             Call.SessionCancelAdd -> Answer.Done.also { session.cancelAdd() }
             is Call.SessionSignInKit -> {
@@ -1149,6 +1151,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.RowPlan(plan.menu.map { HeaderShown.PlanAction(it, word(it)) }, plan.last.map { HeaderShown.PlanAction(it, word(it)) })
             } ?: noTenant
             is Call.SignInPlan -> Answer.SignInPlan(me.raddatz.veyq.mobile.session.SignInPlan.entries(call.adding, call.camera))
+            Call.UnlockPlan -> Answer.UnlockPlan(me.raddatz.veyq.mobile.session.UnlockPlan.entries(inExtension = false))
             is Call.HeaderOpen -> tenant.value?.models?.header?.let { make ->
                 val id = ids.incrementAndFetch()
                 headers.put(id, HeldHeader(make(call.node, call.facts, ::closeOpen), call.maxButtons))
