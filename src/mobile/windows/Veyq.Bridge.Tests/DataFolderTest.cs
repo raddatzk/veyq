@@ -39,4 +39,34 @@ public sealed class DataFolderTest
             if (Directory.Exists(localAppData)) Directory.Delete(localAppData, recursive: true);
         }
     }
+
+    // inbox #1052: a pass's unpackaged build keeps its device in the folder its run names (run.py's <dir>\data), never in
+    // the %LOCALAPPDATA%\veyq every earlier pass left its password-trusted throwaways in; the packaged app ignores it.
+    [TestMethod]
+    public void APassesBuildKeepsItsDeviceInTheFolderItsRunNames()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"veyq-data-{Environment.ProcessId}-{Guid.NewGuid():N}");
+        var localAppData = Path.Combine(root, "local");
+        var pass = Path.Combine(root, "veyq-1052", "data");
+        var packageFolder = Path.Combine(localAppData, "Packages", "app.veyq.Veyq_b17envnammnz6", "LocalState");
+        try
+        {
+            var shared = DeviceStore.OpenIn(DataFolder.Unpackaged(localAppData));
+            Assert.AreEqual(new HostReply.Done(), shared.Answer(new HostRequest.StoreWrite { name = "veyq.trusted-devices", value = "an earlier pass's" }));
+
+            var folder = DataFolder.Resolve(null, localAppData, pass);
+            Assert.AreEqual(pass, folder);
+            Assert.AreEqual(new HostReply.Value { value = null },
+                DeviceStore.OpenIn(folder).Answer(new HostRequest.StoreRead { name = "veyq.trusted-devices" }),
+                "a pass's build opened the trust another pass left");
+            Assert.AreEqual(Path.Combine(pass, "offline"), DataFolder.Offline(folder));
+
+            Assert.AreEqual(packageFolder, DataFolder.Resolve(packageFolder, localAppData, pass), "the packaged app took a pass's folder");
+            Assert.AreEqual(Path.Combine(localAppData, "veyq"), DataFolder.Resolve(null, localAppData, ""));
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
+    }
 }

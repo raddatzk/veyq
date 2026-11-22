@@ -34,7 +34,10 @@ Verbs:
   run [--width W --height H] [--devlogin [--fill|--unlock]]
                              builds the app as `build` does (without its tests), stops a running one, puts it in
                              `<dir>\app` and starts it in the logged-on session through the scheduled task `veyq-app`
-                             (Veyq.Drive's launch); W × H resizes its window. Then it holds the tunnel to the backend
+                             (Veyq.Drive's launch), its data in `<dir>\data` (VEYQ_DATA_DIR: the device store, the
+                             offline stores, the log — this directory's alone, removed with it; never the
+                             `%LOCALAPPDATA%\veyq` every pass shared before, inbox #1052); W × H resizes its window.
+                             Then it holds the tunnel to the backend
                              (`ssh -R`, VEYQ_LIVE's port, default http://veyq.localhost:8080) until it is ended (Ctrl+C);
                              the app keeps running. A debug build reads VEYQ_THEME (light, dark) and VEYQ_LANGUAGE (en-US,
                              de-DE) from this host's environment. VEYQ_DEV_SCAN=1 shows its QR harness instead of the
@@ -183,7 +186,10 @@ APP_NAME = "Veyq.App"  # the app's assembly, exe and .pri name (Veyq.csproj): ne
 REMOTE_APP = REMOTE_DIR / "app"  # the app run.py starts, copied out of the build so a running one blocks no build
 REMOTE_DRIVE = REMOTE_DIR / "drive"  # Veyq.Drive, which the scheduled tasks run
 REMOTE_RUN = REMOTE_DIR / "run"  # the launch's and the drive's files
-REMOTE_LOG = "AppData/Local/veyq/log.txt"  # the unpackaged app's log (Log.cs, AppData.cs), from the ssh user's home
+# the data folder `run` hands the debug build (VEYQ_DATA_DIR, AppData.cs): this directory's device, never the
+# %LOCALAPPDATA%\veyq every pass's build shared whatever VEYQ_WINDOWS_DIR it named (inbox #1052)
+REMOTE_DATA = REMOTE_DIR / "data"
+REMOTE_LOG = str(REMOTE_DATA / "log.txt")  # the unpackaged app's log (Log.cs, AppData.cs)
 # the packaged app's log under %LOCALAPPDATA%: its package's own LocalState (AppData.cs), never REMOTE_LOG's
 PACKAGE_LOG = "Packages/{family}/LocalState/log.txt"
 # `local`: this host is the Windows host (CI's msix job). Its directory must be one of its own, never this tree: a verb
@@ -1053,6 +1059,7 @@ def run_app(width: int | None, height: int | None, devlogin: bool = False, unloc
     if code != 0:
         return code
     env = {k: os.environ[k] for k in ("VEYQ_THEME", "VEYQ_LANGUAGE", "VEYQ_DEV_SCAN", "VEYQ_DEV_SETTINGS", "VEYQ_DEV_CAPTURABLE") if os.environ.get(k)} | secrets
+    env["VEYQ_DATA_DIR"] = str(REMOTE_DATA)
     # a debug build's QR harness's test camera: an image on this host, copied beside the launch file
     if os.environ.get("VEYQ_DEV_CAMERA"):
         image = Path(os.environ["VEYQ_DEV_CAMERA"]).resolve()

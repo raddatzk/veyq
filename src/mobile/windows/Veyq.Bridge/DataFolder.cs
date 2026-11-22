@@ -17,11 +17,20 @@ public static class DataFolder
 
     /// <summary>
     /// The data folder: <paramref name="packageLocalFolder"/> (the package's own local folder, given only when the process
-    /// has package identity) whenever there is one, whatever is under <paramref name="localAppData"/>; else
-    /// <see cref="Unpackaged"/>.
+    /// has package identity) whenever there is one, whatever is under <paramref name="localAppData"/> or
+    /// <paramref name="passFolder"/> says; else <paramref name="passFolder"/> where one is named; else <see cref="Unpackaged"/>.
     /// </summary>
-    public static string Resolve(string? packageLocalFolder, string localAppData) =>
-        string.IsNullOrEmpty(packageLocalFolder) ? Unpackaged(localAppData) : packageLocalFolder;
+    /// <remarks>
+    /// <paramref name="passFolder"/> is a debug build's <c>VEYQ_DATA_DIR</c>, which <c>windows/run.py run</c> sets to
+    /// <c>&lt;VEYQ_WINDOWS_DIR&gt;\data</c>: each pass's device then lives beside its own app and goes with its directory.
+    /// Every pass shared <c>%LOCALAPPDATA%eyq</c> before, whatever directory it named, so one pass's start met the
+    /// password trust another pass's sign-out had kept, of a throwaway erased since (inbox #1052: ten such records on the
+    /// test VM, 2026-11-22). The packaged app never takes it.
+    /// </remarks>
+    public static string Resolve(string? packageLocalFolder, string localAppData, string? passFolder = null) =>
+        !string.IsNullOrEmpty(packageLocalFolder) ? packageLocalFolder
+        : !string.IsNullOrEmpty(passFolder) ? passFolder
+        : Unpackaged(localAppData);
 
     /// <summary>
     /// The accounts' offline stores (ADR 0140 decision 3) in <paramref name="dataFolder"/> (<see cref="Resolve"/>'s):

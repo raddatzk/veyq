@@ -320,8 +320,9 @@ A Gradle build of its own, run through its own wrapper.
   Crates are held to the no-deprecated rule by reading each one's repository: cargo has no deprecation gate.
 - `windows/` — the Windows app (ADR 0136 decision 5; ADR 0123's Consequences, the Windows app): .NET 10 projects in C#.
   `Veyq.Bridge` (net10.0, no Windows API) is the safe wrapper over the six functions, the host's device store in the
-  app's data folder (`DataFolder`: the package's own `LocalState` when packaged, `%LOCALAPPDATA%\veyq\` unpackaged; the
-  app's `AppData` asks for package identity), and the hand-off to the UI thread; `Veyq.Bridge.Tests` its round trip,
+  app's data folder (`DataFolder`: the package's own `LocalState` when packaged, `%LOCALAPPDATA%\veyq\` unpackaged, or
+  a debug build's `VEYQ_DATA_DIR`, which `run.py run` sets to `<VEYQ_WINDOWS_DIR>\data`; the app's `AppData` asks for
+  package identity), and the hand-off to the UI thread; `Veyq.Bridge.Tests` its round trip,
   `DataFolderTest` and the real DLL.
   `Veyq` is the app (WinUI 3, unpackaged, self-contained, `win-x64`; its assembly `Veyq.App`): `Program.cs` (the entry in
   place of WinUI's generated one: with package identity one instance, a second activation handed to the running one by
@@ -1342,8 +1343,10 @@ only with the web's.
   file`, or the container keeps the old inode). On Android `input keyevent 111` (Escape) closes the link's dialog: hide
   the keyboard with Back. In GTK's link dialog two Tabs from the name land on "The numbers do not match", where Return
   ends the ceremony: for the keys, click the slide's knob first, then the arrows and Return. Windows' unpackaged app keeps
-  its data in `%LOCALAPPDATA%\veyq` whatever `VEYQ_WINDOWS_DIR` says, so a pass's device shares the store another pass
-  left (an unlock of a trusted account met there): back the folder up before and `robocopy /MIR` it back after.
+  its data in `<VEYQ_WINDOWS_DIR>\data` when `run.py run` starts it (inbox #1052): two passes with two directories have
+  two devices, and a pass's device goes with its directory. Before, every pass shared `%LOCALAPPDATA%\veyq`, and a start
+  met the password trust an earlier pass's sign-out kept of a throwaway erased since — as designed, sign-out keeps the
+  password trust (ADR 0123 decision 8), and an erasure the tool makes on the server never reaches a device.
 - Under a host load around 20 the swiftshader emulator raises "isn't responding" on a long editor sheet: the main thread is
   idle (`kill -3` after `adb root`, `/data/anr/trace_*`), so tap Wait, never Close; a pass reads its state after it.
 - On iOS one SwiftUI `Text` of a megabyte drew nothing (measured 2026-11-12, a file's cut text): a long text is a line a
@@ -1488,7 +1491,8 @@ only with the web's.
   where an unpackaged build had made it, so every debug pass's sign-out and Stop trusting hit the installed app's device
   state ("it keeps locking", 2026-11-14): the app resolves its data folder by package identity (`AppData`,
   `DataFolder`) — packaged `%LOCALAPPDATA%\Packages\<family>\LocalState` (its log there, `run.py`'s `PACKAGE_LOG`),
-  unpackaged `%LOCALAPPDATA%\veyq` — and nothing but `AppData` reads `LocalApplicationData`. A `--` in the manifest's XML comment failed the package build behind
+  unpackaged `%LOCALAPPDATA%\veyq` (a debug build's `VEYQ_DATA_DIR` before it, `run.py run`'s `<dir>\data`, never
+  taken by the packaged app) — and nothing but `AppData` reads `LocalApplicationData`. A `--` in the manifest's XML comment failed the package build behind
   an assembly the MSIX task could not load (`System.Security.Permissions`): `run.py` parses the filled manifest first.
   A packaged build names its .pri `resources.pri`. With UAC off the packaged app starts, elevated like the rest;
   with UAC on at medium integrity (`0x2000`); only with UAC on did the (unpackaged) app take a drop from Explorer (2026-11-13).
@@ -1899,8 +1903,8 @@ only with the web's.
   and `heard` go in the same `drive` call, the steps that raise the event between them. UIA's `select` on an
   `AutoSuggestBox` item only highlights it — the box takes no chosen suggestion from it; choose with the keys (Down,
   Enter). Escape while a lightbox is open closes the lightbox, not the search. `run.py run`'s `ssh -R` outlives the run:
-  end it by its PID (`ps`), never `pkill -f`. The unpackaged app's `%LOCALAPPDATA%\veyq` is shared with every earlier pass
-  (an app ↔ app pass above): back it up, empty it for a clean start, and restore it after.
+  end it by its PID (`ps`), never `pkill -f`. The unpackaged app's data is its directory's `data` (an app ↔ app pass
+  above): a clean start is that folder removed, nothing shared with another pass.
 - **A plan's entry under Kotlin/Native's Objective-C names** (ADR 0154 decision 2): the framework renames an entry
   whose name Objective-C reserves — `COPY` is `theCopy`, `DELETE` `delete_`, `NEW` `theNew` — so a Swift drawing never
   spells an entry by hand: `apple/generate_plans.py` reads the names from `VeyqCore.h` and stops the build where they and
