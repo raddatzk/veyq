@@ -103,7 +103,7 @@ final class MemoriesHolding: Holding {
     /// A share's files the extension handed over for a Memory or a chapter: queued into its node.
     func pickUp(_ target: ShareHandoff.Target, _ sources: [UploadSource]) -> Bool {
         guard !target.isLevel, let nodeId = target.nodeId, let uploads = media else { return false }
-        _ = uploads.upload(scopeId: target.scopeId, nodeId: nodeId, label: target.label, sources: sources)
+        _ = uploads.upload(scopeId: target.scopeId, nodeId: nodeId, label: target.label, sources: sources, filed: nil)
         return true
     }
 

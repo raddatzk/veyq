@@ -21,6 +21,7 @@ import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.offline.EntryKey
 import me.raddatz.veyq.mobile.offline.OfflineStores
+import me.raddatz.veyq.mobile.offline.SizedVolume
 import me.raddatz.veyq.mobile.offline.freshTestDirectory
 import me.raddatz.veyq.mobile.offline.removeAll
 import kotlin.test.AfterTest
@@ -46,7 +47,8 @@ class OfflineWipeWiredTest {
     private val root = freshTestDirectory()
     private val keys = SoftwareDeviceKeys(p)
     private val prefs = MemoryDeviceStore()
-    private val device = ThisDevice(prefs, keys, "test device", p, offlineRoot = root)
+    // a sized volume, never the host's: the free-space floor would refuse the queued writes on a nearly full machine
+    private val device = ThisDevice(prefs, keys, "test device", p, offlineRoot = root).also { it.offlineFiles = SizedVolume() }
 
     @AfterTest
     fun cleanUp() = removeAll(root)

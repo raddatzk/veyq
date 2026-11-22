@@ -10,6 +10,7 @@ import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.offline.Queued
 import me.raddatz.veyq.mobile.offline.QueuedWrite
+import me.raddatz.veyq.mobile.offline.SizedVolume
 import me.raddatz.veyq.mobile.offline.freshTestDirectory
 import me.raddatz.veyq.mobile.offline.removeAll
 import me.raddatz.veyq.mobile.session.SessionModel.Gate
@@ -37,7 +38,8 @@ class UnlockForgetTest {
     private val root = freshTestDirectory()
     private val keys = SoftwareDeviceKeys(p)
     private val prefs = MemoryDeviceStore()
-    private val device = ThisDevice(prefs, keys, "test device", p, offlineRoot = root)
+    // a sized volume, never the host's: the free-space floor would refuse the queued writes on a nearly full machine
+    private val device = ThisDevice(prefs, keys, "test device", p, offlineRoot = root).also { it.offlineFiles = SizedVolume() }
 
     /** Every request the forget would send: none may be. */
     private val sent = mutableListOf<String>()
