@@ -85,9 +85,11 @@ archived, release 44.257.9 of 2026-11-21, and `renovatebot/github-action` v46.3.
 3. **Renovate acts as a GitHub App of its own, installed on this repository alone**, so that its pull requests and
    pushes start `Checks` like a person's.
    - The App gets only the permissions the job needs: contents, pull requests and workflows to write; issues to write,
-     for the Dependency Dashboard; Dependabot alerts to read, for decision 6.
-   - Its private key is a secret that only the Renovate job reads. A job token is minted per run and expires within
-     the hour.
+     for the Dependency Dashboard; commit statuses to write, for the status that holds a release in its cool-down
+     (decision 5); Dependabot alerts to read, for decision 6. It never gets checks to write, which would let it create a
+     check run of any name.
+   - Its private key is a secret of an environment that admits the default branch alone, so only the Renovate job
+     reads it. A job token is minted per run and expires within the hour.
    - This makes the close-and-reopen of the libwebp pull request and the approval of the follow's pushes unnecessary.
    - Creating the App and storing its key is the owner's step.
 

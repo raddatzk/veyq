@@ -6,7 +6,7 @@ satisfies: []
 adrs: ["0158", "0057", "0127"]
 invariants:
   - "no LLM anywhere in the update path: a pull request's body carries third-party release notes (ADR 0158 decision 2)"
-  - "the App is installed on raddatzk/veyq alone; its private key is read by the Renovate job alone, which runs from the default branch, never from a pull request"
+  - "the App is installed on raddatzk/veyq alone; its private key is an environment secret of `renovate`, whose deployment-branch rule admits `main` alone, so only the Renovate job on the default branch reads it, never a pull request's run"
   - "postUpgradeTasks run only repository scripts that allowedCommands names exactly; dependencies' install scripts stay off"
   - "a version and everything that moves with it (SHA-256, digest, lockfile, verification metadata, rebuilt bytes) change in one pull request, and the guards hold a hand-made bump to the same rules"
   - "nothing merges by itself; Dependabot's version updates are switched off only for an ecosystem Renovate has been shown to cover"
@@ -65,8 +65,8 @@ The following are gone at the end:
 
 ```
 .github/workflows/renovate.yml      schedule (Saturday 05:00 UTC, Dependabot's slot) + workflow_dispatch (input: dry run)
-  job renovate                      runs only on the default branch; permissions: {} (the App token does the writing)
-    actions/create-github-app-token@<sha>   app-id: vars.RENOVATE_APP_ID, private-key: secrets.RENOVATE_APP_PRIVATE_KEY
+  job renovate                      environment: renovate (main only); permissions: {} (the App token does the writing)
+    actions/create-github-app-token@<sha>   client-id: vars.RENOVATE_APP_CLIENT_ID, private-key: secrets.RENOVATE_APP_PRIVATE_KEY
     renovatebot/github-action@<sha>         renovate-version: <image digest>, configurationFile: renovate.json5
                                             env: RENOVATE_ALLOWED_COMMANDS (exact regexes), RENOVATE_IGNORE_SCRIPTS
 renovate.json5                      extends nothing remote; one packageRule per policy with its reason in `description`
@@ -103,18 +103,32 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
 
 ## Phases
 
-- [ ] **1 the App** (owner). Create a GitHub App `veyq-renovate` and install it on `raddatzk/veyq` only. Permissions:
+- [ ] **1 the App** (owner). Create a GitHub App `veyq-renovate` and install it on `raddatzk/veyq` only, with no
+  webhook. Repository permissions:
   - contents: write;
   - pull requests: write;
   - workflows: write;
-  - issues: write;
+  - issues: write, for the Dependency Dashboard;
+  - commit statuses: write. Renovate's GitHub readme lists it (read 2026-11-22), and `minimumReleaseAge` reports
+    through the status `renovate/stability-days`;
   - Dependabot alerts: read;
   - checks: read;
   - metadata: read.
 
-  Store the variable `RENOVATE_APP_ID` and the secret `RENOVATE_APP_PRIVATE_KEY`, restricted to the default branch's
-  environment if one is used.
-  · Done when: both exist, and a dispatched no-op run mints a token.
+  The readme's list also has administration: read, checks: write and merge queues: write. They are left out:
+  - Administration: Renovate reads branch protection with it (`checkBranchProtectionForForceRebase` in its
+    `lib/modules/platform/github/index.ts`, read 2026-11-22), to rebase on its own when `main` demands up-to-date
+    branches. `main`'s ruleset does not demand that, and the read's failure is handled. Phase 2's dry run shows whether
+    the missing permission costs anything.
+  - Checks: write would let the App create a check run of any name, `Pipeline green` included.
+  - The repository has no merge queue.
+
+  Create an environment `renovate` whose deployment-branch rule admits `main` alone, and store the App's Client ID as
+  its variable `RENOVATE_APP_CLIENT_ID` and the private key as its secret `RENOVATE_APP_PRIVATE_KEY`.
+  `actions/create-github-app-token` v3 marks the App ID input deprecated, so the Client ID is what the job reads.
+  `.github/workflows/renovate.yml` holds, until phase 2, only the job that proves the App: it mints a token and is red
+  unless the token reaches this repository and no other.
+  · Done when: the variable and the secret exist in `renovate`, and a dispatch of `renovate.yml` on `main` is green.
 - [ ] **2 dry run beside Dependabot.** Add `renovate.yml` and `renovate.json5` with `dryRun: "full"`. Port the version
   policy: every Dependabot group and `ignore` rule as a `packageRule` with its reason. Measure the Node.js LTS question
   first. Dependabot stays untouched.
