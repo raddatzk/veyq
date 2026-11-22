@@ -449,14 +449,50 @@ and what it costs.
   ASCII then sort by code unit, a visible change, and still ~10 B gz over without a further cut; (c) the CR's cheapest cut,
   the move plan and the collision alone, the order and the numbering staying TypeScript (the order is LevelOrder's 2.1 KB
   minified of the 10.8 KB). Cost: the slice waits for the owner.
+- **D30 — The owner's answer to D28 (2026-11-22): option (a).** This slice is accepted at 3.14× (own code 4,158 B gz
+  against 1,326 B gz of deleted TypeScript); R = 3.0 stays the rule for every later slice. Recorded as an explicit
+  per-slice allowance in the slice check (`src/packages/core-js/src/slice.test.ts`'s `SLICES` row carries
+  `allowed: { ratio: 3.14, owner: '2026-11-22' }`; a row without one is held to R), so the budget is 27,943 + 3.14 × 1,326 =
+  32,106 B gz against 32,101 measured. Evidence: measured, `pnpm run check` in `src/packages/core-js` green. Cost: 5 B gz of
+  headroom for this slice's Kotlin; any growth of it is a new owner question.
+- **D31 — The owner's second answer (2026-11-22), for ADR 0155.** Platform code an application's façade needs (Expenses'
+  JSON seam and money formats, ~2.1 KB) counts against the platform module's running budget (3.0× deleted TypeScript), not
+  against the search; the separate "search alone ≤ 40 KB" budget is retired, since the platform module grows by design with
+  every slice. Cost: the search's own size is no longer checked alone; the running budget is.
+- **D32 — The web's side, phase 4.** Resumed from the parked branch: `core/node/treeRules.ts` holds the two handles (the
+  registry's `kindFacts()`, rebuilt after a registration; `treeFactsOf(nodes)`, one per node list, a `WeakMap` with a length
+  guard) and maps ids back — no rule; it keeps the deleted functions' signatures (but `orderLevel` takes no locale,
+  `displayNamesOf` an order instead of a name function and a comparator, `endsIdentity` the tree), so the callers changed
+  their imports and, where a signature changed, their arguments. `TreeSource` gains `facts()` (the member's source per node
+  list, the guest's once); the eight test fakes that build a `TreeSource` by hand gained `facts: () => treeFactsOf([])`
+  (none of them asks a move rule) and `dropBoxDownload.test.ts` its numbering through the adapter: changes beyond imports,
+  for the interface's new member. Evidence: measured, `vue-tsc`, `eslint` and the 7,376 web tests green; the web's
+  `tree.vectors.test.ts` through the package red under each of decision 12's two Kotlin mutations (`order #2`,
+  `collision #21`).
+- **D33 — The eager set, measured (decision 12's size, the web's half).** Builds of `4c4743d16` (the tree before the slice)
+  and of this phase, `vite build`, gzip 9 per chunk, the eager set `main` and `index.html`'s modulepreloads: 630,538 →
+  634,769 B gz, **+4,231**: `activeSpace` +4,116 (the Kotlin), a new eager chunk `treeRules` +748 (the adapter: the bundler
+  splits it, as it is reached from `main` and four lazy chunks), `main` −635 (the deleted TypeScript, less than its 1,326
+  measured alone, since it was compressed against its neighbours). No lazy chunk grows by more than 20 B gz (`jspdf.es.min`
+  +20, `PotCreateDialog` and `MemoryNodeDialog` +15). Against the bound: 3,978 at R, 4,164 at the owner's 3.14 — **67 B gz
+  over the allowance**, the adapter's chunk the difference; handed to the owner with the number. Cost: none built.
+- **D34 — The browser pass (phase 4), headless Chrome, one throwaway (`throwaway:account`, erased after), en and de.** The
+  two builds side by side over one dev backend: this tree's Vite on 8095 and the phase-1 tree's on 8096 (each started from
+  its worktree, stopped by PID). Same tenant, same nodes: a folder holding the folders `Afolder`, `Dest`, `Zfolder` and the
+  Memories `Foto 10`, `Foto 2`, `apfel`, `_Notiz` and the Pot `Äpfel` (`Dest` holding a Memory `Foto 2`). Identical (`diff`
+  empty) in both languages: the level's rows (`_Notiz`, `apfel`, `Äpfel`, `Foto 2`, `Foto 10`; the folders apart), a new
+  folder `AFOLDER` and a rename onto `dest` refused inline naming the folder, the move dialog's places and blocks (itself
+  disabled, "It is already here", a Memory place for a folder refused, "No place here can take …"), a move onto a Memory of
+  the name refused naming it, and a selection of three moved into `Dest`: "2 moved", `Foto 2` left out with why. **Owed**:
+  a file `a.b` beside a folder `a.b`, a drop box's two guests named `Anna`, a contributor guest's move — each needs an
+  upload, which the bundled store signs for the dev instance's own origin (8081, the coordinator's Vite) and the web's CSP
+  refuses from 8095; and the apps' level in the web's order on a device (no device pass run; the apps run the same
+  `LevelOrder` against the same vectors on every target).
 
 ## Questions for the owner
 
-Open (2026-11-22, D28): **the platform module's running budget misses by 180 B gz** (32,101 against 31,921; the slice's
-own code 3.14× its deleted TypeScript against R = 3.0), while phase 3's probe (4×) and the time gate (D27) pass. Phases 1–3
-are committed; the web's rewiring is parked, unverified, on `claude/node-tree-p4-wip`. Which of D28's options (a) take
-3.14× for this slice, (b) drop the collator's table (a visible change for names led by non-ASCII punctuation, and still a
-few bytes over), (c) the move plan and collision alone — or another bound?
+D28 answered (D30). Open (2026-11-22, D33): the eager set grows by 4,231 B gz, 67 over the slice's allowance at 3.14×
+(4,164); the difference is the adapter's own chunk, which the bundler splits off.
 
 ## Definition of done
 

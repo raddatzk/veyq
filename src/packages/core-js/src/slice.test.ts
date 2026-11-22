@@ -34,12 +34,15 @@ const ENTRIES: Record<string, { control: string }> = {
  */
 const R = 3.0
 const SEARCH_ALONE_GZ = 27_943 // ADR 0156 § Consequences: the search's entry alone on the split
-const SLICES: { slice: string; deletedGz: number }[] = [
+/** One row per moved slice: the gzip of the TypeScript it deleted, and — only where the owner granted it — a ratio of its
+ *  own in place of R, with the owner's date. The rule stays R for every slice that names none. */
+const SLICES: { slice: string; deletedGz: number; allowed?: { ratio: number; owner: string } }[] = [
   // cr-web-node-tree-on-the-core (ADR 0155 decision 7.2.1): levelList.ts, location.ts' order and numbering,
-  // siblingCollision.ts' collidingSibling, move.ts' plan - 3,086 B min / 1,326 B gz, measured on sources
-  { slice: 'the node tree\'s rules', deletedGz: 1_326 },
+  // siblingCollision.ts' collidingSibling, move.ts' plan - 3,086 B min / 1,326 B gz, measured on sources. Its own code
+  // measured 4,158 B gz (3.14x): accepted at that ratio by the owner, 2026-11-22.
+  { slice: 'the node tree\'s rules', deletedGz: 1_326, allowed: { ratio: 3.14, owner: '2026-11-22' } },
 ]
-const BUDGET_GZ = Math.floor(SEARCH_ALONE_GZ + SLICES.reduce((n, s) => n + R * s.deletedGz, 0))
+const BUDGET_GZ = Math.floor(SEARCH_ALONE_GZ + SLICES.reduce((n, s) => n + (s.allowed?.ratio ?? R) * s.deletedGz, 0))
 
 /** [entries] bundled together, minified, as a web build bundles them: each entry's code is the platform's module file. */
 async function bundle(entries: string[]) {
@@ -73,7 +76,7 @@ describe('the platform module\'s running budget', () => {
   it('every entry together stays within the search alone plus R × each slice\'s deleted TypeScript', async () => {
     const whole = await bundle(Object.keys(ENTRIES))
     console.log(`every platform entry together: ${whole.js.length} B minified, ${whole.gz} B gz (budget ${BUDGET_GZ}: ` +
-      `${SEARCH_ALONE_GZ} + ${SLICES.map((s) => `${R} × ${s.deletedGz}`).join(' + ')})`)
+      `${SEARCH_ALONE_GZ} + ${SLICES.map((s) => `${s.allowed?.ratio ?? R} × ${s.deletedGz}${s.allowed ? ` (the owner, ${s.allowed.owner})` : ''}`).join(' + ')})`)
     expect(whole.gz).toBeLessThanOrEqual(BUDGET_GZ)
   })
 })
