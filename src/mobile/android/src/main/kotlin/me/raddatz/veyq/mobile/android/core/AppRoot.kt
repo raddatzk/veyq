@@ -65,6 +65,7 @@ fun AppRoot(model: AppModel) {
                 s, { server, email, password, secretKey -> model.signIn(server, email, password, secretKey) }, model::cancelAdd,
                 onKit = model::readKit, onClearKit = model::clearKit, onScanKit = model::scanKit, kitScan = kitScan, onCloseKitScan = model::closeKitScan,
                 onScanFromTrusted = model::scanFromTrusted, onShowForSignIn = model::showForSignIn, onOpenLink = model.guests::ask,
+                secretKeyProblem = model::secretKeyProblem,
             )
             is Screen.Unlock -> UnlockScreen(s, model::unlock, model::otherAccount, onForget = model::forgetUnlocked, onOpenLink = model.guests::ask)
             is Screen.Signed -> offer?.let { OfferScreen(it, trustWorking, model::answerOffer) }
@@ -109,6 +110,8 @@ fun SignInScreen(
     onShowForSignIn: ((String) -> Unit)? = null,
     /** *Open a link* (ADR 0150 decision 4): a received link opened as its guest, no session needed. */
     onOpenLink: (() -> Unit)? = null,
+    /** Why the Secret Key as typed is none (core's, inbox #1058): a typo is said under the field as it is typed. */
+    secretKeyProblem: (String) -> me.raddatz.veyq.mobile.crypto.SecretKeyProblem? = { null },
 ) {
     var server by rememberSaveable { mutableStateOf(state.server ?: BuildDefaults.SERVER) }
     var email by rememberSaveable { mutableStateOf(state.email.orEmpty()) }
@@ -163,7 +166,11 @@ fun SignInScreen(
                 },
             )
         } else {
-            OutlinedTextField(secretKey, { secretKey = it }, label = { Text(stringResource(R.string.signin_secret_key)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            // a typo is said as it is typed (the web's SecretKeyField); a key that is no key at all says nothing until the sign-in
+            val typo = androidx.compose.runtime.remember(secretKey) { secretKeyProblem(secretKey) == me.raddatz.veyq.mobile.crypto.SecretKeyProblem.TYPO }
+            OutlinedTextField(secretKey, { secretKey = it }, label = { Text(stringResource(R.string.signin_secret_key)) }, singleLine = true,
+                modifier = Modifier.fillMaxWidth().testTag("signin-secret-key"), isError = typo,
+                supportingText = if (typo) { { Text(stringResource(R.string.secret_key_typo), modifier = Modifier.testTag("signin-secret-key-typo")) } } else null,
                 visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
         }
         kit?.typedServer?.let { before ->

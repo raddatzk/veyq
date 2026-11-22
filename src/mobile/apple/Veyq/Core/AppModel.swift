@@ -343,6 +343,9 @@ final class AppModel {
     /// The Secret Key row's way back to typing: the kit's held key ends.
     func clearKit() { session.clearKit() }
 
+    /// Why the sign-in's Secret Key field, as typed, holds no key (core's `SessionModel.secretKeyProblem`): a typo is said.
+    func secretKeyProblem(_ text: String) -> SecretKeyProblem? { session.secretKeyProblem(text: text) }
+
     /// A flow's Secret Key section took a kit file (ADR 0151 decision 4): read in place into memory as the sign-in's is
     /// and handed to the flow's `intake`, which holds its key until the call or the flow ends.
     func readFlowKit(_ intake: KeyIntake, _ url: URL) {

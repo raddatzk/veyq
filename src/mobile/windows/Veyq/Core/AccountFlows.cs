@@ -495,6 +495,7 @@ internal sealed class FlowKeyControl
     private readonly Button _open;
     private readonly Button _scan;
     private readonly ContentControl _problem = new();
+    private readonly TextBlock _typo;
     private readonly TextBlock _otherAccount;
     private readonly TextBlock _otherServer;
     private HeldKit? _shown;
@@ -521,6 +522,8 @@ internal sealed class FlowKeyControl
         _prefix = prefix;
         Box = FlowPage.Secret(header, id);
         Box.PasswordChanged += (_, _) => Changed?.Invoke();
+        // a typo said as it is typed (the core's KeyIntake.problem, the web's SecretKeyField); a malformed key says nothing
+        _typo = SecretKeyTypo.Watch(Box, $"{prefix}-secret-key-typo");
         var clear = new HyperlinkButton { Content = Words.SigninKitClear(), Padding = new Thickness(0) };
         AutomationProperties.SetAutomationId(clear, $"{prefix}-kit-clear");
         clear.Click += (_, _) =>
@@ -546,7 +549,7 @@ internal sealed class FlowKeyControl
         AutomationProperties.SetAutomationId(_problem, $"{prefix}-kit-problem");
         _otherAccount = FlowText.Notice($"{prefix}-kit-other-account");
         _otherServer = FlowText.Notice($"{prefix}-kit-other-server");
-        foreach (var c in new UIElement[] { Box, _held, buttons, _problem, _otherAccount, _otherServer }) _panel.Children.Add(c);
+        foreach (var c in new UIElement[] { Box, _typo, _held, buttons, _problem, _otherAccount, _otherServer }) _panel.Children.Add(c);
         OfferScan();
     }
 

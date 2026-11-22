@@ -23,7 +23,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::glib;
 
-use crate::bridge::{self, wire::Answer, wire::Call, wire::Gate, wire::KitShown, wire::Method, wire::ScanKind, wire::ScanShown, wire::ScanState, wire::SignInEntry, wire::StaySignedIn, wire::UnlockEntry, wire::Why};
+use crate::bridge::{self, wire::Answer, wire::Call, wire::Gate, wire::KitShown, wire::Method, wire::ScanKind, wire::ScanShown, wire::ScanState, wire::SecretKeyProblem, wire::SignInEntry, wire::StaySignedIn, wire::UnlockEntry, wire::Why};
 use crate::core_ui::qr_camera::ScanView;
 use crate::core_ui::dev_login::DevSignIn;
 use crate::core_ui::{said, theme, words};
@@ -63,6 +63,38 @@ fn page(heading: &gtk::Label, rows: &[&gtk::Widget]) -> adw::ToolbarView {
     page.add_top_bar(&adw::HeaderBar::builder().show_title(false).build());
     page.set_content(Some(&scroll));
     page
+}
+
+/// Says a typo under a Secret Key row as it is typed (`SecretKey.Check`, the core's `KeyIntake.problem`; inbox #1058, the
+/// web's `SecretKeyField`): shown for a `TYPO`, hidden for a key, an empty row or a `MALFORMED` one, which says nothing
+/// until the action refuses it. Each edit asks anew; an answer to an older edit is dropped. Nothing of the key is logged.
+pub(crate) fn watch_typo(row: &adw::PasswordEntryRow, label: &gtk::Label) {
+    label.set_label(&words::secret_key_typo());
+    label.set_visible(false);
+    let asked = Rc::new(Cell::new(0u64));
+    let l = label.clone();
+    row.connect_changed(move |row| {
+        let n = asked.get() + 1;
+        asked.set(n);
+        let call = Call::SecretKeyCheck { secret_key: row.text().to_string() };
+        let (asked, l) = (asked.clone(), l.clone());
+        glib::spawn_future_local(async move {
+            let typo = match bridge::call(&call).await.map(|(a, _)| a) {
+                Ok(Answer::SecretKeyChecked { problem }) => problem == Some(SecretKeyProblem::Typo),
+                Ok(other) => {
+                    eprintln!("veyq: SecretKey.Check answered {other:?}");
+                    false
+                }
+                Err(e) => {
+                    eprintln!("veyq: SecretKey.Check unreadable: {e:?}");
+                    false
+                }
+            };
+            if asked.get() == n {
+                l.set_visible(typo);
+            }
+        });
+    });
 }
 
 fn error_label() -> gtk::Label {
@@ -145,6 +177,10 @@ impl SignIn {
         entries.set_widget_name("signin-entries");
         let other_server = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
         other_server.add_css_class("dim-label");
+        // the Secret Key row's typo, said as it is typed: the page holds it, the row's handler draws it
+        let typo = error_label();
+        typo.set_widget_name("signin-secret-key-typo");
+        watch_typo(&secret_key, &typo);
         // Staying signed in is no longer chosen here: the core offers it after the sign-in (ADR 0123 decision 8), drawn by `Offer`
         let error = error_label();
         let submit = gtk::Button::builder().label(words::signin_submit()).halign(gtk::Align::Center).build();
@@ -154,7 +190,7 @@ impl SignIn {
         cancel.add_css_class("flat");
         let spinner = adw::Spinner::builder().visible(false).build();
         let heading = gtk::Label::new(Some(&words::signin_title()));
-        let page = page(&heading, &[fields.upcast_ref(), other_server.upcast_ref(), error.upcast_ref(), spinner.upcast_ref(), entries.upcast_ref()]);
+        let page = page(&heading, &[fields.upcast_ref(), typo.upcast_ref(), other_server.upcast_ref(), error.upcast_ref(), spinner.upcast_ref(), entries.upcast_ref()]);
 
         let s = Rc::new(Self {
             page,

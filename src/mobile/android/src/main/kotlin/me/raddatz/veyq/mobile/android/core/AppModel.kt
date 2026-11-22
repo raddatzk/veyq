@@ -346,6 +346,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** The Secret Key row's way back to typing: the kit's held key ends. */
     fun clearKit() = session.clearKit()
 
+    /** Why the sign-in's Secret Key field, as typed, holds no key (core's `SessionModel.secretKeyProblem`): a typo is said. */
+    fun secretKeyProblem(text: String) = session.secretKeyProblem(text)
+
     private val _kitScan = MutableStateFlow<me.raddatz.veyq.mobile.qr.QrScan<*>?>(null)
 
     /**
