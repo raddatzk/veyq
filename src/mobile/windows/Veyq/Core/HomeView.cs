@@ -112,11 +112,11 @@ internal static class HomeView
     public static ListViewItem ObjectRow(ObjectRef r) =>
         Row(KindGlyph(r.kind), r.name, $"object:{r.name}", false, () => Act.Send(new Call.ShellOpen { Ref = r }),
             glyph => RowCovers.Prefix(glyph, r.nodeId),
-            r.kind is "MEMORY" or "CHAPTER" ? RowDates.Line(r.nodeId) : null, At(r));
+            r.kind is "MEMORY" or "CHAPTER" ? RowLines.Line(r.nodeId) : null, At(r));
 
     /// <summary><paramref name="r"/> as a tile: what its row shows and does (LevelTiles).</summary>
     private static LevelTiles.Item ObjectTile(ObjectRef r) =>
-        new(KindGlyph(r.kind), r.nodeId, r.name, r.kind is "MEMORY" or "CHAPTER" ? RowDates.Line(r.nodeId) : null, $"object:{r.name}",
+        new(KindGlyph(r.kind), r.nodeId, r.name, r.kind is "MEMORY" or "CHAPTER" ? RowLines.Line(r.nodeId) : null, $"object:{r.name}",
             () => Act.Send(new Call.ShellOpen { Ref = r }), Node: At(r));
 
     private static LevelTiles.Item FolderTile(NodeRef n, Drops? drops) =>

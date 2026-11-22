@@ -28,7 +28,7 @@ internal static class DepotUi
         registry.Application(new ApplicationUi { Id = ApplicationId.Depot });
     }
 
-    /// <summary>A file's page in the shell: the header's download is its Save a copy, its replace the uploads' replace.</summary>
+    /// <summary>A file's page in the shell: the header's download is its Save a copy, its replace Depot's (FileReplace).</summary>
     private sealed class FileBody : KindBody
     {
         private readonly FilePage _page;
@@ -51,7 +51,7 @@ internal static class DepotUi
 
         public override void Replace()
         {
-            if (_page.Id is { } id) _host.Replace(id);
+            if (_page.Id is { } id) FileReplace.Member(_host.Window, id, _host.Say);
         }
 
         public override void Dispose() => _page.Dispose();
@@ -62,10 +62,12 @@ internal static class DepotUi
     private sealed class GuestFileBody : KindBody
     {
         private readonly FilePage _page;
+        private readonly GuestHost _host;
         private bool _replaces;
 
         public GuestFileBody(GuestHost host, long file)
         {
+            _host = host;
             _page = new FilePage(host.Node, file)
             {
                 Read = (facts, _) =>
@@ -84,6 +86,8 @@ internal static class DepotUi
         public override bool Shows(ObjectRef r) => false;
 
         public override long? GuestReplaces => _replaces ? _page.Id : null;
+
+        public override void GuestReplace(long file) => FileReplace.Guest(_host.Window, _host.Received, file, _host.Say);
 
         public override void Dispose() => _page.Dispose();
     }

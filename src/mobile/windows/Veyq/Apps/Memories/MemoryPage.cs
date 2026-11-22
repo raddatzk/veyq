@@ -962,7 +962,7 @@ internal sealed class MemoryPage : IDisposable
         var drawn = (s.date, s.place, s.editsFacts);
         if (_factsDrawn == drawn || _id is not { } gallery) return;
         _factsDrawn = drawn;
-        Log.Write($"memory facts: date {RowDates.DateText(s.date) ?? "-"}, place {(s.place is null ? "-" : "named")}, edits {s.editsFacts}, tracks {s.tracks}");
+        Log.Write($"memory facts: date {MemoryDates.DateText(s.date) ?? "-"}, place {(s.place is null ? "-" : "named")}, edits {s.editsFacts}, tracks {s.tracks}");
         _factsSlot.Child = MemoryFacts.Line(_window, gallery, s);
     }
 

@@ -33,6 +33,7 @@ internal static class MemoriesUi
             List = host => new MemoriesPlaces(host),
             Creates = new Dictionary<Create, Action<CreateHost>> { [Create.Memory] = host => NewMemory(host) },
             PersonSection = window => new PersonMemoriesSection(window),
+            RowLines = MemoryDates.Lines,
         });
     }
 

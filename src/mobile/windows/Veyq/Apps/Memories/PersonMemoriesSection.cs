@@ -147,7 +147,7 @@ internal sealed class PersonMemoriesSection : PersonSection
     /// <summary>The rows, drawn anew only when they changed: the level's (its cover, name, date, place, the group).</summary>
     private void DrawRows(IReadOnlyList<PersonRowShown> rows)
     {
-        var key = string.Join("|", rows.Select(r => $"{r.Ref.nodeId}:{r.Ref.name}:{RowDates.DateText(r.date)}:{r.place}:{r.groupName?.ToString()}"));
+        var key = string.Join("|", rows.Select(r => $"{r.Ref.nodeId}:{r.Ref.name}:{MemoryDates.DateText(r.date)}:{r.place}:{r.groupName?.ToString()}"));
         if (key == _rowsDrawn) return;
         _rowsDrawn = key;
         _rows.Items.Clear();
@@ -160,7 +160,7 @@ internal sealed class PersonMemoriesSection : PersonSection
             line.Children.Add(RowCovers.Prefix(HomeView.Glyph(HomeView.KindGlyph(r.Ref.kind)), r.Ref.nodeId));
             var texts = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             texts.Children.Add(new TextBlock { Text = r.Ref.name, TextTrimming = TextTrimming.CharacterEllipsis });
-            var under = Lives.Joined([RowDates.DateText(r.date), r.place, r.groupName is { } g ? Said.Piece(g) : null]);
+            var under = Lives.Joined([MemoryDates.DateText(r.date), r.place, r.groupName is { } g ? Said.Piece(g) : null]);
             if (under.Length > 0)
             {
                 texts.Children.Add(new TextBlock
