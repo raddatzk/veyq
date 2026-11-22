@@ -99,7 +99,7 @@ describe('MemoryDetail follows rights', () => {
   it('a Memory\'s header in the owner\'s priority (ADR 0110), core\'s actions by their ids; report and delete in the ⋯', async () => {
     const core = (id: string, over: Partial<CoreHeaderAction> = {}): CoreHeaderAction => ({ id, label: id, icon: 'heart', shown: true, onClick: () => {}, ...over })
     const w = await mountDetail(memberMemoryRights(), MEMORY_KIND, {
-      coreActions: [core('favorite', { placement: 'before' }), core('copy', { placement: { after: 'move' }, menuOnly: true }), core('download'), core('report', { menuOnly: true })],
+      coreActions: [core('favorite'), core('copy'), core('download'), core('report')],
     })
     expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'download'])
     // The banner only while none is drawn, the move and copy: ⋯ entries, before report and delete.

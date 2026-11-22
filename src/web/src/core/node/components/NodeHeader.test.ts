@@ -13,7 +13,6 @@ import NodeHeader from './NodeHeader.vue'
 import { provideNestedNodeHeading } from '../nodeHeaderContribution'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import {
-  mergeHeaderActions,
   standardActionList,
   standardNodeActions,
   standardNodeRename,
@@ -219,22 +218,22 @@ describe('NodeHeader', () => {
   })
 
   it('renders only the shown actions, labelled, in order — and no empty action row', () => {
-    const w = mountHeader({ title: 'T', actions: [act('a'), act('b', { shown: false }), act('c')] })
-    expect(labels(w)).toEqual(['L-a', 'L-c'])
-    expect(mountHeader({ title: 'T', actions: [act('a', { shown: false })] }).find('.veyq-node-header-actions').exists()).toBe(false)
+    const w = mountHeader({ title: 'T', actions: [act('share'), act('download', { shown: false }), act('upload')] })
+    expect(labels(w)).toEqual(['L-share', 'L-upload'])
+    expect(mountHeader({ title: 'T', actions: [act('share', { shown: false })] }).find('.veyq-node-header-actions').exists()).toBe(false)
   })
 
   it('a click on each action calls its own handler; a disabled one does not fire', async () => {
-    const fns = { a: vi.fn(), b: vi.fn(), c: vi.fn() }
-    const w = mountHeader({ title: 'T', actions: [act('a', { onClick: fns.a }), act('b', { onClick: fns.b }), act('c', { onClick: fns.c, disabled: true })] })
-    for (const id of ['a', 'b', 'c']) await w.find(`button[data-action="${id}"]`).trigger('click')
-    expect(fns.a).toHaveBeenCalledTimes(1)
-    expect(fns.b).toHaveBeenCalledTimes(1)
-    expect(fns.c).not.toHaveBeenCalled()
+    const fns = { share: vi.fn(), upload: vi.fn(), music: vi.fn() }
+    const w = mountHeader({ title: 'T', actions: [act('share', { onClick: fns.share }), act('upload', { onClick: fns.upload }), act('music', { onClick: fns.music, disabled: true })] })
+    for (const id of ['share', 'upload', 'music']) await w.find(`button[data-action="${id}"]`).trigger('click')
+    expect(fns.share).toHaveBeenCalledTimes(1)
+    expect(fns.upload).toHaveBeenCalledTimes(1)
+    expect(fns.music).not.toHaveBeenCalled()
   })
 
   it('every action is a real, focusable button of type button (keyboard: Tab, Enter, Space are the browser\'s)', () => {
-    const w = mountHeader({ title: 'T', actions: [act('a'), act('b')] })
+    const w = mountHeader({ title: 'T', actions: [act('share'), act('upload')] })
     for (const b of w.findAll('.veyq-node-header-actions button')) {
       expect(b.element.tagName).toBe('BUTTON')
       expect(b.attributes('type')).toBe('button')
@@ -243,20 +242,20 @@ describe('NodeHeader', () => {
   })
 
   it('marks a toggle\'s pressed state; a button carries no text label (icon-only, one size: the fit\'s premise)', () => {
-    const w = mountHeader({ title: 'T', actions: [act('fav', { pressed: true }), act('off', { pressed: false }), act('up', { severity: 'primary' }), act('x')] })
-    expect(w.find('[data-action="fav"]').attributes('aria-pressed')).toBe('true')
-    expect(w.find('[data-action="off"]').attributes('aria-pressed')).toBe('false')
-    expect(w.find('[data-action="x"]').attributes('aria-pressed')).toBeUndefined()
+    const w = mountHeader({ title: 'T', actions: [act('favorite', { pressed: true }), act('music', { pressed: false }), act('upload', { severity: 'primary' }), act('share')] })
+    expect(w.find('[data-action="favorite"]').attributes('aria-pressed')).toBe('true')
+    expect(w.find('[data-action="music"]').attributes('aria-pressed')).toBe('false')
+    expect(w.find('[data-action="share"]').attributes('aria-pressed')).toBeUndefined()
     for (const b of w.findAll('.veyq-node-header-action')) expect(b.text(), b.attributes('data-action')).toBe('')
   })
 
   it('the kind\'s order puts its listed ids first, in that order; an unlisted action still renders, after them', () => {
     const w = mountHeader(
-      { title: 'T', actions: [act('share'), act('rename'), act('upload')], order: ['favorite', 'upload', 'download', 'share', 'missing'] },
+      { title: 'T', actions: [act('share'), act('music'), act('upload')], order: ['favorite', 'upload', 'download', 'share', 'replace'] },
       {},
-      [{ ...act('favorite'), placement: 'before' as const }, act('download'), act('later')],
+      [act('favorite'), act('download')],
     )
-    expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'download', 'share', 'rename', 'later'])
+    expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'download', 'share', 'music'])
   })
 
   it('delete and report are never buttons: the ⋯ menu\'s last entries, report then delete', async () => {
@@ -264,9 +263,9 @@ describe('NodeHeader', () => {
     const w = mountHeader(
       { title: 'Trips', actions: [act('delete', { severity: 'danger', onClick: remove }), act('share')], order: ['share'] },
       {},
-      [{ ...act('report'), menuOnly: true }, act('copy')],
+      [act('report'), act('download')],
     )
-    expect(headerButtonIds(w)).toEqual(['share', 'copy'])
+    expect(headerButtonIds(w)).toEqual(['share', 'download'])
     expect(w.find('button[data-action="delete"]').exists()).toBe(false)
     expect(w.find('button[data-action="report"]').exists()).toBe(false)
     const more = w.find('.veyq-node-header-more')
@@ -280,7 +279,7 @@ describe('NodeHeader', () => {
   })
 
   it('no menu-only action and everything a button: no ⋯ at all', () => {
-    expect(mountHeader({ title: 'T', actions: [act('a'), act('b')] }).find('.veyq-node-header-more').exists()).toBe(false)
+    expect(mountHeader({ title: 'T', actions: [act('share'), act('upload')] }).find('.veyq-node-header-more').exists()).toBe(false)
   })
 
   it('measured: as many as fit are buttons in order, the rest are entries before the separator; a disabled one stays disabled', async () => {
@@ -290,14 +289,14 @@ describe('NodeHeader', () => {
     const off = vi.fn()
     const w = mountHeader({
       title: 'T',
-      actions: [act('a'), act('b'), act('c'), act('d'), act('e'), act('f', { disabled: true, onClick: off }), act('delete', { severity: 'danger' })],
-      order: ['b', 'a'],
+      actions: [act('share'), act('upload'), act('music'), act('replace'), act('open-own-page'), act('download', { disabled: true, onClick: off }), act('delete', { severity: 'danger' })],
+      order: ['upload', 'share'],
     })
     await flushPromises()
-    expect(headerButtonIds(w)).toEqual(['b', 'a', 'c', 'd'])
+    expect(headerButtonIds(w)).toEqual(['upload', 'share', 'music', 'replace'])
     const entries = await openHeaderMenu(w)
     const menu = document.body.querySelector('.veyq-menu')!
-    expect([...menu.children].map((c) => (c.classList.contains('veyq-menu__separator') ? '|' : c.className.match(/veyq-node-header-action-(\w+)/)![1]))).toEqual(['e', 'f', '|', 'delete'])
+    expect([...menu.children].map((c) => (c.classList.contains('veyq-menu__separator') ? '|' : c.className.match(/veyq-node-header-action-([\w-]+)/)![1]))).toEqual(['open-own-page', 'download', '|', 'delete'])
     expect(entries[1].getAttribute('aria-disabled')).toBe('true')
     entries[1].querySelector<HTMLElement>('.veyq-menu__item-content')!.click()
     expect(off).not.toHaveBeenCalled()
@@ -337,9 +336,10 @@ describe('NodeHeader', () => {
         return this.classList.contains('veyq-node-header-title') ? nameWidth(this) : 0
       })
     }
-    const memoryActions = () => ['favorite', 'upload', 'share', 'request', 'people', 'download', 'cover', 'banner', 'rename', 'move', 'copy'].map((id) => act(id))
+    const memoryActions = () => ['favorite', 'upload', 'share', 'music', 'replace', 'download', 'open-own-page', 'banner', 'move', 'copy'].map((id) => act(id))
+    const memoryOrder = ['favorite', 'upload', 'share', 'music', 'replace', 'download', 'open-own-page']
     // The leading visual is the icon's 16:9 frame here, given the 180 px wide width above (a Memory's is 244 px in the sheet).
-    const mountMemory = (title: string) => mountHeader({ title, icon: 'images', actions: [...memoryActions(), act('delete', { severity: 'danger' })] })
+    const mountMemory = (title: string) => mountHeader({ title, icon: 'images', actions: [...memoryActions(), act('delete', { severity: 'danger' })], order: memoryOrder })
 
     it('compact below the switch, wide at it: the header\'s class follows the answer', async () => {
       layoutWidths(540)
@@ -370,9 +370,10 @@ describe('NodeHeader', () => {
       const short = mountMemory('Rom 2026')
       await flushPromises()
       expect(headerButtonIds(long)).toEqual(['favorite', 'upload'])
-      // The title row is 900 - 196 = 704 px, less the name (80 + 1) and the gap: 607 px for k buttons and the ⋯ (48k + 41).
-      expect(headerButtonIds(short)).toHaveLength(11)
-      expect(await headerMenuIds(long)).toEqual(['share', 'request', 'people', 'download', 'cover', 'banner', 'rename', 'move', 'copy', 'delete'])
+      // The title row is 900 - 196 = 704 px, less the name (80 + 1) and the gap: 607 px for k buttons and the ⋯ (48k + 41) -
+      // room for eleven, so all seven that may be buttons are.
+      expect(headerButtonIds(short)).toHaveLength(7)
+      expect(await headerMenuIds(long)).toEqual(['share', 'music', 'replace', 'download', 'open-own-page', 'move', 'copy', 'banner', 'delete'])
     })
 
     it('compact, the actions\' own row holds as many as fit; no floor there', async () => {
@@ -380,7 +381,7 @@ describe('NodeHeader', () => {
       const w = mountMemory('Rom 2026')
       await flushPromises()
       // A 300 px row: the ⋯ (41) and five 48 px buttons.
-      expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'request', 'people'])
+      expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'music', 'replace'])
     })
 
     it('never flips: every re-measure keeps the answer although the leading visual is 64 px while compact', async () => {
@@ -430,39 +431,39 @@ describe('NodeHeader', () => {
       await flushPromises()
       const head = () => w.find('.veyq-node-header')
       expect(head().attributes('data-layout-width')).toBe('300')
-      expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'request', 'people'])
+      expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'music', 'replace'])
 
       // The header is 900 px now, its observer's frame not yet run: still the 300 px layout, and it says so.
       vi.restoreAllMocks()
       layoutWidths(900)
       await flushPromises()
       expect(head().attributes('data-layout-width')).toBe('300')
-      expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'request', 'people'])
+      expect(headerButtonIds(w)).toEqual(['favorite', 'upload', 'share', 'music', 'replace'])
 
       resized!()
       await flushPromises()
       vi.unstubAllGlobals()
       expect(head().attributes('data-layout-width')).toBe('900')
-      expect(headerButtonIds(w)).toHaveLength(11)
+      expect(headerButtonIds(w)).toHaveLength(7)
     })
   })
 
   it('core\'s own actions sit before or after the application\'s, gated like any other', () => {
-    const w = mountHeader({ title: 'T', actions: [act('app')] }, {}, [act('c-after'), { ...act('c-before'), placement: 'before' as const }, act('c-off', { shown: false })])
-    expect(labels(w)).toEqual(['L-c-before', 'L-app', 'L-c-after'])
+    const w = mountHeader({ title: 'T', actions: [act('share')] }, {}, [act('download'), act('favorite'), act('report', { shown: false })])
+    expect(labels(w)).toEqual(['L-favorite', 'L-share', 'L-download'])
   })
 
   // Core's actions come centrally (ADR 0110): the header asks the view around it for ITS node; the page builds none.
   it('asks the view around it for core\'s actions of the node it heads - none for the space\'s top level, none without a view', () => {
     asked.length = 0
-    const w = mountHeader({ title: 'T', actions: [act('app')] }, {}, [{ ...act('report'), menuOnly: true }])
+    const w = mountHeader({ title: 'T', actions: [act('share')] }, {}, [act('report')])
     expect(asked.map((n) => n?.id)).toContain(NODE.id)
     expect(w.find('.veyq-node-header-more').exists(), 'core\'s report in the menu').toBe(true)
     asked.length = 0
     const top = mountHeader({ title: 'Space', node: null }, {}, [act('favorite')])
     expect(asked).toEqual([null])
     expect(top.find('.veyq-node-header-actions').exists()).toBe(false)
-    expect(mountHeader({ title: 'T', node: NODE, actions: [act('app')] }).findAll('.veyq-node-header-action').map((b) => b.attributes('data-action'))).toEqual(['app'])
+    expect(mountHeader({ title: 'T', node: NODE, actions: [act('share')] }).findAll('.veyq-node-header-action').map((b) => b.attributes('data-action'))).toEqual(['share'])
   })
 })
 
@@ -496,7 +497,7 @@ describe('NodeHeader: what is editable at its place has no action (ADR 0110 deci
     expect(w.find('h1').attributes('aria-label')).toBe('Trips')
     // No tooltip on the name (owner 2026-11-04): no layer tooltip trigger (it marks its trigger with `data-state`, as every
     // action button of this header has), no native title on the button or the heading.
-    const withAction = mountHeader({ title: 'Trips', node: NODE, rename: { save: vi.fn() }, actions: [{ id: 'x', label: 'X', icon: 'pencil', onClick: vi.fn(), shown: true }] })
+    const withAction = mountHeader({ title: 'Trips', node: NODE, rename: { save: vi.fn() }, actions: [{ id: 'share', label: 'X', icon: 'pencil', onClick: vi.fn(), shown: true }] })
     expect(withAction.find('.veyq-node-header-actions button').attributes('data-state'), 'control: a tooltip trigger is marked').toBeDefined()
     expect(withAction.find('button[data-testid="node-header-rename"]').attributes('data-state')).toBeUndefined()
     expect(button.attributes('data-state')).toBeUndefined()
@@ -637,7 +638,7 @@ describe('NodeHeader: what is editable at its place has no action (ADR 0110 deci
     const w = mountHeader(
       { title: 'Trips', actions: standardNodeActions(t, { share: true, move: true, delete: true }, {}), order: ['share', 'move', 'copy'] },
       {},
-      [{ ...act('copy'), menuOnly: true, placement: { after: 'move' } }],
+      [act('copy')],
     )
     expect(headerButtonIds(w)).toEqual(['share'])
     expect(await headerMenuIds(w)).toEqual(['move', 'copy', 'delete'])
@@ -645,11 +646,6 @@ describe('NodeHeader: what is editable at its place has no action (ADR 0110 deci
 })
 
 describe('nodeHeader helpers', () => {
-  it('mergeHeaderActions puts core before / after the application list', () => {
-    const ids = mergeHeaderActions([{ ...act('x'), placement: 'before' }, act('y')], [act('a')]).map((a) => a.id)
-    expect(ids).toEqual(['x', 'a', 'y'])
-  })
-
   it('standardActionList (a row\'s): only the granted ones, share, rename, move, delete; the kind may relabel', () => {
     const on = { share: vi.fn(), rename: vi.fn(), move: vi.fn(), remove: vi.fn() }
     const all = standardActionList(t, { share: true, rename: true, move: true, delete: true, deleteLabel: 'Drop it' }, on)
@@ -662,12 +658,10 @@ describe('nodeHeader helpers', () => {
     expect(standardActionList(t, {}, on)).toEqual([])
   })
 
-  it('standardNodeActions (a header\'s): no rename entry whatever the right says, the move menu-only (ADR 0110 decision 11)', () => {
+  it('standardNodeActions (a header\'s): no rename entry whatever the right says (ADR 0110 decision 11)', () => {
     const on = { share: vi.fn(), rename: vi.fn(), move: vi.fn(), remove: vi.fn() }
     const all = standardNodeActions(t, { share: true, rename: true, move: true, delete: true }, on)
     expect(all.map((a) => a.id)).toEqual(['share', 'move', 'delete'])
-    expect(all.find((a) => a.id === 'move')?.menuOnly).toBe(true)
-    expect(all.find((a) => a.id === 'share')?.menuOnly).toBeUndefined()
   })
 
   it('standardNodeRename: only with the right AND the page\'s write; it saves through that write', async () => {

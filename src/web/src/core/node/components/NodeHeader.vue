@@ -38,8 +38,9 @@
 // **Core's actions come centrally** (owner 2026-11-01, ADR 0110): the header asks the view around it
 // (`../coreNodeActions.ts`: core's node page `NodePage.vue`, the level `LevelView.vue`) for core's own actions of the `node`
 // it heads - the heart, "Copy to…", the download, Report - each gated by its core rights function, and merges them
-// with the application's (`mergeHeaderActions`). No page builds or forwards one, so none can leave Report out. A kind's
-// `order` may still name a core id for its priority.
+// with the application's in the core's plan (`plans.ts` over `@veyq/core-js/navigation`, the plan every app draws: ADR 0154
+// decision 2). No page builds or forwards one, so none can leave Report out. A kind's `order` may still name a core id for its
+// priority.
 //
 // **Two layouts, picked by the header's own width** (ADR 0110 decisions 1 and 8): `headerLayout` answers `wide` while the
 // leading visual's wide width, the name's minimum, the floor's buttons and the ⋯ fit in one row, else `compact`. Its inputs
@@ -49,7 +50,7 @@
 //
 // **As many as fit, the rest in one menu** (ADR 0110): the actions that may be buttons are buttons in `order` as far as
 // the row has room — measured on mount and on every resize, `fitHeaderActions` — and the rest are entries of one ⋯ menu,
-// whose last group is the menu-only actions (move and copy, then report, then delete) behind a separator. Unmeasured (no
+// whose last group is the plan's (move and copy, then report, then delete) behind a separator. Unmeasured (no
 // `ResizeObserver`, a width of 0: a unit test, a hidden tab) the header is wide and every action that may be a button is one. Compact, the
 // actions have a row of their own, the whole header wide — the title row then draws no box of its own (`display:
 // contents`) and the actions' box is the room. Wide, the name comes first: the room is the title row less the name's
@@ -77,15 +78,13 @@ import {
   headerFloor,
   headerLayout,
   headerRowCounts,
-  mergeHeaderActions,
-  orderHeaderActions,
-  partitionHeaderActions,
   type NodeHeaderAction,
   type NodeHeaderChipFact,
   type NodeHeaderFact,
   type NodeHeaderRename,
 } from '../nodeHeader'
 import { nodeNameErrorText, renameSelectionEnd } from '../nodeName'
+import { headerPlan } from '../plans'
 import { injectCoreNodeActions, useCoreHeaderActions } from '../coreNodeActions'
 import { injectNodeHeadingLevel } from '../nodeHeaderContribution'
 import type { TreeNode } from '../tree'
@@ -117,7 +116,10 @@ const { t } = useI18n()
 const headingTag = injectNodeHeadingLevel() === 2 ? 'h2' : 'h1'
 const view = injectCoreNodeActions()
 const coreActions = useCoreHeaderActions(() => props.node)
-const parts = computed(() => partitionHeaderActions(orderHeaderActions(mergeHeaderActions(coreActions.value, props.actions).filter((a) => a.shown), props.order)))
+// The core's plan of this node's actions: the entries that may be buttons, then the menu's two groups (`plans.ts`).
+const parts = computed(() => headerPlan([...coreActions.value, ...props.actions], props.order))
+/** The menu's entries beyond the buttons that do not fit: the plan's menu, then its last group. */
+const menuOnly = computed(() => [...parts.value.menu, ...parts.value.last])
 
 // The leading visual, always 16:9: the node's cover where the kind takes one and the view resolved it, else the empty frame
 // with the kind's icon (a kind without a cover too) - the cover or the frame a button that opens core's cover dialog where
@@ -235,10 +237,10 @@ const floor = computed(() => headerFloor(parts.value.buttons.length))
 const compact = ref(false)
 const measured = ref({ rowWidth: 0, buttonWidth: 0, gap: 0, moreWidth: 0 })
 const fit = computed(() =>
-  fitHeaderActions({ count: parts.value.buttons.length, menuOnly: parts.value.menuOnly.length > 0, floor: compact.value ? 0 : floor.value, ...measured.value }),
+  fitHeaderActions({ count: parts.value.buttons.length, menuOnly: menuOnly.value.length > 0, floor: compact.value ? 0 : floor.value, ...measured.value }),
 )
 const buttons = computed(() => parts.value.buttons.slice(0, fit.value))
-const menuItems = computed<VeyqMenuItem[]>(() => actionMenuItems([parts.value.buttons.slice(fit.value), parts.value.menuOnly], 'veyq-node-header'))
+const menuItems = computed<VeyqMenuItem[]>(() => actionMenuItems([[...parts.value.buttons.slice(fit.value), ...parts.value.menu], parts.value.last], 'veyq-node-header'))
 const menu = ref<InstanceType<typeof VeyqMenu> | null>(null)
 
 const header = ref<HTMLElement | null>(null)
@@ -272,7 +274,7 @@ async function measure() {
   // The leading visual's WIDE width, whatever size it has now: reading its current box would flip the answer back (64 px).
   const visual = head.querySelector('.veyq-node-header-leading')?.firstElementChild
   const leadingWide = visual ? px(getComputedStyle(visual).getPropertyValue('--veyq-node-header-leading-wide')) : 0
-  const layoutMore = parts.value.buttons.length > floor.value || parts.value.menuOnly.length > 0
+  const layoutMore = parts.value.buttons.length > floor.value || menuOnly.value.length > 0
   const layout = headerLayout({
     headerWidth,
     leadingWide,
@@ -401,7 +403,7 @@ onBeforeUnmount(() => {
           </button>
           <template v-else>{{ title }}</template>
         </component>
-        <div v-if="parts.buttons.length || parts.menuOnly.length" ref="actionsEl" class="veyq-node-header-actions">
+        <div v-if="parts.buttons.length || menuOnly.length" ref="actionsEl" class="veyq-node-header-actions">
           <VeyqTooltip v-for="a in buttons" :key="a.id" :text="a.label">
             <VeyqButton
               class="veyq-icon-button veyq-prime-icon-button veyq-node-header-action"

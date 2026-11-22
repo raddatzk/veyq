@@ -24,7 +24,7 @@ export function canDownload(access: Access, node: { kind: NodeKind } | null): bo
 
 function action(t: Translate, access: Access, node: { id: string; kind: NodeKind } | null, onDownload: () => void): (CoreRowAction & CoreHeaderAction)[] {
   const shown = canDownload(access, node)
-  return shown ? [{ id: 'download', label: t('export.action'), icon: 'download', placement: 'after', shown, onClick: onDownload }] : []
+  return shown ? [{ id: 'download', label: t('export.action'), icon: 'download', shown, onClick: onDownload }] : []
 }
 
 export function downloadHeaderActions(t: Translate, access: Access, node: { id: string; kind: NodeKind } | null, onDownload: () => void): CoreHeaderAction[] {

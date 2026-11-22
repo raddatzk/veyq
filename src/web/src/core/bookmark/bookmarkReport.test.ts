@@ -64,9 +64,9 @@ describe('a bookmark\'s Report', () => {
     const node = bookmark(`${window.location.origin}/s/${SHARE}#k=${KSHARE}`)
     const { actions, push } = harness(node)
     for (const list of [actions.row(node), actions.header(node)]) {
-      expect(ids(list), 'the name first, the share last before delete').toEqual(['report-name', 'report'])
+      expect(ids(list), 'the name first, the share last before delete').toEqual(['report', 'report-shared'])
     }
-    actions.row(node).find((a) => a.id === 'report')!.onClick()
+    actions.row(node).find((a) => a.id === 'report-shared')!.onClick()
     expect(push).toHaveBeenCalledWith({ path: `/s/${SHARE}`, hash: `#k=${KSHARE}&report` })
     expect(vi.mocked(openReport), 'nothing goes to this instance\'s moderators').not.toHaveBeenCalled()
   })
@@ -76,10 +76,10 @@ describe('a bookmark\'s Report', () => {
     vi.stubGlobal('open', open)
     const foreign = `https://photos.other.example/s/${SHARE}#k=${KSHARE}`
     const plain = bookmark(foreign)
-    harness(plain).actions.row(plain).find((a) => a.id === 'report')!.onClick()
+    harness(plain).actions.row(plain).find((a) => a.id === 'report-shared')!.onClick()
     expect(open).toHaveBeenCalledWith(`${foreign}&report`, '_blank', 'noopener,noreferrer')
     const locked = bookmark(foreign, 'pw')
-    harness(locked).actions.row(locked).find((a) => a.id === 'report')!.onClick()
+    harness(locked).actions.row(locked).find((a) => a.id === 'report-shared')!.onClick()
     expect(bookmarkOpenRequest.value).toMatchObject({ url: `${foreign}&report`, report: true, password: 'pw' })
     expect(vi.mocked(openReport)).not.toHaveBeenCalled()
     vi.unstubAllGlobals()
@@ -87,7 +87,7 @@ describe('a bookmark\'s Report', () => {
 
   it('reports the bookmark\'s name to this instance, never its key', () => {
     const node = bookmark(`https://photos.other.example/s/${SHARE}#k=${KSHARE}`)
-    harness(node).actions.row(node).find((a) => a.id === 'report-name')!.onClick()
+    harness(node).actions.row(node).find((a) => a.id === 'report')!.onClick()
     const request = vi.mocked(openReport).mock.calls[0]![0]
     expect(request.targets.map((x) => [x.kind, 'id' in x ? x.id : null])).toEqual([['NAME', node.id]])
     expect(request.nameOnly, 'no second choice of the same name').toBeUndefined()

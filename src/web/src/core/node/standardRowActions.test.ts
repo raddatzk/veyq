@@ -2,7 +2,7 @@
 // grants them AND the page has a door (a guest's host hands on the move alone), and replaced by an application's own action of
 // the same id.
 import { describe, it, expect, vi } from 'vitest'
-import { STANDARD_ROW_ACTION_IDS, standardRowActions, withStandardRowActions } from './standardRowActions'
+import { standardRowActions, withStandardRowActions } from './standardRowActions'
 import type { LevelRowAction } from './levelRow'
 import { treeNode } from '../../test/models'
 
@@ -15,7 +15,7 @@ const ALL = { rename: true, move: true, delete: true }
 describe('standardRowActions', () => {
   it('offers rename, move and delete, in that order, each only where the application granted it', () => {
     const d = doors()
-    expect(ids(standardRowActions(t, node, { standard: ALL }, d))).toEqual([...STANDARD_ROW_ACTION_IDS])
+    expect(ids(standardRowActions(t, node, { standard: ALL }, d))).toEqual(['rename', 'move', 'delete'])
     expect(ids(standardRowActions(t, node, { standard: { move: true } }, d))).toEqual(['move'])
     expect(ids(standardRowActions(t, node, { standard: { rename: true, delete: false } }, d))).toEqual(['rename'])
   })
@@ -48,8 +48,8 @@ describe('withStandardRowActions', () => {
   const own = (id: string, over: Partial<LevelRowAction> = {}): LevelRowAction => ({ id, label: `own ${id}`, icon: 'pencil', shown: true, onClick: () => {}, ...over })
   const defaults = standardRowActions(t, node, { standard: ALL }, doors())
 
-  it('adds the defaults around the application\'s own: rename and move before, delete after', () => {
-    expect(ids(withStandardRowActions([own('download')], defaults))).toEqual(['rename', 'move', 'download', 'delete'])
+  it('adds the defaults beside the application\'s own (where each sits is the row\'s plan)', () => {
+    expect(ids(withStandardRowActions([own('download')], defaults))).toEqual(['rename', 'move', 'delete', 'download'])
   })
 
   it('an application\'s action of the same id REPLACES core\'s default - its own `shown` decides, even when it says no', () => {
