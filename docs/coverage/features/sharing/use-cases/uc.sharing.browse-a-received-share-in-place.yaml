@@ -7,7 +7,7 @@ title: Browse a received share in place, inside the space
 acceptanceCriteria:
   # the share API's CORS (backend)
   - id: share-api-answers-any-origin
-    text: While core.public-shares.embeddable is effective, the public share API under /api/shares/{shareId}, /api/setup and /api/moderation/key answer a preflight 204 and carry Access-Control-Allow-Origin * and CORP cross-origin, never Access-Control-Allow-Credentials; switched off, and on every other path, they stay same-origin.
+    text: While core.public-shares.embeddable is effective, the public share API under /api/shares/{shareId}, /api/setup and /api/moderation/key answer a preflight 204 and carry Access-Control-Allow-Origin * and CORP cross-origin, never Access-Control-Allow-Credentials, and Cache-Control no-store so no browser revalidates a granted answer past the switch (inbox #1068); switched off, and on every other path, they stay same-origin.
     coverage:
       backend:
         integration:
@@ -15,6 +15,7 @@ acceptanceCriteria:
           - ShareCrossOriginSliceTest.theServerOwnersSwitchMakesEveryPathClassSameOriginAgain
           - ShareCrossOriginSliceTest.theTenantsSwitchReachesItsServedLinksAndNothingElse
           - ShareCrossOriginSliceTest.aLinkTheGateDoesNotServeGetsExactlyTheUnknownIdsAnswer
+          - ShareCrossOriginSliceTest.noGrantedAnswerIsStoredSoNoRevalidationOutlivesTheSwitch
           - ShareCrossOriginSliceTest.aCuratorsOperationOnALinkAndAMembersPathStaySameOrigin
           - ShareCrossOriginSliceTest.anOptionsThatIsNoPreflightIsStillAnUndeclaredMethod
           - ApiMethodIndexContractTest.theGuestShareOperationsOfferedCrossOriginAreTheContractsUnauthenticatedOnes

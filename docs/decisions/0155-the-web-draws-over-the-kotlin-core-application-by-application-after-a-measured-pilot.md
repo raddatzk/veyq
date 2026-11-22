@@ -354,7 +354,8 @@ Measured before the decision (2026-11-20):
     parameter — `LocalDays` for the apps, the engine's `Date` behind the façade (0.30×): one formula, one reading per platform.
   - *Left:* an instance's tenant switch for `.embeddable` does not reach `/api/setup`'s capability list (measured in the
     pass: switched off, the list still named it and the page embedded), so the page decides by the instance's answer, as
-    before the slice — the server's question, not this slice's (inbox #1067: since 2026-11-22 the list is the link domain's tenant's, ADR 0088 decision 3).
+    before the slice — the server's question, not this slice's (inbox #1067: since 2026-11-22 the list is the link domain's tenant's, ADR 0088 decision 3; the same day's re-run of
+    the pass, switched off and reloaded, showed the fallback line naming the host, ADR 0121 decision 3 § `Cache-Control`).
 
 - **The rights and plans' slice** (decision 7.2's third, built 2026-11-22, branch `claude/rights-slice`). A node header's plan
   and a level row's menu (`NodeHeader.plan`, `LevelRow.plan`, ADR 0154 decision 2) and core's favourite, cover and bookmark

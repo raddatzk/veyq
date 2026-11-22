@@ -34,9 +34,21 @@ object CrossOrigin {
      * How long a browser may keep a preflight's answer, in seconds. Short on purpose but not zero: every guest call
      * carries a share header, so without a cache each one costs a round trip first. A switch turned off is not held up by
      * it — the actual answer then carries no `Access-Control-Allow-Origin` and the browser refuses to read it, cached
-     * preflight or not — so the age bounds only how long a method the server stopped offering stays offered.
+     * preflight or not, because no granted answer is ever stored ([NO_STORE]) — so the age bounds only how long a
+     * method the server stopped offering stays offered.
      */
     const val MAX_AGE_SECONDS = 600
+
+    /**
+     * The `Cache-Control` every granted answer carries (inbox #1068). A browser that stored a granted answer — the guest
+     * resolve's `200` carries an `ETag` and nothing that forbids storing it — revalidates it on the next plain request, and
+     * the `304` the server sends once the switch is off has no `Access-Control-Allow-Origin`; but the browser runs its
+     * CORS check on the stored response the `304` refreshes, whose `Access-Control-Allow-Origin: *` survives, so the page
+     * that embedded the link went on reading it (measured 2026-11-22 in Chrome, ADR 0121 decision 3). `no-store`, never
+     * `no-cache`: a revalidated copy is exactly the leak. A guest client's own conditional request (`If-None-Match` set
+     * by the client, ADR 0081) still gets its `304`: that is answered to the script, not from the browser's store.
+     */
+    const val NO_STORE = "no-store"
 
     /** Mark [ctx]'s response as readable by any origin. */
     fun grant(ctx: RoutingContext) {
@@ -45,9 +57,11 @@ object CrossOrigin {
 
     fun isGranted(ctx: RoutingContext): Boolean = ctx.get<Boolean>(KEY) == true
 
-    /** The headers every granted answer carries, a refusal included, so a browser can read a `404` or a `403` too. */
+    /** The headers every granted answer carries, a refusal included, so a browser can read a `404` or a `403` too —
+     *  and [NO_STORE], so no browser keeps a granted answer past the switch. */
     fun writeTo(headers: MultiMap) {
         headers.set(ALLOW_ORIGIN, "*")
         headers.set(EXPOSE_HEADERS, "ETag")
+        headers.set("Cache-Control", NO_STORE)
     }
 }

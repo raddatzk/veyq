@@ -86,6 +86,18 @@ proxy through this instance would make it learn what each member reads.
      gets. Only a served link, whose existence its own answer already shows, can differ by its tenant's switch.
    - **`Access-Control-Max-Age: 600`.** A switch turned off acts on the actual answer, which then carries no
      `Access-Control-Allow-Origin`, cached preflight or not; the age bounds only how long a method stays offered.
+   - **`Cache-Control: no-store` on every granted answer** (inbox #1068, built 2026-11-22). Without it the bullet above
+     did not hold: the resolve's `200` carries an `ETag` and nothing that forbids storing it, so a browser revalidates
+     it on the next plain request; switched off, the server answers `304` without a CORS header, but the browser checks
+     CORS on the stored response the `304` refreshes, whose `Access-Control-Allow-Origin: *` survives. Measured
+     2026-11-22 in headless Chrome: in the two-origin pass (two Vites as two origins over the dev backend, a throwaway
+     tenant's link kept as a bookmark on the other origin) a plain `fetch` of the resolve after the tenant switched
+     `.embeddable` off went out with the stored `If-None-Match`, came back `304` without any CORS header, and the page
+     read `200`; against a stand-in serving these headers the same held with and without a cached preflight, and with
+     `no-store` the browser asked unconditionally and refused the answer. The bookmark's page itself fell back
+     (`notEmbeddable`, from `/api/setup`, inbox #1067) — what read on was any script of the other origin.
+     `no-store`, not `no-cache` (a revalidated copy is the leak); a guest client's own `If-None-Match` (ADR 0081) is
+     answered to the script and keeps its `304`. Written by `CrossOrigin.writeTo`, so no granted path can miss it.
    - **Not covered:** an answer Vert.x writes before JAX-RS (a body over the request limit) carries no CORS header, and
      a preflight is not rate-limited (the limiters are post-matching); it costs the guest gate's reads.
 
