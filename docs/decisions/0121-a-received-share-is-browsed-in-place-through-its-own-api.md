@@ -74,7 +74,9 @@ proxy through this instance would make it learn what each member reads.
    endpoints take no cookie and no bearer, the whole link is their capability
    ([ADR 0076](0076-a-guest-write-proves-it-holds-the-links-key.md)), and any HTTP client already reaches them; CORS only
    lets a browser do what `curl` does. The two pre-auth reads a foreign client needs, `/api/setup` and
-   `/api/moderation/key`, answer the same way at instance level. Everything else stays same-origin. As built
+   `/api/moderation/key`, answer the same way at instance level — the grant only: the capability list `/api/setup`
+   carries is the domain's tenant's (ADR 0088 decision 3), so a tenant that switched `.embeddable` off stays readable
+   and is refused `notEmbeddable` by its absence (inbox #1067). Everything else stays same-origin. As built
    (`ShareCrossOrigin`, a pre-matching filter ahead of `UndeclaredMethodFilter`; the app shell writes the headers):
    - **Only a guest's operations.** On those paths only the methods whose operation takes no bearer (`@PermitAll`, held
      to the contract's operations without `bearerAuth` by `ApiMethodIndexContractTest`) are offered; a curator's
@@ -102,7 +104,9 @@ proxy through this instance would make it learn what each member reads.
    server's to refuse, as on its page. As built (`core/sharing/shareInstance.ts` over the platform's `sharing/ShareInstance.kt`
    `embedding` since 2026-11-22, ADR 0155 § The share links' slice — the reading the apps' open shares): `embeddability` is one pure function
    over what was read, its refusals `switchedOff`, `unreachable` (no answer, or no version or capability list),
-   `otherVersion`, `noLinks` and `notEmbeddable`; the fallback line names each but `switchedOff`. "No answer" is its own
+   `otherVersion`, `noLinks` and `notEmbeddable`; the fallback line names each but `switchedOff`. The setup read names
+   the switch of the tenant whose domain the link carries (`SetupHandler.state`; until 2026-11-22, inbox #1067, the
+   instance's alone, so a tenant's `.embeddable` off reached the page only through the share answers' missing CORS). "No answer" is its own
    unavailable (`ShareUnavailableError('unreachable')`, where the generated client got no HTTP response — the network,
    or a browser that withheld a cross-origin answer); every refusal stays `not_found`. The share page treats both alike;
    a bookmark's page whose resolve ends `unreachable` after the setup check passed (the link's tenant switched

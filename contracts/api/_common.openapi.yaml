@@ -175,14 +175,13 @@ components:
     Capability:
       type: object
       description: >
-        One entry of an effective capability set (ADR 0032, ADR 0088): the pre-auth instance manifest of
+        One entry of an effective capability set (ADR 0032, ADR 0088): the pre-auth manifest of
         `GET /api/setup`, and the tenant's set a member reads after sign-in (`GET /api/tenants/{tenantId}/capabilities`).
         Both are one type and carry the entry's requirements in effect as values, `[{ id, …values }]` (ADR 0088
         decision 8): each value property belongs to one entry (the catalog's `requirements`, whose names
         `scripts/validate_capabilities.py` holds to these properties) and carries a value only on it and only while set
-        (null otherwise). The
-        pre-auth manifest carries the instance level's, the tenant's set the strictest of both. Additive, no `major`
-        bump.
+        (null otherwise). The tenant's set, and the pre-auth manifest asked on the tenant's domain, carry the strictest
+        of both levels; the manifest on a host that claims no tenant the instance's. Additive, no `major` bump.
       required: [id]
       properties:
         id:

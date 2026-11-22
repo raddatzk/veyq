@@ -29,7 +29,9 @@ import org.jboss.resteasy.reactive.server.spi.ResteasyReactiveContainerRequestCo
  * guest operations included without core naming one. A curator's operation on a link (revoke, reactivate, reissue, its
  * sealed name, `PATCH`/`DELETE` of the link) takes a bearer and stays same-origin; so does every other path.
  *
- * **Whose switch.** `/api/setup` and `/api/moderation/key` read the instance level. A share path reads the tenant of the
+ * **Whose switch.** `/api/setup` and `/api/moderation/key` read the instance level — for the grant only: the capability
+ * list `/api/setup` carries is the request domain's tenant's (`SetupHandler.state`, inbox #1067), so a tenant that
+ * switched `.embeddable` off stays readable and tells a foreign client so by the entry's absence, never by a refusal. A share path reads the tenant of the
  * link **if the guest gate serves it** ([ShareGuestGate.activeShare]); for any other id — unknown, revoked, expired,
  * blocked, its role switched off — the instance level, which is exactly what an unknown id gets. So the headers are no
  * existence oracle: every id the gate answers `404` gets the same CORS answer as an id no link has, and only a link that

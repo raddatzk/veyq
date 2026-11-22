@@ -34,7 +34,11 @@ instance and tenant layers.
    instance, `+` by a tenant owner as well. The effective state is an **AND** along the path and across both
    levels, so a tenant can only narrow what the operator allows, never widen it.
 3. **The server computes; the client reads.**
-   - Pre-auth `/api/setup` carries the instance level, for what matters before login (`core.remember-device`).
+   - Pre-auth `/api/setup` carries the level of the domain it is asked on, for what matters before login
+     (`core.remember-device`): a tenant's domain gets that tenant's effective set, a host that claims no tenant the
+     instance level. As built, since 2026-11-22 (inbox #1067): it carried the instance level alone, so a tenant that
+     switched `core.public-shares.embeddable` off was still advertised with it to another instance's page (ADR 0121
+     decision 4), which embedded its links; the domain is the one the CSP already follows (ADR 0121 decision 2).
    - After login the server delivers the effective set for the tenant.
    - A client knows only the ids it has UI for. It ignores an unknown id and hides the feature when an id is
      missing. Why an id is missing (an older server, the operator, the tenant) is never the client's question, so

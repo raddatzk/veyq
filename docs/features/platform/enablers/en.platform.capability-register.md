@@ -54,8 +54,9 @@ makes it off, and its emptiness is `isActive`). A tenant only narrows what the i
 effect at the strictest of both levels.
 
 **Two deliveries.**
-1. The pre-auth `GET /api/setup` carries `version: { major, build }` and the **instance** level, for what a client
-   offers before sign-in. It is the same for every caller.
+1. The pre-auth `GET /api/setup` carries `version: { major, build }` and the level of the **domain** it is asked on,
+   for what a client offers before sign-in: a tenant's domain gets that tenant's effective set, a host that claims no
+   tenant the instance level (inbox #1067). It is the same for every caller of one domain.
 2. After sign-in, `GET /api/tenants/{tenantId}/capabilities` carries the **effective** set for the tenant, read by every
    member on entering a space.
 

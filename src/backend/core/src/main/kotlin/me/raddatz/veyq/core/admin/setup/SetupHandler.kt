@@ -17,7 +17,8 @@ data class SetupState(
     val versionMajor: Int,
     val versionBuild: Int,
     val capabilities: List<String>,
-    /** The instance level's requirements, by name (ADR 0088 decision 8); a client reads them with each capability. */
+    /** The requirements in effect for the answer's level, by name (ADR 0088 decision 8); a client reads them with each
+     *  capability. */
     val requirements: Map<String, Int>,
     /** The configured external services' addresses (ADR 0088 decision 7), carried on their entries while active. */
     val services: Map<String, ServiceAddress>,
@@ -65,14 +66,24 @@ class SetupHandler(
     private val versionBuild: Int = config.version().build()
     private val supportedSuites = listOf("v1")
 
-    fun state(): SetupState = SetupState(
+    /**
+     * The status as answered on [tenantId]'s domain, the instance level for a host that claims no tenant (null).
+     *
+     * **The manifest is the host's tenant's, not the instance's alone** (inbox #1067, ADR 0088 decision 3): another
+     * instance's page reads this answer to decide whether a link may be embedded (ADR 0121 decision 4) and the apps to
+     * decide whether a link is served at all (ADR 0150), so a tenant that switched `core.public-shares.embeddable` (or
+     * `core.public-shares`) off must not be advertised with it on its own domain. Read at the instance level, the answer
+     * named the entry on and the page embedded. Still no per-caller state: every caller of one domain reads the same
+     * answer, and a tenant's domain is public, so it tells nothing its links' own answers do not already show.
+     */
+    fun state(tenantId: String?): SetupState = SetupState(
         setupRequired = !store.isSetupComplete(),
         suites = supportedSuites,
         instanceSalt = instanceStore.instanceSalt(),
         versionMajor = versionMajor,
         versionBuild = versionBuild,
-        capabilities = capabilities.active,
-        requirements = capabilities.requirements(null),
+        capabilities = capabilities.active(tenantId),
+        requirements = capabilities.requirements(tenantId),
         services = services.configured(),
     )
 

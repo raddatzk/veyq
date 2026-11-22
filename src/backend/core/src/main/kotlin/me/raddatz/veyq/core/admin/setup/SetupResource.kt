@@ -13,6 +13,7 @@ import me.raddatz.veyq.core.http.httpFailure
 import me.raddatz.veyq.core.identity.normalizeEmail
 import me.raddatz.veyq.core.ratelimit.RateLimit
 import me.raddatz.veyq.core.ratelimit.RateLimitKey
+import me.raddatz.veyq.core.tenant.RequestTenant
 import jakarta.annotation.security.PermitAll
 import jakarta.ws.rs.core.Response
 import java.util.UUID
@@ -28,13 +29,14 @@ import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 @RateLimitExempt(
     reason = "First-run setup status is the client bootstrap read (instance salt, suites, capabilities, " +
         "version) — every client calls it before it can do anything, so throttling it throttles startup. " +
-        "It is a constant, non-enumerable snapshot with no per-caller state. The one endpoint here that " +
+        "It is a non-enumerable snapshot per domain (the domain's tenant's set) with no per-caller state. The one endpoint here that " +
         "writes, createServerOwner, overrides this with key = IP.",
 )
-class SetupResource(private val handler: SetupHandler) : SetupApi {
+class SetupResource(private val handler: SetupHandler, private val tenant: RequestTenant) : SetupApi {
 
+    // The tenant whose domain the request arrived on, never the instance level alone (inbox #1067, [SetupHandler.state]).
     override fun getSetupStatus(): Response {
-        val state = handler.state()
+        val state = handler.state(tenant.resolve()?.id)
         return Response.ok(
             SetupStatus(
                 setupRequired = state.setupRequired,
