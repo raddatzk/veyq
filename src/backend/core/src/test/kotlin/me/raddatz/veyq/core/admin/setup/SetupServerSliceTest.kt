@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.admin.setup
 
+import me.raddatz.veyq.core.account.kitrecord.KitRecordEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchEntity
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsEntity
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
@@ -20,6 +21,7 @@ import jakarta.persistence.PersistenceException
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.MethodOrderer
 import org.junit.jupiter.api.Order
@@ -40,8 +42,9 @@ class SetupServerSliceTest {
         authPublicKey: String = "ZWQyNTUxOS1hdXRoLXB1Yg==",
         kdfParams: String = "AAAAAwAAgAAAAAABAAAAIHNhbHQtZXhhbXBsZS0xNmJ5dGVz",
         kemPublicKey: String = KEM_PUBLIC_KEY,
+        kitRecord: String? = null,
     ) = """
-        {"email":"$email","suiteId":"v1",
+        {"email":"$email","suiteId":"v1",${kitRecord?.let { "\"kitRecord\":\"$it\"," } ?: ""}
          "identityPublicKey":"aWRlbnRpdHktcHVibGljLWtleQ==",
          "wrappedIdentityPrivateKey":"d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==",
          "authPublicKey":"$authPublicKey",
@@ -104,11 +107,14 @@ class SetupServerSliceTest {
         QuarkusTransaction.requiringNew().run { OperatorDetailsEntity.deleteAll() }
         val switchesBefore = QuarkusTransaction.requiringNew().call { CapabilitySwitchEntity.listAll().map { it.id }.toSet() }
         given().`when`().get("/api/moderation/key").then().statusCode(404)
-        val userId: String = givenAdminChannel().contentType(ContentType.JSON).body(ownerBody())
+        val userId: String = givenAdminChannel().contentType(ContentType.JSON).body(ownerBody(kitRecord = KIT_RECORD))
             .`when`().post("/api/setup/owner")
             .then().statusCode(201)
             .body("userId", notNullValue())
             .extract().path("userId")
+        // The layout of the kit setup printed, sealed under the new Master Key, is born with the account (ADR 0157
+        // decision 4); its absence is [aSetupWithoutAKitRecordStoresNone].
+        assertEquals(KIT_RECORD, kitRecordOf(userId))
         // Rotation, change-password and recovery all verify against this key (ADR 0060 Decision 2); an owner
         // born without it could do none of the three.
         assertEquals(
@@ -292,6 +298,25 @@ class SetupServerSliceTest {
         assertEquals(0L, QuarkusTransaction.requiringNew().call { VeyqUser.count("email", email) }, "the loser wrote nothing")
     }
 
+    /**
+     * A setup client that predates the kit record (ADR 0157 decision 4: the field is optional) still births its owner,
+     * and nothing is stored for it — the account reads as having no record, layout 1. Leaves the instance set up.
+     */
+    @Test
+    @Order(19)
+    fun aSetupWithoutAKitRecordStoresNone() {
+        clearSetupRow()
+        val userId: String = givenAdminChannel().contentType(ContentType.JSON)
+            .body(ownerBody(email = "no-kit-${UUID.randomUUID()}@example.com"))
+            .`when`().post("/api/setup/owner")
+            .then().statusCode(201)
+            .extract().path("userId")
+        assertNull(kitRecordOf(userId))
+    }
+
+    private fun kitRecordOf(userId: String): String? =
+        QuarkusTransaction.requiringNew().call<String?> { KitRecordEntity.findById(userId)?.sealedBlob }
+
     private fun registration(email: String) = OwnerRegistration(
         email = email,
         suiteId = "v1",
@@ -319,5 +344,7 @@ class SetupServerSliceTest {
         /** A public bundle of the right sizes (1216 + 32 bytes): the server stores and serves it, never uses it. */
         val KEM_PUBLIC_KEY: String = java.util.Base64.getEncoder().encodeToString(ByteArray(1216) { (it % 251).toByte() })
         val SIGN_PUBLIC_KEY: String = java.util.Base64.getEncoder().encodeToString(ByteArray(32) { 7 })
+        /** A sealed kit record — a stand-in, the server opens none. */
+        const val KIT_RECORD = "c2V0dXAta2l0LXJlY29yZA=="
     }
 }

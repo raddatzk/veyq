@@ -68,6 +68,7 @@ class AccountRotationResource(
             secretKeyProofSignature = r.secretKeyProofSignature,
             pins = pins,
             register = r.deviceRegister.let { ResealedDocument(it.blob, it.revision.validated()) },
+            kitRecord = r.kitRecord,
             stepIdentitySignature = r.keyChainStep.identitySignature,
             stepProofSignature = r.keyChainStep.proofSignature,
             stageId = r.stageId.toString(),

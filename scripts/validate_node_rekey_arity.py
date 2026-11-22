@@ -68,6 +68,7 @@ EXCLUSIONS = {
     "MasterKeyWrapEntity.wrapped_key": "an account's Master Key under an unlock KEK",
     "VeyqUser.wrapped_identity_private_key": "the identity under the Master Key",
     "DeviceRegisterEntity.sealed_blob": "the device register under the Master Key",
+    "KitRecordEntity.sealed_blob": "the kit record under the Master Key (ADR 0157 decision 3)",
     "IdentityPinsEntity.sealed_blob": "the identity-pin head under the Master Key",
     "IdentityPinEntryEntity.sealed_entry": "an identity pin under the Master Key",
     "TenantProfileEntity.sealed_name": "a member's real name under a value key of its own, which K_tenant, the tenant's "

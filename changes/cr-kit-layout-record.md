@@ -168,3 +168,9 @@ this file deleted.
   to `is_opaque` and loops `validate_rotation_shape.py`'s body-bound resolver; a refine that adds a shared scalar greps
   `is_opaque` and every `$ref`-resolving guard first, and one that adds a field to the rotation request reads
   `validate_rotation_shape.py` (this CR had it optional against ADR 0060 decision 1).
+- Phase 2: a new table of sealed ciphertext also meets `validate_node_rekey_arity.py`, which the CR did not name — every
+  column holding ciphertext is either rewritten by a node re-key or a named EXCLUSION with its key (the kit record: under
+  the Master Key). A refine that adds a sealed column greps that guard's EXCLUSIONS beside the erasure guard. The PUT
+  takes the account lock (`AccountStore.lock`) so the find-then-insert upsert cannot race a second first write, a
+  rotation or an erasure to the key — the device register instead lets a racing first insert fail on the key. Renaming
+  a test named in `docs/coverage/` turns `validate_coverage.py` red: grep the old name there before renaming.

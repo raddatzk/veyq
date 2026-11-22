@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.admin.tenant
 
+import me.raddatz.veyq.core.account.kitrecord.KitRecordStore
 import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.spaces.scope.ScopeSuccession
@@ -170,6 +171,7 @@ class TenantAcceptHandler(
     private val accounts: AccountStore,
     private val profiles: TenantProfileStore,
     private val access: ScopeAccess,
+    private val kitRecords: KitRecordStore,
 ) {
     private val log = Logger.getLogger(TenantAcceptHandler::class.java)
 
@@ -323,17 +325,17 @@ class TenantAcceptHandler(
      *  Role-branched like [accept]: OWNER activates (grant required), MEMBER joins with its self-grant. */
     fun registerAndAccept(
         bootstrapSecret: String, userId: String, account: NewAccount, birth: OwnerBirth?, join: MemberJoin?, username: String,
-        name: SealedValue?, avatar: SealedValue?, profileEpoch: Int?, email: String? = null,
+        name: SealedValue?, avatar: SealedValue?, profileEpoch: Int?, email: String? = null, kitRecord: String? = null,
     ): RegisterAcceptOutcome {
         if (profileSealUnstated(join, name, avatar, profileEpoch)) return RegisterAcceptOutcome.MissingGrant
         return createOrConflict(conflict = { if (handleLost(userId, bootstrapSecret, username)) RegisterAcceptOutcome.UsernameTaken else null }) {
-            registerAndAcceptOnce(bootstrapSecret, userId, account, birth, join, username, name, avatar, profileEpoch, email)
+            registerAndAcceptOnce(bootstrapSecret, userId, account, birth, join, username, name, avatar, profileEpoch, email, kitRecord)
         }
     }
 
     private fun registerAndAcceptOnce(
         bootstrapSecret: String, userId: String, account: NewAccount, birth: OwnerBirth?, join: MemberJoin?, username: String,
-        name: SealedValue?, avatar: SealedValue?, profileEpoch: Int?, email: String?,
+        name: SealedValue?, avatar: SealedValue?, profileEpoch: Int?, email: String?, kitRecord: String?,
     ): RegisterAcceptOutcome {
         val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret)) ?: return RegisterAcceptOutcome.NotFound
         if (!isLive(invite)) return RegisterAcceptOutcome.NoLongerValid
@@ -393,6 +395,9 @@ class TenantAcceptHandler(
             secretKeyProofPublicKey = account.secretKeyProofPublicKey,
             wraps = account.wraps,
         )
+        // The layout of the kit this join printed, sealed under the new Master Key (ADR 0157 decision 4): born with the
+        // account, or nothing when the client sent none.
+        kitRecord?.let { kitRecords.replace(userId, it) }
         if (member) {
             store.joinAsMember(tenant.id, userId, join!!.selfGrant, join.epoch)
             // A mailed invite's redeemed token is the mailbox proof (ADR 0074 Decision 2). A link invite's is not: the

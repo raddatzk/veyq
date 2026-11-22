@@ -96,6 +96,7 @@ data class Publish(
          "secretKeyProofSignature":"$secretKeyProofSignature",
          "identityPins":{"revision":$pinsRevision,"head":"${TestRotation.NEW_PINS}","put":[{"pinId":"${TestRotation.NEW_PIN_ID}","entry":"${TestRotation.NEW_ENTRY}"}],"remove":[],"replaceAll":$pinsReplaceAll},
          "deviceRegister":{"blob":"${TestRotation.NEW_REGISTER}","revision":$registerRevision},
+         "kitRecord":"${TestRotation.NEW_KIT_RECORD}",
          "keyChainStep":{"identitySignature":"$stepIdentitySignature","proofSignature":"$stepProofSignature"},
          "stageId":"$stageId","stagedGrantsDigest":"$stagedGrantsDigest",
          "unreadableScopeIds":[${unreadableScopeIds.joinToString(",") { "\"$it\"" }}],
@@ -116,6 +117,7 @@ fun Publish.toRequest(mapper: ObjectMapper): RotationRequest {
         secretKeyProofSignature = r.secretKeyProofSignature,
         pins = r.identityPins.toPinWrite(),
         register = ResealedDocument(r.deviceRegister.blob, r.deviceRegister.revision!!),
+        kitRecord = r.kitRecord,
         stepIdentitySignature = r.keyChainStep.identitySignature,
         stepProofSignature = r.keyChainStep.proofSignature,
         stageId = r.stageId.toString(),
@@ -244,6 +246,8 @@ class TestRotation(
         /** A sealed pin is exactly 221 bytes, 296 base64 characters (`IdentityPinEntry.entry`); any other length is a 400. */
         val NEW_ENTRY: String = Base64.getEncoder().encodeToString(ByteArray(221) { 0x6e })
         const val NEW_REGISTER = "bmV3LXJlZ2lzdGVy"
+        /** The kit record sealed under the new Master Key (ADR 0157 decision 4) — a stand-in, the server opens none. */
+        const val NEW_KIT_RECORD = "bmV3LWtpdC1yZWNvcmQ="
         const val SELF_GRANT = "c2VsZi1ncmFudC10by10aGUtbmV3LWlkZW50aXR5"
     }
 }

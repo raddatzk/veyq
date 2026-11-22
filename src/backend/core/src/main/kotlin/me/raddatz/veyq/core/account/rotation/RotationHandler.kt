@@ -4,6 +4,7 @@ import me.raddatz.veyq.core.account.deviceregister.DeviceRegisterStore
 import me.raddatz.veyq.core.account.email.EmailChangeStore
 import me.raddatz.veyq.core.account.identitypins.IdentityPinsStore
 import me.raddatz.veyq.core.account.identitypins.PinWrite
+import me.raddatz.veyq.core.account.kitrecord.KitRecordStore
 import me.raddatz.veyq.core.account.login.SessionService
 import me.raddatz.veyq.core.account.deviceregister.PutResult as RegisterPut
 import me.raddatz.veyq.core.account.identitypins.PutResult as PinsPut
@@ -158,6 +159,8 @@ data class RotationRequest(
     val secretKeyProofSignature: String,
     val pins: PinWrite,
     val register: ResealedDocument,
+    /** The kit record sealed under the new Master Key (ADR 0157 decision 4): the layout of the kit the ceremony printed. */
+    val kitRecord: String,
     val stepIdentitySignature: String,
     val stepProofSignature: String,
     val stageId: String,
@@ -217,6 +220,7 @@ class RotationHandler(
     private val sessions: SessionService,
     private val identityPins: IdentityPinsStore,
     private val deviceRegister: DeviceRegisterStore,
+    private val kitRecords: KitRecordStore,
     private val emailChanges: EmailChangeStore,
     private val accounts: AccountStore,
     private val moderation: ModerationHandler,
@@ -394,14 +398,14 @@ class RotationHandler(
      *     server rebuilds (`403 secret_key_proof_failed`); then **the attestation** under the stored auth key
      *     (`403 attestation_failed`).
      * Then the writes: the account rewrite; the pin store and device register (a stale revision rolls everything back,
-     * `409 stale_revision`); the live pairing channels superseded; the moderation hook, which writes the staged
-     * moderation-key epochs in place of the grants it deletes and refuses (`409 rotation_plan_changed`, rolled back) a
-     * holder whose every live epoch is not staged ([ModerationHandler.onIdentityRotated]); **the stage applied** in one
-     * ascending pass under each scope's row lock ([applyStage], whose set check can still roll everything back, `409
-     * rotation_plan_changed`) and deleted; the chain step appended; every open address change voided; the declines of
-     * every job targeting the account cleared; and the other sessions cut **last** — the one step that changes what the
-     * caller may still do. `presentedAccessToken` spares the family this request arrived on, resolved by
-     * `SessionService.revokeOtherFamilies`, never by the request.
+     * `409 stale_revision`); the kit record, replaced (ADR 0157 decision 4); the live pairing channels superseded; the
+     * moderation hook, which writes the staged moderation-key epochs in place of the grants it deletes and refuses
+     * (`409 rotation_plan_changed`, rolled back) a holder whose every live epoch is not staged
+     * ([ModerationHandler.onIdentityRotated]); **the stage applied** in one ascending pass under each scope's row lock
+     * ([applyStage], whose set check can still roll everything back, `409 rotation_plan_changed`) and deleted; the chain
+     * step appended; every open address change voided; the declines of every job targeting the account cleared; and the
+     * other sessions cut **last** — the one step that changes what the caller may still do. `presentedAccessToken`
+     * spares the family this request arrived on, resolved by `SessionService.revokeOtherFamilies`, never by the request.
      */
     fun rotate(userId: String, presentedAccessToken: String?, r: RotationRequest): RotationOutcome = try {
         QuarkusTransaction.requiringNew().call<RotationOutcome> { applyAll(userId, presentedAccessToken, r) }
@@ -478,6 +482,9 @@ class RotationHandler(
         if (pinsStale || deviceRegister.put(userId, r.register.blob, r.register.expectedRevision) is RegisterPut.Stale) {
             throw Refused(RotationOutcome.TrustStateStale)
         }
+        // The kit record the old Master Key sealed opens no more: replaced by the new key's, which names the layout of the
+        // kit this ceremony printed (ADR 0157 decision 4). Last writer wins, so it has no revision to go stale.
+        kitRecords.replace(userId, r.kitRecord)
         // A live channel's envelope carries the OLD Master Key and a live delegated session.
         pairings.supersede(pairings.liveChannels(userId).map { it.id })
         // A moderator's grants of the instance moderation key were sealed to the identity this replaces (ADR 0099 § 4):

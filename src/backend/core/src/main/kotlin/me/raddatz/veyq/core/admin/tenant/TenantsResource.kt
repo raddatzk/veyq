@@ -436,7 +436,7 @@ class TenantsResource(
             with(r) { OwnerBirth.of(grant, grantSignature, recipientIdentityDigest) },
             with(r) { selfGrant.join(inviteProof, SealedValue.of(sealedJoinRecord, wrappedJoinRecordValueKey), signerIdentityDigest) },
             r.username, SealedValue.of(r.sealedName, r.wrappedNameValueKey), SealedValue.of(r.sealedAvatar, r.wrappedAvatarValueKey),
-            r.epoch, r.email,
+            r.epoch, r.email, r.kitRecord,
         )) {
             is RegisterAcceptOutcome.Activated -> Response.status(Response.Status.CREATED)
                 .entity(TenantActivatedWithUser(UUID.fromString(outcome.tenantId), TenantStatus.ACTIVE, UUID.fromString(outcome.userId)))

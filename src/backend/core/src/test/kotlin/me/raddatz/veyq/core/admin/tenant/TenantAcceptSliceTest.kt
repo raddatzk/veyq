@@ -1,5 +1,6 @@
 package me.raddatz.veyq.core.admin.tenant
 
+import me.raddatz.veyq.core.account.kitrecord.KitRecordEntity
 import me.raddatz.veyq.core.membership.TestGrants
 import me.raddatz.veyq.core.crypto.Tokens
 import me.raddatz.veyq.core.identity.TenantProfileEntity
@@ -17,6 +18,7 @@ import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -54,6 +56,28 @@ class TenantAcceptSliceTest {
                 VeyqUser.find("email", "newowner@example.com").firstResult()?.secretKeyProofPublicKey
             },
         )
+    }
+
+    /**
+     * ADR 0157 decision 4: the join birth stores the kit record it carries — the layout of the kit the join printed,
+     * sealed under the new Master Key — with the account, in the same step. A client that predates the record sends none
+     * (the field is optional) and still births; nothing is stored, and the account reads as having no record.
+     */
+    @Test
+    fun aJoinBirthStoresTheKitRecordItCarriesAndOneWithoutStoresNone() {
+        val withRecord = "reg-kit-secret-1"
+        seedPendingTenant("reg-kit-1.example.com", "kitowner1@example.com", withRecord)
+        val born: String = given().contentType(ContentType.JSON).body(registerBody(withRecord, kitRecord = KIT_RECORD))
+            .`when`().post("/api/tenants/accept/register")
+            .then().statusCode(201).extract().path("userId")
+        assertEquals(KIT_RECORD, kitRecordOf(born))
+
+        val without = "reg-kit-secret-2"
+        seedPendingTenant("reg-kit-2.example.com", "kitowner2@example.com", without)
+        val bornWithout: String = given().contentType(ContentType.JSON).body(registerBody(without))
+            .`when`().post("/api/tenants/accept/register")
+            .then().statusCode(201).extract().path("userId")
+        assertNull(kitRecordOf(bornWithout))
     }
 
     @Test
@@ -220,6 +244,9 @@ class TenantAcceptSliceTest {
             store.createPendingTenant("Fam", domain, ownerEmail, Tokens.hash(secret), Instant.now().plus(ttl, ChronoUnit.DAYS)).first
         }
 
+    private fun kitRecordOf(userId: String): String? =
+        QuarkusTransaction.requiringNew().call<String?> { KitRecordEntity.findById(userId)?.sealedBlob }
+
     private fun ownerMembershipCount(tenantId: String): Long =
         QuarkusTransaction.requiringNew().call {
             MembershipEntity.count("tenantId = ?1 and role = ?2", tenantId, MembershipEntity.OWNER)
@@ -250,8 +277,8 @@ class TenantAcceptSliceTest {
         assertEquals(1, answers.count { it == (410 to "invite_no_longer_valid") }, "$round: the loser answers as a replay, got $answers")
     }
 
-    private fun registerBody(secret: String) = """
-        {"bootstrapSecret":"$secret","userId":"${UUID.randomUUID()}","username":"newowner",
+    private fun registerBody(secret: String, kitRecord: String? = null) = """
+        {"bootstrapSecret":"$secret","userId":"${UUID.randomUUID()}","username":"newowner",${kitRecord?.let { "\"kitRecord\":\"$it\"," } ?: ""}
          "account":{"suiteId":"v1",
            "identityPublicKey":"aWRlbnRpdHktcHVibGljLWtleQ==",
            "wrappedIdentityPrivateKey":"d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==",
@@ -264,5 +291,8 @@ class TenantAcceptSliceTest {
     private companion object {
         /** One round of a race can pass by luck; each round spends a fresh secret. */
         const val ROUNDS = 5
+
+        /** A sealed kit record — a stand-in, the server opens none. */
+        const val KIT_RECORD = "am9pbi1raXQtcmVjb3Jk"
     }
 }

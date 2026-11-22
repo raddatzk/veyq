@@ -33,6 +33,8 @@ data class OwnerRegistration(
     val secretKeyProofPublicKey: String,
     val wraps: List<WrapInput>,
     val moderationEpoch: ModerationEpochOne,
+    /** The kit record sealed under the new Master Key (ADR 0157 decision 4), or null: a client that predates it births without. */
+    val kitRecord: String? = null,
 )
 
 /** Epoch 1 of the instance moderation key, minted by the setup client and sealed to this owner (ADR 0099 § 3). */
