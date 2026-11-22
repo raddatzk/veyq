@@ -61,10 +61,11 @@ class ShellModelTest {
         shell.load(openLastUsed = false)
         shell.switchSpace(s.id)
         val home = kotlin.test.assertNotNull(shell.shell)
-        // a space's level (ADR 0154 decision 2, owner 2026-11-20): New in its head, the trash before the view switch
+        // a space's level (ADR 0154 decision 2, owner 2026-11-20): New in its head, Select (its folder moves and is deleted),
+        // then the trash before the view switch
         val level = kotlin.test.assertNotNull(shell.levelPlan(home))
         assertEquals(shell.createsHere(isHome = true, bookmarks = true), level.creates)
-        assertEquals(listOf(LevelTool.TRASH, LevelTool.VIEW), level.tools)
+        assertEquals(listOf(LevelTool.SELECT, LevelTool.TRASH, LevelTool.VIEW), level.tools)
         // the drawer's New comes first, where it offers anything: what the space's top takes
         assertEquals(DrawerSection.NEW, shell.drawerSections().first())
         assertEquals(AppKinds.createsWhere(isHome = false, bookmarks = true), shell.drawerCreates())
@@ -76,6 +77,54 @@ class ShellModelTest {
         assertEquals(HeaderAction.DELETE, row.last.last())
         // a kind this build has no page for offers nothing
         assertTrue(shell.rowPlan(NodeAt(s.id, "x", "UNKNOWN", "x")).isEmpty)
+    }
+
+    @Test
+    fun a_levels_selection_is_the_levels_kept_on_what_it_holds_and_cleared_by_another_place() = runTest {
+        val t = PlayedTenant().also { played += it }
+        val s = t.scope("s1")
+        val alpha = t.node(s, "a", kind = NodeRef.FOLDER, name = "Alpha")
+        t.node(s, "b", kind = NodeRef.FOLDER, name = "Beta")
+        // the folder entered holds a row of its own, so its level offers Select too: only the other place clears it
+        t.node(s, "c", kind = NodeRef.FOLDER, parent = alpha, name = "Gamma")
+        t.remember()
+        val a = t.resume()
+        val shell = ShellModel(a.open(a.tenants.first()), Hidden({}, emptySet()), RecentUses({}, emptyList())) { 0L }
+        shell.load(openLastUsed = false)
+        shell.switchSpace(s.id)
+        assertNull(shell.current?.selection, "no Select mode before Select")
+        shell.selectToggle(t.id("a"))
+        assertNull(shell.current?.selection, "a turn outside Select mode selects nothing")
+        shell.selectStart()
+        val on = kotlin.test.assertNotNull(shell.current?.selection)
+        assertEquals(emptySet(), on.selected)
+        assertEquals(me.raddatz.veyq.mobile.words.Notice(Msg.SELECT_COUNT, 0), on.count)
+        // the bar: what the level's rows allow, in the plan's order, nothing enabled before a row is selected
+        assertEquals(listOf(SelectionAction.MOVE, SelectionAction.COPY, SelectionAction.DELETE), on.entries.map { it.action }.filter { it != SelectionAction.REPORT })
+        assertTrue(on.entries.none { it.enabled })
+        shell.selectToggle(t.id("a"))
+        assertEquals(setOf(t.id("a")), shell.current?.selection?.selected)
+        assertTrue(shell.current!!.selection!!.entries.all { it.enabled })
+        assertEquals(listOf(NodeAt(s.id, t.id("a"), NodeRef.FOLDER, "Alpha")), shell.selected(SelectionAction.DELETE))
+        shell.selectAll()
+        assertEquals(setOf(t.id("a"), t.id("b")), shell.current?.selection?.selected)
+        assertEquals(me.raddatz.veyq.mobile.words.Notice(Msg.SELECT_COUNT, 2), shell.current?.selection?.count)
+        shell.selectNone()
+        assertEquals(emptySet(), shell.current?.selection?.selected)
+        shell.selectAll()
+        // a read keeps it; another place (into a folder) clears it
+        shell.refresh()
+        assertEquals(2, shell.current?.selection?.selected?.size)
+        shell.enter(FolderRef(t.id("a"), "Alpha"))
+        assertNull(shell.current?.selection, "another place clears the selection")
+        shell.goBack()
+        shell.selectStart()
+        shell.selectAll()
+        shell.selectCancel()
+        assertNull(shell.current?.selection)
+        // the selection's actions reach only what is selected, and nothing without a selection
+        assertNull(shell.selectionTrash {})
+        assertNull(shell.selectionMoveSheet(copying = false, deletedName = "x") {})
     }
 
     @Test

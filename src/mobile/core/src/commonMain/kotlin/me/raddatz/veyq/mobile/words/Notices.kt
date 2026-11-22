@@ -73,13 +73,13 @@ enum class NoticeKind {
         /** The words that say something went through (the web's `toast.success`), each reviewed. */
         private val SAID_WORDS = setOf(
             Msg.COPY_DONE, Msg.MOVE_MOVED, Msg.DOWNLOAD_DONE, Msg.DOWNLOAD_CANCELLED, Msg.IMPORT_IMPORTED,
-            Msg.IMPORT_IMPORTED_LEFT_OUT, Msg.OFFLINE_SENT,
+            Msg.IMPORT_IMPORTED_LEFT_OUT, Msg.OFFLINE_SENT, Msg.MOVE_MANY_MOVED, Msg.COPY_MANY_COPIED,
             // a platform's own success, said as a notice since every app maps the kind (ADR 0154 decision 4)
             Msg.LINK_KEPT, Msg.PROFILE_SAVED, Msg.RECEIPTS_SAVED_GALLERY, Msg.RECEIPTS_SAVED,
         )
 
         /** The words that offer an undo (the web's `showUndo`). */
-        private val UNDO_WORDS = setOf(Msg.TRASH_MOVED, Msg.MEMORY_MOVED_TO_TRASH)
+        private val UNDO_WORDS = setOf(Msg.TRASH_MOVED, Msg.MEMORY_MOVED_TO_TRASH, Msg.DELETE_MANY_MOVED)
 
         /** The kind [msg] lives as unless its site says otherwise: a refusal or a failure, which every other word is. */
         fun of(msg: Msg): NoticeKind = when (msg) {

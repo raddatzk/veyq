@@ -57,7 +57,9 @@ object NodeMove {
     private fun facts(tree: List<NodeRef>): TreeFacts =
         TreeFacts(tree.map { TreeFacts.Node(it.nodeId, it.parentId, it.kind, it.name, it.createdAt, it.identity) })
 
-    private fun moved(n: NodeRef): List<TreeFacts.Node> = listOf(TreeFacts.Node(n.nodeId, n.parentId, n.kind, n.name, n.createdAt, n.identity))
+    private fun fact(n: NodeRef): TreeFacts.Node = TreeFacts.Node(n.nodeId, n.parentId, n.kind, n.name, n.createdAt, n.identity)
+
+    private fun moved(n: NodeRef): List<TreeFacts.Node> = listOf(fact(n))
 
     private fun block(b: String): Block = when (b) {
         MovePlan.SELF -> Block.ITSELF
@@ -90,6 +92,29 @@ object NodeMove {
      *  may go where its original is (it takes the next free name there) — the platform's [MovePlan.hereBlock]. */
     fun hereBlock(tree: List<NodeRef>, moved: NodeRef, at: String?, allows: PlacementAllows, copy: Boolean = false): Block? =
         MovePlan.hereBlock(allows::allows, facts(tree), moved(moved), guest = false, at = at, copy = copy)?.let(::block)
+
+    /** Where the browser opens for several [moved] nodes: the place they are all in, else the scope root ([MovePlan.start]). */
+    fun start(tree: List<NodeRef>, moved: List<NodeRef>): String? = MovePlan.start(facts(tree), null, moved.map(::fact))
+
+    /** The places listed at [at] for several [moved] nodes: a node whose kind takes every one of them ([MovePlan.places]). */
+    fun places(tree: List<NodeRef>, moved: List<NodeRef>, at: String?, allows: PlacementAllows): List<Place> {
+        val byId = tree.associateBy { it.nodeId }
+        return MovePlan.places(allows::allows, facts(tree), moved.map(::fact), guest = false, at = at)
+            .map { Place(byId.getValue(it.node.id), it.blocked?.let(::block)) }
+    }
+
+    /** Why several nodes cannot go to a place, and the one that blocks it ([node] null: every one is there already). */
+    class BlockOf(val block: Block, val node: NodeRef?)
+
+    /**
+     * Why several [moved] nodes cannot be moved — or, with [copy], copied — to [at], naming the one that blocks it; a node
+     * already there blocks nothing (it is left out when sent) unless all are ([MovePlan.hereBlockOf]).
+     */
+    fun hereBlockOf(tree: List<NodeRef>, moved: List<NodeRef>, at: String?, allows: PlacementAllows, copy: Boolean = false): BlockOf? {
+        val byId = moved.associateBy { it.nodeId }
+        return MovePlan.hereBlockOf(allows::allows, facts(tree), moved.map(::fact), guest = false, at = at, copy = copy)
+            ?.let { BlockOf(block(it.block), it.node?.let { n -> byId[n.id] }) }
+    }
 
     /** Whether [id] (null: the scope root) is a guest's identity folder or lies in one. */
     fun inIdentityFolder(tree: List<NodeRef>, id: String?): Boolean = facts(tree).inIdentityFolder(id)

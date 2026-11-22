@@ -785,6 +785,36 @@ internal sealed class Call {
     @Serializable @SerialName("Move.Undo") data class MoveUndo(val move: Long) : Call()
 
     /**
+     * A level's Select mode ([LevelTool.SELECT], inbox #1049): on (`ShellModel.selectStart`), off (*Cancel*,
+     * `selectCancel`), a row turned (`selectToggle`), *All* and *None* — each [Answer.Done], the selection then shown in
+     * [ShellShown.selection].
+     */
+    @Serializable @SerialName("Select.Start") data object SelectStart : Call()
+    @Serializable @SerialName("Select.Cancel") data object SelectCancel : Call()
+    @Serializable @SerialName("Select.Toggle") data class SelectToggle(val nodeId: String) : Call()
+    @Serializable @SerialName("Select.All") data object SelectAll : Call()
+    @Serializable @SerialName("Select.None") data object SelectNone : Call()
+
+    /**
+     * The selection's *Move to…* ([copy] false) or *Copy to…*: one move sheet over every selected row it reaches
+     * (`ShellModel.selectionMoveSheet`), answered as [MoveOpen] is ([Answer.MoveOpened], then the `Move.*` calls).
+     */
+    @Serializable @SerialName("Select.Move") data class SelectMove(val copy: Boolean, val deletedName: String) : Call()
+
+    /** The selection's *Report*: one report sheet (`ShellModel.selectionReportSheet`), answered as [ReportOpen] is. */
+    @Serializable @SerialName("Select.Report") data object SelectReport : Call()
+
+    /**
+     * The selection's *Delete* (`ShellModel.selectionTrash`): its one question ([Answer.SelectionDelete]); [SelectDeleteRun]
+     * sends it ([Answer.Trashed]: what it says, whether its Undo is offered), [SelectDeleteUndo] restores what went
+     * ([Answer.Said]), [SelectDeleteClose] lets it go once the Undo is over (or the question was declined).
+     */
+    @Serializable @SerialName("Select.Delete") data object SelectDelete : Call()
+    @Serializable @SerialName("Select.DeleteRun") data class SelectDeleteRun(val delete: Long) : Call()
+    @Serializable @SerialName("Select.DeleteUndo") data class SelectDeleteUndo(val delete: Long) : Call()
+    @Serializable @SerialName("Select.DeleteClose") data class SelectDeleteClose(val delete: Long) : Call()
+
+    /**
      * A new folder where the shell is (`ShellModel.createFolderHere`), or at the shown space's top where [top] (the drawer's
      * New, `ShellModel.createFolderAtTop`): [Answer.Named], the dialog's outcome (ADR 0154 decision 1).
      */
@@ -911,6 +941,9 @@ internal sealed class Call {
 
     /** Sends the report once (`send`): [Answer.Said] with why not, or none (the receipt is [ReportShown.reference]). */
     @Serializable @SerialName("Report.Send") data class ReportSend(val report: Long) : Call()
+
+    /** A selection above the cap: the folder holding it reported instead (`useEnclosing`, [ReportShown.offersEnclosing]). */
+    @Serializable @SerialName("Report.Enclosing") data class ReportEnclosing(val report: Long) : Call()
 
     /**
      * A QR scan (core's `QrScan`, the QR CR's D5) reading codes as [kind] says, answered with its id
@@ -1935,6 +1968,9 @@ internal sealed class Answer {
     /** A trash: what it says, and whether its undo is offered ([HeaderShown.undo] says when the offer ended). */
     @Serializable @SerialName("Trashed") data class Trashed(val notice: Notice, val undoable: Boolean) : Answer()
 
+    /** A selection's delete held as [delete]: its question's [title] and [question] (`SelectionTrash`), asked before it runs. */
+    @Serializable @SerialName("SelectionDelete") data class SelectionDelete(val delete: Long, val title: Notice, val question: Notice) : Answer()
+
     /**
      * A move or copy sent (or asked first): what it says once done ([done]; the dialog closes), whether its undo is offered
      * now, whether the guest folder's confirm is asked, and why it did not go through ([problem]) — read as the call
@@ -2202,6 +2238,9 @@ internal sealed class Answer {
         /** An upload call into a target the core does not offer (`ShellModel.takesUpload`, ADR 0154 decision 1): its word is `drop_not_here`. */
         DROP_NOT_HERE,
 
+        /** A selection's action that reaches no selected row (`ShellModel.selected`), or a selection's delete the bridge does not hold. */
+        NOTHING_SELECTED, NO_SUCH_DELETE,
+
         /** An import: none open by that id (ADR 0152). */
         NO_SUCH_IMPORT,
 
@@ -2300,6 +2339,9 @@ internal sealed class Watched {
 
     /** A move or copy sheet opened by [Call.MoveOpen]. */
     @Serializable @SerialName("Move") data class Move(val move: Long) : Watched()
+
+    /** A level selection's delete held by [Call.SelectDelete]: its Undo's offer, which the core ends after its window. */
+    @Serializable @SerialName("SelectionDelete") data class SelectionDelete(val delete: Long) : Watched()
 
     /** A share sheet opened by [Call.ShareOpen]. */
     @Serializable @SerialName("Share") data class Share(val share: Long) : Watched()
@@ -2450,6 +2492,9 @@ internal sealed class Update {
 
     /** A move or copy sheet; null once it was closed. */
     @Serializable @SerialName("Move") data class Move(val move: Long, val shown: MoveShown?) : Update()
+
+    /** A selection's delete: what its Undo says while the core offers it; null once the offer ended (or it was closed). */
+    @Serializable @SerialName("SelectionDelete") data class SelectionDelete(val delete: Long, val undo: Notice?) : Update()
 
     /** A share sheet; null once it was closed. */
     @Serializable @SerialName("Share") data class Share(val share: Long, val shown: ShareShown?) : Update()
@@ -3715,6 +3760,13 @@ internal class ReportShown(
     val privacyUrl: String,
     /** Whether the sheet offers "only its name" beside the whole ([whole]'s switch): a node's does; a track's, an ITEM, does not (`ReportSheet.offersName`, ADR 0142 decision 11). */
     val offersName: Boolean = true,
+    /** "You are reporting n items." (`ReportSheet.State.items`). */
+    val items: Notice? = null,
+    /** Why nothing can be sent with this many (a selection above the cap), or null. */
+    val tooMany: Notice? = null,
+    /** Whether the folder holding them is offered instead ([Call.ReportEnclosing]), with its words. */
+    val offersEnclosing: Boolean = false,
+    @Serializable(with = MsgKey::class) val enclosingWord: Msg = Msg.REPORT_ENCLOSING,
 ) {
     /** [receivedAt] as the host shows it (ADR 0154 decision 5). */
     val receivedText: me.raddatz.veyq.mobile.words.ShownText? = receivedAt?.let { me.raddatz.veyq.mobile.words.ShownText.moment(it) }
@@ -3838,7 +3890,7 @@ internal class MoveShown(
     val trail: List<MoveCrumb>,
     val places: List<MovePlace>,
     val empty: Notice?,
-    @Serializable(with = MsgKey::class) val here: Msg?,
+    val here: Notice?,
     val problem: Notice?,
     val noRoom: Notice?,
     val losses: List<Notice>,
@@ -4098,7 +4150,24 @@ internal class ShellShown(
     val level: ShownLevel? = null,
     /** What the drawer's New offers (`ShellModel.drawerCreates`): its entry is [DrawerSection.NEW] in [drawerSections]. */
     val drawerCreates: List<ShownCreate> = emptyList(),
+    /**
+     * The shown level's selection while its Select mode is on (`ShellModel.State.selection`, inbox #1049): the selected ids
+     * (each row and tile drawn checked, a tap turning it, [Call.SelectToggle]), the count's words and the bar's actions, each
+     * drawn whole and in order; null while the mode is off.
+     */
+    val selection: ShownSelection? = null,
 ) {
+    /** A level's selection as the bar draws it: [selected], [count], then *All*, *None*, the [actions] and *Cancel*. */
+    @Serializable class ShownSelection(val selected: List<String>, val count: Notice, val actions: List<ShownSelectionAction>)
+
+    /** One action of the selection's bar: its words, whether some selected row allows it, and what it cannot reach. */
+    @Serializable class ShownSelectionAction(
+        val id: me.raddatz.veyq.mobile.navigation.SelectionAction,
+        @Serializable(with = MsgKey::class) val word: Msg,
+        val enabled: Boolean,
+        val cannot: Notice?,
+    )
+
     /** A level's plan: New's entries with their words, then the tools row's (`LevelPlan`). */
     @Serializable class ShownLevel(val creates: List<ShownCreate>, val tools: List<me.raddatz.veyq.mobile.navigation.LevelTool>)
 

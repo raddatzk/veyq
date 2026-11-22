@@ -26,6 +26,10 @@ import me.raddatz.veyq.mobile.words.Notices
  * - the privacy notice's passage on that contact ([privacyUrl], GDPR Art. 13), built here from the tenant's origin;
  * - one send at a time, the form held while it runs; then the receipt ([State.sent]) or why not ([State.problem]).
  *
+ * Several [nodes] (a level's selection, the web's `reportNodes`) are one report of each whole: the sheet says how many
+ * ([items]), offers no name-only choice, and above [NodeReport.MAX_ITEMS] sends nothing but offers the folder that holds
+ * them instead ([tooMany], [useEnclosing]), as the web's dialog does.
+ *
  * Each app draws [state] (or [watch]); a sent report's sheet takes no more edits.
  */
 class ReportSheet(
@@ -42,19 +46,30 @@ class ReportSheet(
      * would hand this instance's moderators the key of a link to another operator's content, which the backend refuses.
      */
     val nameOnly: Boolean = false,
+    /** What is reported: [node] alone, or a level's selection (its first [node]). */
+    val nodes: List<NodeAt> = listOf(node),
+    /** The folder on screen, offered instead above [NodeReport.MAX_ITEMS] (null: a space's top, nothing to offer). */
+    private val enclosing: NodeAt? = null,
 ) {
+    /** The selection's sheet: [nodes] (never empty), [enclosing] the folder on screen. */
+    constructor(nodes: List<NodeAt>, enclosing: NodeAt?, door: Door) :
+        this(nodes.first(), door, CoroutineScope(SupervisorJob() + Dispatchers.Default), offersName = nodes.size == 1, nameOnly = false, nodes = nodes, enclosing = enclosing)
+
     /**
      * Whether the sheet offers a choice of "it and everything in it" or "only its name" — what every platform draws the
      * scope's choice by. None for an item (sent whole) and none for a [nameOnly] sheet: a kept link has no whole to offer,
      * so its sheet reports the name without asking (offering the whole would offer what the backend refuses).
      */
-    val offersName: Boolean = offersName && !nameOnly
+    val offersName: Boolean = offersName && !nameOnly && nodes.size == 1
 
     /** What the sheet sends (`ShellModel.reportSheet` over a tenant, a test over a server it plays). */
     interface Door {
         /** The tenant's origin, under which its privacy notice is served. */
         val origin: String
         suspend fun send(scope: NodeReport.Scope, category: String, reason: String, contact: String): NodeReport.Sent
+        /** Several nodes, each whole, as one report (a selection's, or the folder holding it): only a level's door sends them. */
+        suspend fun sendAll(nodes: List<NodeAt>, category: String, reason: String, contact: String): NodeReport.Sent =
+            NodeReport.Sent(NodeReport.Outcome.FAILED)
     }
 
     data class State(
@@ -71,9 +86,22 @@ class ReportSheet(
         val problem: Notice? = null,
         /** The receipt once the server took the report; the sheet then only shows it. */
         val sent: NodeReport.Sent? = null,
+        /** How many items are reported: the selection's, or 1 once the folder holding them was chosen instead. */
+        val count: Int = 1,
+        /** The folder holding the selection was chosen instead ([useEnclosing]). */
+        val enclosing: Boolean = false,
     ) {
-        /** Whether Send is offered: the form complete, nothing under way, nothing sent yet. */
-        val canSend: Boolean get() = !sending && sent == null && NodeReport.canSend(category, reason, goodFaith)
+        /** More than one report holds: nothing is sent; the folder holding them may be ([offersEnclosing]). */
+        val tooMany: Boolean get() = count > NodeReport.MAX_ITEMS
+
+        /** Whether Send is offered: the form complete, not too many, nothing under way, nothing sent yet. */
+        val canSend: Boolean get() = !tooMany && !sending && sent == null && NodeReport.canSend(category, reason, goodFaith)
+
+        /** "You are reporting n items." (the web's `report.items`). */
+        val items: Notice get() = Notice(Msg.REPORT_ITEMS, count)
+
+        /** Why nothing can be sent with this many (the web's `report.tooMany`), or null. */
+        val tooManyNotice: Notice? get() = if (tooMany) Notice(Msg.REPORT_TOO_MANY, count) else null
 
         /** What the form says under the chosen category (the note on child sexual abuse material), or nothing. */
         val note: Msg? get() = NodeReport.note(category)
@@ -85,7 +113,16 @@ class ReportSheet(
         val receipt: Notice? get() = sent?.let { Notice(Msg.REPORT_RECEIPT, it.reference.orEmpty(), it.receivedAt.orEmpty()) }
     }
 
-    private val _state = MutableStateFlow(State(whole = !nameOnly))
+    private val _state = MutableStateFlow(State(whole = !nameOnly, count = nodes.size))
+
+    /** Whether the folder holding a selection above [NodeReport.MAX_ITEMS] is offered instead (the web's `reportEnclosing`). */
+    fun offersEnclosing(state: State): Boolean = state.tooMany && enclosing != null
+
+    /** Its words. */
+    val enclosingWord: Msg get() = Msg.REPORT_ENCLOSING
+
+    /** The folder holding the selection is reported instead, whole. */
+    fun useEnclosing() = edit { if (offersEnclosing(it)) it.copy(enclosing = true, count = 1, whole = true) else it }
     val state: StateFlow<State> = _state.asStateFlow()
     val current: State get() = _state.value
 
@@ -125,7 +162,14 @@ class ReportSheet(
         _state.update { if (it.canSend) it.copy(sending = true, problem = null).also { s -> taken = s } else it }
         val s = taken ?: return current
         val sent = withContext(Dispatchers.Default) {
-            runCatching { door.send(if (s.whole && !nameOnly) NodeReport.Scope.WHOLE else NodeReport.Scope.NAME, s.category!!, s.reason, s.contact) }
+            runCatching {
+                val chosen = if (s.enclosing) listOfNotNull(enclosing) else nodes
+                if (chosen.size == 1 && chosen.single() == node) {
+                    door.send(if (s.whole && !nameOnly) NodeReport.Scope.WHOLE else NodeReport.Scope.NAME, s.category!!, s.reason, s.contact)
+                } else {
+                    door.sendAll(chosen, s.category!!, s.reason, s.contact)
+                }
+            }
                 .getOrElse { NodeReport.Sent(NodeReport.Outcome.FAILED) }
         }
         _state.update {

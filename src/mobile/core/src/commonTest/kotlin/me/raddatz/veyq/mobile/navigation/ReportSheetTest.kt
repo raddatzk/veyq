@@ -26,6 +26,41 @@ class ReportSheetTest {
             sent += listOf(scope.name, category, reason, contact)
             return answer
         }
+        override suspend fun sendAll(nodes: List<NodeAt>, category: String, reason: String, contact: String): NodeReport.Sent {
+            sent += listOf("ALL") + nodes.map { it.nodeId }
+            return answer
+        }
+    }
+
+    @Test
+    fun a_selections_report_is_one_of_each_whole_and_above_the_cap_offers_the_folder_holding_them() = runTest {
+        val door = Door()
+        val two = listOf(folder, NodeAt("s", "g", "FOLDER", "Rome"))
+        val sheet = ReportSheet(two, NodeAt("s", "up", "FOLDER", "Up"), door)
+        assertFalse(sheet.offersName, "several nodes: no name-only choice")
+        assertEquals(Notice(Msg.REPORT_ITEMS, 2), sheet.current.items)
+        sheet.category("TERMS_BREACH")
+        sheet.reason("why")
+        sheet.goodFaith(true)
+        sheet.send()
+        assertEquals(listOf(listOf("ALL", "f", "g")), door.sent)
+        // above the cap nothing is sent; the folder on screen is offered and reported instead, whole
+        val many = (0..NodeReport.MAX_ITEMS).map { NodeAt("s", "n$it", "FOLDER", "n$it") }
+        val big = ReportSheet(many, NodeAt("s", "up", "FOLDER", "Up"), door)
+        big.category("TERMS_BREACH")
+        big.reason("why")
+        big.goodFaith(true)
+        assertTrue(big.current.tooMany)
+        assertEquals(Notice(Msg.REPORT_TOO_MANY, NodeReport.MAX_ITEMS + 1), big.current.tooManyNotice)
+        assertFalse(big.current.canSend)
+        assertTrue(big.offersEnclosing(big.current))
+        big.useEnclosing()
+        assertTrue(big.current.canSend)
+        door.sent.clear()
+        big.send()
+        assertEquals(listOf(listOf("ALL", "up")), door.sent)
+        // at a space's top there is no folder to offer
+        assertFalse(ReportSheet(many, null, door).let { it.offersEnclosing(it.current) })
     }
 
     @Test

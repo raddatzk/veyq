@@ -38,7 +38,7 @@ class MoveSheetTest {
     private val trips = NodeAt("s", "trips", "FOLDER", "trips")
     private val guest = NodeAt("s", "guest", "FOLDER", "guest")
 
-    private class Door(val tree: List<NodeRef>) : MoveSheet.Door {
+    private open class Door(val tree: List<NodeRef>) : MoveSheet.Door {
         val moves = mutableListOf<Pair<String, String?>>()
         val copies = mutableListOf<String>()
         var moved = NodeMove.Outcome.MOVED
@@ -67,7 +67,7 @@ class MoveSheetTest {
         assertTrue(s.current.loaded)
         assertNull(s.current.at)
         assertEquals(NodeMove.Block.CURRENT, s.current.block)
-        assertEquals(Msg.MOVE_HERE_CURRENT, s.hereWord(s.current))
+        assertEquals(Notice(Msg.MOVE_HERE_CURRENT), s.here(s.current))
         assertFalse(s.current.canChoose)
         assertEquals(listOf(MoveSheet.Crumb(null, Piece.Said(Notice(Msg.SPACE_PERSONAL)))), s.current.trail)
         // the node itself is listed, blocked, and cannot be opened
@@ -193,5 +193,91 @@ class MoveSheetTest {
         assertEquals(Notice(Msg.MOVE_REFUSED_STALE_PLACEMENT), refused.current.problem)
         assertNull(refused.current.undo)
         assertNull(refused.current.done)
+    }
+
+    // ---- a level's selection (inbox #1049, the web's `MoveNodesDialog`) ----
+
+    private val potB = NodeAt("s", "pot-b", "EXPENSES_POT", "pot-b")
+
+    private suspend fun TestScope.many(nodes: List<NodeAt>, copying: Boolean = false, door: Door = Door(tree)) =
+        MoveSheet(nodes, copying, door, backgroundScope, UnconfinedTestDispatcher(testScheduler)).also { it.load(); runCurrent() }
+
+    @Test
+    fun a_selection_is_one_sheet_whose_place_takes_every_node_and_names_the_one_that_blocks_it() = runTest {
+        val s = many(listOf(trips, potB))
+        assertEquals(Notice(Msg.MOVE_MANY_TITLE, 2), s.title)
+        assertEquals(Msg.MOVE_MANY_HINT, s.hint)
+        // both are at the root: it opens there, and all of them are there already
+        assertNull(s.current.at)
+        assertEquals(Notice(Msg.MOVE_MANY_HERE_CURRENT), s.here(s.current))
+        s.go("2026")
+        assertNull(s.current.at, "a place below a moved node is not opened")
+        val p = many(listOf(rome, potB))
+        p.go(null)
+        p.go("trips")
+        assertNull(p.current.block, "trips takes both Pots")
+        assertTrue(p.current.canChoose)
+        // a place below one of them is listed blocked, by that node's rule
+        assertEquals(NodeMove.Block.ITSELF, s.current.places.single { it.node.nodeId == "trips" }.blocked)
+    }
+
+    @Test
+    fun a_selections_move_sends_each_says_what_went_and_why_not_and_one_undo_moves_them_all_back() = runTest {
+        val door = object : Door(tree) {}
+        door.moved = NodeMove.Outcome.MOVED
+        val s = many(listOf(rome, potB), door = door)
+        s.go("trips")
+        // the second is refused: what went is said with the refusal named after it
+        val refusing = object : MoveSheet.Door by door {
+            override suspend fun move(ref: NodeAt, to: String?): NodeMove.Outcome {
+                door.moves += ref.nodeId to to
+                return if (ref.nodeId == "pot-b" && to == "trips") NodeMove.Outcome.NAME_TAKEN else NodeMove.Outcome.MOVED
+            }
+        }
+        val r = MoveSheet(listOf(rome, potB), false, refusing, backgroundScope, UnconfinedTestDispatcher(testScheduler)).also { it.load(); runCurrent() }
+        r.go("trips")
+        r.choose()
+        assertEquals(listOf<Pair<String, String?>>("rome" to "trips", "pot-b" to "trips"), door.moves)
+        val done = assertNotNull(r.current.done)
+        assertEquals(Msg.SELECT_SUMMARY, done.msg)
+        assertEquals(Notice(Msg.MOVE_MANY_MOVED, 1, "trips"), done.args[0])
+        assertNotNull(r.current.undo, "what went may go back")
+        door.moves.clear()
+        assertNull(r.undo())
+        assertEquals(listOf<Pair<String, String?>>("rome" to "2026"), door.moves, "only what went goes back, to where it was")
+        // all of them through: one notice, one undo for both
+        door.moves.clear()
+        s.choose()
+        assertEquals(Notice(Msg.MOVE_MANY_MOVED, 2, "trips"), s.current.done)
+        door.moves.clear()
+        assertNull(s.undo())
+        assertEquals(listOf<Pair<String, String?>>("rome" to "2026", "pot-b" to null), door.moves)
+    }
+
+    @Test
+    fun a_selections_move_where_nothing_went_stays_open_on_why() = runTest {
+        val door = Door(tree).apply { moved = NodeMove.Outcome.FAILED }
+        val s = many(listOf(rome, potB), door = door)
+        s.go("trips")
+        s.choose()
+        assertNull(s.current.done)
+        assertEquals(Msg.SELECT_SUMMARY, s.current.problem?.msg)
+        assertEquals(Notice(Msg.MOVE_MANY_NONE_MOVED), s.current.problem?.args?.get(0))
+    }
+
+    @Test
+    fun a_selections_copy_copies_each_and_stops_at_the_first_failure() = runTest {
+        val door = Door(tree)
+        val s = many(listOf(trips, potB), copying = true, door = door)
+        assertEquals(Notice(Msg.COPY_MANY_TITLE, 2), s.title)
+        s.choose()
+        assertEquals(listOf("subtree:trips->null", "open:pot-b->null"), door.copies)
+        assertEquals(Notice(Msg.COPY_MANY_COPIED, 2, Notice(Msg.SPACE_PERSONAL)), s.current.done)
+        door.copies.clear()
+        door.copyAnswer = Notice(Msg.COPY_FAILED)
+        val f = many(listOf(trips, potB), copying = true, door = door)
+        f.choose()
+        assertEquals(listOf("subtree:trips->null"), door.copies, "the first failure stops it")
+        assertEquals(Notice(Msg.COPY_FAILED), f.current.problem)
     }
 }
