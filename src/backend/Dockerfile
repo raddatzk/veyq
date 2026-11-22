@@ -5,7 +5,7 @@
 
 # --- web -------------------------------------------------------------------------------------------------
 # Was `frontend/` — the surface is `src/web/` since the greenfield reset.
-FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS frontend-build
+FROM node:26-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1 AS frontend-build
 # The install is a WORKSPACE install since cr-admin-web-extraction (ADR 0065): the lockfile lives at the repo
 # root and `src/web/` resolves `@veyq/crypto` through it, so the stage builds from /repo with src/web/ as a
 # workspace rather than treating it as a standalone project. The image mirrors the checkout under /repo (ADR 0106
@@ -117,7 +117,7 @@ RUN ./gradlew --no-daemon quarkusBuild -x test
 # coreutils, no curl, no tar. `nonroot` is the variant whose default user is not root; the stage below sets its own
 # anyway. Pinned by the multi-arch index digest (amd64 + arm64, validate_image_pins.py's limits say how it was
 # checked); Dependabot's `docker` ecosystem bumps the digest of the `nonroot` tag.
-FROM gcr.io/distroless/java25-debian13:nonroot@sha256:1c4ced761d17961c900cba60c33c8c3c46edbdadaa9d5ef9806eb5a6824fd406 AS distroless-java
+FROM gcr.io/distroless/java25-debian13:nonroot@sha256:b0a31b9a063a6fb8132ec93da4cfd8515421ad35e40d7ac79fbebbaaae98227f AS distroless-java
 
 # Everything the runtime needs a shell for happens here, on the build JDK, and travels into the runtime as files: a
 # distroless stage can run nothing but `java`, so it has no `RUN`.
