@@ -84,13 +84,14 @@ fun sortFreeInterfaceLists(module: String): String {
         if (names.all(::free)) "${m.groupValues[1]}[${names.sorted().joinToString(", ")}]" else m.value
     }
 }
-// One entry file per façade (ADR 0155 decision 5): several façades share one module file (the platform's search and tree in
-// `kotlin_veyq_mobile_core.mjs`), so `dist/<entry>.mjs` and `.d.mts` re-export exactly the declarations the façade's
-// package exports (`jsMain/…/<entry>/web/`), read from those sources' `@JsExport` declarations, never listed by hand.
-// `package.json` maps `@veyq/core-js/<entry>` to them, so a name of another façade does not type-check through an entry
-// and the web's direction guard, which reads the entry's name, judges every name by its owner. An `external interface` is
-// a type only: it is re-exported by the `.d.mts` alone, which names the composition's module (`veyq-mobile-composition.mjs`,
-// whose one `.d.mts` declares every module's exports). Each module's façades re-export from that module's file, Kotlin's
+// One declaration file per façade (ADR 0155 decision 5): several façades share one module file (the platform's search and
+// tree in `kotlin_veyq_mobile_core.mjs`), so `dist/<entry>.d.mts` re-exports exactly the declarations the façade's package
+// exports (`jsMain/…/<entry>/web/`), read from those sources' `@JsExport` declarations, never listed by hand, from the
+// composition's module (`veyq-mobile-composition.mjs`, whose one `.d.mts` declares every module's exports).
+// `package.json` maps `@veyq/core-js/<entry>`'s types to it and its code to the module file itself, so a name of another
+// façade does not type-check through an entry and the web's direction guard, which reads the entry's name, judges every
+// name by its owner. The code is the module file, not a file re-exporting from it: through such a hop a test's `vi.mock` of
+// one export no longer reached the module's own (the web's `SearchField.test.ts`, measured 2026-11-22). Each module's façades re-export from that module's file, Kotlin's
 // per-module name (`:core` → `kotlin_veyq_mobile_core.mjs`, `:apps:<a>` → `kotlin_veyq_mobile_apps_<a>.mjs`).
 val facades: Map<String, FileTree> = (listOf(project(":core")) + rootProject.project(":apps").subprojects).associate { p ->
     "kotlin_veyq_mobile_" + p.path.removePrefix(":").replace(':', '_') + ".mjs" to p.fileTree("src/jsMain/kotlin") { include("**/web/*.kt") }
@@ -103,10 +104,8 @@ fun writeEntries(dist: File) {
             check(seen.add(entry)) { "two façades named $entry" }
             val found = files.sortedBy { it.name }.flatMap { f -> declaration.findAll(f.readText()).map { it.groupValues[1] to it.groupValues[2] } }
             check(found.isNotEmpty()) { "the façade $entry exports nothing" }
-            val values = found.filter { !it.first.startsWith("external") }.map { it.second }.sorted()
             val all = found.map { it.second }.sorted()
-            val head = "// @veyq/core-js/$entry: the declarations of the façade …mobile.$entry.web, written by :composition:jsPackage.\n"
-            dist.resolve("$entry.mjs").writeText(head + "export { ${values.joinToString(", ")} } from './$module';\n")
+            val head = "// @veyq/core-js/$entry: the declarations of the façade …mobile.$entry.web in $module, written by :composition:jsPackage.\n"
             dist.resolve("$entry.d.mts").writeText(head + "export { ${all.joinToString(", ")} } from './veyq-mobile-composition.mjs';\n")
         }
     }

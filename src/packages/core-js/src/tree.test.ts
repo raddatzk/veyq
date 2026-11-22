@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const dist = resolve(here, '../dist')
-if (!existsSync(resolve(dist, 'tree.mjs'))) {
+if (!existsSync(resolve(dist, 'tree.d.mts'))) {
   throw new Error('dist/ is missing: run `pnpm run build` (the core compiled by Gradle) before the check')
 }
 // The package's own entry, as the web imports it.

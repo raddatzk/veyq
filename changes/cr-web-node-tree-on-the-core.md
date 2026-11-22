@@ -398,12 +398,20 @@ and what it costs.
   the build does not know, which meets nothing, as before). Cost: a second entry point, one rule.
 - **D24 — The entry files, rebuilt in `:composition:jsPackage`.** Each core module's `jsMain/**/web/*.kt` is a façade; its
   `@JsExport` declarations (read from the sources, the parked writer's regular expression) become `dist/<entry>.mjs`
-  (`export { … } from './<the module's file>'`, values only) and `dist/<entry>.d.mts` (every name, types too, `from
+  (D29: no longer written) and `dist/<entry>.d.mts` (every name, types too, `from
   './veyq-mobile-composition.mjs'`: TypeScript refuses an `import` from a `.d.mts` path, TS2846, and resolves the `.mjs`
   to the composition's one declaration file). `package.json` maps `./search` and `./tree` to them; `entries.typetest.ts`
   refuses `orderLevel` through `./search` and `fold` through `./tree`; `conformance.test.ts` names the three declaration
   files. Evidence: measured, `pnpm run build && pnpm run check` in `src/packages/core-js` (all but the budget green). Cost:
   the generator's 20 lines.
+- **D29 — An entry's code is the module file, its types a file of its own.** With D24's re-exporting `dist/search.mjs` the
+  web's `SearchField.test.ts` went red (1 of 61: `vi.mock('@veyq/core-js/search', …)` with one export wrapped no longer
+  reached the binding the test imports) — the parked Expenses branch's red, reproduced, and the CR's named risk. Measured:
+  with `default` mapped straight to `kotlin_veyq_mobile_core.mjs` again (types still `dist/search.d.mts`) 61 of 61 pass. So
+  the generator writes the declaration file only; `package.json` maps each entry's code to its module file. What it costs:
+  at runtime an entry carries its module's other façade's names too (they always did: one module file); the separation is
+  the types' and the direction guard's, which read the entry. Evidence: `pnpm exec vitest run
+  src/core/search/SearchField.test.ts` in `src/web`, before and after.
 - **D25 — The façade's surface.** The CR's list, plus `compareByCreation` (the web's `segmentsOf` and the drop box's page
   sort by it) and minus `compareById` (its one web caller numbered a guest's names, which `displayNames(…, byId)` does).
   Handles: `KindFactsHandle`, `TreeFactsHandle` (no member in their `.d.ts`). Moved nodes cross as the web's own objects

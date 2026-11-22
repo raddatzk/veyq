@@ -11,14 +11,16 @@ import { build } from 'esbuild'
 // (ADR 0155 decision 7.2). The size is printed beside the budget, the Kotlin standard library's share apart from the core's own.
 const here = dirname(fileURLToPath(import.meta.url))
 const dist = resolve(here, '../dist')
-if (!existsSync(resolve(dist, 'kotlin_veyq_mobile_core.mjs'))) {
+const MODULE_FILE = 'kotlin_veyq_mobile_core.mjs'
+if (!existsSync(resolve(dist, MODULE_FILE))) {
   throw new Error('dist/ is missing: run `pnpm run build` (the core compiled by Gradle) before the check')
 }
 
 const FORBIDDEN = /kotlinx-serialization|kotlinx-coroutines|kotlinx\.coroutines|kotlinx\/serialization|ktor|NotOnTheWeb\.kt/i
 
-/** Each entry of the platform's module file (`dist/<entry>.mjs`, written by `:composition:jsPackage`) and a Kotlin source its
- *  map must list: the map does reach the Kotlin sources, so an absence of a forbidden one is an absence. */
+/** Each entry of the platform's module file (`package.json` maps its code to the module, its types to `dist/<entry>.d.mts`)
+ *  and a Kotlin source its map must list: the map does reach the Kotlin sources, so an absence of a forbidden one is an
+ *  absence. */
 const ENTRIES: Record<string, { control: string }> = {
   search: { control: 'search/Query.kt' },
   tree: { control: 'tree/LevelOrder.kt' },
@@ -39,12 +41,12 @@ const SLICES: { slice: string; deletedGz: number }[] = [
 ]
 const BUDGET_GZ = Math.floor(SEARCH_ALONE_GZ + SLICES.reduce((n, s) => n + R * s.deletedGz, 0))
 
-/** [entries] bundled together, minified, as a web build bundles them. */
+/** [entries] bundled together, minified, as a web build bundles them: each entry's code is the platform's module file. */
 async function bundle(entries: string[]) {
   const out = await build({
     bundle: true, minify: true, format: 'esm', platform: 'browser', write: false, metafile: true, sourcemap: 'external',
     outdir: resolve(here, '../.slice'), logLevel: 'silent', external: ['@noble/*'],
-    stdin: { contents: entries.map((e) => `export * from './${e}.mjs'`).join('\n'), resolveDir: dist, sourcefile: 'entries.mjs' },
+    stdin: { contents: entries.map((e) => `export * from '@veyq/core-js/${e}'`).join('\n'), resolveDir: here, sourcefile: 'entries.mjs' },
   })
   const js = out.outputFiles.find((f) => f.path.endsWith('.js'))!
   const map = JSON.parse(out.outputFiles.find((f) => f.path.endsWith('.map'))!.text) as { sources: string[] }
