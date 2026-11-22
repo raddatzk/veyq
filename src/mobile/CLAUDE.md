@@ -283,7 +283,7 @@ A Gradle build of its own, run through its own wrapper.
   and one module per screen (`sign_in` with the unlock, `shell` with Search, `home` (every row with its cover, `Shell.RowCover`, a folder's level with its head), `pot` with its download,
   `pot_settings` (a Pot's Settings place, editable in place) and `pot_create` (New pot),
   `entry_editor` (an entry's editor; `typed`: when a text field is set from the state), `receipt_viewer` (a receipt
-  shown from memory: a picture through GTK, a PDF through poppler-rs) and `entry_history`, `file_page` (a Depot file's page
+  shown from memory: a picture through GTK, a PDF through poppler-rs, its pages drawn by the core UI's `pdf_render`) and `entry_history`, `file_page` (a Depot file's page
   and its Save a copy with its toast; a medium played by `player` — `gtk::Video` over a `gtk::MediaFile` reading `reader_stream`, a
   seekable `gio::InputStream` whose reads are `Reader.Read` ranges, `bridge::call_blocking` on GStreamer's thread),
   `memory_page` (a Memory's or a chapter's page: its chapters with their covers, the justified grid the core lays out and
@@ -299,7 +299,7 @@ A Gradle build of its own, run through its own wrapper.
   `gtk::Widget` of its own whose `snapshot` appends the tiles' textures by the viewport's one formula and strokes each
   track as a `gsk::Path` with its activity's dash; the pins hit-tested, no widget; the consent's offer in its place; the
   attribution always at its foot), the Memories bar's Map tab `memories_map` (the bar's places above the list, as a Pot's),
-  a row's date (`home::ask_dates`, `Memories.Dates`), Settings → Map services `map_services`) with
+  a row's date (Memories' `dates::ask` over `Memories.Dates`, its lines handed to `home::lines_arrived`), Settings → Map services `map_services`) with
   `lightbox` (an `AdwNavigationPage` pushed over the content: zoom, the slideshow, a video through `player`, the details (a photo's small map and its place's name, `Lightbox.Map`, `Lightbox.Place`),
   Save, the music's compact controls, `Lightbox.Video` from its player) and `media_tiers` (the host's answer to
   `Media.Tiers`/`Media.Duration`: gdk-pixbuf over glycin for a photo, turned by its EXIF; a GStreamer `playbin` frame for
@@ -350,7 +350,7 @@ A Gradle build of its own, run through its own wrapper.
   `CaptureTimeEdit`, their pure rules `CurationText`, a person's profile `PersonPage` (ADR 0144); the core's raster map
   `RasterMap`, ADR 0143 decision 1: a `Canvas` of tile `Image`s by the viewport's one formula, each track a dashed
   `Polyline`, the pins hit-tested and no `Button`, the consent's offer in its place, the attribution always at its foot;
-  the Memories bar's Map tab in `ShellView`, a row's date `RowDates`, Settings → Map services `MapServicesSection`) with `LightboxView` (in
+  the Memories bar's Map tab in `ShellView`, a row's date (core's `RowLines` over Memories' `MemoryDates.Lines`, `ApplicationUi.RowLines`), Settings → Map services `MapServicesSection`) with `LightboxView` (in
   the page's place over black: zoom, the slideshow, a video through `MediumPlayer`, the details (a photo's small map and its place's name), Save, the music's compact
   controls, `Lightbox.Video` from its player, the mark's heart and Report), the page's filter `GalleryFilterBar` (an `AutoSuggestBox`
   with the core's chips, the marks' mode as a `DropDownButton`), its Contributions view `ContributionsView` (the

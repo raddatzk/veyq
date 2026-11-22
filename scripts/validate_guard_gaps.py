@@ -312,6 +312,16 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      `validate_mobile_ui_direction` rule (c); the core UI reaches an application only through the registry (inbox #1056)
   117 Android's Memories UI importing Expenses' `PotModel` — rejected: `validate_mobile_ui_direction` rule (b), an
      application naming another core application's package
+  118 Apple's core UI (`Core/UploadsView.swift`) naming Depot's Kotlin `DepotUploads` — rejected:
+     `validate_mobile_ui_direction` rule (c) on Apple; the core UI asks the registry's holdings (inbox #1066)
+  119 Apple's core UI calling Expenses' Kotlin extension `.openReceipt(` — rejected: Apple's (c), an application's
+     extension member reached through the framework
+  120 Apple's Depot UI naming Memories' Kotlin `GalleryModel` — rejected: Apple's (b) over the Kotlin exports
+  121 Linux's core UI (`core_ui/home.rs`) naming `Call::MemoriesDates` — rejected: Linux's (c), Memories' part of the wire
+  122 Windows' core UI (`Core/HomeView.cs`) naming `MemoryDateShown` bare — rejected: Windows' (c)
+  123 Windows' Depot UI naming `Call.GalleryOpen` — rejected: Windows' (b), another application's part of the wire
+  124 a wire prefix `Ledger.` classified nowhere — rejected: the desktops' (c) reads the prefix table whole
+  125 Apple's core UI naming `GalleryModel` in a comment only — passes: the Swift mask blanks it
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1278,6 +1288,54 @@ def forge_android_application_names_other_core_application(root: pathlib.Path) -
     return "Android's Memories UI importing Expenses' PotModel (must be REJECTED — an application never names another)"
 
 
+def _mobile_append(root: pathlib.Path, rel: str, text: str) -> None:
+    f = root / MOBILE_DIR / rel
+    if not f.is_file():
+        raise ForgeError(f"{MOBILE_DIR}/{rel} is missing — re-anchor this forgery")
+    f.write_text(f.read_text(encoding="utf-8") + text, encoding="utf-8")
+
+
+def forge_apple_core_ui_names_core_application(root: pathlib.Path) -> str:
+    _mobile_append(root, "apple/Veyq/Core/UploadsView.swift", "\nprivate typealias GuardGapProbe = DepotUploads\n")
+    return "Apple's core UI naming Depot's DepotUploads (must be REJECTED — the core UI asks the registry's holdings)"
+
+
+def forge_apple_core_ui_calls_application_extension(root: pathlib.Path) -> str:
+    _mobile_append(root, "apple/Veyq/Core/UploadsView.swift", "\nprivate func guardGapProbe(_ x: AnyObject) { _ = x.openReceipt(pot: x) }\n")
+    return "Apple's core UI calling Expenses' extension openReceipt (must be REJECTED — an application's member)"
+
+
+def forge_apple_application_names_other_kotlin_application(root: pathlib.Path) -> str:
+    _mobile_append(root, "apple/Veyq/Apps/Depot/DepotUi.swift", "\nprivate typealias GuardGapProbe = GalleryModel\n")
+    return "Apple's Depot UI naming Memories' GalleryModel (must be REJECTED — an application never names another)"
+
+
+def forge_linux_core_ui_names_application_wire(root: pathlib.Path) -> str:
+    _mobile_append(root, "linux/src/core_ui/home.rs", "\nfn guard_gap_probe() -> Call { Call::MemoriesDates }\n")
+    return "Linux's core UI naming Call::MemoriesDates (must be REJECTED — Memories' part of the wire)"
+
+
+def forge_windows_core_ui_names_application_wire(root: pathlib.Path) -> str:
+    _mobile_append(root, "windows/Veyq/Core/HomeView.cs", "\ninternal static class GuardGapProbe { internal static MemoryDateShown? Probe => null; }\n")
+    return "Windows' core UI naming MemoryDateShown (must be REJECTED — Memories' part of the wire)"
+
+
+def forge_windows_application_names_other_application_wire(root: pathlib.Path) -> str:
+    _mobile_append(root, "windows/Veyq/Apps/Depot/DepotUi.cs", "\ninternal static class GuardGapProbe { internal static object Probe => new Call.GalleryOpen(); }\n")
+    return "Windows' Depot UI naming Call.GalleryOpen (must be REJECTED — another application's part of the wire)"
+
+
+def forge_wire_prefix_unclassified(root: pathlib.Path) -> str:
+    _mobile_append(root, "bridge/src/commonMain/kotlin/me/raddatz/veyq/mobile/bridge/Wire.kt",
+                   '\n@Serializable @SerialName("Ledger.Open") data class GuardGapProbe(val x: Int)\n')
+    return "a wire prefix Ledger. in no table (must be REJECTED — the prefix table is read whole)"
+
+
+def forge_apple_core_ui_names_application_in_comment(root: pathlib.Path) -> str:
+    _mobile_append(root, "apple/Veyq/Core/UploadsView.swift", "\n// the gallery's GalleryModel is Memories', held by its holding\n")
+    return "Apple's core UI naming GalleryModel in a comment only (must PASS — the mask blanks it)"
+
+
 def forge_web_core_imports_second_application(root: pathlib.Path) -> str:
     _plant_depot(root, "core/node/guardGapProbe.ts", "export { FILE_KIND } from '../../features/depot/kinds'\n")
     return "a core/node file re-exporting features/depot/kinds (must be REJECTED — core depends on no application)"
@@ -1965,6 +2023,14 @@ CASES = [
     ("115", MOBILE_GRAPH, forge_mobile_platform_api_shown, False),
     ("116", "validate_mobile_ui_direction.py", forge_android_core_ui_names_core_application, False),
     ("117", "validate_mobile_ui_direction.py", forge_android_application_names_other_core_application, False),
+    ("118", "validate_mobile_ui_direction.py", forge_apple_core_ui_names_core_application, False),
+    ("119", "validate_mobile_ui_direction.py", forge_apple_core_ui_calls_application_extension, False),
+    ("120", "validate_mobile_ui_direction.py", forge_apple_application_names_other_kotlin_application, False),
+    ("121", "validate_mobile_ui_direction.py", forge_linux_core_ui_names_application_wire, False),
+    ("122", "validate_mobile_ui_direction.py", forge_windows_core_ui_names_application_wire, False),
+    ("123", "validate_mobile_ui_direction.py", forge_windows_application_names_other_application_wire, False),
+    ("124", "validate_mobile_ui_direction.py", forge_wire_prefix_unclassified, False),
+    ("125", "validate_mobile_ui_direction.py", forge_apple_core_ui_names_application_in_comment, True),
     ("100", LINK_CLOSE_ARITY, forge_link_closed_outside_the_body, False),
     ("101", LINK_CLOSE_ARITY, forge_link_closed_by_a_bulk_update, False),
     ("85", WEB_GUARD, forge_web_core_catalog_carries_application_namespace, False),
