@@ -70,6 +70,24 @@ object AppleSharing {
         store: DeviceStore, sessions: GuestSessions, language: String, queue: UploadQueue?, deriver: Derivation.Deriver?,
     ): GuestOpener = GuestOpener(store, sessions, language, queue, deriver)
 
+    /**
+     * A READ_WRITE guest's folder upload into [level] ([me.raddatz.veyq.mobile.depot.DepotGuest.uploadFolder]), off the
+     * caller's thread: what it says, each line — one that threw says the folder failed, never nothing.
+     */
+    suspend fun guestUploadFolder(level: GuestLevel, path: String, found: List<me.raddatz.veyq.mobile.depot.FolderUpload.Found>): List<me.raddatz.veyq.mobile.words.Notice> =
+        withContext(Dispatchers.Default) {
+            try {
+                me.raddatz.veyq.mobile.depot.DepotGuest.uploadFolder(level, null, path, found).said
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                listOf(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DEPOT_FOLDER_FAILED, me.raddatz.veyq.mobile.depot.FolderUpload.rootName(null, path)))
+            }
+        }
+
+    /** A kept link's row's share report ([BookmarkPage.reportSharedFromRow]): its meta read off the caller's thread. */
+    suspend fun reportSharedFromRow(page: BookmarkPage) = withContext(Dispatchers.Default) { page.reportSharedFromRow() }
+
     /** The page of bookmark [node] in [tenant], its link opened as a guest by [opener]. */
     fun bookmarkPage(tenant: TenantSession, node: NodeAt, opener: GuestOpener): BookmarkPage =
         BookmarkPage.of(tenant, node) { link, password -> opener.view(link, password) }

@@ -202,7 +202,7 @@ class QueuedOverlayTest {
         assertEquals(Notice(Msg.OFFLINE_WRITES_LOST, 2), shell.queuedLost())
         // New offline offers only what is queued (never a Pot, a folder uploaded whole or a kept link)
         assertEquals(
-            listOf(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER, me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES, me.raddatz.veyq.mobile.AppKinds.Create.MEMORY),
+            listOf(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER, me.raddatz.veyq.mobile.AppKinds.Create.MEMORY, me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES),
             shell.createsHere(isHome = true, bookmarks = true),
         )
         // the one upload gate (ADR 0154 decision 1: a drop, a pick, the bridge's upload calls) takes what New offers offline

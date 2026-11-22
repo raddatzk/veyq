@@ -415,12 +415,15 @@ class GalleryModel(
     )
 
     /**
-     * What a medium's tile offers beside opening it (ADR 0154 decision 2; the web's `MediaGrid` tile: open, and the mark
-     * toggle where the rights allow — nothing else): its mark, once the caller's own set is read. A platform draws it through
-     * its own gesture (a context menu, a long press); a Mac's *Open in New Window* is the platform's, beside it.
+     * What a medium's tile offers beside opening it (ADR 0154 decision 2; the web's `MediaGrid` tile: open, the mark toggle
+     * where the rights allow, and on a link guest's own upload its delete — `MemoryDetail.vue`'s overlay, `isOwnMedia`): its
+     * mark, once the caller's own set is read; the delete where the rights delete the guest's own media only and this one is
+     * its own ([deletes]; a member deletes from the medium's own view, not from a tile). A platform draws it through its own
+     * gesture (a context menu, a long press); a Mac's *Open in New Window* is the platform's, beside it.
      */
     fun tileActions(row: Row): List<TileAction> = listOfNotNull(
         TileAction.MARK.takeIf { current.marking && current.marksLoaded && !row.blocked },
+        TileAction.DELETE.takeIf { rights.deleteMedia == MemoryRights.DeleteMedia.OWN && deletes(row.mediaId) },
     )
 
     /** What the page's own New makes here ([MemoryCreate.offered] on this node, where the rights allow): a chapter on a Memory. */

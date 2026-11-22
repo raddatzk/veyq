@@ -319,7 +319,7 @@ class GuestDoorsTest {
         v.load()
         val level = assertIs<GuestPage.Level>(v.page.value).model
         assertTrue(level.writes, "a READ_WRITE guest's level offers no write")
-        assertEquals(listOf(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER, me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES), level.creates, "a READ_WRITE guest's New: a folder, then files")
+        assertEquals(listOf(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER, me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FILES, me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FOLDER), level.creates, "a READ_WRITE guest's New: a folder, files, a folder uploaded (owner 2026-11-22)")
         // nothing is written before the guest named itself (the web's `requestGuest`): the write asks the name through the
         // core's one naming flow (ADR 0154 decision 1); declined, nothing is made or queued
         val access = assertNotNull(v.access)
@@ -359,8 +359,37 @@ class GuestDoorsTest {
         assertEquals("FILE" to folder, file["kind"]!!.jsonPrimitive.content to file["parentId"]!!.jsonPrimitive.content)
         assertEquals(1, f.content.completed.size, "the file's content was not completed")
         assertEquals(listOf(f.share.rootId, folder), v.stack.value.map { it.nodeId }, "the reload lost the guest's place")
-        f.share.assertNoKeyInAnyRequest()
+        // a folder uploaded whole as the guest (owner 2026-11-22): its folders made top-down under the level, each file into
+        // its own folder, a link said and left out, the guest named already so nothing asked
+        val here = assertIs<GuestPage.Level>(v.page.value).model
+        val before = f.content.created.size
+        val up = me.raddatz.veyq.mobile.depot.DepotGuest.uploadFolder(
+            here, null, "/home/ben/Trip",
+            listOf(
+                me.raddatz.veyq.mobile.depot.FolderUpload.Found("a.txt", me.raddatz.veyq.mobile.depot.FolderUpload.Kind.FILE, source("a.txt", "a")),
+                me.raddatz.veyq.mobile.depot.FolderUpload.Found("sub", me.raddatz.veyq.mobile.depot.FolderUpload.Kind.DIRECTORY),
+                me.raddatz.veyq.mobile.depot.FolderUpload.Found("sub/b.txt", me.raddatz.veyq.mobile.depot.FolderUpload.Kind.FILE, source("b.txt", "b")),
+                me.raddatz.veyq.mobile.depot.FolderUpload.Found("elsewhere", me.raddatz.veyq.mobile.depot.FolderUpload.Kind.LINK),
+            ),
+        )
+        assertEquals(2, up.queued, "a guest's folder upload queued not its two files")
+        assertEquals(listOf(me.raddatz.veyq.mobile.words.Msg.DEPOT_FOLDER_LINK_SKIPPED), up.said.map { it.msg }, "the link left out was not said")
+        withContext(kotlinx.coroutines.Dispatchers.Default) {
+            withTimeout(10_000) { queue.state.first { s -> s.batches.size == 2 && s.batches.all { b -> b.finished } } }
+        }
+        val tree = f.content.created.drop(before).map { it["nodeId"]!!.jsonPrimitive.content to (it["kind"]!!.jsonPrimitive.content to it["parentId"]!!.jsonPrimitive.content) }
+        val (top, topAt) = tree[0]
+        assertEquals("FOLDER" to folder, topAt, "the top folder is not made in the level")
+        val sub = tree.single { it.second == ("FOLDER" to top) }.first
+        assertEquals(setOf("FILE" to top, "FILE" to sub), tree.filter { it.second.first == "FILE" }.map { it.second }.toSet(), "a file not in its own folder")
+        assertEquals(3, f.content.completed.size, "a folder upload's files were not completed")
+        // the link read anew lists the folder made; nothing held nothing, so nothing was taken back
+        withContext(kotlinx.coroutines.Dispatchers.Default) {
+            withTimeout(10_000) { v.page.first { p -> (p as? GuestPage.Level)?.model?.rows?.any { it.nodeId == top } == true } }
+        }
         v.close()
+        withContext(kotlinx.coroutines.Dispatchers.Default) { kotlinx.coroutines.delay(300) }
+        f.share.assertNoKeyInAnyRequest()
     }
 
     /** #1034: a guest's Memory plays its music with the player the host handed the link, as the member's. */

@@ -491,6 +491,11 @@ internal sealed class Call {
      * through the host's gesture (a context menu), each entry run as the header's of that node.
      */
     @Serializable @SerialName("Row.Plan") data class RowPlan(val node: NodeAt) : Call()
+    /**
+     * A kept link's row's *Report shared content* (its row plan's `REPORT_SHARED`, `BookmarkPage.reportSharedFromRow`): the
+     * link's screen with its report asked, held as a received link ([Answer.Received]); refused where the link does not read.
+     */
+    @Serializable @SerialName("Row.ReportShared") data class RowReportShared(val node: NodeAt) : Call()
 
     /**
      * The sign-in's entries below its fields (`SignInPlan.entries`, ADR 0154 decision 2): [Answer.SignInPlan], asked again
@@ -1013,6 +1018,12 @@ internal sealed class Call {
      * the folder on screen ([ReceivedPage.writes], #1034: each its own file, the link read anew as each settles).
      */
     @Serializable @SerialName("Received.Upload") data class ReceivedUpload(val received: Long, val paths: List<String>) : Call()
+    /**
+     * A READ_WRITE guest's *Upload folder* into the level on screen (`DepotGuest.uploadFolder`, owner 2026-11-22): the
+     * directory at [path] walked by the bridge, its folders made and its files queued as the guest; [Answer.Queued] with
+     * what is said.
+     */
+    @Serializable @SerialName("Received.UploadFolder") data class ReceivedUploadFolder(val received: Long, val path: String) : Call()
 
     /**
      * The file on screen replaced by the file at [path] as the link's READ_WRITE guest (#1035; the web's share page), once
@@ -1889,9 +1900,11 @@ internal sealed class Answer {
 
     /**
      * An upload call's files queued ([Call.UploadFiles], [Call.UploadFolder], [Call.UploadReplace], [Call.MemoryUpload]): how
-     * many, and what is said of those left out ([notice]: `MediaUploads.notTaken`; null where none was).
+     * many, and what is said of those left out ([notice]: `MediaUploads.notTaken`; null where none was); where more than one
+     * line is said (a guest's folder upload, [Call.ReceivedUploadFolder]: each link and unreadable entry, each folder not
+     * made), the first is [notice] and the rest [more], each said.
      */
-    @Serializable @SerialName("Queued") data class Queued(val count: Int, val notice: Notice? = null) : Answer()
+    @Serializable @SerialName("Queued") data class Queued(val count: Int, val notice: Notice? = null, val more: List<Notice> = emptyList()) : Answer()
 
     /** Where a held write's *Open* goes ([Call.QueuedOpen]): the core's typed target, never a write's content. */
     @Serializable @SerialName("QueuedOpens") data class QueuedOpens(val open: me.raddatz.veyq.mobile.composition.QueuedOpen) : Answer()
@@ -4303,6 +4316,8 @@ internal class ReceivedPage(
     val file: Long?, val gallery: Long?, val pot: Long?, val sent: List<String>,
     /** A READ_WRITE guest's level: New folder ([Call.ReceivedNewFolder]) and the upload ([Call.ReceivedUpload]) offered (`GuestLevel.writes`, #1034). */
     val writes: Boolean = false,
+    /** A guest level's New (`GuestLevel.creates`, a plan drawn whole): a folder, files, a folder uploaded where it writes. */
+    val creates: List<ShellShown.ShownCreate> = emptyList(),
 )
 
 /**

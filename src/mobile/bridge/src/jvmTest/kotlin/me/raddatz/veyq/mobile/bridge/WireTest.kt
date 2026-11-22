@@ -185,11 +185,11 @@ class WireTest {
             Call.LinkConfirm(70, "Büro-Laptop"), Call.LinkEnterCode(70, "042917"), Call.LinkClose(70),
             Call.DeepLink("veyq://link"), Call.DeepLink("veyq://open"),             Call.ReceivedOpen("https://photos.example.org/s/x#k=y"), Call.ReceivedPassword(80, "pw"), Call.ReceivedAcceptTerms(80), Call.ReceivedAcceptNote(80),
             Call.ReceivedOpenNode(80, "n1"), Call.ReceivedBack(80), Call.ReceivedStay(80), Call.ReceivedLeave(80), Call.ReceivedName(80, "Ben"),
-            Call.ReceivedForgetGuest(80), Call.ReceivedKeep(80, "s1"), Call.ReceivedUpload(80, listOf("/tmp/a.jpg")), Call.ReceivedReplace(80, "/tmp/a.txt"), Call.ReceivedClose(80),
+            Call.ReceivedForgetGuest(80), Call.ReceivedKeep(80, "s1"), Call.ReceivedUpload(80, listOf("/tmp/a.jpg")), Call.ReceivedUploadFolder(80, "/tmp/trip"), Call.ReceivedReplace(80, "/tmp/a.txt"), Call.ReceivedClose(80),
             Call.ReceivedKeepPlaces(80), Call.ReceivedReport(80), Call.ReceivedReportShown(80),
             Call.ReceivedReportNode(80, "n1"), Call.ReceivedNewFolder(80, "Neu"), Call.ReceivedNamingSave(80, "Ben"), Call.ReceivedNamingDecline(80),
             Call.ShellOpenBookmark(me.raddatz.veyq.mobile.navigation.NodeAt("s1", "b1", "SHARE_BOOKMARK", "Ein Link")),
-            Call.BookmarkOpen(me.raddatz.veyq.mobile.navigation.NodeAt("s1", "b1", "SHARE_BOOKMARK", "photos.example.org")), Call.BookmarkOwnPage(90), Call.BookmarkReportShared(90),
+            Call.BookmarkOpen(me.raddatz.veyq.mobile.navigation.NodeAt("s1", "b1", "SHARE_BOOKMARK", "photos.example.org")), Call.BookmarkOwnPage(90), Call.BookmarkReportShared(90), Call.RowReportShared(me.raddatz.veyq.mobile.navigation.NodeAt("s1", "b1", "SHARE_BOOKMARK", "photos.example.org")),
             Call.BookmarkClose(90), Call.BookmarkCheck("s1", "https://photos.example.org/s/x#k=y"),
             Call.BookmarkCreate("s1", null, "https://photos.example.org/s/x#k=y", "pw", ""), Call.BookmarkCreate("s1", "f1", "t", "", "Trip"),
             Call.SettingsOpen("veyq.localhost#user-1"), Call.SettingsClose(50), Call.SettingsRefresh(50), Call.SettingsRename(50, "Büro-Laptop"),
@@ -296,7 +296,7 @@ class WireTest {
             Answer.KeepPlaces(listOf(ShellShown.ShownSpace(SpaceRef("s1", "PERSONAL", ""), Piece.Plain("Mine")))), Answer.Refused(Answer.Why.NO_SUCH_BOOKMARK), Answer.ReceivedProblem(me.raddatz.veyq.mobile.words.Msg.LINK_PROBLEM_MODERATION, true), Answer.Refused(Answer.Why.NO_SUCH_RECEIVED), Answer.Refused(Answer.Why.NO_SUCH_LINK), Answer.Refused(Answer.Why.NO_SIGN_IN), Answer.Refused(Answer.Why.NOT_TAKEN),
             Answer.GalleryOpened(60), Answer.LightboxOpened(61), Answer.GridLayout(listOf(GridRow(4, 0.0, 183.0, listOf(GridTile("m1", 0.0, 244.0), GridTile("m2", 252.0, 137.25))),
                 GridRow(5, 191.0, 150.0, listOf(GridTile("m3", 0.0, 200.0)))), 341.0, 9), Answer.GridLayout(emptyList(), 0.0, 0), Answer.Created(memory, null), Answer.RowCover("b-1@0.25,0.0,0.5,1.0", me.raddatz.veyq.mobile.session.NodeCover.Crop(0.25, 0.0, 0.5, 1.0), true, "image/jpeg"), Answer.RowCover("b-1@0,0,1,1", me.raddatz.veyq.mobile.session.NodeCover.Crop.FULL, false, null), Answer.Created(null, Notice(Msg.MEMORY_SLUG_TAKEN)),
-            Answer.Queued(2, Notice(Msg.MEMORY_NOT_MEDIA, listOf(1))), Answer.Refused(Answer.Why.NOT_OFFERED), Answer.Refused(Answer.Why.NO_SUCH_GALLERY),
+            Answer.Queued(2, Notice(Msg.MEMORY_NOT_MEDIA, listOf(1))), Answer.Queued(1, Notice(Msg.DEPOT_FOLDER_LINK_SKIPPED, listOf("a")), listOf(Notice(Msg.DEPOT_FOLDER_UNREADABLE, listOf("b")))), Answer.Refused(Answer.Why.NOT_OFFERED), Answer.Refused(Answer.Why.NO_SUCH_GALLERY),
             Answer.MediumDetails(
                 listOf(
                     DetailRow(Msg.MEMORY_FIELD_CAPTURED, null, null, 1_790_000_000_000, null), DetailRow(Msg.MEMORY_FIELD_FILE_SIZE, null, 34_029, null, null),
@@ -512,7 +512,7 @@ class WireTest {
                 80,
                 ReceivedShown(
                     "photos.example.org", ReceivedGate.READY, null, false, false, "", "", "", "Be kind", "Summer", "READ_WRITE",
-                    ReceivedPage(ReceivedPageKind.LEVEL, "Summer", "FOLDER", listOf(ReceivedRow("n1", "MEMORY", "Trip", false)), null, null, null, emptyList(), writes = true),
+                    ReceivedPage(ReceivedPageKind.LEVEL, "Summer", "FOLDER", listOf(ReceivedRow("n1", "MEMORY", "Trip", false)), null, null, null, emptyList(), writes = true, creates = listOf(ShellShown.ShownCreate(me.raddatz.veyq.mobile.AppKinds.Create.UPLOAD_FOLDER, Msg.DEPOT_UPLOAD_FOLDER))),
                     true, "Ben", false, false, true, false,
                 ),
             ),

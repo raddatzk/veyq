@@ -31,10 +31,20 @@ data class LevelPlan(val creates: List<AppKinds.Create>, val tools: List<LevelTo
         /**
          * The plan of a level: [creates] New's entries where New is offered (`ShellModel.createsHere` under
          * `canCreateHere`); the trash where [trash] (the web's `trashOffered`: a member's space, online, not in a guest's
-         * folder); the view switch where the level shows a list ([views]: not the Memories map tab).
+         * folder); the view switch where the level offers more than one view ([views], [LevelPlan.views]: the web's
+         * `showViews`, `views.length > 1`).
          */
-        fun of(creates: List<AppKinds.Create>, trash: Boolean, views: Boolean): LevelPlan =
-            LevelPlan(creates, listOfNotNull(LevelTool.TRASH.takeIf { trash }, LevelTool.VIEW.takeIf { views }))
+        fun of(creates: List<AppKinds.Create>, trash: Boolean, views: List<ViewMode>): LevelPlan =
+            LevelPlan(creates, listOfNotNull(LevelTool.TRASH.takeIf { trash }, LevelTool.VIEW.takeIf { views.size > 1 }))
+
+        /**
+         * The views a level offers (the web's `LevelView` `views`): none on the Memories map tab ([mapTab], which shows no
+         * list); rows and tiles ([ViewMode.LEVEL]) wherever the level lists folders or shows a node — so not on an empty guest's
+         * identity folder ([identityFolder] with no [rows]: the web's `hideEmptyTabs` lists no folders there). Held by
+         * `contracts/platform/plans/v1-vectors.json`'s `level.tools`.
+         */
+        fun views(mapTab: Boolean, identityFolder: Boolean, rows: Int): List<ViewMode> =
+            if (mapTab || (identityFolder && rows == 0)) emptyList() else ViewMode.LEVEL
     }
 }
 

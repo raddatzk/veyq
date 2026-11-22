@@ -94,6 +94,15 @@ class BookmarkPage(val node: NodeAt, private val door: Door) {
         return GuestScreen(door.guest(b.link, b.password), reportAsked = true)
     }
 
+    /**
+     * *Report shared content* from the kept link's row (ADR 0154 § Consequences: the web's row offers it where the link
+     * reads, `coreNodeActions.ts`): no page was shown, so its meta is read here first; null where it does not read.
+     */
+    suspend fun reportSharedFromRow(): GuestScreen? {
+        if (bookmark == null) bookmark = door.bookmark()
+        return reportShared()
+    }
+
     /** *Report name*: the bookmark's name only, to this instance (its key is never handed over). */
     fun reportNameSheet(): ReportSheet = door.reportName()
 

@@ -26,6 +26,7 @@ import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.session.OpenNode
 import me.raddatz.veyq.mobile.sharing.GuestAccess
 import me.raddatz.veyq.mobile.sharing.GuestDoor
+import me.raddatz.veyq.mobile.sharing.GuestLevel
 import me.raddatz.veyq.mobile.sharing.GuestPage
 import me.raddatz.veyq.mobile.sharing.GuestSession
 
@@ -122,18 +123,20 @@ object DepotGuest {
      */
     class LevelUpload internal constructor(
         private val access: GuestAccess, private val session: GuestSession, parent: OpenNode, private val source: UploadSource,
+        /** The node's name: a folder upload's planned one, else the file's own. */
+        private val named: String = source.name,
     ) : UploadQueue.Job {
         private val parent = OpenNode(
             parent.scopeId, parent.id, parent.parentId, parent.kind, parent.name, parent.key.copyOf(), parent.epoch, null, 0, parent.scopeEpoch,
         )
         private var created: Pair<String, ByteArray>? = null
         private var filled = false
-        override val name get() = source.name
+        override val name get() = named
         override val sizeBytes get() = source.size
         override fun isFinal(code: String) = code == DepotFiles.Codes.NAME_TAKEN || code == "illegal_structure"
 
         override suspend fun run(progress: (Double) -> Unit) {
-            val node = created ?: when (val made = access.createNode(session, parent, FILE_KIND, source.name)) {
+            val node = created ?: when (val made = access.createNode(session, parent, FILE_KIND, named)) {
                 is GuestAccess.Created.Done -> (made.nodeId to made.key).also { created = it }
                 GuestAccess.Created.Taken -> throw UploadQueue.Failed(DepotFiles.Codes.NAME_TAKEN)
                 is GuestAccess.Created.Refused -> throw UploadQueue.Failed(made.code ?: "failed")
@@ -162,6 +165,74 @@ object DepotGuest {
             const val FILE_KIND = "FILE"
         }
     }
+
+    /** What a guest's folder upload came to: how many files were queued, and what is said (Depot's folder notices). */
+    class FolderUploaded(val queued: Int, val said: List<me.raddatz.veyq.mobile.words.Notice>)
+
+    /**
+     * A READ_WRITE guest's *Upload folder* into [level] (owner 2026-11-22: on every client; the web's `uploadFolder` over
+     * `guestUpload.beginTree`): what the platform's walk [found] kept ([FolderUpload.keeps]; each link and unreadable entry
+     * said), the guest asked its name first ([GuestLevel.writer]), then the same plan and order as a member's
+     * ([FolderUpload.made]) — every folder made as the guest (`createShareNodeAsGuest`, a fresh key under its parent's),
+     * every file one [LevelUpload] job into its folder on the guest view's queue. No storage check: a guest reads no
+     * tenant's room (the web's skips it too), the upload's own refusal decides. Once the batch settled, the folders that hold
+     * nothing are taken back (a guest cannot trash; the web's `takeBackEmptyFolders`), none below which a retry could still
+     * land a file.
+     * [shownName] and [path] name the top folder ([FolderUpload.rootName]).
+     */
+    suspend fun uploadFolder(level: GuestLevel, shownName: String?, path: String, found: List<FolderUpload.Found>): FolderUploaded {
+        val rootName = FolderUpload.rootName(shownName, path)
+        val walked = FolderUpload.walked(found)
+        val leftOut = me.raddatz.veyq.mobile.words.Notices.folderLeftOut(walked)
+        val plan = FolderUpload.plan(rootName, walked.entries, me.raddatz.veyq.mobile.AppKinds::tokenInput)
+        if (plan.files == 0) return FolderUploaded(0, leftOut)
+        val w = level.writer() ?: return FolderUploaded(0, leftOut)
+        val keys = ArrayList<ByteArray>()
+        // what was made, for the take-back once the batch settled: each folder (top-down) and its parent, each job's folder
+        val madeFolders = ArrayList<String>()
+        val parentOf = HashMap<String, String>()
+        val folderOf = HashMap<UploadQueue.Job, String>()
+        val siblings = w.siblings.mapNotNull { me.raddatz.veyq.mobile.AppKinds.tokenInput(it.kind, it.name) }
+        val report = runCatching {
+            FolderUpload.made(plan, w.parent, siblings, me.raddatz.veyq.mobile.AppKinds::tokenInput, object : FolderUpload.Maker<OpenNode> {
+                override suspend fun folder(parent: OpenNode, name: String): FolderUpload.Made<OpenNode> =
+                    when (val made = runCatching { w.access.createNode(w.session, parent, FOLDER_KIND, name) }.getOrNull()) {
+                        is GuestAccess.Created.Done -> {
+                            keys += made.key
+                            madeFolders += made.nodeId
+                            parentOf[made.nodeId] = parent.id
+                            FolderUpload.Made.Done(OpenNode(parent.scopeId, made.nodeId, parent.id, FOLDER_KIND, name, made.key, 0, null, 0, made.scopeEpoch))
+                        }
+                        GuestAccess.Created.Taken -> FolderUpload.Made.Taken
+                        else -> FolderUpload.Made.Failed
+                    }
+                override fun job(parent: OpenNode, name: String, entry: FolderUpload.Entry): UploadQueue.Job =
+                    LevelUpload(w.access, w.session, parent, entry.source, name).also { folderOf[it] = parent.id }
+                override fun id(folder: OpenNode): String = folder.id
+            })
+        }.getOrNull()
+        // each job copied the key of its folder: the folders' own are zeroed here
+        keys.forEach { it.fill(0) }
+        val said = leftOut + (report?.let { me.raddatz.veyq.mobile.words.Notices.folderUpload(it) } ?: listOf(
+            me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DEPOT_FOLDER_FAILED, rootName),
+        ))
+        if (report?.outcome != FolderUpload.Outcome.READY) return FolderUploaded(0, said)
+        w.reload()
+        // once the batch settled, the folders that hold nothing are taken back (a guest cannot trash) — but none below which
+        // a refusal that is not final could still land a file on a retry
+        val queued = w.enqueue(report.jobs, report.name) { batch ->
+            val keep = HashSet<String>()
+            for (item in batch.items) {
+                if (item.status != UploadQueue.Status.FAILED || item.final) continue
+                var at = folderOf[item.job]
+                while (at != null && keep.add(at)) at = parentOf[at]
+            }
+            w.takeBackEmpty(madeFolders, keep)
+        }
+        return FolderUploaded(queued, said)
+    }
+
+    private const val FOLDER_KIND = "FOLDER"
 
     internal fun httpOf(access: GuestAccess) = access.client.http
     internal fun pwOf(access: GuestAccess) = access.pwToken
