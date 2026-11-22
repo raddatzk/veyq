@@ -56,6 +56,8 @@ internal sealed class SignInView
     private readonly Button _openLink;
     /// <summary>The kit's server replaced a different one the form held: said, never refused.</summary>
     private readonly TextBlock _otherServer;
+    /// <summary>The Secret Key's typo, said as it is typed (<see cref="SecretKeyTypo"/>).</summary>
+    private readonly TextBlock _typo;
     /// <summary>The kit the form last showed, so a new one fills the email and the server once.</summary>
     private KitShown? _shownKit;
     /// <summary>The entries under the fields, the core's plan drawn whole (Entry).</summary>
@@ -93,6 +95,7 @@ internal sealed class SignInView
         _openLink = openLink;
         _otherServer = Field(new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed }, "signin-kit-other-server");
         _otherServer.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+        _typo = SecretKeyTypo.Watch(_secretKey, "signin-secret-key-typo");
         _error = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
         _error.Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
         AutomationProperties.SetAutomationId(_error, "signin-error");
@@ -122,7 +125,7 @@ internal sealed class SignInView
         AutomationProperties.SetAutomationId(_heading, "signin-title");
         AutomationProperties.SetHeadingLevel(_heading, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level1);
         var column = new StackPanel { Spacing = 16, MaxWidth = 420, Padding = new Thickness(24), VerticalAlignment = VerticalAlignment.Center };
-        foreach (var child in new UIElement[] { _heading, _server, _email, _password, _secretKey, _kitHeld, _otherServer, _error, _entries, _working }) column.Children.Add(child);
+        foreach (var child in new UIElement[] { _heading, _server, _email, _password, _secretKey, _typo, _kitHeld, _otherServer, _error, _entries, _working }) column.Children.Add(child);
         // a width-capped column straight in a ScrollViewer sat off centre once the window was resized (measured): the
         // ScrollViewer's child stretches, the column centres in it
         var stretch = new Grid();
@@ -355,5 +358,40 @@ internal sealed class SignInView
         _password.Password = dev.Password;
         _secretKey.Password = dev.SecretKey;
         if (!dev.FillOnly) Ask();
+    }
+}
+
+/// <summary>
+/// A typo said under a Secret Key box as it is typed (SecretKey.Check, the core's <c>KeyIntake.problem</c>; inbox #1058,
+/// the web's SecretKeyField): shown for a <c>TYPO</c>, collapsed for a key, an empty box or a <c>MALFORMED</c> one, which
+/// says nothing until the action refuses it. Each edit asks anew; an answer to an older edit is dropped. Nothing of the
+/// key is logged.
+/// </summary>
+internal static class SecretKeyTypo
+{
+    /// <summary>The line under <paramref name="box"/>, watching it from here on.</summary>
+    public static TextBlock Watch(PasswordBox box, string id)
+    {
+        var line = new TextBlock { Text = Words.SecretKeyTypo(), TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
+        line.Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
+        AutomationProperties.SetAutomationId(line, id);
+        long asked = 0;
+        box.PasswordChanged += async (_, _) =>
+        {
+            var n = ++asked;
+            try
+            {
+                var (answer, _) = await Core.CallAsync(new Call.SecretKeyCheck { secretKey = box.Password });
+                if (n != asked) return;
+                var typo = answer is Answer.SecretKeyChecked { problem: SecretKeyProblem.Typo };
+                line.Visibility = typo ? Visibility.Visible : Visibility.Collapsed;
+            }
+            catch (Exception e)
+            {
+                // an exception out of an async void would end the app in combase, with nothing in the log
+                Log.Write($"SecretKey.Check failed: {e.GetType().Name}");
+            }
+        };
+        return line;
     }
 }

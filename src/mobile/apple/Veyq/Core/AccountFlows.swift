@@ -344,6 +344,11 @@ struct FlowKeySection<Extra: View>: View {
             } else {
                 SecureField(label, text: $text, prompt: Text(label))
                     .disabled(working || state?.reading == true)
+                // a typo is said as it is typed (core's `KeyIntake.problem`, the web's SecretKeyField); a malformed key says nothing
+                if intake.problem(text: text) == .typo {
+                    Text(say(.secretKeyTypo)).foregroundStyle(Role.danger)
+                        .accessibilityIdentifier("flow-secret-key-typo")
+                }
             }
             if state?.reading == true { ProgressView() }
             // the scan first on a phone or tablet, the file first on a Mac, as at the sign-in

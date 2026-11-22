@@ -1,6 +1,9 @@
 package me.raddatz.veyq.mobile.bridge
 
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.raddatz.veyq.mobile.account.KitImport
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.navigation.Connection
@@ -134,6 +137,28 @@ class KitDispatchTest {
     private suspend fun Bridge<*, *>.signInShown() {
         assertEquals(Answer.Done, ask(Call.SessionStart))
         assertTrue(gateNow() is Gate.SignIn)
+    }
+
+    /**
+     * A Secret Key field's text checked as it is typed (`SecretKey.Check`, inbox #1058): over `v1.json#secret_key_text`,
+     * each case's key and a kit's token read (no problem), each refused text answers its problem — typo or malformed,
+     * the two the field tells apart (the empty one malformed). Asked before any session: the sign-in's own field.
+     */
+    @Test
+    fun aSecretKeyFieldsTextIsCheckedAgainstTheVectorsTypoApartFromMalformed() = runBlocking {
+        val section = kotlinx.serialization.json.Json.parseToJsonElement(
+            File(System.getProperty("veyq.repoRoot"), "contracts/crypto/vectors/v1.json").readText(),
+        ).jsonObject.getValue("secret_key_text").jsonObject
+        fun texts(list: String, field: String) = section.getValue(list).jsonArray.map { it.jsonObject.getValue(field).jsonPrimitive.content }
+        val b = kitBridge(null)
+        for ((i, text) in (texts("cases", "text") + token).withIndex()) assertEquals(Answer.SecretKeyChecked(null), b.ask(Call.SecretKeyCheck(text)), "text $i")
+        val refused = section.getValue("refused").jsonArray.map { it.jsonObject }
+        assertEquals(setOf("typo", "malformed"), refused.map { it.getValue("problem").jsonPrimitive.content }.toSet())
+        for (c in refused) {
+            val problem = me.raddatz.veyq.mobile.crypto.SecretKeyProblem.valueOf(c.getValue("problem").jsonPrimitive.content.uppercase())
+            assertEquals(Answer.SecretKeyChecked(problem), b.ask(Call.SecretKeyCheck(c.getValue("text").jsonPrimitive.content)), c.getValue("why").jsonPrimitive.content)
+        }
+        b.shutdown()
     }
 
     @Test

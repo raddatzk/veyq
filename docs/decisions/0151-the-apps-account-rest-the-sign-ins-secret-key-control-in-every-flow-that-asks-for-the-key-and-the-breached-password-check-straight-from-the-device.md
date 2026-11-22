@@ -101,6 +101,15 @@ words.
 - **The password, its full hash and the Secret Key are in no request, no log, no store and no bridge update**; the key
   lives in the core's memory for the call (or, a kit held, until the flow took it or closed) and is zeroed after it.
 - **Out of scope:** the apps have no join, recovery or first-run setup; when one comes, it takes decision 5's check.
+- **A typo is told apart from a key that is no key (inbox #1058, built 2026-11-22):** the core's Secret Key reader
+  answers typed (`SecretKeyText.reading`: the key, or `SecretKeyProblem.TYPO` / `MALFORMED`, the web's
+  `readSecretKey`; ADR 0154 decision 1), and the intake asks it for a field as it is typed (`KeyIntake.problem`, the
+  sign-in's through `SessionModel.secretKeyProblem`; a `veyqkit:` token that reads is no problem). Every app draws the
+  web's `SecretKeyField` rule under the sign-in's field and every flow's: a typo is said at once (`secret_key_typo`, the
+  web's `unlock.secretKeyTypo`), a malformed entry says nothing until the action refuses it as a key that does not
+  match. The desktops ask on every edit through the bridge (`SecretKey.Check`, answered `SecretKeyChecked` with the
+  problem alone): a typed key travels inward as the sign-in's does (`SecretFreeSchemaTest`'s `typedIn`), nothing of it
+  outward, nothing logged. `v1.json#secret_key_text.refused` pins the split for `@veyq/crypto` and the core alike.
 - **Built 2026-11-19 on every app** (cr-app-account-rest): the core's `account/KeyIntake` (`typed`, `key`, `read`,
   `take`, `scan`, `clear`, `spent`; what a screen sees, `IntakeState` and `HeldKit`), `SessionModel` on it, and one
   intake in each of `PasswordChange`, `AddressChange` (its request and its kit step share it) and `KeyRotation`, whose

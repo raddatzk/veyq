@@ -116,7 +116,8 @@ A Gradle build of its own, run through its own wrapper.
   `SafetyNumber.cs`.
 - **The flows' Secret Key and the breached-password check** ([ADR 0151](../../docs/decisions/0151-the-apps-account-rest-the-sign-ins-secret-key-control-in-every-flow-that-asks-for-the-key-and-the-breached-password-check-straight-from-the-device.md), built 2026-11-19):
   `account/KeyIntake` is the sign-in's key control as a model — `typed(text)` (a `veyqkit:` token first, then a bare
-  key: the web's paste swap), `read` (a kit file, `KitImport`), `scan`, `take`, `clear`, `spent`; the screen sees only
+  key: the web's paste swap), `problem(text)` (the field's typo line as typed, `SecretKeyProblem`; the bridge's
+  `SecretKey.Check`, inbox #1058), `read` (a kit file, `KitImport`), `scan`, `take`, `clear`, `spent`; the screen sees only
   `IntakeState`/`HeldKit` (the kit's address and server, the other-account and other-server notices), never the key.
   `SessionModel` holds one, and so does each of `PasswordChange`, `AddressChange` (request and kit step share it) and
   `KeyRotation`'s gate: their actions take the field's text (empty while a kit is held), the key a copy the call zeroes,

@@ -343,8 +343,11 @@ joined by `-` (on the kit, three lines of three groups). A reader folds case, dr
 `0` and `I`, `L` as `1`, as the invite code does. What then is not 54 symbols of the alphabet is **malformed**; 54
 symbols that are not exactly the form of the bytes they decode to — a check that disagrees, or padding bits set in
 the 52nd symbol — are a **typo**, and the Secret-Key field says so before anything is derived (one misread symbol
-slips past the check with probability 2^-10). Every flow that takes a typed key decodes it here; a key that does not
-read is a credential that does not match.
+slips past the check with probability 2^-10); a malformed entry says nothing while it is typed. Every flow that takes a
+typed key decodes it here; a key that does not read is a credential that does not match. The apps read the same form in
+their Kotlin core (`crypto/SecretKey.kt`, `SecretKeyText.reading`), which answers the same two problems typed
+(`SecretKeyProblem`), so every app's Secret-Key field says the typo as the web's does (ADR 0151 § Consequences);
+`secret_key_text.refused` pins which text is which for both readers.
 
 ## Registration (account creation) — high level
 

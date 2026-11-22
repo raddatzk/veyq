@@ -557,6 +557,16 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
             val typo = (if (text[0] == '0') "1" else "0") + text.drop(1)
             if (SecretKeyText.read(p, typo) != null) fail("a typo read as a key")
         }
+        // Each refused text answered with its problem: the typo / malformed split a Secret-Key field tells apart.
+        val refused = v.obj("secret_key_text")["refused"]!!.jsonArray.map { it.jsonObject }
+        check("secret_key_text's refused cases name both problems") {
+            eq(refused.map { it.str("problem") }.toSet(), setOf("typo", "malformed"))
+        }
+        for (c in refused) {
+            check("secret_key_text refuses ${c.str("why")}") {
+                eq(SecretKeyText.reading(p, c.str("text")), SecretKeyReading.Unreadable(SecretKeyProblem.valueOf(c.str("problem").uppercase())))
+            }
+        }
     }
 
     /**

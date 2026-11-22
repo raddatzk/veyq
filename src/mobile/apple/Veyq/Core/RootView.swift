@@ -35,7 +35,8 @@ struct RootView: View {
                 onKit: model.readKit(_:typedServer:), onClearKit: model.clearKit, onScanKit: model.scanKit(typedServer:),
                 onScanFromTrusted: linkEntry(model.scanFromTrusted(server:)),
                 onShowForSignIn: linkEntry(model.showForSignIn(server:)),
-                onOpenLink: model.inExtension ? nil : { model.guests.ask(model) }
+                onOpenLink: model.inExtension ? nil : { model.guests.ask(model) },
+                secretKeyProblem: model.secretKeyProblem(_:)
             ) { server, email, password, secretKey in
                 model.signIn(server: server, email: email, password: password, secretKey: secretKey)
             }

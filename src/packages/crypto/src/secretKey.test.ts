@@ -12,6 +12,9 @@ const vectors = JSON.parse(readFileSync(resolve(here, '../../../../contracts/cry
 const unhex = (h: string) => Uint8Array.from(Buffer.from(h, 'hex'))
 const CASES = (vectors.secret_key_text.cases as { key: string; text: string }[]).map((c) => ({ key: unhex(c.key), text: c.text }))
 const [RAMP] = CASES
+/** The texts no key prints as, each with the problem a reader answers (`#secret_key_text.refused`): the typo / malformed
+ *  split a Secret-Key field tells apart, held on both suites by the same cases. */
+const REFUSED = vectors.secret_key_text.refused as { why: string; text: string; problem: 'typo' | 'malformed' }[]
 
 /** The symbol at folded position `i` of a printed key, replaced by `to`, hyphens kept. */
 function swapSymbol(text: string, i: number, to: string): string {
@@ -116,6 +119,15 @@ describe('the Secret Key text form', () => {
       expect(readSecretKey(text)).toEqual({ ok: false, problem: 'malformed' })
       expect(() => secretKeyBytes(text)).toThrow(expect.objectContaining({ problem: 'malformed' }))
     })
+  })
+
+  it.each(REFUSED)('refuses the vectors\' $why as $problem', ({ text, problem }) => {
+    expect(readSecretKey(text)).toEqual({ ok: false, problem })
+  })
+
+  it('has refused vectors of both problems', () => {
+    // the control: an each over an empty or one-sided list would pass without telling the two apart
+    expect(new Set(REFUSED.map((r) => r.problem))).toEqual(new Set(['typo', 'malformed']))
   })
 
   it('takes its check from the first 10 bits of SHA-256 over the key', () => {

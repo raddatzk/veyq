@@ -22,6 +22,9 @@ struct SignInView: View {
     /// *Open a link* (ADR 0150 decision 4): a received link opened as its guest, no session needed; nil where the app
     /// offers none (the extension).
     var onOpenLink: (() -> Void)?
+    /// Why the Secret Key as typed is none (core's `SessionModel.secretKeyProblem`, inbox #1058): a typo is said under the
+    /// field as it is typed, a key that is no key at all says nothing until the sign-in refuses it.
+    var secretKeyProblem: (String) -> SecretKeyProblem? = { _ in nil }
     let onSignIn: (String, String, String, String) -> Void
 
     @State private var server: String
@@ -41,6 +44,7 @@ struct SignInView: View {
         onScanKit: ((String) -> QrScan<AnyObject>)? = nil,
         onScanFromTrusted: ((String) -> Void)? = nil, onShowForSignIn: ((String) -> Void)? = nil,
         onOpenLink: (() -> Void)? = nil,
+        secretKeyProblem: @escaping (String) -> SecretKeyProblem? = { _ in nil },
         onSignIn: @escaping (String, String, String, String) -> Void
     ) {
         self.working = working
@@ -54,6 +58,7 @@ struct SignInView: View {
         self.onScanFromTrusted = onScanFromTrusted
         self.onShowForSignIn = onShowForSignIn
         self.onOpenLink = onOpenLink
+        self.secretKeyProblem = secretKeyProblem
         self.onSignIn = onSignIn
         _server = State(initialValue: server.map(Self.shortServer) ?? Self.prefill)
         _email = State(initialValue: email ?? "")
@@ -111,6 +116,10 @@ struct SignInView: View {
                     }
                 } else {
                     SecureField(say(.signinSecretKey), text: $secretKey)
+                    if secretKeyProblem(secretKey) == .typo {
+                        Text(say(.secretKeyTypo)).foregroundStyle(Role.danger)
+                            .accessibilityIdentifier("signin-secret-key-typo")
+                    }
                 }
             } footer: {
                 if let kit, let before = kit.typedServer {

@@ -159,7 +159,9 @@ internal fun FlowKeyField(
             modifier = Modifier.fillMaxWidth().testTag("$tag-kit"),
         )
     } else {
-        SecretField(value, onValue, label, tag, enabled && !state.reading, hint)
+        // a typo is said as it is typed (core's `KeyIntake.problem`, the web's SecretKeyField); a malformed key says nothing
+        val typo = remember(value) { intake.problem(value) == me.raddatz.veyq.mobile.crypto.SecretKeyProblem.TYPO }
+        SecretField(value, onValue, label, tag, enabled && !state.reading, hint, notice = if (typo) stringResource(R.string.secret_key_typo) else null, warn = typo)
     }
     if (state.reading) LinearProgressIndicator(Modifier.fillMaxWidth())
     Refusal(state.problem, "$tag-kit-problem")

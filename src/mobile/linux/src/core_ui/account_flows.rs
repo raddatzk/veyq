@@ -252,12 +252,15 @@ impl KeyControl {
         let scan = adw::ButtonRow::builder().title(words::signin_kit_scan()).start_icon_name("camera-photo-symbolic").visible(false).build();
         let list = rows(&[key.upcast_ref(), held.upcast_ref(), open.upcast_ref(), scan.upcast_ref()]);
         let problem = error_label();
+        // a typo said as it is typed (the core's `KeyIntake.problem`, the web's SecretKeyField); a malformed key says nothing
+        let typo = error_label();
+        crate::core_ui::sign_in::watch_typo(&key, &typo);
         let other_account = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
         other_account.add_css_class("warning");
         let other_server = dim("");
         other_server.set_visible(false);
         let notes = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(6).build();
-        for l in [&problem, &other_account, &other_server] {
+        for l in [&typo, &problem, &other_account, &other_server] {
             notes.append(l);
         }
         let i = id.clone();

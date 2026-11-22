@@ -344,6 +344,13 @@ class SessionModel<A : Connection, T : Any>(
     }
 
     /**
+     * Why the sign-in's Secret Key field, as typed, holds no key ([me.raddatz.veyq.mobile.account.KeyIntake.problem]):
+     * [me.raddatz.veyq.mobile.crypto.SecretKeyProblem.TYPO] is said under the field, the rest says nothing until the
+     * sign-in refuses it. Asked on every edit; nothing of [text] is kept.
+     */
+    fun secretKeyProblem(text: String): me.raddatz.veyq.mobile.crypto.SecretKeyProblem? = intake.problem(text)
+
+    /**
      * A kit read (a file's, [readKit], or a scanned code's): its email and server into the sign-in's form — a kit with no
      * server keeps the form's —, its Secret Key held by this model in place of any held before. The model owns
      * [found]'s kit from here and zeroes its key when it ends. [typedServer] is the form's server as typed now (else the

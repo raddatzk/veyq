@@ -34,6 +34,7 @@ class SecretFreeSchemaTest {
     private val typedIn = mapOf(
         "Session.SignIn.password" to "the password the person typed, on its way to the core",
         "Session.SignIn.secretKey" to "the Secret Key the person typed, on its way to the core",
+        "SecretKey.Check.secretKey" to "a Secret Key field's text as the person types it, on its way to the core's typo check (only the problem comes back)",
         "Session.Unlock.password" to "the password the person typed at the unlock, on its way to the core",
         "Manage.PasswordTrust.password" to "the password the person typed to go back to the password trust, on its way to the core",
         "Share.Password.password" to "the password a guest link is to ask for, as the person typed it, on its way to the core",
