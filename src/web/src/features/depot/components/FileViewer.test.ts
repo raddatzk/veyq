@@ -14,9 +14,11 @@ vi.mock('../../../sw/register', () => ({
 }))
 
 // PDFs are `FileViewer.pdf.test.ts`'s; here the engine is a stub so no test loads pdf.js by accident.
+vi.mock('../svgRaster', () => ({ rasterizeSvg: vi.fn() }))
 vi.mock('../../../shared/pdf/pdfEngine', async (orig) => ({ ...(await orig<typeof import('../../../shared/pdf/pdfEngine')>()), openPdf: vi.fn() }))
 
 import FileViewer from './FileViewer.vue'
+import { rasterizeSvg } from '../svgRaster'
 import { registerPlayback, revokePlayback } from '../../../sw/register'
 import { PLAINTEXT_CHUNK_SIZE } from '../../../sw/range'
 import { IMAGE_CAP, TEXT_CAP } from '../view'
@@ -37,6 +39,7 @@ beforeEach(() => {
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation((u) => void revoked.push(u))
   vi.mocked(registerPlayback).mockReset().mockResolvedValue(null)
   vi.mocked(revokePlayback).mockClear()
+  vi.mocked(rasterizeSvg).mockReset().mockResolvedValue(new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' }))
 })
 afterEach(() => vi.restoreAllMocks())
 
@@ -92,18 +95,29 @@ describe('an image', () => {
     expect(w.find('img').exists()).toBe(false)
   })
 
-  it('shows an SVG only as an <img> from a blob URL typed image/svg+xml - never inline', async () => {
+  it('shows an SVG only as the PNG it draws, from a blob URL - never inline, never by the SVG\'s own URL (inbox #1059)', async () => {
     const svg = utf8('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')
     const w = mountViewer(target(providerOf(svg), { type: 'image/svg+xml', name: 'logo.svg' }))
     await flushPromises()
+    expect(vi.mocked(rasterizeSvg)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(rasterizeSvg).mock.calls[0][0].type).toBe('image/svg+xml')
     expect(w.find('img').attributes('src')).toBe('blob:viewer-1')
-    expect(minted[0].type).toBe('image/svg+xml')
+    expect(minted.map((b) => b.type), 'the page mints a URL for the PNG alone').toEqual(['image/png'])
     // The layer's own icons are inline SVGs (`VeyqIcon`: `<span class="veyq-icon"><svg class="veyq-icon__svg">`, ADR
     // 0107); every other <svg> in the viewer would be the FILE's markup parsed into the page.
     const inline = w.findAll('svg').filter((s) => !(s.classes('veyq-icon__svg') && s.element.parentElement?.classList.contains('veyq-icon')))
     expect(inline, 'the file\'s SVG is never inline markup').toHaveLength(0)
     expect(w.find('script').exists()).toBe(false)
     expect(w.find('object, iframe, embed').exists()).toBe(false)
+  })
+
+  it('an SVG the browser cannot draw is a clear message and the download', async () => {
+    vi.mocked(rasterizeSvg).mockRejectedValueOnce(new Error('the SVG did not draw'))
+    const w = mountViewer(target(providerOf(utf8('<svg><broken')), { type: 'image/svg+xml', name: 'logo.svg' }))
+    await flushPromises()
+    expect(w.find('img').exists()).toBe(false)
+    expect(minted).toHaveLength(0)
+    expect(w.text()).toContain(t('depot.viewer.unsupported.format'))
   })
 
   it('a decode failure (HEIC off Safari, a damaged file) is a clear message and the download, with the URL revoked', async () => {
