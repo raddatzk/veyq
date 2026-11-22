@@ -174,3 +174,19 @@ this file deleted.
   takes the account lock (`AccountStore.lock`) so the find-then-insert upsert cannot race a second first write, a
   rotation or an erasure to the key — the device register instead lets a racing first insert fail on the key. Renaming
   a test named in `docs/coverage/` turns `validate_coverage.py` red: grep the old name there before renaming.
+- Phase 3: (a) a shell notice that links into Settings meets the lint rule `veyq/one-settings-door` (`eslint.config.js`),
+  which the CR did not name — a new door is one more `ignores` entry with its reason (`KitRenewalPrompt.vue`, the
+  seventh). (b) `clearActiveSpace` — the CR's locator for "dropped where the vault is cleared" — is called by no
+  production code: a sign-out is a document load (ADR 0070), so the layout's memory goes with the page; the reset was
+  also put where this tab swaps or drops the Master Key without a reload (`rotateKeys`' unknown outcome and its resume),
+  and a committed rotation sets it to current. (c) The address change and the renewal seal the record while the proof
+  holds the Master Key and `PUT` the sealed blob once the kit is kept, so `writeKitRecord` takes the blob, not the key
+  (decision 4 named `writeKitRecord(masterKey)`): no key is held across the person's save. (d) The notice's dismissal
+  stores the layout it spoke of, not a flag, so a later raise of `KIT_LAYOUT` is told once more (decision 2); "only when
+  no other notice is on" is `otherNoticesOn`, as the CR's locator says — the kit notice can still stand beside the
+  donation banner and the profile prompt, as those two already stand together. (e) A host suite that mocks the vault
+  without `masterKey` goes red wholesale when a section it mounts reads at mount (`KeyRotationPanel.test.ts`: 23 reds
+  from `EmergencyKitStatus`) — stub the new section there and test it in its own suite. (f) admin-web refs make no
+  coverage claim yet (not `ADMITTED`, ADR 0040): the Server Owner's birth is named in a criterion gap on `web`.
+  (g) `checkColdCredential` dropped the vault copy its `masterKey()` presence check took without zeroing it; fixed with
+  the `use` step.
