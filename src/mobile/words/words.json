@@ -33,7 +33,7 @@
   },
   "drawer_spaces": {
     "en": "Spaces",
-    "de": "Spaces"
+    "de": "Bereiche"
   },
   "drawer_settings": {
     "en": "Settings",
@@ -338,11 +338,11 @@
   },
   "search_words_profile": {
     "en": "username, real name, profile picture, avatar",
-    "de": "Benutzername, echter Name, Profilbild, Avatar"
+    "de": "Benutzername, Name, Profilbild, Avatar"
   },
   "search_words_password": {
     "en": "password, passphrase, sign-in",
-    "de": "Passwort, Passphrase, Anmeldung"
+    "de": "Kennwort, Passwort, Anmeldung"
   },
   "search_words_email": {
     "en": "email, e-mail, sign-in address, new address",
@@ -366,8 +366,8 @@
     "de": "Zurück"
   },
   "list_empty": {
-    "en": "Nothing here yet",
-    "de": "Hier ist noch nichts"
+    "en": "Nothing here yet.",
+    "de": "Hier ist noch nichts."
   },
   "not_built": {
     "en": "This view is not built in the app yet.",
@@ -399,7 +399,7 @@
   },
   "signin_working": {
     "en": "Signing in…",
-    "de": "Anmeldung läuft…"
+    "de": "Wird angemeldet…"
   },
   "signin_error_unreachable": {
     "en": "The server could not be reached.",
@@ -717,7 +717,7 @@
   },
   "space_switch": {
     "en": "Switch space",
-    "de": "Space wechseln"
+    "de": "Bereich wechseln"
   },
   "space_personal": {
     "en": "Personal",
@@ -733,7 +733,7 @@
   },
   "switcher_open": {
     "en": "Switch space, tenant or server",
-    "de": "Space, Tenant oder Server wechseln"
+    "de": "Bereich, Tenant oder Server wechseln"
   },
   "switcher_add_server": {
     "en": "Add server",
@@ -774,7 +774,7 @@
   },
   "manage_hint": {
     "en": "Hidden tenants and spaces stay on the server and are only left out on this device.",
-    "de": "Ausgeblendete Tenants und Spaces bleiben auf dem Server und werden nur auf diesem Gerät weggelassen."
+    "de": "Ausgeblendete Tenants und Bereiche bleiben auf dem Server und werden nur auf diesem Gerät weggelassen."
   },
   "manage_trusted_password": {
     "en": "This device opens with your password.",
@@ -899,7 +899,7 @@
   "offer_not_now": {
     "note": "the offer's third answer: the password trust stays, the offer does not come back on this device",
     "en": "Not now",
-    "de": "Nicht jetzt",
+    "de": "Jetzt nicht",
     "apple_en": "Not Now"
   },
   "offer_not_now_hint": {
@@ -944,7 +944,7 @@
   },
   "unlock_remembered_hint": {
     "en": "Confirm it is you to open your spaces.",
-    "de": "Bestätige, dass du es bist, um deine Spaces zu öffnen."
+    "de": "Bestätige, dass du es bist, um deine Bereiche zu öffnen."
   },
   "unlock_login_hint": {
     "note": "the unlock of a remembered account whose store asks nothing (StaySignedIn LOGIN: Linux, Windows without Hello): it shows only when the resume at the start failed (owner 2026-11-11)",
@@ -989,7 +989,7 @@
     "de": "Bestätige, dass du es bist"
   },
   "pot_loading": {
-    "en": "Loading the pot…",
+    "en": "Loading the Pot…",
     "de": "Kasse wird geladen…"
   },
   "pot_no_entries": {
@@ -1001,11 +1001,11 @@
     "de": "Eintrag hinzufügen"
   },
   "pot_expense_by": {
-    "en": "Expense by {1}",
+    "en": "expense by {1}",
     "de": "Ausgabe von {1}"
   },
   "pot_refund_to": {
-    "en": "Refund to {1}",
+    "en": "refund to {1}",
     "de": "Erstattung an {1}"
   },
   "list_beside_empty": {
@@ -1026,7 +1026,7 @@
   },
   "pot_unreadable": {
     "en": "unreadable",
-    "de": "nicht lesbar"
+    "de": "unlesbar"
   },
   "pot_edited": {
     "en": "edited",
@@ -1101,7 +1101,7 @@
     "de": "Änderungen an diesen Einträgen fehlen, die Salden können also falsch sein:"
   },
   "pot_ledger_unknown_entry": {
-    "en": "An entry this pot no longer shows",
+    "en": "An entry this Pot no longer shows",
     "de": "Ein Eintrag, den diese Kasse nicht mehr zeigt"
   },
   "entry_title": {
@@ -1129,7 +1129,7 @@
     "de": "Abbrechen"
   },
   "entry_stale": {
-    "en": "Someone else changed the pot meanwhile. It was read again; save once more.",
+    "en": "Someone else changed the Pot meanwhile. It was read again; save once more.",
     "de": "Jemand anderes hat die Kasse inzwischen geändert. Sie wurde neu gelesen; speichere noch einmal."
   },
   "cat_food": {
@@ -1209,7 +1209,7 @@
     "de": "Entfernen"
   },
   "people_remove_confirm": {
-    "en": "No entry names them, so they disappear from the pot. This can’t be undone.",
+    "en": "No entry names them, so they disappear from the Pot. This can’t be undone.",
     "de": "Kein Eintrag nennt die Person, sie verschwindet also aus der Kasse. Das lässt sich nicht rückgängig machen."
   },
   "people_settle_first": {
@@ -1237,11 +1237,11 @@
     "de": "Die Änderung wurde nicht gespeichert. Bitte versuche es erneut."
   },
   "pot_busy": {
-    "en": "The pot’s key is being renewed. Try again in a moment.",
+    "en": "The Pot’s key is being renewed. Try again in a moment.",
     "de": "Der Schlüssel der Kasse wird gerade erneuert. Versuche es gleich noch einmal."
   },
   "pot_blocked": {
-    "en": "The operator blocked this pot.",
+    "en": "The operator blocked this Pot.",
     "de": "Der Betreiber hat diese Kasse gesperrt."
   },
   "people_deleted_summary": {
@@ -1255,15 +1255,15 @@
     }
   },
   "settings_missing": {
-    "en": "This pot has no base currency yet. Pick one to record entries.",
+    "en": "This Pot has no base currency yet. Pick one to record entries.",
     "de": "Diese Kasse hat noch keine Basiswährung. Wähle eine, um Einträge zu erfassen."
   },
   "settings_missing_read_only": {
-    "en": "This pot has no base currency yet, so it shows no entries.",
+    "en": "This Pot has no base currency yet, so it shows no entries.",
     "de": "Diese Kasse hat noch keine Basiswährung und zeigt deshalb keine Einträge."
   },
   "settings_currency_fixed": {
-    "en": "Fixed: the pot holds entries.",
+    "en": "Fixed: the Pot holds entries.",
     "de": "Steht fest: Die Kasse hat Einträge."
   },
   "settings_currency_hint": {
@@ -1271,7 +1271,7 @@
     "de": "Alle Salden sind in dieser Währung. Sie steht fest, sobald der erste Eintrag gespeichert ist."
   },
   "settings_categories_hint": {
-    "en": "Added here, they can be picked for every entry of this pot. They can be renamed, not removed.",
+    "en": "Added here, they can be picked for every entry of this Pot. They can be renamed, not removed.",
     "de": "Hier hinzugefügt, lassen sie sich für jeden Eintrag dieser Kasse wählen. Sie lassen sich umbenennen, nicht entfernen."
   },
   "settings_category_name": {
@@ -1287,7 +1287,7 @@
     "de": "{1} umbenennen"
   },
   "create_pot": {
-    "en": "New pot",
+    "en": "New Pot",
     "de": "Neue Kasse",
     "apple_en": "New Pot"
   },
@@ -1304,11 +1304,11 @@
     "de": "Erstellen"
   },
   "create_pot_name_taken": {
-    "en": "There is already a pot with this name here.",
+    "en": "There is already a Pot with this name here.",
     "de": "Hier gibt es schon eine Kasse mit diesem Namen."
   },
   "create_pot_people_failed": {
-    "en": "The pot was created, its people were not. Add them in its settings.",
+    "en": "The Pot was created, its people were not. Add them in its settings.",
     "de": "Die Kasse wurde erstellt, ihre Personen nicht. Füge sie in ihren Einstellungen hinzu."
   },
   "create_pot_invalid": {
@@ -1316,7 +1316,7 @@
     "de": "Prüfe den Namen und die Personen: je 1 bis 100 Zeichen."
   },
   "create_pot_failed": {
-    "en": "The pot was not created. Please try again.",
+    "en": "The Pot was not created. Please try again.",
     "de": "Die Kasse wurde nicht erstellt. Bitte versuche es erneut."
   },
   "ed_new_title": {
@@ -1448,19 +1448,19 @@
     "de": "Anteile in {1}"
   },
   "ed_paid_column": {
-    "en": "paid",
-    "de": "bezahlt"
+    "en": "Paid",
+    "de": "Bezahlt"
   },
   "ed_received_column": {
-    "en": "received",
-    "de": "erhalten"
+    "en": "Received",
+    "de": "Erhalten"
   },
   "ed_stale": {
     "en": "Someone else changed this entry. Here is their version; save again to put yours on top.",
     "de": "Jemand anderes hat diesen Eintrag geändert. Hier ist die neue Fassung; speichere erneut, um deine darüberzulegen."
   },
   "ed_blocked": {
-    "en": "Blocked by the operator: this pot or entry takes no changes. Nothing was saved.",
+    "en": "Blocked by the operator: this Pot or entry takes no changes. Nothing was saved.",
     "de": "Von der Betreiberseite gesperrt: Diese Kasse oder dieser Eintrag nimmt keine Änderungen an. Nichts wurde gespeichert."
   },
   "ed_save_failed": {
@@ -1540,7 +1540,7 @@
     "de": "Eine Person ist doppelt genannt."
   },
   "problem_unknown_participant": {
-    "en": "The entry names someone who is not in this pot.",
+    "en": "The entry names someone who is not in this Pot.",
     "de": "Der Eintrag nennt jemanden, der nicht in dieser Kasse ist."
   },
   "ed_split_everyone": {
@@ -1570,7 +1570,7 @@
     "de": "Geändert"
   },
   "history_unreadable": {
-    "en": "A version this pot cannot read",
+    "en": "A version this Pot cannot read",
     "de": "Eine Fassung, die diese Kasse nicht lesen kann"
   },
   "history_unknown_writer": {
@@ -2817,17 +2817,17 @@
   },
   "cover_set": {
     "en": "Set cover",
-    "de": "Titelbild festlegen",
+    "de": "Cover festlegen",
     "apple_en": "Set Cover…"
   },
   "cover_change": {
     "en": "Change cover",
-    "de": "Titelbild ändern",
+    "de": "Cover ändern",
     "apple_en": "Change Cover…"
   },
   "cover_remove": {
     "en": "Remove cover",
-    "de": "Titelbild entfernen",
+    "de": "Cover entfernen",
     "apple_en": "Remove Cover"
   },
   "cover_failed": {
@@ -3299,8 +3299,8 @@
     "de": "„{1}“ konnte nicht hinzugefügt werden: Im Speicher dieses Bereichs ist kein Platz mehr."
   },
   "memory_upload_switched_off": {
-    "en": "Memories is switched off here, so nothing can be added.",
-    "de": "Erinnerungen ist hier abgeschaltet, deshalb kann nichts dazukommen."
+    "en": "Memories is switched off here, so nothing can be added",
+    "de": "Erinnerungen ist hier abgeschaltet, deshalb kann nichts dazukommen"
   },
   "memory_new": {
     "en": "New Memory",
@@ -3494,7 +3494,7 @@
     "de": "Beginn"
   },
   "memory_date_invalid_range": {
-    "en": "The end can't be before the start.",
+    "en": "The end can’t be before the start.",
     "de": "Das Ende darf nicht vor dem Beginn liegen."
   },
   "memory_date_mode_auto": {
@@ -3543,7 +3543,7 @@
     "apple_en": "Enter Your Own Name"
   },
   "memory_place_name_from_map": {
-    "en": "Use the map's name",
+    "en": "Use the map’s name",
     "de": "Namen aus der Karte",
     "apple_en": "Use the Map's Name"
   },
@@ -3829,7 +3829,7 @@
     "de": "nicht eingerichtet"
   },
   "settings_maps_receive": {
-    "en": "The map service receives the part of the map you view, the place-name service the point of a place, and both this device's IP address.",
+    "en": "The map service receives the part of the map you view, the place-name service the point of a place, and both this device’s IP address.",
     "de": "Der Kartendienst erhält den Kartenausschnitt, den du ansiehst, der Dienst für Ortsnamen den Punkt eines Orts, und beide die IP-Adresse dieses Geräts."
   },
   "settings_maps_switch": {
@@ -4172,7 +4172,7 @@
   "device_unlock_prompt": {
     "note": "the system's biometric prompt, when the app opens a remembered account",
     "en": "Open your spaces",
-    "de": "Deine Spaces öffnen"
+    "de": "Deine Bereiche öffnen"
   },
   "ok": {
     "en": "OK",
@@ -4228,11 +4228,12 @@
     "de": "Fotomediathek"
   },
   "cover_choose_image": {
-    "en": "Choose an Image",
-    "de": "Bild auswählen"
+    "en": "Choose an image",
+    "de": "Bild auswählen",
+    "apple_en": "Choose an Image"
   },
   "pot_open_failed": {
-    "en": "This pot did not open",
+    "en": "This Pot did not open",
     "de": "Dieser Pot ließ sich nicht öffnen"
   },
   "share_extension_sign_in_first": {
@@ -4242,7 +4243,7 @@
   "share_link_share": {
     "note": "hands a link to the system's share sheet",
     "en": "Share…",
-    "de": "Teilen …"
+    "de": "Teilen…"
   },
   "share_role": {
     "en": "Role",
@@ -6623,7 +6624,7 @@
   },
   "bookmark_delete_confirm": {
     "en": "“{1}” moves to the trash. You can restore it from there until it is removed for good.",
-    "de": "„{1}“ wird in den Papierkorb verschoben. Von dort kannst du es wiederherstellen, bis es endgültig gelöscht wird."
+    "de": "„{1}“ kommt in den Papierkorb. Dort lässt es sich wiederherstellen, bis es endgültig entfernt wird."
   },
   "import_title": {
     "note": "the web's export.importTitle (ADR 0152 decision 8)",
