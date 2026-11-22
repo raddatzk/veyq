@@ -148,6 +148,10 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
   - The append-only check on `verification-metadata.xml` becomes a guard.
   - The Playwright match is completed in `validate_image_pins.py`.
   - Each guard that names Dependabot or the follow is edited to name Renovate.
+  - `scripts/release_notes.py` exempts only Dependabot's authors (`is_dependabot`) from the release-note check and
+    lists their pull requests as one line under the dependencies. Renovate's App is added to both (its author login,
+    read from its first pull request), or every Renovate pull request is red on *The pull request carries a release
+    note* and missing from the draft (found 2026-11-22 on this CR's phase 1 pull request).
 
   · Done when: the trust chain is green. Each moved rule is bitten: a removed metadata entry is red, and a Playwright
   image one minor off is red.
