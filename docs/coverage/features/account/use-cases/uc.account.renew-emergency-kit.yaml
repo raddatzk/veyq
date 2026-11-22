@@ -1,0 +1,18 @@
+useCase: uc.account.renew-emergency-kit
+feature: account
+title: Make a new Emergency Kit when a clearer one exists
+status: planned
+# Refined 2026-11-22 (ADR 0157); cr-kit-layout-record builds it. Nothing of it exists yet: no layout version, no kit
+# record, no suggestion. The implementer fills `coverage` per criterion and drops `status`.
+acceptanceCriteria:
+  - id: record-is-sealed
+    text: The account's kit record is one blob sealed under the Master Key (purpose kit-record); the server stores and serves it to the account alone and never sees a layout number. A blob that does not open reads as layout 1.
+  - id: every-kit-writes-it
+    text: Each flow that makes a kit writes the record in the same step - the join birth and the Server Owner's birth in their request, securing the account in the rotation request, the address change and the renewal with a PUT once the PDF was saved; recovery and a password change write nothing.
+  - id: suggestion-is-quiet
+    text: An account whose record is older than KIT_LAYOUT, or absent, sees it in Settings - Security with the newest layout's sentence and that the old kit keeps working, and once per browser and account a dismissible shell notice that does not return.
+  - id: proven-before-printed
+    text: Making the new kit checks the password and the Secret Key against the PASSWORD floor first; a wrong one renders no kit and writes no record.
+gaps:
+  backend: "No kit-record operations in the contract, no kitRecord on the birth and rotation requests, no table, store, resource or erasure row."
+  web: "No KIT_LAYOUT, no record read or write, no security block, no shell notice, no renewal flow, no kit-record seal purpose or vector; admin-web's owner birth carries no record."

@@ -322,6 +322,23 @@ Two round-trip tests in two packages cannot keep a writer and a reader in agreem
   forgot-password page in the writer's language. The layout code is per package (no UI in `@veyq/crypto`), the two kept
   line for line alike.
 
+### The kit record
+
+*Planned (cr-kit-layout-record).* What sheet the account last printed, so a clearer one can be suggested
+([ADR 0157](../../../decisions/0157-a-kits-layout-has-a-version-and-a-sealed-record-says-which-one-the-account-last-made.md),
+[uc.account.renew-emergency-kit](../use-cases/uc.account.renew-emergency-kit.md)).
+
+- **The layout has a version, `KIT_LAYOUT`**, beside each writer's layout code and never in the token (the token's `v` is
+  its format's, and a new one would make every printed kit unreadable). Layout 1 is every kit before ADR 0157; layout 2
+  labels the key with its blocks and lines. It is raised only for a change that helps a person use the kit, each raise
+  with one sentence of what the new sheet does better.
+- **The record is one blob sealed under the Master Key**, `{ "layout": n }`, purpose `kit-record` with no binding field
+  (the Master Key is the account's alone and the account has one record, ADR 0072), served by `GET`/`PUT /api/account/kit-record` to the account alone, last writer wins, deleted with the
+  account. No record reads as layout 1.
+- **Whatever makes a kit writes it in the same step**: the two births in their request (`registerAndAcceptTenantInvite`,
+  `createServerOwner`), securing the account in the rotation request under the new Master Key, the address change and the
+  renewal with the `PUT` once the PDF was saved. Recovery and a password change make no kit and write nothing.
+
 ### The Secret Key's text form
 
 How a Secret Key is printed, typed, carried in the token and compared — the one form, in `@veyq/crypto/secretKey`,
