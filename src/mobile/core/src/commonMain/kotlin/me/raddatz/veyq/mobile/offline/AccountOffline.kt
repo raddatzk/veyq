@@ -226,6 +226,9 @@ class AccountOffline internal constructor(
         return true
     }
 
+    /** How many writes the outbox holds now ([count]), noted where the unlock reads it without a key ([OfflineStores.waiting]). */
+    internal fun noteWaiting(count: Int) = OfflineStores.noteWaiting(settings, account, count)
+
     /** [frames] (each sealed under its blob's own `K_blob`) appended to the queued blob [key]; false below the floor, nothing written. */
     internal suspend fun putQueuedFrames(key: EntryKey, frames: Map<Int, ByteArray>): Boolean {
         require(key.kind == KeptRead.OUTBOX_FRAMES)

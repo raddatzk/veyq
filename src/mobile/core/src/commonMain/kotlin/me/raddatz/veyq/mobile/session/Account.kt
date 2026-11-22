@@ -894,10 +894,7 @@ class VeyqAccount private constructor(
      * Each level's unlock key that no DEVICE_KEY record on this device uses any more is deleted (one per level, shared by
      * every account remembered at it): after a sign-out, a stop, or a change of level.
      */
-    private fun releaseUnlockKeys() {
-        val used = device.trusted().mapNotNull { it.unlockLevel }.toSet()
-        for (level in StaySignedIn.entries) if (level !in used) runCatching { device.keys.deleteUnlockKey(level) }
-    }
+    private fun releaseUnlockKeys() = device.releaseUnlockKeys()
 
     /** Ends this device's trust in the account: its wrap deleted on the server, its keys and record here. */
     suspend fun forgetThisDevice() {

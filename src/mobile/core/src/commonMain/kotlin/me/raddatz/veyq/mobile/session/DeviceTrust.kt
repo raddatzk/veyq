@@ -308,6 +308,36 @@ class ThisDevice(
 
     internal fun newAlias(): String = "veyq.device." + hex(primitives.randomBytes(16))
 
+    /**
+     * Each level's unlock key that no DEVICE_KEY record on this device uses any more is deleted (one per level, shared by
+     * every account remembered at it): after a sign-out, a stop, or a change of level.
+     */
+    internal fun releaseUnlockKeys() {
+        val used = trusted().mapNotNull { it.unlockLevel }.toSet()
+        for (level in StaySignedIn.entries) if (level !in used) runCatching { keys.deleteUnlockKey(level) }
+    }
+
+    /**
+     * *Stop trusting this device* for [record] from the unlock, with no account opened (inbox #1052: an account erased
+     * elsewhere comes back at every start, and this device cannot tell — a refused login reads as a wrong password). What
+     * the Manage servers' stop forgets here, it forgets: the record's bind key and refresh token, the record and its kept
+     * wrap, an unlock key no other record uses, the account's offline store with any writes waiting in it, and its "Not
+     * now"; and the server's instance salt where no other record names its host (inbox #971). Nothing is sent: there is no
+     * session to send it with, and the wrap the server keeps opens only with the bind key gone now — it stays in the
+     * account's device register, from where another device of the person's removes it. Every other account's record,
+     * keys, wrap and store stay. Each step is best effort and the next runs whatever the last did.
+     */
+    internal fun forgetLocked(record: TrustedDevice) {
+        runCatching { keys.deleteBindKey(record.alias) }
+        runCatching { keys.deleteSecret(record.refreshAlias) }
+        forget(record.key)
+        setDeclined(record.key, false)
+        releaseUnlockKeys()
+        offline?.let { o -> runCatching { o.wipe(record.key) }.onFailure { println("veyq: the offline store was not wiped: $it") } }
+        val host = io.ktor.http.Url(record.server).host
+        if (trusted().none { io.ktor.http.Url(it.server).host == host }) dropInstanceSalt(host)
+    }
+
     private fun uuid(): String {
         val b = primitives.randomBytes(16)
         b[6] = ((b[6].toInt() and 0x0f) or 0x40).toByte()

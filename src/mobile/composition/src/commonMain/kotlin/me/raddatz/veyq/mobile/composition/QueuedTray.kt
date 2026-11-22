@@ -101,6 +101,13 @@ object QueuedShown {
     fun ask(loss: QueuedLoss, count: Int): QueuedAsk? = lost(count)?.let { QueuedAsk(it, loss.confirm) }
 
     /**
+     * The ask before the unlock's *Stop trusting this device* ([me.raddatz.veyq.mobile.session.SessionModel.forgetUnlocked],
+     * inbox #1052) while writes made offline wait for the account it shows — counted as its outbox last noted them, no key
+     * being open there; null where none waits, and outside the unlock (nothing to ask).
+     */
+    fun forgetAsk(session: me.raddatz.veyq.mobile.session.SessionModel<*, *>): QueuedAsk? = ask(QueuedLoss.STOP_TRUSTING, session.waitingOnUnlock())
+
+    /**
      * What *Save a copy* of a refused write's file [name] came to ([QueuedTray.saveCopy] into the path the host's save
      * dialog gave): saved, or not — the host then removes what it began to write. Said as a download's end is.
      */

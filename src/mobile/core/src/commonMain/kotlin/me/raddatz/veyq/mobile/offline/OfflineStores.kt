@@ -59,6 +59,7 @@ class OfflineStores internal constructor(
             if (key == null) {
                 // no header, or one this Master Key does not open: whatever the directory holds is no longer readable
                 for (n in files.list(dir).orEmpty()) files.remove("$dir${files.separator}$n")
+                noteWaiting(store, account, 0)
                 key = primitives.randomBytes(32)
                 writeHeader(dir, account, wrapKey, key)
             }
@@ -155,6 +156,7 @@ class OfflineStores internal constructor(
         interrupt(WipeStep.FILES)
         files.removeDirectory(dir)
         interrupt(WipeStep.DIRECTORY)
+        noteWaiting(store, account, 0)
         write(records() - account)
     }
 
@@ -165,6 +167,13 @@ class OfflineStores internal constructor(
 
     /** Whether [account] has a store on this device. */
     fun has(account: String): Boolean = records()[account]?.wiping == false
+
+    /**
+     * How many writes made offline [account]'s store holds, as its outbox last noted them (ADR 0153 decision 2): what the
+     * unlock asks about before its *Stop trusting this device* (inbox #1052), where no Master Key opens the store to count.
+     * A count only, beside the trusted record in the device store, never what a write is; 0 without a store.
+     */
+    fun waiting(account: String): Int = if (!has(account)) 0 else store.read(WAITING + account)?.toIntOrNull() ?: 0
 
     private fun directory(id: String) = "$root${files.separator}$id"
 
@@ -190,6 +199,12 @@ class OfflineStores internal constructor(
             OfflineStores(root, store, primitives, files, clock)
 
         const val KEY = "veyq.offline-stores"
+        private const val WAITING = "veyq.offline-waiting."
+
+        /** [count] writes noted as waiting in [account]'s store ([waiting]); none noted at 0. */
+        internal fun noteWaiting(store: DeviceStore, account: String, count: Int) {
+            if (count > 0) store.write(WAITING + account, count.toString()) else store.remove(WAITING + account)
+        }
         /** The header's file name, the one a store's directory names in the clear (a test's). */
         const val HEADER_NAME = OfflineStore.HEADER
         const val HEADER_VERSION = 1
