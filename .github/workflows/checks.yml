@@ -261,10 +261,11 @@ jobs:
     # The one module left out is `:bridge`: its `jvmTest` reads the headers of the bridge's Linux and Windows libraries,
     # so it links them, and their C libraries are built on a Mac (core/sodium/build_libsodium.py builds Apple's slices
     # too) — `app-inputs` runs it, where that toolchain already is. The live cases skip without `VEYQ_LIVE`. The budget
-    # is an estimate until the first run replaces it: locally 21 min for every module, `:bridge` among them, under a
-    # load of 12–20 (2026-11-22).
+    # is an estimate until the first run replaces it: locally 3.9 min through scripts/run_pipeline.py, a fresh clone over
+    # a warm Gradle cache, under a load of 13–25 (2026-11-23); a cold cache resolves every dependency first, as
+    # `backend`'s first run did.
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

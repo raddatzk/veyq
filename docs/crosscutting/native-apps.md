@@ -629,6 +629,9 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   were seen opened, refused, recorded, restored and deleted only.
 - **The apps' CI jobs** (Checks' `app-inputs`, `flatpak`, `msix`, `apps-stage`; ADR 0139 decision 10) are written and have
   never run on GitHub: the first push to `main` proves them (inbox #914). Android's and Apple's apps have none.
+- **The core's own tests on the JVM** run in Checks' `kotlin-core` (every module but `:bridge`, a JDK alone) and the
+  bridge's in `app-inputs` (inbox #1085): written, measured only by running their commands locally, never run on GitHub.
+  The core's native test tasks (`macosArm64Test`, the Linux and Windows ones) run in no CI job.
 
 **Cameras** ([ADR 0141](../decisions/0141-qr-codes-are-read-and-drawn-by-the-core.md); inbox #912)
 - **No real camera has scanned yet** — every `Found` came through a debug test camera. Owed, each the owner's (a
