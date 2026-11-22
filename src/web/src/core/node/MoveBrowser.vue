@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // Core's move browser (owner decision 2026-10-14, replacing inbox #358's list of every destination): ONE place at a time,
-// the way the level shows a folder. It opens where the moved nodes are (`move.ts` `moveStart`), shows a trail up to the top
+// the way the level shows a folder. It opens where the moved nodes are (`treeRules.ts` `moveStart`), shows a trail up to the top
 // of what the session reads (a member's scope root, a guest's link root), and lists only the places a user may go into or
 // move into (`movePlaces`), drawn as the level draws them - core's `LevelRowItem`, the kind's icon or the node's cover, in
 // the level's order (`orderLevel`), with no actions. The place on screen is the `place` model; the dialog around it says
@@ -21,8 +21,7 @@ import type { Access, TreeSource } from '../access'
 import type { TreeNode } from './tree'
 import { FOLDER_KIND } from './kind'
 import { registry } from '../applications/registry'
-import { movePlaces, moveTrail } from './move'
-import { orderLevel } from './levelList'
+import { movePlaces, moveTrail, orderLevel } from './treeRules'
 import type { LevelRow } from './levelRow'
 import LevelRowItem from './components/LevelRowItem.vue'
 import NodeCoverImage from './cover/components/NodeCoverImage.vue'
@@ -40,7 +39,7 @@ const props = defineProps<{
 }>()
 /** The place on screen: a node id, or null for the member's scope root. */
 const place = defineModel<string | null>('place', { required: true })
-const { t, locale } = useI18n()
+const { t } = useI18n()
 
 const nameOf = (id: string | null) => (id === null ? (props.rootLabel ?? '') : props.tree.nameOf(id))
 const placeName = computed(() => nameOf(place.value))
@@ -64,7 +63,7 @@ const places = computed(() => {
   const blocked = new Map(listed.map((p) => [p.node.id, p.blocked]))
   const folders = listed.filter((p) => p.node.kind === FOLDER_KIND).map((p) => p.node)
   const others = listed.filter((p) => p.node.kind !== FOLDER_KIND).map((p) => p.node)
-  return orderLevel(folders, others, locale.value).map((node) => ({ node, blocked: blocked.get(node.id) ?? null }))
+  return orderLevel(folders, others).map((node) => ({ node, blocked: blocked.get(node.id) ?? null }))
 })
 
 // The covers of the places, resolved the way the level resolves them (a member's from the shared store, a guest's through

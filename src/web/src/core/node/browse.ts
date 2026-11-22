@@ -2,7 +2,8 @@
 // so the current level + the breadcrumb are derived here from the locally-decrypted tree (`listTree`).
 import type { TreeNode } from './tree'
 import type { Crumb } from '../../app/breadcrumb'
-import { compareByCreation, displayNamesOf, hashForNode } from './location'
+import { hashForNode } from './location'
+import { displayNamesOf } from './treeRules'
 import { FOLDER_KIND, type NodeKind } from './kind'
 
 const byOrder = (a: TreeNode, b: TreeNode): number => a.orderIndex - b.orderIndex || a.name.localeCompare(b.name)
@@ -40,7 +41,7 @@ export function childrenOf(tree: TreeNode[], parentId: string | null): Level {
 export function displayNameOf(tree: readonly TreeNode[], node: TreeNode): string {
   const parentId = node.parentId ?? null
   const siblings = tree.filter((n) => (n.parentId ?? null) === parentId)
-  return displayNamesOf(siblings, (n) => n.name, compareByCreation).get(node.id) ?? node.name
+  return displayNamesOf(siblings).get(node.id) ?? node.name
 }
 
 /** The breadcrumb from the root down to `nodeId` (null = root): `[root, …ancestors, node]`, each crumb

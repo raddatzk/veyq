@@ -322,6 +322,9 @@ def test(pattern: str | None) -> int:
     # and the web's format vectors (ShownVectorsTest, ADR 0154 decision 5), read the same way
     format_vectors = Path("src/mobile/words/format-vectors.json")
     copy_to([ROOT / format_vectors], remote / "repo" / PureWindowsPath(format_vectors.parent))
+    # and the node tree's vectors (TreeVectorsTest), read the same way
+    tree_vectors = Path("contracts/platform/tree/v1-vectors.json")
+    copy_to([ROOT / tree_vectors], remote / "repo" / PureWindowsPath(tree_vectors.parent))
     env = {"VEYQ_VECTORS": str(remote / VECTORS.name), "VEYQ_NORMALIZATION_TEST": str(remote / NORMALIZATION_TEST.name),
            "VEYQ_REPO_ROOT": str(remote / "repo")}
     forward: list[str] | None = None

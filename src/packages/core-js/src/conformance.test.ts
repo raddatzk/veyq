@@ -36,7 +36,8 @@ describe('the shipped module', () => {
   const shipped = readdirSync(dist).filter((f) => f.endsWith('.d.mts'))
 
   it('names no conformance symbol in its definitions', () => {
-    expect(shipped).toEqual(['veyq-mobile-composition.d.mts'])
+    // the composition's one declaration file, and each entry's own (`search`, `tree`), which re-exports from it
+    expect(shipped).toEqual(['search.d.mts', 'tree.d.mts', 'veyq-mobile-composition.d.mts'])
     for (const f of shipped) expect(readFileSync(resolve(dist, f), 'utf8')).not.toMatch(/conformance/i)
   })
 

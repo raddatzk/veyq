@@ -34,7 +34,7 @@ import type { NodeDetailProps } from '../../../core/applications/registry'
 import { hostRights, injectNodeHost, shareOfferOf } from '../../../core/node/nodeHost'
 import type { TreeNode } from '../../../core/node/tree'
 import { FOLDER_KIND } from '../../../core/node/kind'
-import { compareByCreation, displayNamesOf } from '../../../core/node/location'
+import { compareByCreation, displayNamesOf } from '../../../core/node/treeRules'
 import { useConfirm } from '../../../shared/state/useConfirm'
 import { useToast } from '../../../shared/state/useToast'
 import { FILE_KIND } from '../kinds'
@@ -92,7 +92,7 @@ const folders = computed(() => {
     .filter((n) => n.kind === FOLDER_KIND)
     .sort(compareByCreation)
   // Core's one numbering (the folder's heading and breadcrumb say the same, inbox #393).
-  const labels = displayNamesOf(own, (n) => n.name, compareByCreation)
+  const labels = displayNamesOf(own)
   return own.map((folder) => {
     const files = props.tree.children(folder.id).filter((c) => c.kind === FILE_KIND).length
     return { folder, label: labels.get(folder.id) ?? folder.name, files }

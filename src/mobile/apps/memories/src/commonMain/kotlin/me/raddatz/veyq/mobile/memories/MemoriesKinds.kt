@@ -1,10 +1,10 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.tree.KindFacts
 import kotlin.native.HiddenFromObjC
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.ApplicationKinds
 import me.raddatz.veyq.mobile.PlatformApi
-import me.raddatz.veyq.mobile.crypto.Naming
 import me.raddatz.veyq.mobile.export.NodeExport
 import me.raddatz.veyq.mobile.export.SubtreeCopy
 import me.raddatz.veyq.mobile.export.SubtreeImport
@@ -59,7 +59,11 @@ object MemoriesKinds : ApplicationKinds {
         else -> null
     }
 
-    override fun tokenInput(kind: String, name: String): String? = if (kind in kinds) "memories/" + Naming.slugify(name) else null
+    /** A Memory and a chapter fold as containers behind Memories' route slug; a Memory at the top or in a folder, a chapter in a Memory. */
+    override val kindFacts = listOf(
+        KindFacts.Kind(MEMORY, "memories", KindFacts.NAME, root = true, parents = listOf(FOLDER)),
+        KindFacts.Kind(CHAPTER, "memories", KindFacts.NAME, root = false, parents = listOf(MEMORY)),
+    )
 
     override fun rekey(kind: String): NodeRekey.ContentRekey? = if (kind in kinds) MemoryRekey.content else null
 
@@ -90,12 +94,6 @@ object MemoriesKinds : ApplicationKinds {
                 else -> null
             }
         }
-    }
-
-    override fun placement(kind: String, parent: String?): Boolean? = when (kind) {
-        MEMORY -> parent == null || parent == FOLDER
-        CHAPTER -> parent == MEMORY
-        else -> null
     }
 
     override fun headerOrder(kind: String): List<H>? =

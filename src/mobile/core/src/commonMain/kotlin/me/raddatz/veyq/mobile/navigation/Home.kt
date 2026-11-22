@@ -17,14 +17,17 @@ object Home {
     fun filters(applicationsOff: Set<String>): List<ApplicationId?> = listOf<ApplicationId?>(null) + availableApplications(applicationsOff).map { it.id }
 
     /**
-     * One level: the children of [parentId] (null: the space's root), folders first, each group by name. A kept link is
-     * core's and belongs to no application: listed with everything (the web's `All` tab, `levelTabs.kindVisible`), left out
-     * by an application's filter.
+     * One level: the children of [parentId] (null: the space's root) in the web's order (the platform's
+     * [me.raddatz.veyq.mobile.tree.LevelOrder]: folders first, then every other node mixed by name, equal names by
+     * creation). A kept link is core's and belongs to no application: listed with everything (the web's `All` tab,
+     * `levelTabs.kindVisible`), left out by an application's filter.
      */
-    fun level(nodes: List<NodeRef>, scopeId: String, parentId: String?, filter: ApplicationId?): List<NodeRef> =
-        nodes.filter { it.scopeId == scopeId && it.parentId == parentId }
+    fun level(nodes: List<NodeRef>, scopeId: String, parentId: String?, filter: ApplicationId?): List<NodeRef> {
+        val (folders, others) = nodes.filter { it.scopeId == scopeId && it.parentId == parentId }
             .filter { it.isFolder || (it.isBookmark && filter == null) || (it.application != null && (filter == null || it.application == filter)) }
-            .sortedWith(compareBy<NodeRef> { !it.isFolder }.thenBy { it.name.lowercase() })
+            .partition { it.isFolder }
+        return me.raddatz.veyq.mobile.tree.LevelOrder.order(folders, others, { it.nodeId }, { it.name }, { it.createdAt })
+    }
 
     /**
      * One group of a level, as the web's level view draws it (`LevelView`'s groups): the folders, then the contents.

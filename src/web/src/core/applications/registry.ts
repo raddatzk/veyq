@@ -134,7 +134,8 @@
 // screens ONCE, as groups of `{ keys, label }` (`core/shortcuts/shortcuts.ts`), its labels keys of its own namespace; core's
 // overview (`core/shortcuts/ShortcutsDialog.vue`) lists them after core's own, for an application switched on here only.
 import { nothingOfItsOwnToRekey, type RekeyContentHook, type ScopeRekeyParticipant } from '../node/rekey/hooks'
-import { defineAsyncComponent, type Component } from 'vue'
+import { defineAsyncComponent, markRaw, type Component } from 'vue'
+import { kindFacts as coreKindFacts, type KindFactsHandle } from '@veyq/core-js/tree'
 import { FOLDER_KIND, type NodeKind } from '../node/kind'
 import type { NodeParent, TreeNode } from '../node/tree'
 import type { Level } from '../node/browse'
@@ -145,7 +146,7 @@ import type { ScopeKey } from '../../features/spaces/epochs'
 import type { PublicShareHead } from '../sharing/resolvePublicShare'
 import type { MintedShare } from '../sharing/manageShares'
 import type { Access, GuestAccess, TreeSource } from '../access'
-import { slugify } from '../../shared/naming'
+import { fileNameSlug, slugify } from '../../shared/naming'
 import type { VeyqIconName } from '../../shared/ui/icons'
 import type { ExportContentHook, ImportContentHook } from '../export/hooks'
 import type { ManifestContent } from '../export/manifest'
@@ -752,6 +753,11 @@ export interface Registry {
   /** Whether a node of `kind` may be placed in a parent of `parentKind` (null: the scope root), by the kind's
    *  `placement` hint — false for a kind that declares none or nobody registered (fail closed). */
   placementAllows(kind: NodeKind, parentKind: NodeKind | null): boolean
+  /** Every registered kind's facts as the platform's tree rules read them (`@veyq/core-js/tree`'s `kindFacts`: its route
+   *  slug, its folding for the slug token — `NAME` for `slugify`, `FILE_NAME` for `fileNameSlug` —, its placement), by kind:
+   *  an opaque handle, built once and again after a registration. The apps' registry answers the same table, both held to
+   *  contracts/platform/tree/v1-vectors.json's `kinds`. */
+  kindFacts(): KindFactsHandle
   /** The applications' entries of the level view's "New" menu, sorted by `order` (stable): every kind's `createEntry`
    *  (id `create:<KIND>`, `create` set) and every `levelActions` entry, each with the kind that declared it. Core adds its own
    *  folder entry. */
@@ -806,6 +812,8 @@ export function createRegistry(): Registry {
   // application id → its route slug, or null for the application with no segment.
   const routes = new Map<string, string | null>()
   const slugs = new Set<string>()
+  /** The kinds' facts for the tree's rules (`kindFacts`), dropped by every registration. */
+  let facts: KindFactsHandle | null = null
   /** The route slug of `kind`'s application: a slug, null (no segment), or undefined (nothing decided, or no application). */
   const routeOfKind = (kind: NodeKind): string | null | undefined => {
     const app = applicationOfKind.get(kind)
@@ -843,6 +851,7 @@ export function createRegistry(): Registry {
       }
     }
     kinds.set(kind, descriptor)
+    facts = null
     if (id !== null) applicationOfKind.set(kind, id)
     joinList()
   }
@@ -862,6 +871,7 @@ export function createRegistry(): Registry {
           slugs.add(slug)
         }
         routes.set(id, slug)
+        facts = null
       },
       lifecycle(hooks: LifecycleHooks) {
         if (lifecycles.has(id)) throw new Error(`lifecycle hooks of ${id} are already registered`)
@@ -954,6 +964,22 @@ export function createRegistry(): Registry {
       return { slug: slug ?? null, group: slug ? `application:${slug}` : 'none' }
     },
     routeSlugs: () => [...slugs],
+    kindFacts() {
+      facts ??= markRaw(
+        coreKindFacts(
+          [...kinds.keys()].sort().map((kind) => {
+            const d = kinds.get(kind)!
+            // a folding is frozen into stored tokens, so the rules know two by name and no function
+            if (d.slug !== undefined && d.slug !== fileNameSlug) throw new Error(`node kind ${kind} folds by a function the tree's rules do not name`)
+            return {
+              kind, route: routeOfKind(kind) ?? null, folding: d.slug === fileNameSlug ? 'FILE_NAME' : 'NAME',
+              root: d.placement?.root ?? false, parents: [...(d.placement?.parents ?? [])],
+            }
+          }),
+        ),
+      )
+      return facts
+    },
     placementAllows(kind, parentKind) {
       const p = kinds.get(kind)?.placement
       if (!p) return false

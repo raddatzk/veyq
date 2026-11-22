@@ -57,6 +57,7 @@ acceptanceCriteria:
       web:
         unit:
           - src/core/node/levelTabs.test.ts
+          - src/core/node/tree.vectors.test.ts
           - src/shared/state/useLevelTab.test.ts
           - src/core/node/LevelView.tabs.test.ts
           - src/core/applications/registry.test.ts

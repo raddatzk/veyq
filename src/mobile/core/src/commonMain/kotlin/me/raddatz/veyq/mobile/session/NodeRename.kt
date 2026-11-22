@@ -39,10 +39,12 @@ object NodeRename {
         val node = tree.firstOrNull { it.id == nodeId } ?: return Result(Outcome.FAILED, code = "not_found")
         if (placementSeen != null && node.placementRevision != placementSeen) return Result(Outcome.NAME_TAKEN, code = NodePlacement.STALE_PLACEMENT)
         if (trimmed.isEmpty() || trimmed == node.name) return Result(Outcome.RENAMED)
-        val input = tokenInput(node.kind, trimmed) ?: return Result(Outcome.FAILED)
-        // The loaded tree's sibling that folds to the same input: said by name before anything is sent (`collidingSibling`).
-        tree.firstOrNull { it.parentId == node.parentId && it.id != nodeId && tokenInput(it.kind, it.name) == input }
-            ?.let { return Result(Outcome.NAME_TAKEN, taken = it) }
+        tokenInput(node.kind, trimmed) ?: return Result(Outcome.FAILED)
+        // The loaded tree's sibling that folds to the same input: said by name before anything is sent (the platform's
+        // `SiblingNames`, the web's `collidingSibling`).
+        me.raddatz.veyq.mobile.tree.SiblingNames.colliding(
+            tree.filter { it.parentId == node.parentId }, { it.id }, { it.kind }, { it.name }, node.kind, trimmed, nodeId, tokenInput,
+        )?.let { return Result(Outcome.NAME_TAKEN, taken = it) }
         val ended = NodePlacement.place(
             tenant, scopeId, nodeId, parentOf = { it.parentId }, nameOf = { trimmed }, tokenInput = tokenInput, waitsMs = waitsMs,
             placementSeen = placementSeen,

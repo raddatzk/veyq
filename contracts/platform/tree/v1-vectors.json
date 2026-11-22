@@ -1,0 +1,2926 @@
+{
+  "format": "veyq-tree-v1-vectors",
+  "note": "Conformance vectors for the node tree's rules: the order a level lists its nodes in (`order`: folders first, then every other node mixed by name, case and accents aside, digits as numbers, equal names by creation then id), the numbering of siblings that carry one name (`displayNames`), whether a name collides with a sibling's (`collision`, over the kinds' token inputs, ADR 0080 decision 16), and the move's plan (`moveBlock`, `moveBlockOf`, `planMove`, `movePlaces`, `moveTrail`, `moveStart`; ADR 0080 decision 11 for identity folders). Each case names the rule it pins (`rule`). Inputs chosen by hand; every `expected` recorded by running the rules and read against its rule before commit. A tree (`trees`) is the nodes a session reads, `rootId` its top (null: a member's scope root); a mode `guest` places only into a folder. `kinds` is the kind table both clients read (the web's registry, the apps' AppKinds). `order` was first read from Intl.Collator(locale, { numeric: true, sensitivity: 'base' }) in English and in German, which agree on every case (`icu`). The shape: v1-vectors.schema.json.",
+  "icu": "78.3",
+  "kinds": [
+    {
+      "kind": "CHAPTER",
+      "route": "memories",
+      "folding": "NAME",
+      "root": false,
+      "parents": [
+        "MEMORY"
+      ]
+    },
+    {
+      "kind": "DEPOT_DROPBOX",
+      "route": null,
+      "folding": "NAME",
+      "root": true,
+      "parents": [
+        "FOLDER"
+      ]
+    },
+    {
+      "kind": "EXPENSES_POT",
+      "route": "expenses",
+      "folding": "NAME",
+      "root": true,
+      "parents": [
+        "FOLDER"
+      ]
+    },
+    {
+      "kind": "FILE",
+      "route": null,
+      "folding": "FILE_NAME",
+      "root": true,
+      "parents": [
+        "FOLDER"
+      ]
+    },
+    {
+      "kind": "FOLDER",
+      "route": null,
+      "folding": "NAME",
+      "root": true,
+      "parents": [
+        "FOLDER"
+      ]
+    },
+    {
+      "kind": "MEMORY",
+      "route": "memories",
+      "folding": "NAME",
+      "root": true,
+      "parents": [
+        "FOLDER"
+      ]
+    },
+    {
+      "kind": "SHARE_BOOKMARK",
+      "route": null,
+      "folding": "NAME",
+      "root": true,
+      "parents": [
+        "FOLDER"
+      ]
+    }
+  ],
+  "order": [
+    {
+      "rule": "folders first, then every other node mixed by name, not grouped by kind",
+      "folders": [
+        {
+          "id": "fZebra",
+          "name": "Zebra",
+          "createdAt": 1000
+        },
+        {
+          "id": "fAlpha",
+          "name": "Alpha",
+          "createdAt": 2000
+        }
+      ],
+      "others": [
+        {
+          "id": "report",
+          "name": "Report",
+          "createdAt": 10000
+        },
+        {
+          "id": "beach",
+          "name": "Beach",
+          "createdAt": 11000
+        },
+        {
+          "id": "inbox",
+          "name": "Inbox",
+          "createdAt": 12000
+        },
+        {
+          "id": "aaa",
+          "name": "Aaa",
+          "createdAt": 13000
+        }
+      ],
+      "expected": [
+        "fAlpha",
+        "fZebra",
+        "aaa",
+        "beach",
+        "inbox",
+        "report"
+      ]
+    },
+    {
+      "rule": "a folder named Zzz before a file named Aaa: the kind decides first",
+      "folders": [
+        {
+          "id": "zzz",
+          "name": "Zzz",
+          "createdAt": 1000
+        }
+      ],
+      "others": [
+        {
+          "id": "aaa",
+          "name": "Aaa",
+          "createdAt": 5000
+        }
+      ],
+      "expected": [
+        "zzz",
+        "aaa"
+      ]
+    },
+    {
+      "rule": "digits read as numbers, leading zeros aside: Foto 2 before Foto 10, Foto 02 ties with Foto 2 (the older first)",
+      "folders": [],
+      "others": [
+        {
+          "id": "foto10",
+          "name": "Foto 10",
+          "createdAt": 1000
+        },
+        {
+          "id": "foto2",
+          "name": "Foto 2",
+          "createdAt": 2000
+        },
+        {
+          "id": "foto1",
+          "name": "Foto 1",
+          "createdAt": 3000
+        },
+        {
+          "id": "foto02",
+          "name": "Foto 02",
+          "createdAt": 4000
+        },
+        {
+          "id": "foto007",
+          "name": "Foto 007",
+          "createdAt": 5000
+        },
+        {
+          "id": "foto2a",
+          "name": "Foto 2a",
+          "createdAt": 6000
+        },
+        {
+          "id": "foto2nospace",
+          "name": "Foto2",
+          "createdAt": 7000
+        },
+        {
+          "id": "ten",
+          "name": "10",
+          "createdAt": 8000
+        },
+        {
+          "id": "nine",
+          "name": "9",
+          "createdAt": 9000
+        },
+        {
+          "id": "zero",
+          "name": "0",
+          "createdAt": 10000
+        },
+        {
+          "id": "zeros",
+          "name": "00",
+          "createdAt": 11000
+        },
+        {
+          "id": "big",
+          "name": "Foto 12345678901234567890",
+          "createdAt": 12000
+        },
+        {
+          "id": "ninetynine",
+          "name": "Foto 99",
+          "createdAt": 13000
+        }
+      ],
+      "expected": [
+        "zero",
+        "zeros",
+        "nine",
+        "ten",
+        "foto1",
+        "foto2",
+        "foto02",
+        "foto2a",
+        "foto007",
+        "foto10",
+        "ninetynine",
+        "big",
+        "foto2nospace"
+      ]
+    },
+    {
+      "rule": "case and accents aside: a, A and Ä are one letter; equal names tie by creation",
+      "folders": [],
+      "others": [
+        {
+          "id": "b",
+          "name": "b",
+          "createdAt": 1000
+        },
+        {
+          "id": "Auml",
+          "name": "Ä",
+          "createdAt": 2000
+        },
+        {
+          "id": "a",
+          "name": "a",
+          "createdAt": 3000
+        },
+        {
+          "id": "C",
+          "name": "C",
+          "createdAt": 4000
+        },
+        {
+          "id": "aepfel",
+          "name": "Äpfel",
+          "createdAt": 5000
+        },
+        {
+          "id": "zebra",
+          "name": "zebra",
+          "createdAt": 6000
+        },
+        {
+          "id": "apfel",
+          "name": "apfel",
+          "createdAt": 7000
+        },
+        {
+          "id": "Apfel",
+          "name": "Apfel",
+          "createdAt": 8000
+        },
+        {
+          "id": "Aacute",
+          "name": "Ápfel",
+          "createdAt": 9000
+        },
+        {
+          "id": "banana",
+          "name": "banana",
+          "createdAt": 10000
+        },
+        {
+          "id": "Apple",
+          "name": "Apple",
+          "createdAt": 11000
+        },
+        {
+          "id": "cherry",
+          "name": "cherry",
+          "createdAt": 12000
+        },
+        {
+          "id": "cafe1",
+          "name": "Café",
+          "createdAt": 13000
+        },
+        {
+          "id": "cafe2",
+          "name": "cafe",
+          "createdAt": 14000
+        },
+        {
+          "id": "cafe3",
+          "name": "CAFE",
+          "createdAt": 15000
+        }
+      ],
+      "expected": [
+        "Auml",
+        "a",
+        "aepfel",
+        "apfel",
+        "Apfel",
+        "Aacute",
+        "Apple",
+        "b",
+        "banana",
+        "C",
+        "cafe1",
+        "cafe2",
+        "cafe3",
+        "cherry",
+        "zebra"
+      ]
+    },
+    {
+      "rule": "a sharp s is ss, the capital sharp s too",
+      "folders": [],
+      "others": [
+        {
+          "id": "strasse1",
+          "name": "Straße",
+          "createdAt": 1000
+        },
+        {
+          "id": "strasse2",
+          "name": "Strasse",
+          "createdAt": 2000
+        },
+        {
+          "id": "strasse3",
+          "name": "STRASSE",
+          "createdAt": 3000
+        },
+        {
+          "id": "strase",
+          "name": "Strase",
+          "createdAt": 4000
+        },
+        {
+          "id": "strassen",
+          "name": "Strassen",
+          "createdAt": 5000
+        },
+        {
+          "id": "strasse4",
+          "name": "STRAẞE",
+          "createdAt": 6000
+        }
+      ],
+      "expected": [
+        "strase",
+        "strasse1",
+        "strasse2",
+        "strasse3",
+        "strasse4",
+        "strassen"
+      ]
+    },
+    {
+      "rule": "a name led by white space, punctuation or a symbol sorts before digits and letters, in the collator's order of the groups",
+      "folders": [],
+      "others": [
+        {
+          "id": "underscore",
+          "name": "_Notiz",
+          "createdAt": 1000
+        },
+        {
+          "id": "hyphen",
+          "name": "-Notiz",
+          "createdAt": 2000
+        },
+        {
+          "id": "paren",
+          "name": "(Notiz)",
+          "createdAt": 3000
+        },
+        {
+          "id": "bracket",
+          "name": "[Notiz]",
+          "createdAt": 4000
+        },
+        {
+          "id": "brace",
+          "name": "{Notiz}",
+          "createdAt": 5000
+        },
+        {
+          "id": "at",
+          "name": "@Notiz",
+          "createdAt": 6000
+        },
+        {
+          "id": "star",
+          "name": "*Notiz",
+          "createdAt": 7000
+        },
+        {
+          "id": "slash",
+          "name": "/Notiz",
+          "createdAt": 8000
+        },
+        {
+          "id": "backslash",
+          "name": "\\Notiz",
+          "createdAt": 9000
+        },
+        {
+          "id": "amp",
+          "name": "&Notiz",
+          "createdAt": 10000
+        },
+        {
+          "id": "hash",
+          "name": "#Notiz",
+          "createdAt": 11000
+        },
+        {
+          "id": "pct",
+          "name": "%Notiz",
+          "createdAt": 12000
+        },
+        {
+          "id": "tick",
+          "name": "`Notiz",
+          "createdAt": 13000
+        },
+        {
+          "id": "caret",
+          "name": "^Notiz",
+          "createdAt": 14000
+        },
+        {
+          "id": "plus",
+          "name": "+Notiz",
+          "createdAt": 15000
+        },
+        {
+          "id": "lt",
+          "name": "<Notiz",
+          "createdAt": 16000
+        },
+        {
+          "id": "eq",
+          "name": "=Notiz",
+          "createdAt": 17000
+        },
+        {
+          "id": "gt",
+          "name": ">Notiz",
+          "createdAt": 18000
+        },
+        {
+          "id": "bar",
+          "name": "|Notiz",
+          "createdAt": 19000
+        },
+        {
+          "id": "tilde",
+          "name": "~Notiz",
+          "createdAt": 20000
+        },
+        {
+          "id": "dollar",
+          "name": "$Notiz",
+          "createdAt": 21000
+        },
+        {
+          "id": "dquote",
+          "name": "\"Notiz\"",
+          "createdAt": 22000
+        },
+        {
+          "id": "squote",
+          "name": "'Notiz'",
+          "createdAt": 23000
+        },
+        {
+          "id": "bang",
+          "name": "!Notiz",
+          "createdAt": 24000
+        },
+        {
+          "id": "question",
+          "name": "?Notiz",
+          "createdAt": 25000
+        },
+        {
+          "id": "dot",
+          "name": ".Notiz",
+          "createdAt": 26000
+        },
+        {
+          "id": "comma",
+          "name": ",Notiz",
+          "createdAt": 27000
+        },
+        {
+          "id": "semi",
+          "name": ";Notiz",
+          "createdAt": 28000
+        },
+        {
+          "id": "colon",
+          "name": ":Notiz",
+          "createdAt": 29000
+        },
+        {
+          "id": "space",
+          "name": " Notiz",
+          "createdAt": 30000
+        },
+        {
+          "id": "plain",
+          "name": "Notiz",
+          "createdAt": 31000
+        },
+        {
+          "id": "digit",
+          "name": "1 Notiz",
+          "createdAt": 32000
+        }
+      ],
+      "expected": [
+        "space",
+        "underscore",
+        "hyphen",
+        "comma",
+        "semi",
+        "colon",
+        "bang",
+        "question",
+        "dot",
+        "squote",
+        "dquote",
+        "paren",
+        "bracket",
+        "brace",
+        "at",
+        "star",
+        "slash",
+        "backslash",
+        "amp",
+        "hash",
+        "pct",
+        "tick",
+        "caret",
+        "plus",
+        "lt",
+        "eq",
+        "gt",
+        "bar",
+        "tilde",
+        "dollar",
+        "digit",
+        "plain"
+      ]
+    },
+    {
+      "rule": "punctuation and symbols outside ASCII take their place in the same groups",
+      "folders": [],
+      "others": [
+        {
+          "id": "endash",
+          "name": "–Notiz",
+          "createdAt": 1000
+        },
+        {
+          "id": "emdash",
+          "name": "—Notiz",
+          "createdAt": 2000
+        },
+        {
+          "id": "lowquote",
+          "name": "„Notiz“",
+          "createdAt": 3000
+        },
+        {
+          "id": "guillemet",
+          "name": "«Notiz»",
+          "createdAt": 4000
+        },
+        {
+          "id": "ellipsis",
+          "name": "…Notiz",
+          "createdAt": 5000
+        },
+        {
+          "id": "iquestion",
+          "name": "¿Notiz",
+          "createdAt": 6000
+        },
+        {
+          "id": "ibang",
+          "name": "¡Notiz",
+          "createdAt": 7000
+        },
+        {
+          "id": "section",
+          "name": "§Notiz",
+          "createdAt": 8000
+        },
+        {
+          "id": "pilcrow",
+          "name": "¶Notiz",
+          "createdAt": 9000
+        },
+        {
+          "id": "degree",
+          "name": "°Notiz",
+          "createdAt": 10000
+        },
+        {
+          "id": "copyright",
+          "name": "©Notiz",
+          "createdAt": 11000
+        },
+        {
+          "id": "registered",
+          "name": "®Notiz",
+          "createdAt": 12000
+        },
+        {
+          "id": "plusminus",
+          "name": "±Notiz",
+          "createdAt": 13000
+        },
+        {
+          "id": "times",
+          "name": "×Notiz",
+          "createdAt": 14000
+        },
+        {
+          "id": "divide",
+          "name": "÷Notiz",
+          "createdAt": 15000
+        },
+        {
+          "id": "euro",
+          "name": "€Notiz",
+          "createdAt": 16000
+        },
+        {
+          "id": "pound",
+          "name": "£Notiz",
+          "createdAt": 17000
+        },
+        {
+          "id": "yen",
+          "name": "¥Notiz",
+          "createdAt": 18000
+        },
+        {
+          "id": "rsquo",
+          "name": "’Notiz",
+          "createdAt": 19000
+        },
+        {
+          "id": "bullet",
+          "name": "•Notiz",
+          "createdAt": 20000
+        },
+        {
+          "id": "hyphenAscii",
+          "name": "-Notiz",
+          "createdAt": 21000
+        },
+        {
+          "id": "underscore",
+          "name": "_Notiz",
+          "createdAt": 22000
+        },
+        {
+          "id": "plain",
+          "name": "Notiz",
+          "createdAt": 23000
+        }
+      ],
+      "expected": [
+        "underscore",
+        "hyphenAscii",
+        "endash",
+        "emdash",
+        "ibang",
+        "iquestion",
+        "ellipsis",
+        "rsquo",
+        "lowquote",
+        "guillemet",
+        "section",
+        "pilcrow",
+        "bullet",
+        "degree",
+        "copyright",
+        "registered",
+        "plusminus",
+        "divide",
+        "times",
+        "pound",
+        "yen",
+        "euro",
+        "plain"
+      ]
+    },
+    {
+      "rule": "an emoji is a symbol: after the punctuation, before the currency signs, digits and letters",
+      "folders": [],
+      "others": [
+        {
+          "id": "smile",
+          "name": "😀 Smile",
+          "createdAt": 1000
+        },
+        {
+          "id": "party",
+          "name": "🎉 Party",
+          "createdAt": 2000
+        },
+        {
+          "id": "heart",
+          "name": "♥ Herz",
+          "createdAt": 3000
+        },
+        {
+          "id": "plain",
+          "name": "Party",
+          "createdAt": 4000
+        },
+        {
+          "id": "dollar",
+          "name": "$ Preis",
+          "createdAt": 5000
+        },
+        {
+          "id": "hyphen",
+          "name": "- Liste",
+          "createdAt": 6000
+        },
+        {
+          "id": "digit",
+          "name": "2 Fotos",
+          "createdAt": 7000
+        }
+      ],
+      "expected": [
+        "hyphen",
+        "heart",
+        "party",
+        "smile",
+        "dollar",
+        "digit",
+        "plain"
+      ]
+    },
+    {
+      "rule": "other scripts after Latin: Greek, Cyrillic, then the CJK ideographs",
+      "folders": [],
+      "others": [
+        {
+          "id": "han1",
+          "name": "中文",
+          "createdAt": 1000
+        },
+        {
+          "id": "han2",
+          "name": "一",
+          "createdAt": 2000
+        },
+        {
+          "id": "greek1",
+          "name": "Ωmega",
+          "createdAt": 3000
+        },
+        {
+          "id": "greek2",
+          "name": "Αλφα",
+          "createdAt": 4000
+        },
+        {
+          "id": "cyr1",
+          "name": "Яблоко",
+          "createdAt": 5000
+        },
+        {
+          "id": "cyr2",
+          "name": "Апельсин",
+          "createdAt": 6000
+        },
+        {
+          "id": "latin",
+          "name": "Zulu",
+          "createdAt": 7000
+        },
+        {
+          "id": "hebrew",
+          "name": "שלום",
+          "createdAt": 8000
+        },
+        {
+          "id": "arabic",
+          "name": "سلام",
+          "createdAt": 9000
+        }
+      ],
+      "expected": [
+        "latin",
+        "greek2",
+        "greek1",
+        "cyr2",
+        "cyr1",
+        "hebrew",
+        "arabic",
+        "han2",
+        "han1"
+      ]
+    },
+    {
+      "rule": "names that fold to nothing for a slug still order: the empty name first",
+      "folders": [],
+      "others": [
+        {
+          "id": "empty",
+          "name": "",
+          "createdAt": 1000
+        },
+        {
+          "id": "bangs",
+          "name": "!!!",
+          "createdAt": 2000
+        },
+        {
+          "id": "smile",
+          "name": "😀",
+          "createdAt": 3000
+        },
+        {
+          "id": "han",
+          "name": "中",
+          "createdAt": 4000
+        },
+        {
+          "id": "a",
+          "name": "a",
+          "createdAt": 5000
+        }
+      ],
+      "expected": [
+        "empty",
+        "bangs",
+        "smile",
+        "a",
+        "han"
+      ]
+    },
+    {
+      "rule": "ligatures and letters the collator reads as their base letters: æ is ae, ø is o, ł is l, a full-width letter is the letter",
+      "folders": [],
+      "others": [
+        {
+          "id": "aeble",
+          "name": "æble",
+          "createdAt": 1000
+        },
+        {
+          "id": "Aeble",
+          "name": "Aeble",
+          "createdAt": 2000
+        },
+        {
+          "id": "oeuvre1",
+          "name": "Œuvre",
+          "createdAt": 3000
+        },
+        {
+          "id": "oeuvre2",
+          "name": "oeuvre",
+          "createdAt": 4000
+        },
+        {
+          "id": "oere",
+          "name": "Øre",
+          "createdAt": 5000
+        },
+        {
+          "id": "ore",
+          "name": "Ore",
+          "createdAt": 6000
+        },
+        {
+          "id": "lodz1",
+          "name": "Łódź",
+          "createdAt": 7000
+        },
+        {
+          "id": "lodz2",
+          "name": "Lodz",
+          "createdAt": 8000
+        },
+        {
+          "id": "fi1",
+          "name": "ﬁle",
+          "createdAt": 9000
+        },
+        {
+          "id": "fi2",
+          "name": "file",
+          "createdAt": 10000
+        },
+        {
+          "id": "full1",
+          "name": "Ｆｕｌｌ",
+          "createdAt": 11000
+        },
+        {
+          "id": "full2",
+          "name": "Full",
+          "createdAt": 12000
+        },
+        {
+          "id": "ij1",
+          "name": "ĳs",
+          "createdAt": 13000
+        },
+        {
+          "id": "ij2",
+          "name": "ijs",
+          "createdAt": 14000
+        },
+        {
+          "id": "eth",
+          "name": "ðe",
+          "createdAt": 15000
+        },
+        {
+          "id": "d",
+          "name": "de",
+          "createdAt": 16000
+        },
+        {
+          "id": "dstroke",
+          "name": "đe",
+          "createdAt": 17000
+        }
+      ],
+      "expected": [
+        "aeble",
+        "Aeble",
+        "eth",
+        "d",
+        "dstroke",
+        "fi1",
+        "fi2",
+        "full1",
+        "full2",
+        "ij1",
+        "ij2",
+        "lodz1",
+        "lodz2",
+        "oeuvre1",
+        "oeuvre2",
+        "oere",
+        "ore"
+      ]
+    },
+    {
+      "rule": "white space inside a name is one of its characters, before punctuation and letters: a tab before a space, a no-break space is a space",
+      "folders": [],
+      "others": [
+        {
+          "id": "ab",
+          "name": "ab",
+          "createdAt": 1000
+        },
+        {
+          "id": "a_b",
+          "name": "a b",
+          "createdAt": 2000
+        },
+        {
+          "id": "a__b",
+          "name": "a  b",
+          "createdAt": 3000
+        },
+        {
+          "id": "a_tab_b",
+          "name": "a\tb",
+          "createdAt": 4000
+        },
+        {
+          "id": "a_nbsp_b",
+          "name": "a b",
+          "createdAt": 5000
+        },
+        {
+          "id": "a_dash_b",
+          "name": "a-b",
+          "createdAt": 6000
+        }
+      ],
+      "expected": [
+        "a_tab_b",
+        "a__b",
+        "a_b",
+        "a_nbsp_b",
+        "a_dash_b",
+        "ab"
+      ]
+    },
+    {
+      "rule": "equal names tie by creation, then by id in UTF-16 order (B before a), whatever order the tree listed them in",
+      "folders": [],
+      "others": [
+        {
+          "id": "a-new",
+          "name": "Anna",
+          "createdAt": 2000
+        },
+        {
+          "id": "z-old",
+          "name": "Anna",
+          "createdAt": 1000
+        },
+        {
+          "id": "b",
+          "name": "Bob",
+          "createdAt": 5
+        },
+        {
+          "id": "a",
+          "name": "Bob",
+          "createdAt": 5
+        },
+        {
+          "id": "B9",
+          "name": "Carl",
+          "createdAt": 7
+        },
+        {
+          "id": "a9",
+          "name": "Carl",
+          "createdAt": 7
+        },
+        {
+          "id": "2",
+          "name": "anna",
+          "createdAt": 2
+        },
+        {
+          "id": "1",
+          "name": "ANNA",
+          "createdAt": 1
+        }
+      ],
+      "expected": [
+        "1",
+        "2",
+        "z-old",
+        "a-new",
+        "a",
+        "b",
+        "B9",
+        "a9"
+      ]
+    },
+    {
+      "rule": "a guest's nodes carry no creation instant (null): equal names tie by id",
+      "folders": [],
+      "others": [
+        {
+          "id": "c",
+          "name": "Anna",
+          "createdAt": null
+        },
+        {
+          "id": "a",
+          "name": "Anna",
+          "createdAt": null
+        },
+        {
+          "id": "b",
+          "name": "anna",
+          "createdAt": null
+        },
+        {
+          "id": "d",
+          "name": "Ben",
+          "createdAt": null
+        }
+      ],
+      "expected": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ]
+    },
+    {
+      "rule": "folders and others are ordered apart, each by the same rule",
+      "folders": [
+        {
+          "id": "f2",
+          "name": "Foto 10",
+          "createdAt": 1
+        },
+        {
+          "id": "f1",
+          "name": "foto 9",
+          "createdAt": 2
+        },
+        {
+          "id": "f3",
+          "name": "_Archiv",
+          "createdAt": 3
+        }
+      ],
+      "others": [
+        {
+          "id": "m1",
+          "name": "Foto 10",
+          "createdAt": 4
+        },
+        {
+          "id": "m2",
+          "name": "Äpfel",
+          "createdAt": 5
+        },
+        {
+          "id": "m3",
+          "name": "apfel",
+          "createdAt": 6
+        },
+        {
+          "id": "m4",
+          "name": "_Notiz",
+          "createdAt": 7
+        }
+      ],
+      "expected": [
+        "f3",
+        "f1",
+        "f2",
+        "m4",
+        "m2",
+        "m3",
+        "m1"
+      ]
+    }
+  ],
+  "displayNames": [
+    {
+      "rule": "a unique name keeps itself; a repeated one is numbered from (2) in creation order (the instant, then the id)",
+      "order": "creation",
+      "siblings": [
+        {
+          "id": "c",
+          "name": "Anna",
+          "createdAt": 3
+        },
+        {
+          "id": "a",
+          "name": "Anna",
+          "createdAt": 1
+        },
+        {
+          "id": "b",
+          "name": "Ben",
+          "createdAt": 2
+        },
+        {
+          "id": "d",
+          "name": "Anna",
+          "createdAt": 2
+        }
+      ],
+      "expected": {
+        "a": "Anna",
+        "b": "Ben",
+        "d": "Anna (2)",
+        "c": "Anna (3)"
+      }
+    },
+    {
+      "rule": "a guest's view numbers in node-id order (no creation instant is served)",
+      "order": "id",
+      "siblings": [
+        {
+          "id": "c",
+          "name": "Anna",
+          "createdAt": 3
+        },
+        {
+          "id": "a",
+          "name": "Anna",
+          "createdAt": 1
+        },
+        {
+          "id": "b",
+          "name": "Ben",
+          "createdAt": 2
+        },
+        {
+          "id": "d",
+          "name": "Anna",
+          "createdAt": 2
+        }
+      ],
+      "expected": {
+        "a": "Anna",
+        "b": "Ben",
+        "c": "Anna (2)",
+        "d": "Anna (3)"
+      }
+    },
+    {
+      "rule": "the numbering compares names exactly: case and accents tell names apart",
+      "order": "creation",
+      "siblings": [
+        {
+          "id": "x",
+          "name": "anna",
+          "createdAt": 1
+        },
+        {
+          "id": "y",
+          "name": "Anna",
+          "createdAt": 2
+        },
+        {
+          "id": "z",
+          "name": "Änna",
+          "createdAt": 3
+        },
+        {
+          "id": "w",
+          "name": "Anna",
+          "createdAt": 4
+        }
+      ],
+      "expected": {
+        "x": "anna",
+        "y": "Anna",
+        "z": "Änna",
+        "w": "Anna (2)"
+      }
+    },
+    {
+      "rule": "two born in one millisecond fall to their ids in UTF-16 order (B before a)",
+      "order": "creation",
+      "siblings": [
+        {
+          "id": "a9",
+          "name": "Anna",
+          "createdAt": 5
+        },
+        {
+          "id": "B9",
+          "name": "Anna",
+          "createdAt": 5
+        }
+      ],
+      "expected": {
+        "B9": "Anna",
+        "a9": "Anna (2)"
+      }
+    },
+    {
+      "rule": "display only: a sibling literally named Anna (2) and the second Anna read alike",
+      "order": "creation",
+      "siblings": [
+        {
+          "id": "p",
+          "name": "Anna",
+          "createdAt": 1
+        },
+        {
+          "id": "q",
+          "name": "Anna (2)",
+          "createdAt": 2
+        },
+        {
+          "id": "r",
+          "name": "Anna",
+          "createdAt": 3
+        }
+      ],
+      "expected": {
+        "p": "Anna",
+        "q": "Anna (2)",
+        "r": "Anna (2)"
+      }
+    },
+    {
+      "rule": "no siblings, no labels",
+      "order": "creation",
+      "siblings": [],
+      "expected": {}
+    }
+  ],
+  "collision": [
+    {
+      "rule": "the sibling under the same parent whose token input the new name takes",
+      "nodes": "plain",
+      "parentId": "p",
+      "kind": "FOLDER",
+      "name": "trips",
+      "self": null,
+      "expected": "f1"
+    },
+    {
+      "rule": "at the scope root (parent null)",
+      "nodes": "plain",
+      "parentId": null,
+      "kind": "FOLDER",
+      "name": "TRIPS",
+      "self": null,
+      "expected": "r1"
+    },
+    {
+      "rule": "a parent with no such child",
+      "nodes": "plain",
+      "parentId": "other",
+      "kind": "FOLDER",
+      "name": "Trips",
+      "self": null,
+      "expected": null
+    },
+    {
+      "rule": "a file folds by fileNameSlug: its case aside, its punctuation kept",
+      "nodes": "plain",
+      "parentId": "p",
+      "kind": "FILE",
+      "name": "foto.jpg",
+      "self": null,
+      "expected": "x1"
+    },
+    {
+      "rule": "fileNameSlug keeps the space and the dot apart",
+      "nodes": "plain",
+      "parentId": "p",
+      "kind": "FILE",
+      "name": "Day1 md",
+      "self": null,
+      "expected": null
+    },
+    {
+      "rule": "a folder Foto JPG (foto-jpg) and a file Foto.JPG (foto.jpg) coexist",
+      "nodes": "plain",
+      "parentId": "p",
+      "kind": "FOLDER",
+      "name": "Foto JPG",
+      "self": null,
+      "expected": null
+    },
+    {
+      "rule": "a folder a.b (a-b) and a file a-b (a-b) collide",
+      "nodes": [
+        {
+          "id": "x3",
+          "kind": "FILE",
+          "name": "a-b",
+          "parentId": "p"
+        }
+      ],
+      "parentId": "p",
+      "kind": "FOLDER",
+      "name": "a.b",
+      "self": null,
+      "expected": "x3"
+    },
+    {
+      "rule": "a file a.b beside a folder a.b is accepted (a.b against a-b)",
+      "nodes": [
+        {
+          "id": "f",
+          "kind": "FOLDER",
+          "name": "a.b",
+          "parentId": "p"
+        }
+      ],
+      "parentId": "p",
+      "kind": "FILE",
+      "name": "a.b",
+      "self": null,
+      "expected": null
+    },
+    {
+      "rule": "a decomposed umlaut folds like the composed one",
+      "nodes": [
+        {
+          "id": "m",
+          "kind": "FOLDER",
+          "name": "Müller",
+          "parentId": "p"
+        }
+      ],
+      "parentId": "p",
+      "kind": "FOLDER",
+      "name": "Müller",
+      "self": null,
+      "expected": "m"
+    },
+    {
+      "rule": "a Memory and a Pot of one name do not collide (route groups, ADR 0080 decision 16)",
+      "nodes": [
+        {
+          "id": "m",
+          "kind": "MEMORY",
+          "name": "Korfubanien",
+          "parentId": "p"
+        }
+      ],
+      "parentId": "p",
+      "kind": "EXPENSES_POT",
+      "name": "Korfubanien",
+      "self": null,
+      "expected": null
+    },
+    {
+      "rule": "a Pot and a Memory of one name do not collide, the other way round",
+      "nodes": [
+        {
+          "id": "e",
+          "kind": "EXPENSES_POT",
+          "name": "Korfubanien",
+          "parentId": "p"
+        }
+      ],
+      "parentId": "p",
+      "kind": "MEMORY",
+      "name": "korfubanien",
+      "self": null,
+      "expected": null
+    },
+    {
+      "rule": "a Memory does not collide with a folder, a file or a drop box of its name",
+      "nodes": "routes",
+      "parentId": "p",
+      "kind": "MEMORY",
+      "name": "Korfubanien",
+      "self": null,
+      "expected": null
+    },
+    {
+      "rule": "a Pot does not collide with a folder, a file or a drop box of its name",
+      "nodes": "routes",
+      "parentId": "p",
+      "kind": "EXPENSES_POT",
+      "name": "Korfubanien",
+      "self": null,
+      "expected": null
+    },
+    {
+      "rule": "a folder does not collide with a Pot of its name",
+      "nodes": [
+        {
+          "id": "e",
+          "kind": "EXPENSES_POT",
+          "name": "Korfubanien",
+          "parentId": "p"
+        }
+      ],
+      "parentId": "p",
+      "kind": "FOLDER",
+      "name": "Korfubanien",
+      "self": null,
+      "expected": null
+    },
+    {
+      "rule": "two Pots of one name collide",
+      "nodes": [
+        {
+          "id": "e",
+          "kind": "EXPENSES_POT",
+          "name": "Korfubanien",
+          "parentId": "p"
+        }
+      ],
+      "parentId": "p",
+      "kind": "EXPENSES_POT",
+      "name": "KORFUBANIEN",
+      "self": null,
+      "expected": "e"
+    },
+    {
+      "rule": "a Memory and a chapter of one name collide (one route group)",
+      "nodes": [
+        {
+          "id": "m",
+          "kind": "MEMORY",
+          "name": "Tag 1",
+          "parentId": "p"
+        }
+      ],
+      "parentId": "p",
+      "kind": "CHAPTER",
+      "name": "tag-1",
+      "self": null,
+      "expected": "m"
+    },
+    {
+      "rule": "a folder and a Depot file of one name collide (the plain names are one group)",
+      "nodes": [
+        {
+          "id": "x",
+          "kind": "FILE",
+          "name": "report",
+          "parentId": "p"
+        }
+      ],
+      "parentId": "p",
+      "kind": "FOLDER",
+      "name": "Report",
+      "self": null,
+      "expected": "x"
+    },
+    {
+      "rule": "a drop box and a folder of one name collide",
+      "nodes": [
+        {
+          "id": "f",
+          "kind": "FOLDER",
+          "name": "Report",
+          "parentId": "p"
+        }
+      ],
+      "parentId": "p",
+      "kind": "DEPOT_DROPBOX",
+      "name": "report",
+      "self": null,
+      "expected": "f"
+    },
+    {
+      "rule": "a kept link folds as a folder does, among the plain names",
+      "nodes": [
+        {
+          "id": "f",
+          "kind": "FOLDER",
+          "name": "Links",
+          "parentId": "p"
+        }
+      ],
+      "parentId": "p",
+      "kind": "SHARE_BOOKMARK",
+      "name": "links",
+      "self": null,
+      "expected": "f"
+    },
+    {
+      "rule": "a kind nobody registered folds by slugify among the plain names",
+      "nodes": [
+        {
+          "id": "u",
+          "kind": "SOMETHING_NEW",
+          "name": "Rom",
+          "parentId": "p"
+        }
+      ],
+      "parentId": "p",
+      "kind": "FOLDER",
+      "name": "rom",
+      "self": null,
+      "expected": "u"
+    },
+    {
+      "rule": "a name that folds to nothing falls back to its hash and meets only its own",
+      "nodes": [
+        {
+          "id": "h",
+          "kind": "FOLDER",
+          "name": "😀",
+          "parentId": "p"
+        },
+        {
+          "id": "h2",
+          "kind": "FOLDER",
+          "name": "🎉",
+          "parentId": "p"
+        }
+      ],
+      "parentId": "p",
+      "kind": "FOLDER",
+      "name": "😀",
+      "self": null,
+      "expected": "h"
+    },
+    {
+      "rule": "a rename never collides with the node itself",
+      "nodes": "plain",
+      "parentId": "p",
+      "kind": "FOLDER",
+      "name": "trips",
+      "self": "f1",
+      "expected": null
+    },
+    {
+      "rule": "a rename still meets another sibling of the name",
+      "nodes": [
+        {
+          "id": "f1",
+          "kind": "FOLDER",
+          "name": "Trips",
+          "parentId": "p"
+        },
+        {
+          "id": "f2",
+          "kind": "FOLDER",
+          "name": "trips",
+          "parentId": "p"
+        }
+      ],
+      "parentId": "p",
+      "kind": "FOLDER",
+      "name": "TRIPS",
+      "self": "f1",
+      "expected": "f2"
+    },
+    {
+      "rule": "the first sibling in the given order that collides is named",
+      "nodes": [
+        {
+          "id": "x2",
+          "kind": "FILE",
+          "name": "Report",
+          "parentId": "p"
+        },
+        {
+          "id": "x1",
+          "kind": "FOLDER",
+          "name": "report",
+          "parentId": "p"
+        }
+      ],
+      "parentId": "p",
+      "kind": "FOLDER",
+      "name": "Report",
+      "self": null,
+      "expected": "x2"
+    }
+  ],
+  "collisionNodes": {
+    "plain": [
+      {
+        "id": "f1",
+        "kind": "FOLDER",
+        "name": "Trips",
+        "parentId": "p"
+      },
+      {
+        "id": "x1",
+        "kind": "FILE",
+        "name": "Foto.JPG",
+        "parentId": "p"
+      },
+      {
+        "id": "x2",
+        "kind": "FILE",
+        "name": "Day1.md",
+        "parentId": "p"
+      },
+      {
+        "id": "r1",
+        "kind": "FOLDER",
+        "name": "Trips",
+        "parentId": null
+      }
+    ],
+    "routes": [
+      {
+        "id": "f",
+        "kind": "FOLDER",
+        "name": "Korfubanien",
+        "parentId": "p"
+      },
+      {
+        "id": "x",
+        "kind": "FILE",
+        "name": "korfubanien",
+        "parentId": "p"
+      },
+      {
+        "id": "b",
+        "kind": "DEPOT_DROPBOX",
+        "name": "Korfubanien",
+        "parentId": "p"
+      }
+    ]
+  },
+  "trees": {
+    "space": {
+      "rootId": null,
+      "nodes": [
+        {
+          "id": "home",
+          "parentId": null,
+          "kind": "FOLDER",
+          "name": "home",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "a",
+          "parentId": "home",
+          "kind": "FOLDER",
+          "name": "a",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "a1",
+          "parentId": "a",
+          "kind": "FOLDER",
+          "name": "a1",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "b",
+          "parentId": "home",
+          "kind": "FOLDER",
+          "name": "b",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "mem",
+          "parentId": "b",
+          "kind": "MEMORY",
+          "name": "Rom",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "ch",
+          "parentId": "mem",
+          "kind": "CHAPTER",
+          "name": "Tag 1",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "box",
+          "parentId": "home",
+          "kind": "DEPOT_DROPBOX",
+          "name": "box",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "guest",
+          "parentId": "box",
+          "kind": "FOLDER",
+          "name": "Anna",
+          "createdAt": null,
+          "identity": true
+        },
+        {
+          "id": "inner",
+          "parentId": "guest",
+          "kind": "FOLDER",
+          "name": "inner",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "gfile",
+          "parentId": "guest",
+          "kind": "FILE",
+          "name": "a.jpg",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "file",
+          "parentId": "home",
+          "kind": "FILE",
+          "name": "Report.pdf",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "pot",
+          "parentId": "home",
+          "kind": "EXPENSES_POT",
+          "name": "Trip",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "mem2",
+          "parentId": null,
+          "kind": "MEMORY",
+          "name": "Paris",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "x",
+          "parentId": "a",
+          "kind": "UNREGISTERED",
+          "name": "x",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "odd",
+          "parentId": null,
+          "kind": "FOLDER",
+          "name": "f",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "idf",
+          "parentId": "odd",
+          "kind": "FOLDER",
+          "name": "g",
+          "createdAt": null,
+          "identity": true
+        },
+        {
+          "id": "deep",
+          "parentId": "idf",
+          "kind": "FOLDER",
+          "name": "deep",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "dest",
+          "parentId": null,
+          "kind": "FOLDER",
+          "name": "dest",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "taken",
+          "parentId": "dest",
+          "kind": "FOLDER",
+          "name": "A",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "takenfile",
+          "parentId": "dest",
+          "kind": "FILE",
+          "name": "report.pdf",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "mem3",
+          "parentId": "a",
+          "kind": "MEMORY",
+          "name": "Rom",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "romfolder",
+          "parentId": "dest",
+          "kind": "FOLDER",
+          "name": "Rom",
+          "createdAt": null,
+          "identity": false
+        }
+      ]
+    },
+    "link": {
+      "rootId": "home",
+      "nodes": [
+        {
+          "id": "home",
+          "parentId": null,
+          "kind": "FOLDER",
+          "name": "home",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "a",
+          "parentId": "home",
+          "kind": "FOLDER",
+          "name": "a",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "a1",
+          "parentId": "a",
+          "kind": "FOLDER",
+          "name": "a1",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "b",
+          "parentId": "home",
+          "kind": "FOLDER",
+          "name": "b",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "mem",
+          "parentId": "b",
+          "kind": "MEMORY",
+          "name": "Rom",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "ch",
+          "parentId": "mem",
+          "kind": "CHAPTER",
+          "name": "Tag 1",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "box",
+          "parentId": "home",
+          "kind": "DEPOT_DROPBOX",
+          "name": "box",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "guest",
+          "parentId": "box",
+          "kind": "FOLDER",
+          "name": "Anna",
+          "createdAt": null,
+          "identity": true
+        },
+        {
+          "id": "inner",
+          "parentId": "guest",
+          "kind": "FOLDER",
+          "name": "inner",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "gfile",
+          "parentId": "guest",
+          "kind": "FILE",
+          "name": "a.jpg",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "file",
+          "parentId": "home",
+          "kind": "FILE",
+          "name": "Report.pdf",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "pot",
+          "parentId": "home",
+          "kind": "EXPENSES_POT",
+          "name": "Trip",
+          "createdAt": null,
+          "identity": false
+        },
+        {
+          "id": "mem3",
+          "parentId": "a",
+          "kind": "MEMORY",
+          "name": "Rom",
+          "createdAt": null,
+          "identity": false
+        }
+      ]
+    }
+  },
+  "moveBlock": [
+    {
+      "rule": "a folder may go to the scope root",
+      "tree": "space",
+      "nodes": [
+        "a"
+      ],
+      "mode": "member",
+      "at": null,
+      "intent": "move",
+      "expected": null
+    },
+    {
+      "rule": "not where it is",
+      "tree": "space",
+      "nodes": [
+        "a"
+      ],
+      "mode": "member",
+      "at": "home",
+      "intent": "move",
+      "expected": "current"
+    },
+    {
+      "rule": "another folder takes it",
+      "tree": "space",
+      "nodes": [
+        "a"
+      ],
+      "mode": "member",
+      "at": "b",
+      "intent": "move",
+      "expected": null
+    },
+    {
+      "rule": "not into itself",
+      "tree": "space",
+      "nodes": [
+        "a"
+      ],
+      "mode": "member",
+      "at": "a",
+      "intent": "move",
+      "expected": "self"
+    },
+    {
+      "rule": "not below itself",
+      "tree": "space",
+      "nodes": [
+        "a"
+      ],
+      "mode": "member",
+      "at": "a1",
+      "intent": "move",
+      "expected": "inside"
+    },
+    {
+      "rule": "a Memory takes no folder",
+      "tree": "space",
+      "nodes": [
+        "a"
+      ],
+      "mode": "member",
+      "at": "mem",
+      "intent": "move",
+      "expected": "kind"
+    },
+    {
+      "rule": "a drop box takes nothing placed",
+      "tree": "space",
+      "nodes": [
+        "a"
+      ],
+      "mode": "member",
+      "at": "box",
+      "intent": "move",
+      "expected": "kind"
+    },
+    {
+      "rule": "an identity folder's move out of its drop box: the drop box is where it is",
+      "tree": "space",
+      "nodes": [
+        "guest"
+      ],
+      "mode": "member",
+      "at": "box",
+      "intent": "move",
+      "expected": "current"
+    },
+    {
+      "rule": "an identity folder may go to a plain folder",
+      "tree": "space",
+      "nodes": [
+        "guest"
+      ],
+      "mode": "member",
+      "at": "a",
+      "intent": "move",
+      "expected": null
+    },
+    {
+      "rule": "nothing goes into a guest's identity folder",
+      "tree": "space",
+      "nodes": [
+        "a"
+      ],
+      "mode": "member",
+      "at": "guest",
+      "intent": "move",
+      "expected": "identityFolder"
+    },
+    {
+      "rule": "nothing goes below a guest's identity folder",
+      "tree": "space",
+      "nodes": [
+        "a"
+      ],
+      "mode": "member",
+      "at": "inner",
+      "intent": "move",
+      "expected": "identityFolder"
+    },
+    {
+      "rule": "an identity folder directly in a folder, and below it",
+      "tree": "space",
+      "nodes": [
+        "mem2"
+      ],
+      "mode": "member",
+      "at": "deep",
+      "intent": "move",
+      "expected": "identityFolder"
+    },
+    {
+      "rule": "a chapter goes into a Memory",
+      "tree": "space",
+      "nodes": [
+        "ch"
+      ],
+      "mode": "member",
+      "at": "mem3",
+      "intent": "move",
+      "expected": null
+    },
+    {
+      "rule": "a chapter is where it is",
+      "tree": "space",
+      "nodes": [
+        "ch"
+      ],
+      "mode": "member",
+      "at": "mem",
+      "intent": "move",
+      "expected": "current"
+    },
+    {
+      "rule": "a chapter takes no scope root",
+      "tree": "space",
+      "nodes": [
+        "ch"
+      ],
+      "mode": "member",
+      "at": null,
+      "intent": "move",
+      "expected": "kind"
+    },
+    {
+      "rule": "a chapter takes no folder",
+      "tree": "space",
+      "nodes": [
+        "ch"
+      ],
+      "mode": "member",
+      "at": "b",
+      "intent": "move",
+      "expected": "kind"
+    },
+    {
+      "rule": "a kind without a placement goes nowhere (fail closed)",
+      "tree": "space",
+      "nodes": [
+        "x"
+      ],
+      "mode": "member",
+      "at": null,
+      "intent": "move",
+      "expected": "kind"
+    },
+    {
+      "rule": "a kind without a placement goes into no folder either",
+      "tree": "space",
+      "nodes": [
+        "x"
+      ],
+      "mode": "member",
+      "at": "b",
+      "intent": "move",
+      "expected": "kind"
+    },
+    {
+      "rule": "several: every one is here already",
+      "tree": "space",
+      "nodes": [
+        "a",
+        "b"
+      ],
+      "mode": "member",
+      "at": "home",
+      "intent": "move",
+      "expected": "current"
+    },
+    {
+      "rule": "several: one of them holds the place",
+      "tree": "space",
+      "nodes": [
+        "a",
+        "b"
+      ],
+      "mode": "member",
+      "at": "a1",
+      "intent": "move",
+      "expected": "inside"
+    },
+    {
+      "rule": "several: one is here, the other is not — it may be chosen",
+      "tree": "space",
+      "nodes": [
+        "a",
+        "mem2"
+      ],
+      "mode": "member",
+      "at": null,
+      "intent": "move",
+      "expected": null
+    },
+    {
+      "rule": "several: a chapter and a folder into a Memory",
+      "tree": "space",
+      "nodes": [
+        "ch",
+        "a1"
+      ],
+      "mode": "member",
+      "at": "mem3",
+      "intent": "move",
+      "expected": "kind"
+    },
+    {
+      "rule": "a guest moves into a folder of its link",
+      "tree": "link",
+      "nodes": [
+        "mem"
+      ],
+      "mode": "guest",
+      "at": "a",
+      "intent": "move",
+      "expected": null
+    },
+    {
+      "rule": "a guest's node is where it is",
+      "tree": "link",
+      "nodes": [
+        "mem"
+      ],
+      "mode": "guest",
+      "at": "b",
+      "intent": "move",
+      "expected": "current"
+    },
+    {
+      "rule": "a guest places nothing into a Memory, though a member could",
+      "tree": "link",
+      "nodes": [
+        "ch"
+      ],
+      "mode": "guest",
+      "at": "mem3",
+      "intent": "move",
+      "expected": "kind"
+    },
+    {
+      "rule": "a guest's chapter has no folder to go to",
+      "tree": "link",
+      "nodes": [
+        "ch"
+      ],
+      "mode": "guest",
+      "at": "a",
+      "intent": "move",
+      "expected": "kind"
+    },
+    {
+      "rule": "a copy may go where its original is",
+      "tree": "space",
+      "nodes": [
+        "a"
+      ],
+      "mode": "member",
+      "at": "home",
+      "intent": "copy",
+      "expected": null
+    },
+    {
+      "rule": "a copy never into itself",
+      "tree": "space",
+      "nodes": [
+        "a"
+      ],
+      "mode": "member",
+      "at": "a",
+      "intent": "copy",
+      "expected": "self"
+    },
+    {
+      "rule": "a copy never below itself",
+      "tree": "space",
+      "nodes": [
+        "a"
+      ],
+      "mode": "member",
+      "at": "a1",
+      "intent": "copy",
+      "expected": "inside"
+    },
+    {
+      "rule": "a copy never into a guest's folder",
+      "tree": "space",
+      "nodes": [
+        "a"
+      ],
+      "mode": "member",
+      "at": "guest",
+      "intent": "copy",
+      "expected": "identityFolder"
+    },
+    {
+      "rule": "a copy of a chapter into its own Memory",
+      "tree": "space",
+      "nodes": [
+        "ch"
+      ],
+      "mode": "member",
+      "at": "mem",
+      "intent": "copy",
+      "expected": null
+    },
+    {
+      "rule": "no nodes: nothing blocks",
+      "tree": "space",
+      "nodes": [],
+      "mode": "member",
+      "at": "b",
+      "intent": "move",
+      "expected": null
+    }
+  ],
+  "moveBlockOf": [
+    {
+      "rule": "several copies may go to their own level",
+      "tree": "space",
+      "nodes": [
+        "a",
+        "b"
+      ],
+      "mode": "member",
+      "at": "home",
+      "intent": "copy",
+      "expected": null
+    },
+    {
+      "rule": "several copies: the one holding the place is named",
+      "tree": "space",
+      "nodes": [
+        "a",
+        "b"
+      ],
+      "mode": "member",
+      "at": "a1",
+      "intent": "copy",
+      "expected": {
+        "block": "inside",
+        "node": "a"
+      }
+    },
+    {
+      "rule": "several moves where all of them are: current, no node named",
+      "tree": "space",
+      "nodes": [
+        "a",
+        "b"
+      ],
+      "mode": "member",
+      "at": "home",
+      "intent": "move",
+      "expected": {
+        "block": "current",
+        "node": null
+      }
+    },
+    {
+      "rule": "one already there blocks nothing, and the other may go",
+      "tree": "space",
+      "nodes": [
+        "mem",
+        "a"
+      ],
+      "mode": "member",
+      "at": "b",
+      "intent": "move",
+      "expected": null
+    },
+    {
+      "rule": "the first that blocks is named",
+      "tree": "space",
+      "nodes": [
+        "a1",
+        "ch"
+      ],
+      "mode": "member",
+      "at": "mem3",
+      "intent": "move",
+      "expected": {
+        "block": "kind",
+        "node": "a1"
+      }
+    },
+    {
+      "rule": "a place that takes all of them",
+      "tree": "space",
+      "nodes": [
+        "a",
+        "mem2"
+      ],
+      "mode": "member",
+      "at": "b",
+      "intent": "move",
+      "expected": null
+    },
+    {
+      "rule": "a guest: the node a non-folder refuses is named",
+      "tree": "link",
+      "nodes": [
+        "gfile",
+        "a1"
+      ],
+      "mode": "guest",
+      "at": "mem",
+      "intent": "move",
+      "expected": {
+        "block": "kind",
+        "node": "gfile"
+      }
+    }
+  ],
+  "planMove": [
+    {
+      "rule": "each sent in the given order",
+      "tree": "space",
+      "nodes": [
+        "a1",
+        "mem2"
+      ],
+      "to": "b",
+      "expected": {
+        "send": [
+          "a1",
+          "mem2"
+        ],
+        "leftOut": []
+      }
+    },
+    {
+      "rule": "one already there is left out as current",
+      "tree": "space",
+      "nodes": [
+        "a",
+        "mem2"
+      ],
+      "to": "home",
+      "expected": {
+        "send": [
+          "mem2"
+        ],
+        "leftOut": [
+          {
+            "node": "a",
+            "reason": "current"
+          }
+        ]
+      }
+    },
+    {
+      "rule": "a name a sibling there takes is left out, naming the sibling (folded by each node's kind)",
+      "tree": "space",
+      "nodes": [
+        "a",
+        "file",
+        "mem2"
+      ],
+      "to": "dest",
+      "expected": {
+        "send": [
+          "mem2"
+        ],
+        "leftOut": [
+          {
+            "node": "a",
+            "reason": "nameTaken",
+            "sibling": "taken"
+          },
+          {
+            "node": "file",
+            "reason": "nameTaken",
+            "sibling": "takenfile"
+          }
+        ]
+      }
+    },
+    {
+      "rule": "to the scope root",
+      "tree": "space",
+      "nodes": [
+        "a",
+        "dest"
+      ],
+      "to": null,
+      "expected": {
+        "send": [
+          "a"
+        ],
+        "leftOut": [
+          {
+            "node": "dest",
+            "reason": "current"
+          }
+        ]
+      }
+    },
+    {
+      "rule": "a Memory meets a Memory of its name there",
+      "tree": "space",
+      "nodes": [
+        "mem3"
+      ],
+      "to": "b",
+      "expected": {
+        "send": [],
+        "leftOut": [
+          {
+            "node": "mem3",
+            "reason": "nameTaken",
+            "sibling": "mem"
+          }
+        ]
+      }
+    },
+    {
+      "rule": "a Memory of a name a folder there holds is no collision (route groups)",
+      "tree": "space",
+      "nodes": [
+        "mem3"
+      ],
+      "to": "dest",
+      "expected": {
+        "send": [
+          "mem3"
+        ],
+        "leftOut": []
+      }
+    }
+  ],
+  "movePlaces": [
+    {
+      "rule": "a folder: the folders there, itself listed blocked; no drop box, no Memory, no file",
+      "tree": "space",
+      "nodes": [
+        "a"
+      ],
+      "mode": "member",
+      "at": "home",
+      "expected": [
+        {
+          "node": "a",
+          "blocked": "self"
+        },
+        {
+          "node": "b",
+          "blocked": null
+        }
+      ]
+    },
+    {
+      "rule": "the scope root lists its folders; a Memory takes no folder",
+      "tree": "space",
+      "nodes": [
+        "a"
+      ],
+      "mode": "member",
+      "at": null,
+      "expected": [
+        {
+          "node": "home",
+          "blocked": null
+        },
+        {
+          "node": "odd",
+          "blocked": null
+        },
+        {
+          "node": "dest",
+          "blocked": null
+        }
+      ]
+    },
+    {
+      "rule": "a chapter: the folders stay the way down, a Memory is listed and takes it",
+      "tree": "space",
+      "nodes": [
+        "ch"
+      ],
+      "mode": "member",
+      "at": null,
+      "expected": [
+        {
+          "node": "home",
+          "blocked": null
+        },
+        {
+          "node": "mem2",
+          "blocked": null
+        },
+        {
+          "node": "odd",
+          "blocked": null
+        },
+        {
+          "node": "dest",
+          "blocked": null
+        }
+      ]
+    },
+    {
+      "rule": "a chapter in a folder holding a Memory",
+      "tree": "space",
+      "nodes": [
+        "ch"
+      ],
+      "mode": "member",
+      "at": "b",
+      "expected": [
+        {
+          "node": "mem",
+          "blocked": null
+        }
+      ]
+    },
+    {
+      "rule": "no identity folder is offered",
+      "tree": "space",
+      "nodes": [
+        "guest"
+      ],
+      "mode": "member",
+      "at": "box",
+      "expected": []
+    },
+    {
+      "rule": "no identity folder directly in a folder either",
+      "tree": "space",
+      "nodes": [
+        "mem2"
+      ],
+      "mode": "member",
+      "at": "odd",
+      "expected": []
+    },
+    {
+      "rule": "a kind without a placement: only the folders",
+      "tree": "space",
+      "nodes": [
+        "x"
+      ],
+      "mode": "member",
+      "at": null,
+      "expected": [
+        {
+          "node": "home",
+          "blocked": null
+        },
+        {
+          "node": "odd",
+          "blocked": null
+        },
+        {
+          "node": "dest",
+          "blocked": null
+        }
+      ]
+    },
+    {
+      "rule": "several: each of them listed blocked",
+      "tree": "space",
+      "nodes": [
+        "a",
+        "b"
+      ],
+      "mode": "member",
+      "at": "home",
+      "expected": [
+        {
+          "node": "a",
+          "blocked": "self"
+        },
+        {
+          "node": "b",
+          "blocked": "self"
+        }
+      ]
+    },
+    {
+      "rule": "several: a Memory is listed only where it takes every one",
+      "tree": "space",
+      "nodes": [
+        "ch",
+        "a"
+      ],
+      "mode": "member",
+      "at": null,
+      "expected": [
+        {
+          "node": "home",
+          "blocked": null
+        },
+        {
+          "node": "odd",
+          "blocked": null
+        },
+        {
+          "node": "dest",
+          "blocked": null
+        }
+      ]
+    },
+    {
+      "rule": "below a moved node: listed blocked as inside",
+      "tree": "space",
+      "nodes": [
+        "home"
+      ],
+      "mode": "member",
+      "at": "a",
+      "expected": [
+        {
+          "node": "a1",
+          "blocked": "inside"
+        }
+      ]
+    },
+    {
+      "rule": "a guest: only folders, never a Memory",
+      "tree": "link",
+      "nodes": [
+        "ch"
+      ],
+      "mode": "guest",
+      "at": "b",
+      "expected": []
+    },
+    {
+      "rule": "a guest at its link's root",
+      "tree": "link",
+      "nodes": [
+        "mem"
+      ],
+      "mode": "guest",
+      "at": "home",
+      "expected": [
+        {
+          "node": "a",
+          "blocked": null
+        },
+        {
+          "node": "b",
+          "blocked": null
+        }
+      ]
+    },
+    {
+      "rule": "no nodes: only the folders",
+      "tree": "space",
+      "nodes": [],
+      "mode": "member",
+      "at": null,
+      "expected": [
+        {
+          "node": "home",
+          "blocked": null
+        },
+        {
+          "node": "odd",
+          "blocked": null
+        },
+        {
+          "node": "dest",
+          "blocked": null
+        }
+      ]
+    }
+  ],
+  "moveTrail": [
+    {
+      "rule": "the scope root alone",
+      "tree": "space",
+      "at": null,
+      "expected": [
+        null
+      ]
+    },
+    {
+      "rule": "from the scope root down to the place, whatever its depth",
+      "tree": "space",
+      "at": "a1",
+      "expected": [
+        null,
+        "home",
+        "a",
+        "a1"
+      ]
+    },
+    {
+      "rule": "into a drop box",
+      "tree": "space",
+      "at": "box",
+      "expected": [
+        null,
+        "home",
+        "box"
+      ]
+    },
+    {
+      "rule": "a guest's trail starts at its link's root",
+      "tree": "link",
+      "at": "b",
+      "expected": [
+        "home",
+        "b"
+      ]
+    },
+    {
+      "rule": "a guest at its link's root",
+      "tree": "link",
+      "at": "home",
+      "expected": [
+        "home"
+      ]
+    },
+    {
+      "rule": "a place the tree does not read starts at the top",
+      "tree": "space",
+      "at": "elsewhere",
+      "expected": [
+        null,
+        "elsewhere"
+      ]
+    }
+  ],
+  "moveStart": [
+    {
+      "rule": "where the node is",
+      "tree": "space",
+      "nodes": [
+        "a"
+      ],
+      "expected": "home"
+    },
+    {
+      "rule": "an identity folder opens in its drop box",
+      "tree": "space",
+      "nodes": [
+        "guest"
+      ],
+      "expected": "box"
+    },
+    {
+      "rule": "a chapter opens in its Memory",
+      "tree": "space",
+      "nodes": [
+        "ch"
+      ],
+      "expected": "mem"
+    },
+    {
+      "rule": "several from one place",
+      "tree": "space",
+      "nodes": [
+        "a",
+        "b"
+      ],
+      "expected": "home"
+    },
+    {
+      "rule": "several from two places: the top",
+      "tree": "space",
+      "nodes": [
+        "a",
+        "mem2"
+      ],
+      "expected": null
+    },
+    {
+      "rule": "a node at the scope root: the scope root",
+      "tree": "space",
+      "nodes": [
+        "mem2"
+      ],
+      "expected": null
+    },
+    {
+      "rule": "a guest's node",
+      "tree": "link",
+      "nodes": [
+        "mem"
+      ],
+      "expected": "b"
+    },
+    {
+      "rule": "a guest's node whose parent lies above the link: the link's root",
+      "tree": "link",
+      "nodes": [
+        "home"
+      ],
+      "expected": "home"
+    },
+    {
+      "rule": "no nodes: the top",
+      "tree": "link",
+      "nodes": [],
+      "expected": "home"
+    }
+  ]
+}

@@ -34,6 +34,8 @@ import { nodeContentKey } from './node/tree'
 import { displayNameOf, nodeById } from './node/browse'
 import { hashForNode } from './node/location'
 import { registry } from './applications/registry'
+import { treeFactsOf } from './node/treeRules'
+import type { TreeFactsHandle } from '@veyq/core-js/tree'
 
 /** A member of an unlocked scope. */
 export interface MemberAccess {
@@ -137,6 +139,9 @@ export interface TreeSource<N extends SourceNode = SourceNode> {
   nameOf(id: string): string
   /** Whether `id` is a guest's identity folder or lies below one (null: the scope root, never). */
   inIdentityFolder(id: string | null): boolean
+  /** The tree as the platform's tree rules read it (`@veyq/core-js/tree`): one opaque handle per node list the session
+   *  reads, rebuilt when it replaces the list (`core/node/treeRules.ts`). */
+  facts(): TreeFactsHandle
   /** Where node `id` is (null: the root of this view): a member's fragment slug path, or a guest's `?node=<id>` with the
    *  `#k=` fragment kept. Every navigation goes through it. */
   linkTo(id: string | null): RouteLocationRaw
@@ -202,6 +207,7 @@ export function memberTreeSource(from: {
       return false
     },
     linkTo: (id) => ({ hash: hashForNode(from.nodes(), id, from.scope()) }),
+    facts: () => treeFactsOf(from.nodes()),
   }
 }
 

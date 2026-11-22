@@ -1,12 +1,12 @@
 package me.raddatz.veyq.mobile.depot
 
+import me.raddatz.veyq.mobile.tree.KindFacts
 import kotlin.native.HiddenFromObjC
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.ApplicationKinds
 import me.raddatz.veyq.mobile.PlatformApi
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.blob.UploadSource
-import me.raddatz.veyq.mobile.crypto.Naming
 import me.raddatz.veyq.mobile.export.NodeExport
 import me.raddatz.veyq.mobile.export.SubtreeCopy
 import me.raddatz.veyq.mobile.export.SubtreeImport
@@ -50,11 +50,11 @@ object DepotKinds : ApplicationKinds {
     @HiddenFromObjC
     override fun queuedSender(q: Queued): QueuedSender? = if (q == Queued.DEPOT_FILE_ADD) QueuedDepot.fileSender else null
 
-    override fun tokenInput(kind: String, name: String): String? = when (kind) {
-        FILE -> Naming.fileNameSlug(name)
-        DROPBOX -> Naming.slugify(name)
-        else -> null
-    }
+    /** A file folds by `fileNameSlug`, a drop box as a container; Depot claims no route; both at the top or in a folder. */
+    override val kindFacts = listOf(
+        KindFacts.Kind(FILE, null, KindFacts.FILE_NAME, root = true, parents = listOf(FOLDER)),
+        KindFacts.Kind(DROPBOX, null, KindFacts.NAME, root = true, parents = listOf(FOLDER)),
+    )
 
     // nothing of their own under the node's key: their blobs are core's, the re-key moves them
     override fun rekey(kind: String): NodeRekey.ContentRekey? = if (kind in kinds) NodeRekey.ContentRekey.NONE else null
@@ -103,8 +103,6 @@ object DepotKinds : ApplicationKinds {
             }
         }
     }
-
-    override fun placement(kind: String, parent: String?): Boolean? = if (kind in kinds) parent == null || parent == FOLDER else null
 
     override fun headerOrder(kind: String): List<H>? = when (kind) {
         FILE -> listOf(H.FAVORITE, H.DOWNLOAD, H.SHARE, H.REPLACE, H.MOVE, H.COPY)

@@ -44,7 +44,13 @@ class OpenNode(
     /** When the server created the node (ISO-8601): a drop box's guests' folders are ordered by it. */
     val createdAt: String? = null,
 ) {
-    fun asNode(): NodeRef = NodeRef(scopeId, id, parentId, kind, name, identity = shareIdentityId != null)
+    fun asNode(): NodeRef = NodeRef(scopeId, id, parentId, kind, name, identity = shareIdentityId != null, createdAt = createdAtMs)
+
+    /** [createdAt] in epoch milliseconds, read once: a level orders equal names by it. */
+    @OptIn(kotlin.time.ExperimentalTime::class)
+    private val createdAtMs: Double? by lazy {
+        createdAt?.let { runCatching { kotlin.time.Instant.parse(it).toEpochMilliseconds().toDouble() }.getOrNull() }
+    }
     fun asObject(): ObjectRef? = asNode().asObject()
 }
 

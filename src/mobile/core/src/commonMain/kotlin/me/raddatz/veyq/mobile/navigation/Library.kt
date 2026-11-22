@@ -17,6 +17,9 @@ data class NodeRef(
     /** A drop box guest's identity folder (the served `shareIdentityId`): nothing is placed into it or below it, ADR 0080
      *  decision 11. */
     val identity: Boolean = false,
+    /** When the server created the node, in epoch milliseconds (null where none is served, a guest's): equal names in a
+     *  level fall to it, then to the id ([me.raddatz.veyq.mobile.tree.LevelOrder]). */
+    val createdAt: Double? = null,
 ) {
     val isFolder: Boolean get() = kind == FOLDER
     val application: ApplicationId? get() = applicationOf(kind)

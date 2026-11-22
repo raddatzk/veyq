@@ -8,7 +8,7 @@ import {
   NODE_DRAG_TYPE, activeNodeDrag, crumbDropTarget, dropOnNodeTarget, dropTakes, endNodeDrag, isNodeDrag, overNodeTarget, startNodeDrag,
   type NodeDrag,
 } from './nodeDrag'
-import { moveHereBlockOf } from './move'
+import { moveHereBlockOf } from './treeRules'
 import { FOLDER_KIND } from './kind'
 import type { TreeNode } from './tree'
 import type { VeyqMenuItem } from '../../shared/ui/menu'

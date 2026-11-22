@@ -209,7 +209,9 @@ two signed-in accounts list the same tenant) — the owner's rules of 2026-11-19
 through `@veyq/core-js/search`, and the core writes the vectors — every visible space of the current tenant, chips, one ordered list, every
 space's photos through `listScopeMedia`, people and the app's own settings sections; each platform in its own field
 (Android's `SearchBar`, Apple's `.searchable` with tokens, Linux's sidebar `SearchBar`, Windows' `AutoSuggestBox`), the
-Linux and Windows apps over the bridge's `Search.*`. Measured 2026-11-18 on the Android emulator (`uiautomator`,
+Linux and Windows apps over the bridge's `Search.*`. The node tree's rules (a level's order, equal names numbered, a
+name's sibling collision, the move's plan) are the platform's `tree/` for every client, the web through
+`@veyq/core-js/tree`, held by `contracts/platform/tree/v1-vectors.json`, which the core writes ([ADR 0155](../decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md) § The node tree's slice). Measured 2026-11-18 on the Android emulator (`uiautomator`,
 TalkBack's verbose log), the macOS build (its accessibility tree), Linux under Broadway (the announcement on X11
 through `dbus-monitor`) and the Windows VM (UI Automation and its notification events); the first focus's timing and
 each platform's keys are ADR 0146's Consequences and decision 12.

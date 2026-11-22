@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.expenses
 
+import me.raddatz.veyq.mobile.tree.KindFacts
 import kotlin.native.HiddenFromObjC
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.ApplicationKinds
@@ -51,7 +52,8 @@ object ExpensesKinds : ApplicationKinds {
     @HiddenFromObjC
     override fun queuedSender(q: Queued): QueuedSender? = if (q == Queued.POT_ENTRY) QueuedExpenses.entrySender else null
 
-    override fun tokenInput(kind: String, name: String): String? = if (kind == POT) PotCreate.tokenInput(name) else null
+    /** A Pot folds as a container behind Expenses' route slug, at the top or in a folder. */
+    override val kindFacts = listOf(KindFacts.Kind(POT, PotCreate.ROUTE, KindFacts.NAME, root = true, parents = listOf(FOLDER)))
 
     override fun rekey(kind: String): NodeRekey.ContentRekey? = if (kind == POT) PotRekey.content else null
 
@@ -75,8 +77,6 @@ object ExpensesKinds : ApplicationKinds {
         val pot = PotImport.hook(deletedName, uuid)
         return SubtreeImport.Kinds { kind -> if (kind == POT) pot else null }
     }
-
-    override fun placement(kind: String, parent: String?): Boolean? = if (kind == POT) parent == null || parent == FOLDER else null
 
     override fun headerOrder(kind: String): List<H>? = if (kind == POT) listOf(H.FAVORITE, H.SHARE, H.DOWNLOAD, H.MOVE, H.COPY) else null
 

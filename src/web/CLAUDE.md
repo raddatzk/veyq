@@ -291,9 +291,12 @@ here; the server is blind.
   contents (every other kind MIXED, never a section per kind), each its own `<ul>`; only where both have something under the
   shown tab is each a `<section>` named by its quiet `h2` ("Folders", "Contents": `node.groupFolders` / `node.groupContents`).
   Select's All / None and count act on the level, not on a group. **Core draws every row and tile** (`core/node/components/LevelRowItem.vue`); an application only supplies ROW DATA. **The order**
-  (`core/node/levelList.ts`, a pure function): folders first, then ALL other nodes mixed by name - natural (`Foto 2` before
-  `Foto 10`), locale-aware and case-insensitive (`Intl.Collator`), equal names in `compareByCreation` order; the Memory's date
-  no longer sorts. A row is `{ icon, leading?, title, meta, primary, actions }` (`LevelRow`, `core/node/levelRow.ts`): the
+  is the platform's (`@veyq/core-js/tree` through `core/node/treeRules.ts`, the apps' `LevelOrder` too): folders first, then
+  ALL other nodes mixed by name - digits as numbers (`Foto 2` before `Foto 10`), case and accents aside, in no one's locale,
+  equal names in creation order; the Memory's date no longer sorts. So are the numbering of equal names (`displayNamesOf`),
+  a name's sibling collision (`collidingSibling`) and the move's plan (`moveHereBlock(Of)`, `planMove`, `movePlaces`, …):
+  `treeRules.ts` holds the handles and maps ids back, a rule changes in `src/mobile/core/…/tree` (its `TreeVectorsTest` writes
+  `contracts/platform/tree/v1-vectors.json`, which `core/node/tree.vectors.test.ts` runs through the package), never here. A row is `{ icon, leading?, title, meta, primary, actions }` (`LevelRow`, `core/node/levelRow.ts`): the
   leading visual (the kind's icon, or an application component with props - Memories' cover), the name, ONE meta line (the kind's noun in `meta`, then the application's
   `details`: "File - 157 B - Modified ...", "Memory - date range - place", "Drop box - 3 people"; each detail an `{ id, text }` the application
   LEAVES OUT when the node has no such fact - never a placeholder - and core joins, wraps and styles, `levelRowDetails`; the profile

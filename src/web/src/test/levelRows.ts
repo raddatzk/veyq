@@ -6,7 +6,7 @@ import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { computed, defineComponent, h, reactive, ref, type Ref } from 'vue'
 import LevelRowItem from '../core/node/components/LevelRowItem.vue'
 import LevelNotices from '../core/node/components/LevelNotices.vue'
-import { orderLevel } from '../core/node/levelList'
+import { orderLevel } from '../core/node/treeRules'
 import type { LevelNotice, LevelRowsContext, LevelRowsFactory, LevelRowsHost, LevelRowSource } from '../core/node/levelRow'
 import type { LevelActionHandler } from '../core/node/levelActions'
 import type { TreeNode } from '../core/node/tree'
@@ -73,7 +73,7 @@ export function mountRows(
           const listeners = Object.fromEntries(Object.entries(presentation.on ?? {}).map(([name, f]) => [`on${name[0].toUpperCase()}${name.slice(1)}`, f]))
           return h('div', { class: 'rows-harness' }, [h(presentation.component, { ...presentation.props, ...listeners })])
         }
-        const nodes = orderLevel([], state.nodes, 'en')
+        const nodes = orderLevel([], state.nodes)
         return h('div', { class: 'rows-harness' }, [
           h(LevelNotices, { notices: (source.notices?.value ?? []) as readonly LevelNotice[] }),
           h('ul', { class: 'veyq-level-list' }, nodes.map((node) => {

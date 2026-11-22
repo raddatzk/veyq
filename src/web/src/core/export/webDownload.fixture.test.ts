@@ -39,6 +39,7 @@ import { chunkProvider, listMediaPages, loadMediaExif, originalBlobMeta, origina
 import { loadTenantPeople } from '../people/directory'
 import { exportSubtree } from './exportSubtree'
 import { openExport, planImport } from './importSubtree'
+import { treeFactsOf } from '../node/treeRules'
 
 const FIXTURE = resolve(__dirname, '../../../../../contracts/export/import-cases/web-download.zip')
 const PHOTO = new Uint8Array(readFileSync(resolve(__dirname, '../../features/memories/__fixtures__/exif-sample.jpg')))
@@ -79,7 +80,7 @@ const tree: TreeSource<TreeNode> = {
   keyOf: (id) => (id === POT_ID ? pot.potKey : id === MEMORY || id === CHAPTER ? MEMORY_KEY : OTHER_KEY),
   nameOf: () => '',
   inIdentityFolder: () => false,
-  linkTo: () => '/',
+  linkTo: () => '/', facts: () => treeFactsOf([]),
 }
 const one = (bytes: Uint8Array) => ({ chunkCount: 1, getPlaintextChunk: async () => bytes })
 const photo = { mediaId: 'p1', ownerKey: 'user:u-anna', original: { byteSize: PHOTO.length, chunkCount: 1 }, derivatives: [] } as unknown as MediaItem
