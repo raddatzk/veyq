@@ -4381,10 +4381,13 @@ internal enum class ReceivedRefusal { UNREACHABLE, OTHER_VERSION, NO_LINKS }
 @Serializable
 internal enum class ReceivedPageKind { LEVEL, FILE, GALLERY, POT, DROP_BOX, UPLOADER, NOT_SHOWN }
 
-/** One child of a guest's level. */
+/**
+ * One child of a guest's level: [displayName] is what its row draws (a folder numbered where a sibling folder shares its
+ * name, `GuestLevel.Row.displayName`), [name] what a report reads.
+ */
 @Serializable
 @SerialName("ReceivedRow")
-internal class ReceivedRow(val id: String, val kind: String, val name: String, val identity: Boolean)
+internal class ReceivedRow(val id: String, val kind: String, val name: String, val identity: Boolean, val displayName: String = name)
 
 /**
  * The page a received link shows: a level's rows, or the id of the member's own model it opened under the existing calls
@@ -4400,6 +4403,8 @@ internal class ReceivedPage(
     val writes: Boolean = false,
     /** A guest level's New (`GuestLevel.creates`, a plan drawn whole): a folder, files, a folder uploaded where it writes. */
     val creates: List<ShellShown.ShownCreate> = emptyList(),
+    /** The page's title: a level's folder numbered where a sibling folder shares its name (`GuestLevel.title`), else [name]. */
+    val title: String = name,
 )
 
 /**

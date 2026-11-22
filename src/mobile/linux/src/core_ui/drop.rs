@@ -169,7 +169,7 @@ mod tests {
     }
 
     fn row(id: &str, kind: &str) -> NodeRef {
-        NodeRef { scope_id: "s1".into(), node_id: id.into(), parent_id: None, kind: kind.into(), name: id.into(), identity: false, created_at: None }
+        NodeRef { scope_id: "s1".into(), node_id: id.into(), parent_id: None, kind: kind.into(), name: id.into(), identity: false, created_at: None, label: None }
     }
 
     #[test]

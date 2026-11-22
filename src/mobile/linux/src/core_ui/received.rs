@@ -497,7 +497,7 @@ impl Inner {
             return;
         };
         let ready = s.gate == ReceivedGate::Ready;
-        let name = s.page.as_ref().map(|p| p.name.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| s.root_name.clone());
+        let name = s.page.as_ref().map(|p| p.title.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| s.root_name.clone());
         self.title.set_title(if ready && !name.is_empty() { &name } else { &s.host });
         self.title.set_subtitle(if ready { &s.host } else { "" });
         let o = offers(&s, self.mode);
@@ -661,13 +661,13 @@ impl Inner {
                 }
                 self.new.set_visible(self.new_menu.n_items() > 0);
                 if p.rows.is_empty() {
-                    self.set_content(&adw::StatusPage::builder().icon_name(kind_icon(&p.node_kind)).title(glib_escape(&p.name)).vexpand(true).build());
+                    self.set_content(&adw::StatusPage::builder().icon_name(kind_icon(&p.node_kind)).title(glib_escape(&p.title)).vexpand(true).build());
                     return;
                 }
                 let reports = offers(s, self.mode).report && s.role != WRITE_ONLY;
                 let group = adw::PreferencesGroup::new();
                 for r in &p.rows {
-                    let row = adw::ActionRow::builder().title(glib_escape(&r.name)).activatable(true).build();
+                    let row = adw::ActionRow::builder().title(glib_escape(&r.display_name)).activatable(true).build();
                     row.add_prefix(&gtk::Image::from_icon_name(kind_icon(&r.kind)));
                     if reports {
                         // the row's own menu: its report to the link's operator (#1033)

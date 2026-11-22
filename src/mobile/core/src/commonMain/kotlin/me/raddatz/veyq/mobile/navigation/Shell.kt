@@ -99,10 +99,21 @@ data class Shell(
         var id = folderId
         while (id != null && seen.add(id)) {
             val n = byId[id] ?: break
-            if (n.isFolder) path.add(0, FolderRef(n.nodeId, n.name))
+            if (n.isFolder) path.add(0, FolderRef(n.nodeId, n.name, labelOf(tree, n)))
             id = n.parentId
         }
         return copy(path = path)
+    }
+
+    /**
+     * Home's path with each folder's label read anew from [tree] (every node listed): a sibling folder of the same name that
+     * came back older (restored, moved in) renumbers it. A folder the tree does not hold keeps what it had.
+     */
+    fun relabelled(tree: List<NodeRef>): Shell {
+        if (path.isEmpty()) return this
+        val byId = tree.associateBy { it.nodeId }
+        val next = path.map { f -> byId[f.nodeId]?.takeIf { it.isFolder && it.scopeId == space }?.let { f.copy(label = labelOf(tree, it)) } ?: f }
+        return if (next == path) this else copy(path = next)
     }
 
     /** The drawer opens at the start only where nothing is chosen yet: Home, no space, no folder. */
@@ -173,6 +184,10 @@ data class Shell(
     fun search(on: Boolean): Shell = copy(searching = on)
 
     companion object {
+        /** Folder [n]'s label among its sibling folders in [tree] ([Home.labelled]); null where its name is the label. */
+        private fun labelOf(tree: List<NodeRef>, n: NodeRef): String? =
+            Home.labelled(tree.filter { it.isFolder && it.scopeId == n.scopeId && it.parentId == n.parentId }).firstOrNull { it.nodeId == n.nodeId }?.label
+
         /**
          * Where the app opens (ADR 0122 decision 5): the object used last, or — with none — Home on [space] with the
          * drawer open.

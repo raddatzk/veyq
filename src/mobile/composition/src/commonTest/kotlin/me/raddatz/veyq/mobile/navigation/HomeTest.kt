@@ -71,4 +71,30 @@ class HomeTest {
         val spaces = listOf(SpaceRef("p", "PERSONAL", "Personal"), SpaceRef("t", "TENANT", "Familie"))
         assertEquals("t", Home.defaultSpace(spaces)?.scopeId)
     }
+
+    /**
+     * #1062: a level numbers its folders as the web's `LevelView` does (`displayNamesOf` of the level's folders, in creation
+     * order; the vectors' first `displayNames` case) — beside the name, which a rename and a move read; a Memory of the same
+     * name is never numbered, nor numbers a folder.
+     */
+    @Test
+    fun aLevelNumbersFoldersOfOneNameInCreationOrder_besideTheName() {
+        val level = Home.level(
+            listOf(
+                NodeRef("s", "c", "box", NodeRef.FOLDER, "Anna", identity = true, createdAt = 3.0),
+                NodeRef("s", "a", "box", NodeRef.FOLDER, "Anna", identity = true, createdAt = 1.0),
+                NodeRef("s", "b", "box", NodeRef.FOLDER, "Ben", identity = true, createdAt = 2.0),
+                NodeRef("s", "d", "box", NodeRef.FOLDER, "Anna", identity = true, createdAt = 2.0),
+                NodeRef("s", "m", "box", "MEMORY", "Anna", createdAt = 0.0),
+            ),
+            "s", "box", null,
+        )
+        assertEquals(mapOf("a" to "Anna", "d" to "Anna (2)", "c" to "Anna (3)", "b" to "Ben", "m" to "Anna"), level.associate { it.nodeId to it.displayName })
+        assertEquals(listOf(null, "Anna (2)", "Anna (3)", null), level.filter { it.isFolder }.map { it.label })
+        assertTrue(level.all { it.name == "Anna" || it.name == "Ben" }, "the label went into the name")
+        // the path a row enters carries its label
+        assertEquals(FolderRef("d", "Anna", "Anna (2)"), level.single { it.nodeId == "d" }.asFolder())
+        // a level without a repeated folder name labels nothing
+        assertTrue(Home.level(nodes, "s", null, null).all { it.label == null })
+    }
 }

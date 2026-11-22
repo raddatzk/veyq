@@ -91,6 +91,22 @@ describe('breadcrumbOf', () => {
   })
 })
 
+describe('breadcrumbOf numbers a folder of a repeated name (inbox #393, #1062)', () => {
+  const box: TreeNode[] = [
+    node({ id: 'box', kind: FOLDER_KIND, name: 'Box' }),
+    node({ id: 'a1', kind: FOLDER_KIND, name: 'Anna', parentId: 'box', createdAt: 1 }),
+    node({ id: 'a2', kind: FOLDER_KIND, name: 'Anna', parentId: 'box', createdAt: 2 }),
+    node({ id: 'mem', kind: MEMORY_KIND, name: 'Fotos', parentId: 'a2', createdAt: 0 }),
+    node({ id: 'fotos', kind: FOLDER_KIND, name: 'Fotos', parentId: 'a2', createdAt: 3 }),
+  ]
+
+  it('in creation order, among the sibling folders only — a Memory of the name numbers nothing', () => {
+    expect(breadcrumbOf(box, 'fotos', 'Personal', PERSONAL_SCOPE).map((c) => c.name)).toEqual(['Personal', 'Box', 'Anna (2)', 'Fotos'])
+    expect(breadcrumbOf(box, 'a1', 'Personal', PERSONAL_SCOPE).map((c) => c.name)).toEqual(['Personal', 'Box', 'Anna'])
+    expect(breadcrumbOf(box, 'mem', 'Personal', PERSONAL_SCOPE).at(-1)?.name).toBe('Fotos')
+  })
+})
+
 describe('nodeById', () => {
   it('finds a node or returns null', () => {
     expect(nodeById(tree, 'italy')?.name).toBe('Italy')

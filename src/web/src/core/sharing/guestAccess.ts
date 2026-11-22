@@ -22,6 +22,7 @@ import type { RouteLocationRaw } from 'vue-router'
 import type { GuestAccess, TreeSource } from '../access'
 import type { TreeNode } from '../node/tree'
 import { displayNamesOf, treeFactsOf } from '../node/treeRules'
+import { FOLDER_KIND } from '../node/kind'
 import type { ShareNode } from '../../api/generated/sharing'
 import type { PublicShareHead } from './resolvePublicShare'
 import type { GuestIdentity } from './guestIdentity'
@@ -79,10 +80,11 @@ export function guestTreeSource(head: PublicShareHead, route: { readonly hash: s
     if (group) group.push(n)
     else byParent.set(n.parentId, [n])
   }
-  // A repeated name among siblings numbered in node-id order (core's `displayNamesOf`, inbox #393).
+  // A repeated name among sibling folders numbered in node-id order (core's `displayNamesOf`, inbox #393): only folders,
+  // as the level numbers its rows (`LevelView`) — a folder beside a file of one name stays itself (inbox #1062).
   const labels = new Map<string, string>()
   for (const group of byParent.values()) {
-    for (const [id, label] of displayNamesOf(group, 'id')) labels.set(id, label)
+    for (const [id, label] of displayNamesOf(group.filter((n) => n.kind === FOLDER_KIND), 'id')) labels.set(id, label)
   }
 
   return {

@@ -37,10 +37,13 @@ export function childrenOf(tree: TreeNode[], parentId: string | null): Level {
 }
 
 /** A node's name as its siblings tell it apart (`displayNamesOf` in creation order: a drop box's second guest folder
- *  `Anna` reads `Anna (2)`, inbox #393) — what the heading and the breadcrumb call it, as the list it was picked from. */
+ *  `Anna` reads `Anna (2)`, inbox #393) — what the heading and the breadcrumb call it, as the list it was picked from. Only
+ *  a folder is numbered, among its sibling folders, as the level numbers its rows (`LevelView`): a folder `Rom` beside a
+ *  Memory `Rom` stays `Rom` (a name is unique among its application's siblings only; inbox #1062). */
 export function displayNameOf(tree: readonly TreeNode[], node: TreeNode): string {
+  if (node.kind !== FOLDER_KIND) return node.name
   const parentId = node.parentId ?? null
-  const siblings = tree.filter((n) => (n.parentId ?? null) === parentId)
+  const siblings = tree.filter((n) => n.kind === FOLDER_KIND && (n.parentId ?? null) === parentId)
   return displayNamesOf(siblings).get(node.id) ?? node.name
 }
 
