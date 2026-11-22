@@ -438,6 +438,7 @@ SNAPSHOT_TAG_JOB = "snapshot-tag"
 # through its one create-or-edit line (cr-release-draft-from-publish). Publishing stays release.yml's alone.
 DRAFT_JOB = "release-draft"
 DRAFT_PERMISSIONS = {"contents": "write", "pull-requests": "read"}
+DRAFT_UPLOAD = re.compile(r"\buploads\.github\.com\b")  # the release-asset host: a draft job uploads nothing
 DRAFT_WRITE = re.compile(r'^\s*gh api --method (?:POST "repos/\$\{GITHUB_REPOSITORY\}/releases"|'
                          r'PATCH "repos/\$\{GITHUB_REPOSITORY\}/releases/\$\{DRAFT_ID\}") --input "\$payload" --jq \.html_url\s*$')
 DRAFT_GUARD = re.compile(r'if \[\[ "\$\(jq -r \.draft "\$payload"\)" != "true" \]\]; then\s*\n[^\n]*\n\s*exit 1')
@@ -740,7 +741,7 @@ def draft_write_ok(step: dict) -> bool:
     """Whether a `release-draft` step's release writes are exactly the draft's create-or-edit lines, behind the check
     that the payload is a draft — and nothing else that touches a release (no `gh release`, no upload, no publishing)."""
     body = str(step.get("run") or "")
-    if step.get("uses") or "gh release" in body or "uploads.github.com" in body \
+    if step.get("uses") or "gh release" in body or DRAFT_UPLOAD.search(body) \
             or "draft=false" in body or '"draft": false' in body:
         return False
     writes = [line for line in body.splitlines() if RELEASE_ASSET_WRITE.search(line)]
