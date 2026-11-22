@@ -368,6 +368,12 @@ fn queued_row(q: &QueuedItem) -> adw::ActionRow {
     let row = adw::ActionRow::builder().title(glib_escape(&said::notice(&q.title))).subtitle(glib_escape(&said::notice(&q.said))).build();
     row.add_prefix(&gtk::Image::from_icon_name("document-send-symbolic"));
     row.add_css_class("dim-label");
+    // a Memory made offline opens its page before it is sent (core's `QueuedItem.page`, #1040)
+    if let Some(page) = q.page.clone() {
+        row.set_activatable(true);
+        row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+        row.connect_activated(move |_| bridge::send(Call::ShellOpen { r#ref: page.clone() }));
+    }
     row
 }
 
@@ -382,8 +388,8 @@ fn level_tiles(
     for n in nodes {
         let before = tiles.len();
         if folders {
-            let folder = FolderRef { node_id: n.node_id.clone(), name: n.name.clone() };
-            tiles.push(Tile { name: n.name.clone(), subtitle: None, dated: false, icon: kind_icon(&n.kind), node_id: n.node_id.clone(),
+            let folder = FolderRef { node_id: n.node_id.clone(), name: n.name.clone(), label: n.label.clone() };
+            tiles.push(Tile { name: shown_name(n), subtitle: None, dated: false, icon: kind_icon(&n.kind), node_id: n.node_id.clone(),
                 open: Box::new(move || bridge::send(Call::ShellEnter { folder: folder.clone() })), selected: None });
             dropping.push(drops.and_then(|d| d.onto_row(n)));
         } else if let Some(o) = state.lists.objects.iter().find(|o| o.scope_id == n.scope_id && o.node_id == n.node_id) {
@@ -449,15 +455,21 @@ fn bookmark_row(n: &NodeRef) -> adw::ActionRow {
     row
 }
 
+/// What a folder's row and tile draw: its label where a sibling folder shares its name (`Anna (2)`, the core's
+/// `NodeRef.displayName`, inbox #1062), else its name — which a rename and a move keep reading.
+fn shown_name(n: &NodeRef) -> String {
+    n.label.clone().unwrap_or_else(|| n.name.clone())
+}
+
 fn node_at(n: &NodeRef) -> crate::bridge::wire::NodeAt {
     crate::bridge::wire::NodeAt { scope_id: n.scope_id.clone(), node_id: n.node_id.clone(), kind: n.kind.clone(), name: n.name.clone() }
 }
 
 fn folder_row(n: &NodeRef) -> adw::ActionRow {
-    let row = adw::ActionRow::builder().title(glib_escape(&n.name)).activatable(true).build();
+    let row = adw::ActionRow::builder().title(glib_escape(&shown_name(n))).activatable(true).build();
     row.add_prefix(&cover_prefix(gtk::Image::from_icon_name(kind_icon(&n.kind)), &n.node_id));
     row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
-    let folder = FolderRef { node_id: n.node_id.clone(), name: n.name.clone() };
+    let folder = FolderRef { node_id: n.node_id.clone(), name: n.name.clone(), label: n.label.clone() };
     row.connect_activated(move |_| bridge::send(Call::ShellEnter { folder: folder.clone() }));
     row
 }

@@ -774,7 +774,7 @@ impl Shell {
         } else if let Some(app) = shell.application {
             app_name(shown, app)
         } else if let Some(folder) = shell.path.last() {
-            folder.name.clone()
+            folder.label.clone().unwrap_or_else(|| folder.name.clone())
         } else {
             said::piece(&shown.space_name)
         };

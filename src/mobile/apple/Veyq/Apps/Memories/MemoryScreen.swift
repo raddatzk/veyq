@@ -51,7 +51,7 @@ struct MemoryScreen: View {
     private var rows: [GalleryModel.Row] { state?.shown ?? [] }
     private var uploading: [UploadTile] { state?.uploading ?? [] }
     /// What the page adds (core's: the rights' upload, a chapter where it makes one).
-    private var uploads: Bool { (state?.rights.upload ?? false) && (guest?.canAdd ?? true) }
+    private var uploads: Bool { state?.rights.upload ?? false }
     /// A link's guest adds through the page's own menu (it has no node header).
     private var guestUploads: Bool { uploads && guest != nil }
     private var chapterHere: Bool { model.memories.galleryModel(node)?.creates.contains(MemoryCreate.shared.CHAPTER) ?? false }
@@ -207,7 +207,13 @@ struct MemoryScreen: View {
                         } label: {
                             HStack(spacing: 12) {
                                 ChapterCover(model: model, node: node, chapter: c)
-                                Text(c.name)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(c.name)
+                                    // made offline and not sent yet: core's line under its name (#1040)
+                                    if let said = state?.chapterSaid[c.nodeId] {
+                                        Text(say(notice: said)).font(.caption).foregroundStyle(Role.muted)
+                                    }
+                                }
                                 Spacer(minLength: 0)
                             }
                             .contentShape(Rectangle())
@@ -330,7 +336,10 @@ struct MemoryScreen: View {
         // (no types asked there, rather than no modifier: the page's identity stays as the view switches)
         .onDrop(of: showsMusic || showsMap ? [] : IncomingFiles.accepted, isTargeted: nil) { providers in
             guard guest == nil, !showsMusic, !showsMap, let gallery = model.memories.galleryModel(node) else { return false }
-            Task { await model.drop(providers, onto: DropTarget.Gallery(gallery: gallery)) }
+            // on the Contributions view into the bucket it shows (#1065), one of the caller's own root alone (core's `Contributions.intake`)
+            let target: DropTarget = showsContributions ? (contributions.map { DropTarget.Bucket(contributions: $0.model) } ?? DropTarget.Gallery(gallery: gallery))
+                : DropTarget.Gallery(gallery: gallery)
+            Task { await model.drop(providers, onto: target) }
             return true
         }
         // the header's `upload` entry asked for a picker (`MemoriesUi`'s own action)

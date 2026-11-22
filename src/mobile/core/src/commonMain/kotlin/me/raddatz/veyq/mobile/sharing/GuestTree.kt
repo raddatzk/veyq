@@ -24,12 +24,31 @@ class GuestTree private constructor(
     fun node(id: String): OpenNode? = nodes.firstOrNull { it.id == id }
     fun children(id: String?): List<OpenNode> = nodes.filter { it.parentId == id }
 
+    /**
+     * The labels of [parentId]'s folders where a sibling folder shares the name (`Anna (2)`, the platform's
+     * [me.raddatz.veyq.mobile.tree.DisplayNames]), in node-id order — a guest is served no creation instant (the web's
+     * `guestAccess` and its level alike, inbox #393/#1062). A folder whose name is its label is not in it.
+     */
+    fun folderLabels(parentId: String): Map<String, String> =
+        me.raddatz.veyq.mobile.tree.DisplayNames.of(children(parentId).filter { it.kind == me.raddatz.veyq.mobile.navigation.NodeRef.FOLDER }, { it.id }, { it.name }, { null }, byCreation = false)
+            .filter { (id, label) -> node(id)?.name != label }
+
+    /** Node [id]'s name as a title draws it: a folder's label among its sibling folders ([folderLabels]), else its name. */
+    fun displayName(id: String): String? {
+        val n = node(id) ?: return null
+        val parent = n.parentId ?: return n.name
+        return if (n.kind == me.raddatz.veyq.mobile.navigation.NodeRef.FOLDER) folderLabels(parent)[id] ?: n.name else n.name
+    }
+
     /** Every key zeroed: the tree let go. */
     fun close() = nodes.forEach { it.key.fill(0) }
 
     override fun toString(): String = "GuestTree(${nodes.size})"
 
     companion object {
+        /** A tree of nodes already opened, the root first (a test's). */
+        internal fun over(scopeId: String, nodes: List<OpenNode>): GuestTree = GuestTree(scopeId, nodes)
+
         /** The share's second wrap of the root's key under `K_share` (ADR 0012), its purpose only. */
         private val SHARE_KEY = Context("share-key")
 

@@ -215,9 +215,8 @@ private fun MemoryGuestPage(page: GuestPage, screen: GuestScreen, model: AppMode
     val view = screen.view
     when (page) {
         is MemoriesGuest.Gallery -> {
-            val session = view.access?.session?.collectAsStateWithLifecycle()?.value
             DisposableEffect(page.model) { onDispose { page.model.close() } }
-            MemoryGallery(page.model, model, guest = true, canAdd = session != null, onChapter = { c -> scope.launch(Dispatchers.IO) { view.open(c.nodeId) } })
+            MemoryGallery(page.model, model, guest = true, onChapter = { c -> scope.launch(Dispatchers.IO) { view.open(c.nodeId) } })
         }
         is MemoriesGuest.Uploader -> GuestUploaderPage(page.model, view.access, model, snackbar)
         else -> {}

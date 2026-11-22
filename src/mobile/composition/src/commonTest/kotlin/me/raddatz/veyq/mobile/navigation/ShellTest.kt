@@ -104,6 +104,33 @@ class ShellTest {
         assertEquals(NodeAt("s", "b", NodeRef.FOLDER, "Rom"), shell.folderAt("s"))
     }
 
+    /**
+     * #1062: Home's path numbers a folder whose name a sibling folder shares, as the web's breadcrumb and heading do
+     * (`browse.ts displayNameOf`): in creation order, among the folders only; the node a header acts on keeps the name.
+     */
+    @Test
+    fun homesPathNumbersAFolderOfARepeatedName_andIsRelabelledOnARebuild() {
+        val tree = listOf(
+            NodeRef("s", "box", null, "DEPOT_DROPBOX", "Box"),
+            NodeRef("s", "a1", "box", NodeRef.FOLDER, "Anna", identity = true, createdAt = 1.0),
+            NodeRef("s", "a2", "box", NodeRef.FOLDER, "Anna", identity = true, createdAt = 2.0),
+            NodeRef("s", "x", "a2", NodeRef.FOLDER, "Fotos", createdAt = 3.0),
+            NodeRef("s", "m", "a2", "MEMORY", "Fotos", createdAt = 0.0),
+        )
+        val shell = Shell(null, space = "s").at(tree, "x")
+        assertEquals(listOf("Anna (2)", "Fotos"), shell.path.map { it.displayName })
+        assertEquals(listOf(FolderRef("a2", "Anna", "Anna (2)"), FolderRef("x", "Fotos")), shell.path)
+        assertEquals(NodeAt("s", "x", NodeRef.FOLDER, "Fotos"), shell.folderAt("s"))
+        assertEquals("Anna", Shell(null, space = "s").at(tree, "a1").folder?.displayName)
+        // an older sibling of the name comes back (restored): the path's labels are read anew
+        val restored = tree + NodeRef("s", "a0", "box", NodeRef.FOLDER, "Anna", identity = true, createdAt = 0.5)
+        assertEquals(listOf("Anna (3)", "Fotos"), shell.relabelled(restored).path.map { it.displayName })
+        // nothing changed: the same shell
+        assertTrue(shell.relabelled(tree) === shell)
+        // the first one gone: the second keeps the name
+        assertEquals(listOf("Anna", "Fotos"), shell.relabelled(tree.filter { it.nodeId != "a1" }).path.map { it.displayName })
+    }
+
     @Test
     fun choosingInTheDrawerClosesTheObjectAndSearch() {
         val s = Shell.start(pot, "s").search(true).choose(ApplicationId.DEPOT)

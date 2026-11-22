@@ -241,7 +241,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                                     contribution?.subtitle?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted)) }
                                 }
                                 shell.application != null -> Text(appName(shell.application!!), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
-                                shell.folder != null -> Text(shell.folder!!.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                shell.folder != null -> Text(shell.folder!!.displayName, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                                 // the space's name; its switcher is the drawer's, with the tenants (owner 2026-11-10)
                                 else -> Text(spaceName(s.space), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                             }
@@ -506,7 +506,7 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
             LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottom)) {
                 item(key = "hero") { hero(8.dp) }
                 // what was made here offline and is not sent yet, marked (core's `ShellModel.queuedHere`, ADR 0153 decision 5)
-                items(queuedHere, key = { "queued:" + it.id }) { QueuedLevelRow(it) }
+                items(queuedHere, key = { "queued:" + it.id }) { QueuedLevelRow(it, model::open) }
                 if (groups.isEmpty() && queuedHere.isEmpty()) item(key = "empty") { Empty() }
                 // the folders apart from the rest, as the web's level view (core's `Home.groups`)
                 for (group in groups) {
@@ -520,7 +520,7 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
                         val bookmark = node.asBookmark()
                         WithRowMenu(node.at(), model, modifier, s.selection) { menu ->
                             if (folder != null) {
-                                LevelTile(node.name, null, LocalCovers.current[node.nodeId]?.second, Icons.Outlined.Folder, folder = true, modifier = Modifier.rowDrop(node, model), onMenu = menu) { onEnter(folder) }
+                                LevelTile(node.displayName, null, LocalCovers.current[node.nodeId]?.second, Icons.Outlined.Folder, folder = true, modifier = Modifier.rowDrop(node, model), onMenu = menu) { onEnter(folder) }
                             } else if (obj != null) ObjectTile(obj, Modifier, onOpen, menu)
                             else if (bookmark != null) LevelTile(bookmark.name, null, null, kindIcon(bookmark.kind), folder = false, modifier = Modifier, onMenu = menu) { model.openBookmark(bookmark) }
                         }
@@ -528,7 +528,7 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
                         val folder = node.asFolder()
                         if (folder != null) {
                             ListItem(
-                                headlineContent = { Text(node.name, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
+                                headlineContent = { Text(node.displayName, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold) },
                                 leadingContent = {
                                     val cover = LocalCovers.current[node.nodeId]?.second
                                     if (cover != null) androidx.compose.foundation.Image(

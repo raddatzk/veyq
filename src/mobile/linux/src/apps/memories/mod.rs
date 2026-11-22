@@ -35,7 +35,7 @@ use crate::core_ui::{create_action, said, words};
 pub fn register(registry: &mut Registry) {
     registry.kind(ApplicationId::Memories, &["MEMORY", "CHAPTER"], KindPage {
         body,
-        guest: Some(GuestPage { kind: ReceivedPageKind::Gallery, body: guest, add_names_first: true }),
+        guest: Some(GuestPage { kind: ReceivedPageKind::Gallery, body: guest }),
         actions: &["memory-upload", "memory-music", "memory-banner"],
         refreshes: true,
         facts_later: false,

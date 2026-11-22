@@ -145,6 +145,9 @@ object MemoriesGuest {
         /** A guest reads no member's name (ADR 0108 decision 2; a READ guest's download carries none, ADR 0149 decision 9). */
         override suspend fun uploaders(items: List<MemoryMedia.Item>): Map<String, MediaDetails.Uploader> = emptyMap()
 
+        /** A READ_WRITE guest not named yet is asked its name here, at the write ([GuestAccess.naming], #1044). */
+        override suspend fun named(): Boolean = access.role == GuestAccess.READ_WRITE && access.naming.request() != null
+
         override fun upload(sources: List<UploadSource>): Int {
             val queue = access.queue ?: return 0
             val deriver = access.deriver ?: return 0
@@ -228,7 +231,8 @@ class GuestUploader internal constructor(private val access: GuestAccess, val no
     /** Whether the platform's tiers and the upload queue are at hand (else nothing is offered). */
     val offered: Boolean get() = access.queue != null && access.deriver != null
 
-    suspend fun name(displayName: String): Boolean = runCatching { access.nameUploader(displayName.trim()) }.isSuccess
+    /** Name the uploader from the page's own form (the phones', the web's): through the core's one naming flow. */
+    suspend fun name(displayName: String): Boolean = access.naming.name(displayName).let { it.problem == null && it.notice == null }
 
     fun forget() = access.forgetGuest()
 
@@ -239,6 +243,17 @@ class GuestUploader internal constructor(private val access: GuestAccess, val no
         if (session.value == null || sources.isEmpty()) return 0
         queue.enqueue(sources.map { source -> MediaUpload.GuestJob(source, deriver, access.now) { o, p, progress -> send(o, p, progress, source.name) } }, node.name, null, null, null)
         return sources.size
+    }
+
+    /**
+     * [sources] queued as [upload] does, a guest not named yet asked its name first through the core's one naming flow
+     * ([GuestAccess.naming], ADR 0154 decision 1: an uploader's own `K_up`); declined, none is queued (and each is the
+     * caller's to close).
+     */
+    suspend fun uploadAsking(sources: List<UploadSource>): Int {
+        if (!offered || sources.isEmpty()) return 0
+        access.naming.request() ?: return 0
+        return upload(sources)
     }
 
     /** One medium sent now under the guest's `K_up` (the queue's job, a test's). */

@@ -101,9 +101,9 @@ internal class MemoriesHolding(private val model: AppModel) : Holding() {
         return target.take(model.shareInbox, label, null, ShareIn::release)?.let { AddedHere(MediaUploads.notTaken(it.refused)) }
     }
 
-    /** Files dropped onto a gallery: its upload (core's one drop, the gallery's rights). */
+    /** Files dropped onto a gallery, or onto the bucket its Contributions view shows: its upload (core's one drop). */
     override suspend fun drop(shell: ShellModel, target: DropTarget, items: List<Dropped>): DropOutcome? =
-        if (target is DropTarget.Gallery) shell.drop(target, items, null, ShareIn::release) else null
+        if (target is DropTarget.Gallery || target is DropTarget.Bucket) shell.drop(target, items, null, ShareIn::release) else null
 
     override val deriver: me.raddatz.veyq.mobile.media.Derivation.Deriver get() = tiers
 
@@ -507,12 +507,13 @@ internal class MemoriesHolding(private val model: AppModel) : Holding() {
     /**
      * Queues the photos and videos the system's picker granted ([uris]) into [gallery]'s Memory or chapter (core's
      * `MediaUploads`: each one's tiers derived here ([MediaDerive]) while the one before it is on the wire, its bytes read at
-     * any offset; the core reads the gallery anew as each is in, the lists at the batch's end).
+     * any offset; the core reads the gallery anew as each is in, the lists at the batch's end). A link's guest not named
+     * yet is asked its name first by the core (`GalleryModel.uploadAsking`, #1044).
      */
     fun uploadMedia(gallery: GalleryModel, uris: List<android.net.Uri>) {
         scope.launch {
             val sources = withContext(Dispatchers.IO) { uris.mapNotNull { pickedMedium(it) }.map { model.source(it) } }
-            gallery.upload(sources)
+            gallery.uploadAsking(sources)
         }
     }
 

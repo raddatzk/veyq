@@ -1040,9 +1040,6 @@ internal sealed class Call {
     /** The question confirmed: the link let go (its key zeroed) — the host returns where the person was. */
     @Serializable @SerialName("Received.Leave") data class ReceivedLeave(val received: Long) : Call()
 
-    /** A READ_WRITE guest's name, or a WRITE_ONLY uploader's (`nameGuest` / `nameUploader`). */
-    @Serializable @SerialName("Received.Name") data class ReceivedName(val received: Long, val name: String) : Call()
-
     /** *Not you?* */
     @Serializable @SerialName("Received.ForgetGuest") data class ReceivedForgetGuest(val received: Long) : Call()
 
@@ -1054,7 +1051,9 @@ internal sealed class Call {
 
     /**
      * Files at [paths] added by a WRITE_ONLY link's guest (a drop box's, a Memory's uploader), or by a READ_WRITE guest into
-     * the folder on screen ([ReceivedPage.writes], #1034: each its own file, the link read anew as each settles).
+     * the folder on screen ([ReceivedPage.writes], #1034: each its own file, the link read anew as each settles). A guest
+     * not named yet is asked its name by the core at the write ([ReceivedShown.naming], ADR 0154 decision 1, #1042): the
+     * call answers once it was, refused where it declined.
      */
     @Serializable @SerialName("Received.Upload") data class ReceivedUpload(val received: Long, val paths: List<String>) : Call()
     /**
@@ -2730,7 +2729,17 @@ internal class GalleryShown(
      * lightbox on it ([Call.LightboxOpen] at its row) and says so ([Call.GallerySearchOpenedSeen]). Null: nothing asked.
      */
     val searchOpened: String? = null,
+    /**
+     * The [chapters] made offline and not sent yet (`GalleryModel.State.chapterSaid`, ADR 0153 decision 5, #1040): each
+     * chapter's id with the line under its name (*Waiting to send*, or why it is held). Such a chapter opens as any other.
+     */
+    val chaptersUnsent: List<ChapterUnsent> = emptyList(),
 )
+
+/** A chapter of a [GalleryShown] made offline and not sent yet: its [node] id and the line under its name ([said]). */
+@Serializable
+@SerialName("ChapterUnsent")
+internal class ChapterUnsent(val node: String, val said: Notice)
 
 /**
  * A placeholder tile of a [GalleryShown] (core's `UploadTile`): its layout id ([id], never a medium's: a [GridTile.mediaId]
@@ -4400,11 +4409,14 @@ internal enum class ReceivedRefusal { UNREACHABLE, OTHER_VERSION, NO_LINKS }
 @Serializable
 internal enum class ReceivedPageKind { LEVEL, FILE, GALLERY, POT, DROP_BOX, UPLOADER, NOT_SHOWN }
 
-/** One child of a guest's level. */
+/**
+ * One child of a guest's level: [displayName] is what its row draws (a folder numbered where a sibling folder shares its
+ * name, `GuestLevel.Row.displayName`), [name] what a report reads.
+ */
 @Serializable
 @SerialName("ReceivedRow")
 internal class ReceivedRow(
-    val id: String, val kind: String, val name: String, val identity: Boolean,
+    val id: String, val kind: String, val name: String, val identity: Boolean, val displayName: String = name,
     /** The row's menu as the core plans it (`GuestLevelMoves.rowPlan`, inbox #1063): Move where the guest moves its node ([Call.ReceivedMove]). */
     val menu: List<HeaderShown.PlanAction> = emptyList(),
 )
@@ -4427,6 +4439,8 @@ internal class ReceivedPage(
     val tools: List<me.raddatz.veyq.mobile.navigation.LevelTool> = emptyList(),
     /** A guest level's selection while its Select mode is on (`GuestLevelMoves.selection`): the member's bar over it. */
     val selection: ShellShown.ShownSelection? = null,
+    /** The page's title: a level's folder numbered where a sibling folder shares its name (`GuestLevel.title`), else [name]. */
+    val title: String = name,
 )
 
 /**
@@ -4483,6 +4497,9 @@ internal sealed class DropOn {
 
     /** Gallery [gallery]'s Memory or chapter (its page open, [Watched.Gallery]). */
     @Serializable @SerialName("DropOnGallery") data class Gallery(val gallery: Long) : DropOn()
+
+    /** The bucket Contributions view [buckets] shows ([Call.BucketsOpen]): its photos and videos go into it (inbox #1065). */
+    @Serializable @SerialName("DropOnBuckets") data class Buckets(val buckets: Long) : DropOn()
 }
 
 /** One dropped item as the host's file system tells it ([Call.Drop]; core's `Dropped`): never sorted or judged by the host. */

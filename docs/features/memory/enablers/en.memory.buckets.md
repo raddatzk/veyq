@@ -73,8 +73,10 @@
   `owner_key`; there is **no cross-owner move**. Any member may do it, even re-bucketing a contributor's media
   within that contributor's root (see authz below).
 
-- **Not built:** uploading straight into a chosen sub-bucket (an upload lands in its uploader's primary and a move
-  files it; the complete call carries no target bucket), a camera/source filter and a capture-time-shift tool.
+- **Upload into a bucket.** The complete call carries no target bucket: an upload lands in its uploader's primary, and
+  an upload into a sub-bucket (the Beiträge view's upload or a drop onto it) is filed there by a move once each medium is
+  in — only within the caller's own root ([ADR 0034](../../../decisions/0034-media-uploader-buckets.md) point 7).
+- **Not built:** a camera/source filter and a capture-time-shift tool.
 
 ## Ownership & operator-blindness
 

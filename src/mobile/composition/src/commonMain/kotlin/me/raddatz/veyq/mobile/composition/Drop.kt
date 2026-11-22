@@ -6,6 +6,7 @@ import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.depot.DepotUploads
 import me.raddatz.veyq.mobile.depot.FolderUpload
 import me.raddatz.veyq.mobile.export.ImportDialog
+import me.raddatz.veyq.mobile.memories.Contributions
 import me.raddatz.veyq.mobile.memories.GalleryModel
 import me.raddatz.veyq.mobile.memories.MediaUploads
 import me.raddatz.veyq.mobile.memories.MemoryShare
@@ -53,6 +54,20 @@ sealed class DropTarget {
          */
         fun drop(items: List<Dropped>, left: (UploadSource) -> Unit = {}): DropOutcome =
             if (!gallery.takesUploads) DropOutcome.notHere else Drops.ontoGallery(gallery, items, left)
+    }
+
+    /**
+     * The bucket a Memory's or a chapter's Contributions view shows (inbox #1065; the web's `MemoryBuckets.vue` drop): its
+     * photos and videos go into that bucket — one of the caller's own root alone, as the web's takes them.
+     */
+    class Bucket(val contributions: Contributions) : DropTarget() {
+        /** The drop onto this bucket, judged by the view alone (`Contributions.intake`), with or without a tenant's shell. */
+        fun drop(items: List<Dropped>, left: (UploadSource) -> Unit = {}): DropOutcome = when (contributions.intake()) {
+            Contributions.Intake.TAKES -> Drops.sorted(items, left, contributions::upload)
+            Contributions.Intake.NOT_OWN -> DropOutcome.Refused(Notice(Msg.MEMORY_BUCKETS_DROP_NOT_OWN))
+            Contributions.Intake.OFFLINE -> DropOutcome.Refused(Notice(Msg.OFFLINE_READ_ONLY))
+            Contributions.Intake.NONE -> DropOutcome.notHere
+        }
     }
 }
 
@@ -130,10 +145,14 @@ internal object Drops {
      * by count and handed back, each folder said by name — not walked into one Memory, which would flatten it (owner
      * 2026-11-13).
      */
-    fun ontoGallery(gallery: GalleryModel, items: List<Dropped>, left: (UploadSource) -> Unit): DropOutcome {
+    fun ontoGallery(gallery: GalleryModel, items: List<Dropped>, left: (UploadSource) -> Unit): DropOutcome =
+        sorted(items, left, gallery::upload)
+
+    /** A drop's photos and videos sorted out ([MemoryShare]'s answer) and handed to [upload], the rest said as [ontoGallery] says it. */
+    fun sorted(items: List<Dropped>, left: (UploadSource) -> Unit, upload: (List<UploadSource>) -> Int): DropOutcome {
         val sorted = MemoryShare.answer.sort(items.filterIsInstance<Dropped.File>().map { it.source })
         sorted.left.forEach { runCatching { left(it) } }
-        val queued = if (sorted.taken.isEmpty()) 0 else gallery.upload(sorted.taken)
+        val queued = if (sorted.taken.isEmpty()) 0 else upload(sorted.taken)
         if (queued == 0) sorted.taken.forEach { runCatching { left(it) } }
         val notices = items.filterIsInstance<Dropped.Folder>().map { Notice(Msg.MEMORY_DROP_FOLDER, it.name) } +
             unsaid(items) + listOfNotNull(MediaUploads.notTaken(sorted.left.size))

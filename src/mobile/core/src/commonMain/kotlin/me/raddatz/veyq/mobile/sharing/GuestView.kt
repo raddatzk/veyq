@@ -30,10 +30,22 @@ class GuestLevel internal constructor(
     private val access: GuestAccess? = null,
     private val view: GuestView? = null,
 ) {
-    /** One row: a child's id, kind and name (a guest's identity folder is marked, as the member's). */
-    data class Row(val nodeId: String, val kind: String, val name: String, val identity: Boolean)
+    /**
+     * One row: a child's id, kind and name (a guest's identity folder is marked, as the member's), and a folder's [label]
+     * where a sibling folder shares its name (`Anna (2)`, [GuestTree.folderLabels]; null where the name is the label). A row
+     * draws [displayName]; the name stays what a report or a move reads.
+     */
+    data class Row(val nodeId: String, val kind: String, val name: String, val identity: Boolean, val label: String? = null) {
+        val displayName: String get() = label ?: name
+    }
 
-    val rows: List<Row> get() = tree.children(node.nodeId).map { Row(it.id, it.kind, it.name, it.shareIdentityId != null) }
+    val rows: List<Row> get() {
+        val labels = tree.folderLabels(node.nodeId)
+        return tree.children(node.nodeId).map { Row(it.id, it.kind, it.name, it.shareIdentityId != null, labels[it.id]) }
+    }
+
+    /** The folder's name as its page's title draws it: numbered where a sibling folder shares it ([GuestTree.displayName]). */
+    val title: String get() = if (node.nodeId == tree.root.id) node.name else tree.displayName(node.nodeId) ?: node.name
 
     /**
      * Whether the guest adds here — a READ_WRITE link, outside a guest's identity folder (the server refuses it there,

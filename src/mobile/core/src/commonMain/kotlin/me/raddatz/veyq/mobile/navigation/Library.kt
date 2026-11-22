@@ -20,12 +20,21 @@ data class NodeRef(
     /** When the server created the node, in epoch milliseconds (null where none is served, a guest's): equal names in a
      *  level fall to it, then to the id ([me.raddatz.veyq.mobile.tree.LevelOrder]). */
     val createdAt: Double? = null,
+    /**
+     * The folder's name as its sibling folders tell it apart (`Anna (2)`, the platform's [me.raddatz.veyq.mobile.tree.DisplayNames],
+     * inbox #393/#1062), where a sibling folder shares its name; null where the name is the label. Set by [Home.level]; a
+     * row, a tile and a title draw [displayName], a rename, a move and a collision check read [name].
+     */
+    val label: String? = null,
 ) {
+    /** What a row, a tile and a title draw: [label] where siblings share the name, else [name]. */
+    val displayName: String get() = label ?: name
+
     val isFolder: Boolean get() = kind == FOLDER
     val application: ApplicationId? get() = applicationOf(kind)
 
     fun asObject(): ObjectRef? = application?.let { ObjectRef(scopeId, nodeId, kind, it, name) }
-    fun asFolder(): FolderRef? = if (isFolder) FolderRef(nodeId, name) else null
+    fun asFolder(): FolderRef? = if (isFolder) FolderRef(nodeId, name, label) else null
 
     /** A kept link (`SHARE_BOOKMARK`, ADR 0120): core's kind, listed on its level and opened as core's page ([Shell.openBookmark]). */
     val isBookmark: Boolean get() = kind == BOOKMARK

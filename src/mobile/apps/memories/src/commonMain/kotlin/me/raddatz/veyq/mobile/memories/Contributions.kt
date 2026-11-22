@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.session.TenantSession
 
 /**
@@ -146,6 +147,52 @@ class Contributions(private val gallery: GalleryModel, private val door: Door) {
     /** The chosen bucket's [mediaIds] moved into bucket [target], one of [State.moveTargets]; refused across roots. */
     suspend fun move(mediaIds: List<String>, target: String): Buckets.Outcome =
         if (current.moveTargets.none { it.bucketId == target }) Buckets.Outcome.REFUSED else curate { door.move(mediaIds, target) }
+
+    /** Whether the chosen bucket takes an upload now ([intake]). */
+    enum class Intake {
+        /** It does: a bucket of the caller's own root, and the page takes uploads (a sub-bucket online only). */
+        TAKES,
+
+        /** Another uploader's root: an upload lands in its uploader's primary and never moves across owners. */
+        NOT_OWN,
+
+        /** A sub-bucket offline: filing into it is a move, a write, online only (ADR 0140 decision 7). */
+        OFFLINE,
+
+        /** No bucket chosen, or the page takes no upload (no right; offline with nothing queued). */
+        NONE,
+    }
+
+    /**
+     * Whether the chosen bucket takes an upload now (inbox #1065, the web's `MemoryBuckets.vue` `takesUpload`): only a bucket
+     * of the caller's own root — an upload lands in its uploader's primary and a move files it, within one root only.
+     */
+    fun intake(): Intake {
+        val row = current.row ?: return Intake.NONE
+        return when {
+            !gallery.takesUploads -> Intake.NONE
+            !row.own -> Intake.NOT_OWN
+            !row.isPrimary && gallery.current.offline != null -> Intake.OFFLINE
+            else -> Intake.TAKES
+        }
+    }
+
+    /**
+     * The picked or dropped [sources] uploaded into the chosen bucket (inbox #1065): into the caller's primary — virtual or
+     * not — as any upload lands, into a sub-bucket of their root by a move of each medium once it is in. How many were
+     * queued; none where [intake] is not [Intake.TAKES]. A move refused or failed leaves the medium in the primary and is
+     * said as a curation's is ([State.refused]).
+     */
+    fun upload(sources: List<UploadSource>): Int {
+        if (intake() != Intake.TAKES) return 0
+        val row = current.row ?: return 0
+        if (row.isPrimary) return gallery.upload(sources)
+        val bucketId = row.bucketId
+        return gallery.upload(sources) { mediaId ->
+            val out = door.move(listOf(mediaId), bucketId)
+            if (out != Buckets.Outcome.DONE) _state.update { it.copy(refused = out) }
+        }
+    }
 
     /** What [State.refused] said was seen. */
     fun seen() = _state.update { it.copy(refused = null) }

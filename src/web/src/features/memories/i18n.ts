@@ -300,6 +300,8 @@ const en = {
       unnamedMedia: 'Item {n}',
       dropTitle: 'Upload into “{bucket}”',
       dropCopy: 'Drop photos or videos here',
+      // A drop onto another uploader's bucket (inbox #1065): an upload is filed within its uploader's own root only.
+      dropNotOwn: 'Your uploads go into your own buckets. Choose one of yours to drop photos or videos into it.',
       saveFailed: 'Could not save the bucket.',
       moveFailed: 'Could not move the media.',
     },
@@ -683,6 +685,7 @@ const de: typeof en = {
       unnamedMedia: 'Medium {n}',
       dropTitle: 'In „{bucket}“ hochladen',
       dropCopy: 'Fotos oder Videos hier ablegen',
+      dropNotOwn: 'Deine Uploads landen in deinen eigenen Buckets. Wähle eines davon, um Fotos oder Videos dort abzulegen.',
       saveFailed: 'Bucket konnte nicht gespeichert werden.',
       moveFailed: 'Medien konnten nicht verschoben werden.',
     },

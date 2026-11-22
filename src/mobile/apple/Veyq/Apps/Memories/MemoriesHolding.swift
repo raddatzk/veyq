@@ -91,9 +91,10 @@ final class MemoriesHolding: Holding {
         return true
     }
 
-    /// Files dropped onto a Memory's or chapter's gallery: its photos and videos uploaded there (core's one drop).
+    /// Files dropped onto a Memory's or chapter's gallery, or onto the bucket its Contributions view shows: its photos and
+    /// videos uploaded there (core's one drop).
     func drop(_ shell: ShellModel, _ target: DropTarget, _ items: [Dropped]) async -> DropOutcome? {
-        guard target is DropTarget.Gallery else { return nil }
+        guard target is DropTarget.Gallery || target is DropTarget.Bucket else { return nil }
         return try? await shell.drop(target: target, items: items, depot: nil, left: { @Sendable source in
             if let url = ApplePlatform.shared.urlOf(source: source) { AppModel.removePicked(url) }
         }, deletedName: say(.potDeletedPerson))
@@ -102,7 +103,7 @@ final class MemoriesHolding: Holding {
     /// A share's files the extension handed over for a Memory or a chapter: queued into its node.
     func pickUp(_ target: ShareHandoff.Target, _ sources: [UploadSource]) -> Bool {
         guard !target.isLevel, let nodeId = target.nodeId, let uploads = media else { return false }
-        _ = uploads.upload(scopeId: target.scopeId, nodeId: nodeId, label: target.label, sources: sources)
+        _ = uploads.upload(scopeId: target.scopeId, nodeId: nodeId, label: target.label, sources: sources, filed: nil)
         return true
     }
 
@@ -434,7 +435,8 @@ final class MemoriesHolding: Holding {
                 modifiedAt: fromPhotos ? nil : p.modifiedAt.map { KotlinLong(value: $0) }
             )
         }
-        _ = gallery.upload(sources: sources)
+        // a link's guest not named yet is asked its name first by the core, at the write (#1044)
+        Task { _ = try? await gallery.uploadAsking(sources: sources) }
     }
 
     // MARK: New Memory and Add chapter

@@ -118,6 +118,7 @@ fn on_name(on: &DropOn) -> String {
         DropOn::DropOnLevel { label } => format!("the level {label}"),
         DropOn::DropOnRow { folder } => format!("the row {}", folder.name),
         DropOn::DropOnGallery { gallery } => format!("gallery {gallery}"),
+        DropOn::DropOnBuckets { buckets } => format!("the bucket of contributions {buckets}"),
     }
 }
 
@@ -169,7 +170,7 @@ mod tests {
     }
 
     fn row(id: &str, kind: &str) -> NodeRef {
-        NodeRef { scope_id: "s1".into(), node_id: id.into(), parent_id: None, kind: kind.into(), name: id.into(), identity: false, created_at: None }
+        NodeRef { scope_id: "s1".into(), node_id: id.into(), parent_id: None, kind: kind.into(), name: id.into(), identity: false, created_at: None, label: None }
     }
 
     #[test]

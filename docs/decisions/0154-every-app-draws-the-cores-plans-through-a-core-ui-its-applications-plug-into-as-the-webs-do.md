@@ -120,10 +120,30 @@ held for the screens' models but not around them:
   write by the core's one naming (`GuestAccess.naming`). The core follows a reach's end (`SessionModel.followed`), the
   bridge for the desktops; a release build of Android and Apple prefills no server. Where a platform still decides: a
   phone puts a level's refused drop into its pick mode (a refused drop hands nothing back); a level's batch label is its
-  drawn title; a Memory's *Add photos* and a WRITE_ONLY page still name a guest first through `Received.Name` (#1042), and
-  the phones' guest gallery offers *Add* only once named (#1044). Tests: `GatesInTheCoreTest`, `SessionModelTest`,
+  drawn title (a guest's *Add photos* and a WRITE_ONLY page's upload joined the naming 2026-11-22, below). Tests: `GatesInTheCoreTest`, `SessionModelTest`,
   `GuestDoorsTest`, the bridge's `DispatchTest` and `ReceivedBridgeTest`; the bridge's `ShellShown.dropsHere`/`dropRows`
   are held by no bridge test (the bridge's played tenants have no shell; the core's gates are).
+- **As built, decision 1's guest writes** (2026-11-22, #1042 and #1044). Every write a link's guest is offered asks its
+  name at the write through `GuestAccess.naming`, and nothing else does: a gallery's *Add photos* (`GalleryModel.uploadAsking`
+  over `Door.named()` — a member's door answers at once, a guest's asks), a WRITE_ONLY page's upload
+  (`GuestDropBox.uploadAsking`, `GuestUploader.uploadAsking`), beside Replace, *Add entry* and a level's New. The naming
+  covers every writing link: `request()` asks on READ_WRITE and WRITE_ONLY, and `name()` makes a READ_WRITE guest
+  (`nameGuest`) or a WRITE_ONLY uploader with its own `K_up` (`nameUploader`) — the one place that branches on the role.
+  So the bridge's `Received.Name` is gone (a host names only when a write asks, `Received.NamingSave`), Linux's
+  `received.rs` `write()` and its `GuestPage.add_names_first`, Windows' `ReceivedView.Write` and `KindBody.GuestCreate`'s
+  writer, and the phones' `canAdd`: a guest's gallery offers *Add photos* by its rights alone, named or not. Decided on the
+  way: `GuestNaming.offered` stays READ_WRITE-only — it means "the screen shows the guest line", and a WRITE_ONLY page says
+  who sent in its own body, so widening it would draw *Not you?* twice; the phones' WRITE_ONLY pages keep the web's drop
+  form (name, then pick), its save now `naming.name`, so the identity is still the core's — whether they should ask at the
+  write as the desktops' do is the owner's (#1090); `GalleryModel.uploadAsking` closes the picked sources on a decline,
+  since no queue holds them and its callers never closed on a zero; a declined naming on the desktops still toasts
+  "failed" (`Received.Upload` answers `NOT_TAKEN`, as a level's upload did before) — #1091, rather than the bridge reading
+  the session to tell the two apart. Tests: `GuestDoorsTest` (an unnamed guest's gallery offers Add and asks at the upload,
+  declined nothing sent and the pick closed; a drop box's guest asked at its upload and named as an uploader, no identity on
+  a decline; a Memory's uploader named through the naming), `ReceivedBridgeTest` (the drop box's upload asked, declined and
+  named over the bridge; an unnamed guest gallery's `Memory.Upload` asked and declined). **Owed passes:** a guest's
+  *Add photos* and a drop box's and a Memory uploader's upload asked at the write on Linux and Windows, the phones' guest
+  gallery's *Add photos* unnamed on Android and Apple — none clicked in this change.
 - **The passes (decision 1).** Each a throwaway, erased after. New Folder with a taken name kept the dialog open with the
   word under the field on Android, Linux and Windows. Android: a READ_WRITE link opened unnamed offered *Replace…* on a
   file and asked the name at the write, then uploaded. **Not run:** every drop on every app — Android needs a window to
@@ -132,6 +152,14 @@ held for the screens' models but not around them:
   server field (compiled only). **Apple:** both builds green, nothing clicked; the Mac's drops (a ZIP and a folder onto a
   level, onto a folder row and a guest's identity folder, onto a gallery; #1039's folder from Finder), its dialogs and a
   guest's link are the coordinator's pass, the iPhone's the owner's.
+- **As built, decision 1 — a Contributions view's bucket** (inbox #1065, 2026-11-22). A drop on a Memory's Contributions
+  view goes into the bucket it shows, as the web's Beiträge drop does: `DropTarget.Bucket(contributions)`, judged by the
+  view alone (`Contributions.intake`: the caller's own root takes it, another uploader's refuses it with
+  `memory_buckets_drop_not_own`, a sub-bucket offline with `offline_read_only`) and sorted as a gallery's drop
+  (`Drops.sorted`); a sub-bucket's upload is filed by a move once each medium is in (`MediaUploads.upload`'s filer,
+  ADR 0034 point 7). The desktops send `DropOn.Buckets` with the open view's id; Android, Apple, Linux and Windows pick
+  the bucket target while their Contributions view shows. Tests: `ContributionsTest`, `MediaUploadsTest`,
+  `BucketDropTest`. **Not run:** a drop on any app's Contributions view (the passes above apply; owed in #1065).
 - **As built, decision 6's words** (2026-11-20). `scripts/validate_mobile_words.py` reads Android's Kotlin
   (`android-literal`), Swift's accessibility hints and values and `Text(verbatim:`, C#'s and XAML's help texts and a
   dialog's three button texts, GTK's alert responses and an entry row's text, and the two manifests that show text

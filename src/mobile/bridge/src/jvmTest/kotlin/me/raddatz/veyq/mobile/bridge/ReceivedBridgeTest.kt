@@ -105,7 +105,11 @@ class ReceivedBridgeTest {
         assertEquals(ReceivedPageKind.LEVEL, ready.page!!.kind)
         assertEquals(listOf("Trip"), ready.page!!.rows.map { it.name })
         assertFalse(ready.keepOffered, "Keep offered signed out")
-        b.ask(Call.ReceivedName(opened.received, "Ben"))
+        // named at a write, by the core's naming flow (ADR 0154 decision 1): there is no naming apart from a write
+        val made = async { b.ask(Call.ReceivedNewFolder(opened.received, "Neu")) }
+        until { it.naming }
+        b.ask(Call.ReceivedNamingSave(opened.received, "Ben"))
+        made.await()
         assertEquals("Ben", until { it.guestName != null }.guestName)
         b.ask(Call.ReceivedOpenNode(opened.received, memory))
         val gallery = until { it.page?.kind == ReceivedPageKind.GALLERY }
@@ -152,7 +156,11 @@ class ReceivedBridgeTest {
         assertNull(ready("READ", null).recordDays)
     }
 
-    /** A drop box's guest names itself and adds a file by path; the page's update names it once it was sent (#1018's write). */
+    /**
+     * A drop box's guest adds a file by path and is asked its name at that write by the core (`GuestAccess.naming`, #1042:
+     * an uploader's, no role read by the bridge) — declined, nothing is sent; named, the upload waiting on it goes on —; the
+     * page's update names the file once it was sent (#1018's write).
+     */
     @Test
     fun aDropBoxsGuestAddsAFileAndThePageSaysItWasSent() = runBlocking {
         val share = PlayedShare(p, role = "WRITE_ONLY", rootKind = "DEPOT_DROPBOX")
@@ -162,9 +170,16 @@ class ReceivedBridgeTest {
         val w = b.watching(Watched.Received(opened.received))
         fun shown(j: kotlinx.serialization.json.JsonElement) = (wire.decodeFromJsonElement(Update.serializer(), j) as Update.Received).shown
         w.untilJson { j -> shown(j)?.takeIf { it.page?.kind == ReceivedPageKind.DROP_BOX } }
-        assertEquals(Answer.Done, b.ask(Call.ReceivedName(opened.received, "Ben")))
         val file = kotlin.io.path.createTempFile("dropped", ".txt").toFile().apply { writeText("dropped"); deleteOnExit() }
-        assertEquals(Answer.Done, b.ask(Call.ReceivedUpload(opened.received, listOf(file.path))))
+        val declined = async { b.ask(Call.ReceivedUpload(opened.received, listOf(file.path))) }
+        w.untilJson { j -> shown(j)?.takeIf { it.naming } }
+        assertEquals(Answer.Done, b.ask(Call.ReceivedNamingDecline(opened.received)))
+        assertIs<Answer.Refused>(declined.await(), "a file was sent before the guest named itself")
+        val sending = async { b.ask(Call.ReceivedUpload(opened.received, listOf(file.path))) }
+        w.untilJson { j -> shown(j)?.takeIf { it.naming } }
+        assertEquals(Answer.Named(null, null, false, false), b.ask(Call.ReceivedNamingSave(opened.received, "Ben")))
+        assertEquals(Answer.Done, sending.await())
+        assertEquals("Ben", w.untilJson { j -> shown(j)?.takeIf { it.guestName != null } }.guestName)
         val sent = w.untilJson { j -> shown(j)?.takeIf { it.page?.sent?.isNotEmpty() == true } }
         assertEquals(listOf(file.name), sent.page!!.sent)
         share.assertNoKeyInAnyRequest()
@@ -186,9 +201,17 @@ class ReceivedBridgeTest {
         val w = b.watching(Watched.Received(opened.received))
         fun shown(j: kotlinx.serialization.json.JsonElement) = (wire.decodeFromJsonElement(Update.serializer(), j) as Update.Received).shown
         w.untilJson { j -> shown(j)?.takeIf { it.page?.kind == ReceivedPageKind.LEVEL } }
-        b.ask(Call.ReceivedName(opened.received, "Ben"))
         b.ask(Call.ReceivedOpenNode(opened.received, memory))
         val gallery = w.untilJson { j -> shown(j)?.page?.gallery }
+        // #1044: a guest not named yet is offered Add photos — its upload asks the name at the write; declined, none queued
+        b.watching(Watched.Gallery(gallery)).untilJson { j ->
+            (wire.decodeFromJsonElement(Update.serializer(), j) as? Update.Gallery)?.shown?.takeIf { it.canUpload }
+        }
+        val photo = kotlin.io.path.createTempFile("photo", ".jpg").toFile().apply { writeBytes(byteArrayOf(-1, -40, -1)); deleteOnExit() }
+        val adding = async { b.ask(Call.MemoryUpload(gallery, listOf(photo.path))) }
+        w.untilJson { j -> shown(j)?.takeIf { it.naming } }
+        assertEquals(Answer.Done, b.ask(Call.ReceivedNamingDecline(opened.received)))
+        assertEquals(0, assertIs<Answer.Queued>(adding.await()).count, "a photo was queued before the guest named itself")
         val folder = kotlin.io.path.createTempDirectory("Reise").toFile().apply { deleteOnExit() }
         val dropped = assertIs<Answer.Dropped>(
             b.ask(Call.Drop(DropOn.Gallery(gallery), listOf(DropItem.Folder(folder.path), DropItem.NotLocal("away.jpg")), "")),

@@ -119,6 +119,20 @@ class GalleryModel(
         /** The picked [sources] queued into this node ([MediaUploads.upload]); how many were. */
         fun upload(sources: List<UploadSource>): Int
 
+        /**
+         * The picked [sources] queued into this node, each medium handed to [filed] by id once it is in ([MediaUploads.upload]
+         * with a filer: the Contributions view's upload into a sub-bucket, inbox #1065); how many were. Absent: none is
+         * taken — a door that cannot file uploads nothing rather than leave the media in the primary unsaid.
+         */
+        fun upload(sources: List<UploadSource>, filed: suspend (mediaId: String) -> Unit): Int = 0
+
+        /**
+         * Whether a write here may go on as whoever writes: a member at once; a link's guest not named yet is asked its name
+         * first, at the write, through the core's one naming flow (`GuestAccess.naming`, ADR 0154 decision 1) — false where it
+         * declined.
+         */
+        suspend fun named(): Boolean = true
+
         /** Each revision of the shell's lists (its first value: the lists as they are when the page opens). */
         val revisions: Flow<Any?>
 
@@ -205,8 +219,9 @@ class GalleryModel(
         suspend fun queueMark(mediaId: String, marked: Boolean): Boolean = false
 
         /**
-         * What the outbox holds for this node (ADR 0153 decision 5, the overlay): the media whose trash waits — not shown —
-         * and the marks set or taken away offline. Absent: nothing.
+         * What the outbox holds for this node (ADR 0153 decision 5, the overlay): the media whose trash waits — not shown —,
+         * the marks set or taken away offline, the capture times set offline and the chapters made in it offline (#1040).
+         * Absent: nothing.
          */
         suspend fun queuedHere(): QueuedHere = QueuedHere()
 
@@ -247,8 +262,17 @@ class GalleryModel(
     }
 
     /** What a trash or a restore of a medium came to (`deleteMedia`, `restoreMedia`). */
-    /** What the outbox holds for a gallery's node ([Door.queuedHere]): media whose trash waits, marks set offline. */
-    class QueuedHere(val trashed: Set<String> = emptySet(), val marks: Map<String, Boolean> = emptyMap())
+    /**
+     * What the outbox holds for a gallery's node ([Door.queuedHere]): media whose trash waits, marks set offline, each
+     * capture time set offline by medium ([times]: the correction, null where it goes back to the derived time), and the
+     * chapters made in it offline ([chapters]: what each says under its name, *Waiting to send* or why it is held).
+     */
+    class QueuedHere(
+        val trashed: Set<String> = emptySet(),
+        val marks: Map<String, Boolean> = emptyMap(),
+        val times: Map<String, Long?> = emptyMap(),
+        val chapters: Map<String, Notice> = emptyMap(),
+    )
 
     enum class Removal {
         DONE,
@@ -288,8 +312,13 @@ class GalleryModel(
     data class State(
         /** The media in the grid's order; null while the first read runs. */
         val rows: List<Row>? = null,
-        /** A Memory's chapters (none for a chapter). */
+        /** A Memory's chapters (none for a chapter); one made offline among them ([chapterSaid]). */
         val chapters: List<NodeRef> = emptyList(),
+        /**
+         * The [chapters] made offline and not sent yet, by id (ADR 0153 decision 5, #1040): what each says under its name —
+         * *Waiting to send*, or why it is held. Such a chapter opens as its own page, empty but for what waits to go into it.
+         */
+        val chapterSaid: Map<String, Notice> = emptyMap(),
         /** The gallery did not read (the last read stays shown); [failure] says why. */
         val failed: Boolean = false,
         /** What the page offers whoever looks ([MemoryRights.of]); an action shows only where it says yes. */
@@ -544,9 +573,16 @@ class GalleryModel(
     private val pending = HashSet<String>()
 
     private suspend fun read() = reading.withLock {
-        val read = runCatching { door.gallery() }.getOrNull()
+        val listing = runCatching { door.gallery() }.getOrNull()
         val here = runCatching { door.queuedHere() }.getOrDefault(QueuedHere())
         val hidden = here.trashed
+        // a capture time set offline shows in place: the medium in the grid's order its new time gives it (#1040)
+        val read = listing?.takeIf { here.times.isNotEmpty() }?.let { g ->
+            MemoryMedia.Gallery(
+                MemoryMedia.order(g.items.map { i -> if (i.mediaId in here.times) MemoryMedia.withCaptureTime(i, here.times[i.mediaId]) else i }),
+                g.mediaRevision, g.deleteRevision, g.offline,
+            )
+        } ?: listing
         val chapters = if (node.kind == MEMORY) {
             runCatching { MediaDetails.chapters(node.kind, node.nodeId, door.scopeNodes()) }.getOrNull()
         } else {
@@ -554,14 +590,15 @@ class GalleryModel(
         }
         val facts = runCatching { door.facts() }.getOrNull()
         if (read != null) {
-            listed = read
+            listed = listing
             if (read.offline == null) listedAt = wallClock()
             // a trashed one the listing no longer names is settled
             pending.retainAll(read.items.map { it.mediaId }.toSet())
         }
         _state.update { prior ->
             val s = if (read != null) prior.offline(read.offline) else prior
-            val withFacts = (if (chapters != null) s.copy(chapters = chapters) else s).let { if (facts != null) it.copy(facts = facts) else it }
+            val withFacts = (if (chapters != null) s.copy(chapters = chapters, chapterSaid = here.chapters.filterKeys { id -> chapters.any { it.nodeId == id } }) else s)
+                .let { if (facts != null) it.copy(facts = facts) else it }
             if (read == null) withFacts.copy(failed = true)
             // a photo view's media only: a track and a music track are another view's (GalleryMedium, ADR 0135 decision 2)
             else withFacts.copy(
@@ -877,6 +914,28 @@ class GalleryModel(
         return sources.count { MediaUpload.isMedia(it.type, it.name) }
     }
 
+    /**
+     * The picked [sources] added to this Memory or chapter online, each medium handed to [filed] once it is in (the
+     * Contributions view's upload into a sub-bucket: the move is a write, online only, ADR 0140 decision 7); how many were
+     * queued — none offline or where the rights take no upload.
+     */
+    fun upload(sources: List<UploadSource>, filed: suspend (mediaId: String) -> Unit): Int =
+        if (!takesUploads || current.offline != null) 0 else door.upload(sources, filed)
+
+    /**
+     * The picked [sources] added as [upload] does, whoever writes asked first where the door says (a link's guest not named
+     * yet, [Door.named]); how many were queued — declined, none, and each source is closed here. Every app's *Add photos*
+     * and drop go through it, so no app reads a guest's session to offer one (#1044).
+     */
+    suspend fun uploadAsking(sources: List<UploadSource>): Int {
+        if (!takesUploads || sources.isEmpty()) return 0
+        if (!door.named()) {
+            sources.forEach { runCatching { it.close() } }
+            return 0
+        }
+        return upload(sources)
+    }
+
     /** Whether this page takes an upload now: the rights let whoever looks upload, online or queued offline. */
     val takesUploads: Boolean get() = rights.upload && (current.offline == null || current.queues)
 
@@ -891,6 +950,8 @@ class GalleryModel(
         if (MemoryCreate.CHAPTER !in creates) return MemoryCreate.Made(null, Notice(Msg.NODE_ILLEGAL_STRUCTURE))
         if (name.isBlank()) return MemoryCreate.Made(null, Notice(Msg.FOLDER_NAME_EMPTY))
         return runCatching { door.createChapter(name.trim()) }.getOrElse { MemoryCreate.Made(null, MemoryCreate.refused(null)) }
+            // one made offline is listed among the chapters at once, marked, and opens (#1040)
+            .also { if (it.queued) reload() }
     }
 
     // ---- a medium deleted: a member's trash with its Undo, a guest's own purge asked first ----

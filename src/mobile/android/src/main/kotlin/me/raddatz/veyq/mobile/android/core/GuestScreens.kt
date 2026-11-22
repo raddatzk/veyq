@@ -179,7 +179,7 @@ internal fun GuestLinkScreen(screen: GuestScreen, model: AppModel) {
                 TopAppBar(
                     title = {
                         Column {
-                            Text(page?.node?.name?.takeIf { ready } ?: screen.host, fontWeight = FontWeight.Bold, maxLines = 1)
+                            Text(((page as? me.raddatz.veyq.mobile.sharing.GuestPage.Level)?.model?.title ?: page?.node?.name)?.takeIf { ready } ?: screen.host, fontWeight = FontWeight.Bold, maxLines = 1)
                             if (ready) Text(screen.host, style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
                         }
                     },
@@ -395,7 +395,7 @@ private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, vie
                     val plan = remember(level, r.nodeId) { move.rowPlan(r.nodeId) }
                     Box {
                         ListItem(
-                            headlineContent = { Text(r.name) },
+                            headlineContent = { Text(r.displayName) },
                             leadingContent = {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     if (picking != null) androidx.compose.material3.Checkbox(picking.has(r.nodeId), onCheckedChange = null)

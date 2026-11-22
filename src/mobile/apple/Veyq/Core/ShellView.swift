@@ -569,7 +569,7 @@ struct HomeView: View {
                     } else {
                         FolderTile()
                     }
-                    Text(node.name).fontWeight(.bold).foregroundStyle(Role.text)
+                    Text(node.displayName).fontWeight(.bold).foregroundStyle(Role.text)
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(Role.muted)
                 }
@@ -594,7 +594,7 @@ struct HomeView: View {
     private var levelKey: String { "home:\(model.shell.space ?? "")/\(model.shell.folder?.nodeId ?? "")" }
 
     private var title: String {
-        if let folder = model.shell.folder { return folder.name }
+        if let folder = model.shell.folder { return folder.displayName }
         return Names.spaceName(model.space)
     }
 
@@ -634,7 +634,7 @@ struct HomeView: View {
                         NodeTiles(items: group.nodes.compactMap(tile), width: tilesWidth, model: model).padding(.horizontal)
                     }
                     // what was made here offline and waits to be sent, in place (core's `queuedHere`)
-                    ForEach(queuedHere, id: \.id) { QueuedRow(item: $0).padding(.horizontal) }
+                    ForEach(queuedHere, id: \.id) { QueuedRow(item: $0, open: { ref in model.open(ref) }).padding(.horizontal) }
                 }
                 .padding(.vertical, 8)
             }
@@ -658,7 +658,7 @@ struct HomeView: View {
                 }
                 // what was made here offline and waits to be sent, in place (core's `queuedHere`)
                 if !queuedHere.isEmpty {
-                    Section { ForEach(queuedHere, id: \.id) { QueuedRow(item: $0).listRowBackground(Role.surface) } }
+                    Section { ForEach(queuedHere, id: \.id) { QueuedRow(item: $0, open: { ref in model.open(ref) }).listRowBackground(Role.surface) } }
                 }
             }
         }
@@ -681,7 +681,7 @@ struct HomeView: View {
     private func plainTile(_ node: NodeRef) -> NodeTileItem? {
         if let folder = node.asFolder() {
             let target = model.dropTarget(node)
-            return NodeTileItem(id: node.nodeId, name: node.name, cover: model.covers[node.nodeId]?.image, symbol: "folder", folder: true,
+            return NodeTileItem(id: node.nodeId, name: node.displayName, cover: model.covers[node.nodeId]?.image, symbol: "folder", folder: true,
                                 drop: target.map { t in { providers in Task { await model.drop(providers, onto: t) } } }, menu: Self.at(node)) { model.enter(folder) }
         }
         if let bookmark = node.asBookmark() {

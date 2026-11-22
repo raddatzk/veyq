@@ -58,6 +58,9 @@ internal sealed class ContributionsView : IDisposable
 
     public UIElement View => _view;
 
+    /// <summary>The view's id in the core once it opened (Buckets.Open): a drop onto it goes into the bucket it shows (#1065).</summary>
+    public long? Id => _id;
+
     public ContributionsView(Window window, long gallery, Action<Spoken> say, Action<Call> open, Func<bool> offline)
     {
         _window = window;

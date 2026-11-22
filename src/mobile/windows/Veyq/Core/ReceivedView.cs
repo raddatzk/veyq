@@ -371,7 +371,7 @@ internal sealed class ReceivedView : IDisposable
             return;
         }
         var ready = s.gate == ReceivedGate.Ready;
-        var name = s.page?.name is { Length: > 0 } pageName ? pageName : s.rootName;
+        var name = s.page?.title is { Length: > 0 } pageName ? pageName : s.rootName;
         _title.Text = ready && name.Length > 0 ? name : s.host;
         _subtitle.Text = ready ? s.host : "";
         _subtitle.Visibility = ready ? Visibility.Visible : Visibility.Collapsed;
@@ -428,7 +428,7 @@ internal sealed class ReceivedView : IDisposable
         _commands.SecondaryCommands.Clear();
         if (s is null) return;
         // the page's own guest write (a Memory's Add photos, a Pot's Add entry), where it offers one
-        if (_page?.GuestCreate(Write) is { } write)
+        if (_page?.GuestCreate() is { } write)
         {
             _commands.PrimaryCommands.Add(write);
         }
@@ -557,7 +557,7 @@ internal sealed class ReceivedView : IDisposable
         switch (p.kind)
         {
             case ReceivedPageKind.Level:
-                _content.Content = p.rows.Count == 0 ? Scrolled(Empty(p.name, null)) : Rows(p);
+                _content.Content = p.rows.Count == 0 ? Scrolled(Empty(p.title, null)) : Rows(p);
                 break;
             case ReceivedPageKind.DropBox or ReceivedPageKind.Uploader:
                 DrawUploadPage(p);
@@ -599,7 +599,7 @@ internal sealed class ReceivedView : IDisposable
             line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var glyph = HomeView.Glyph(HomeView.KindGlyph(r.kind));
             line.Children.Add(picking is { } sel ? Selection.Check(glyph, sel.selected.Contains(r.id)) : glyph);
-            var title = new TextBlock { Text = r.name, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+            var title = new TextBlock { Text = r.displayName, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
             Grid.SetColumn(title, 1);
             line.Children.Add(title);
             var chevron = HomeView.Glyph("");
@@ -620,7 +620,7 @@ internal sealed class ReceivedView : IDisposable
                 // drawn as a member's row entry is (RowMenu): its words and icon
                 var move = new MenuFlyoutItem { Text = a.word is { } w ? Said.Key(w) : HeaderPlan.Wire(a.id), Icon = NodeHeader.Icon(a, null) };
                 AutomationProperties.SetAutomationId(move, $"received-row-move:{r.name}");
-                var name = r.name;
+                var name = r.displayName;
                 move.Click += (_, _) => MoveDialog.OpenWith(_window, name, new Call.ReceivedMove { received = Received, node = node }, _notices);
                 menu.Items.Add(move);
             }
@@ -635,7 +635,7 @@ internal sealed class ReceivedView : IDisposable
             }
             if (picking is null && menu.Items.Count > 0) item.ContextFlyout = menu;
             AutomationProperties.SetAutomationId(item, $"received-row:{r.name}");
-            AutomationProperties.SetName(item, r.name);
+            AutomationProperties.SetName(item, r.displayName);
             list.Items.Add(item);
         }
         list.ItemClick += (_, e) =>
@@ -666,7 +666,8 @@ internal sealed class ReceivedView : IDisposable
         column.Children.Add(Body(dropBox ? Words.ShareDropboxHint(p.name) : Words.ShareUploaderIntro(), "received-upload-intro"));
         var add = new Button { Content = dropBox ? Words.ShareDropboxPick() : Words.ShareAddPhotos(), Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
         AutomationProperties.SetAutomationId(add, "guest-upload");
-        add.Click += (_, _) => Write(PickAndUpload);
+        // the core asks the guest's name at the upload where it has none (uploadAsking, AskNaming; #1042)
+        add.Click += (_, _) => PickAndUpload();
         column.Children.Add(add);
         if (p.sent.Count > 0)
         {
@@ -815,57 +816,6 @@ internal sealed class ReceivedView : IDisposable
         {
             Log.Write($"the guest's naming failed ({e.GetType().Name})");
             Act.Send(new Call.ReceivedNamingDecline { received = Received });
-        }
-    }
-
-    /// <summary>A guest's write: its name asked first where the guest has none (the web's naming step, the record's notice
-    /// with it), the write itself once the core took the name.</summary>
-    private async void Write(Action then)
-    {
-        try
-        {
-            if (_shown?.guestName is not null)
-            {
-                then();
-                return;
-            }
-            var box = new TextBox { Header = Words.ShareYourName(), PlaceholderText = Words.ShareYourNamePlaceholder(), MinWidth = 320 };
-            AutomationProperties.SetAutomationId(box, "guest-name");
-            var body = new StackPanel { Spacing = 12, MaxWidth = 440 };
-            body.Children.Add(new TextBlock { Text = Words.ShareGuestNameHint(), TextWrapping = TextWrapping.Wrap });
-            body.Children.Add(box);
-            if (ReceivedText.RecordNotice(_shown?.recordDays) is { } notice)
-            {
-                var said = new TextBlock { Text = notice, TextWrapping = TextWrapping.Wrap, Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"] };
-                AutomationProperties.SetAutomationId(said, "guest-name-record-notice");
-                body.Children.Add(said);
-            }
-            var dialog = new ContentDialog
-            {
-                Title = Words.ShareGuestNameTitle(),
-                Content = body,
-                PrimaryButtonText = Words.ShareSave(),
-                CloseButtonText = Words.EntryCancel(),
-                DefaultButton = ContentDialogButton.Primary,
-                IsPrimaryButtonEnabled = false,
-            };
-            AutomationProperties.SetAutomationId(dialog, "guest-name-dialog");
-            box.TextChanged += (_, _) => dialog.IsPrimaryButtonEnabled = box.Text.Trim().Length > 0;
-            box.Loaded += (_, _) => box.Focus(FocusState.Programmatic);
-            if (await Dialogs.Show(_window, dialog) != ContentDialogResult.Primary) return;
-            var name = box.Text.Trim();
-            if (name.Length == 0) return;
-            var (answer, _) = await Core.CallAsync(new Call.ReceivedName { received = Received, name = name });
-            if (answer is Answer.Done) then();
-            else
-            {
-                Log.Write($"the guest's name answered {answer.GetType().Name}");
-                Say(Spoken.Own("share_failed", Words.ShareFailed()));
-            }
-        }
-        catch (Exception e)
-        {
-            Log.Write($"the guest's naming failed ({e.GetType().Name})");
         }
     }
 

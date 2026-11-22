@@ -251,7 +251,7 @@ struct GuestLinkView: View {
     @State private var reportOffered = false
 
     private var ready: Bool { held.gate.value is ShareGates.StateReady }
-    private var title: String { ready ? (held.page?.node.name ?? held.host) : held.host }
+    private var title: String { ready ? ((held.page as? GuestPage.Level)?.model.title ?? held.page?.node.name ?? held.host) : held.host }
 
     var body: some View {
         NavigationStack {
@@ -550,7 +550,7 @@ private struct GuestLevelView: View {
     private func line(_ r: GuestLevel.Row) -> some View {
         HStack(spacing: 12) {
             Image(systemName: r.kind == "FOLDER" ? "folder" : Names.kindSymbol(r.kind)).foregroundStyle(Role.accent).frame(width: 28)
-            Text(r.name).foregroundStyle(Role.text)
+            Text(r.displayName).foregroundStyle(Role.text)
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())

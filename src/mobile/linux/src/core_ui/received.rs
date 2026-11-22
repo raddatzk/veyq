@@ -26,7 +26,9 @@
 //! (`ReceivedShown.recordDays`, ADR 0093 § 10, inbox #1018), its *more* opening the link's instance's privacy notice;
 //! a write that needs the guest's name asks it at the write, as the core's one naming flow says (`ReceivedShown.naming`,
 //! `Received.NamingSave`/`NamingDecline`, ADR 0154 decision 1: Replace, *Add entry*, a level's New), the notice in the
-//! question too. A Memory's *Add photos* and a WRITE_ONLY page still name the guest first (`Received.Name`).
+//! question too — and a Memory's *Add photos* (`Memory.Upload`, #1044) and a WRITE_ONLY page's upload (`Received.Upload`,
+//! #1042: an uploader's name, the core choosing by the role). This side never reads whether the guest is named before a
+//! write.
 //!
 //! What the host keeps of the link: nothing but the text the person pasted, held by the view only to offer *Open in the
 //! browser* where the core refuses the link's instance; no update carries the link or its key (ADR 0150 decision 7), and
@@ -227,8 +229,8 @@ pub fn drawn_key(s: &ReceivedShown) -> String {
 }
 
 /// The page a kind's application registered for a guest ([GuestFrame]), held while it shows (its model closes when it
-/// goes): the header's own write, Download and Replace act on it; with whether its own write names the guest first.
-type Held = (Box<dyn Page>, bool);
+/// goes): the header's own write, Download and Replace act on it.
+type Held = Box<dyn Page>;
 
 /// A received link's screen ([Mode]): its header, the notice of the record, the gate or the page.
 pub struct ReceivedView {
@@ -437,22 +439,12 @@ impl Inner {
         });
         let w = Rc::downgrade(self);
         self.add.connect_clicked(move |_| {
-            if let Some(i) = w.upgrade() {
-                let names_first = match i.held.borrow().as_ref() {
-                    Some((_, names_first)) => *names_first,
-                    None => return,
-                };
-                if names_first {
-                    // a Memory's *Add photos* names the guest first (`Received.Name`)
-                    i.write(|i| {
-                        if let Some((p, _)) = i.held.borrow().as_ref() {
-                            p.act("add", &i.window, &i.root);
-                        }
-                    });
-                } else if let Some((p, _)) = i.held.borrow().as_ref() {
-                    // the editor's save asks the guest's name where the core says (`PotDoor.named`)
-                    p.act("add", &i.window, &i.root);
-                }
+            // the page's own write (a Memory's *Add photos*, a Pot's *Add entry*): the core asks the guest's name at the
+            // write where it needs one (`GalleryModel.uploadAsking`, `PotDoor.named`), never this side
+            if let Some(i) = w.upgrade()
+                && let Some(p) = i.held.borrow().as_ref()
+            {
+                p.act("add", &i.window, &i.root);
             }
         });
         let w = Rc::downgrade(self);
@@ -488,14 +480,14 @@ impl Inner {
         add("upload-files", Rc::new(|i| i.pick_and_upload()));
         add("upload-folder", Rc::new(|i| i.pick_folder_and_upload()));
         add("save", Rc::new(|i| {
-            if let Some((p, _)) = i.held.borrow().as_ref() {
+            if let Some(p) = i.held.borrow().as_ref() {
                 p.act("save", &i.window, &i.root);
             }
         }));
         // the page's own Replace (a file's, into the link's queue); the core asks the guest's name at the replace
         // (`GuestAccess.replaceAsking`), never this side
         add("replace", Rc::new(|i| {
-            if let Some((p, _)) = i.held.borrow().as_ref() {
+            if let Some(p) = i.held.borrow().as_ref() {
                 p.act("replace", &i.window, &i.root);
             }
         }));
@@ -504,7 +496,7 @@ impl Inner {
         let w = Rc::downgrade(self);
         move_node.connect_activate(move |_, node| {
             if let (Some(i), Some(node)) = (w.upgrade(), node.and_then(|v| v.str().map(str::to_owned))) {
-                let name = i.shown.borrow().as_ref().and_then(|s| s.page.as_ref()).and_then(|p| p.rows.iter().find(|r| r.id == node).map(|r| r.name.clone())).unwrap_or_default();
+                let name = i.shown.borrow().as_ref().and_then(|s| s.page.as_ref()).and_then(|p| p.rows.iter().find(|r| r.id == node).map(|r| r.display_name.clone())).unwrap_or_default();
                 crate::core_ui::move_sheet::open_call(&i.root, &name, Call::ReceivedMove { received: i.received, node }, &i.root);
             }
         });
@@ -529,7 +521,7 @@ impl Inner {
             return;
         };
         let ready = s.gate == ReceivedGate::Ready;
-        let name = s.page.as_ref().map(|p| p.name.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| s.root_name.clone());
+        let name = s.page.as_ref().map(|p| p.title.clone()).filter(|n| !n.is_empty()).unwrap_or_else(|| s.root_name.clone());
         self.title.set_title(if ready && !name.is_empty() { &name } else { &s.host });
         self.title.set_subtitle(if ready { &s.host } else { "" });
         let o = offers(&s, self.mode);
@@ -698,13 +690,13 @@ impl Inner {
                 self.select.set_active(p.selection.is_some());
                 self.select_syncing.set(false);
                 if p.rows.is_empty() {
-                    self.set_content(&adw::StatusPage::builder().icon_name(kind_icon(&p.node_kind)).title(glib_escape(&p.name)).vexpand(true).build());
+                    self.set_content(&adw::StatusPage::builder().icon_name(kind_icon(&p.node_kind)).title(glib_escape(&p.title)).vexpand(true).build());
                     return;
                 }
                 let reports = offers(s, self.mode).report && s.role != WRITE_ONLY;
                 let group = adw::PreferencesGroup::new();
                 for r in &p.rows {
-                    let row = adw::ActionRow::builder().title(glib_escape(&r.name)).activatable(true).build();
+                    let row = adw::ActionRow::builder().title(glib_escape(&r.display_name)).activatable(true).build();
                     row.add_prefix(&gtk::Image::from_icon_name(kind_icon(&r.kind)));
                     if let Some(sel) = &p.selection {
                         // while the level picks: the row's check, the row's activation turning it (the member's `selection::row`)
@@ -788,7 +780,7 @@ impl Inner {
                 };
                 let Some(page) = (g.body)(p, &frame) else { return };
                 self.set_content(&page.widget());
-                *self.held.borrow_mut() = Some((page, g.add_names_first));
+                *self.held.borrow_mut() = Some(page);
             }
         }
     }
@@ -808,9 +800,10 @@ impl Inner {
         add.add_css_class("pill");
         add.set_widget_name("guest-upload");
         let w = Rc::downgrade(self);
+        // the core asks the guest's name at the upload where it has none (`uploadAsking`, #1042)
         add.connect_clicked(move |_| {
             if let Some(i) = w.upgrade() {
-                i.write(|i| i.pick_and_upload());
+                i.pick_and_upload();
             }
         });
         column.append(&add);
@@ -873,47 +866,6 @@ impl Inner {
                 }
             }
         });
-    }
-
-    /// A guest's write: its name asked first where the link writes and the guest has none (the web's naming step), the
-    /// write itself once the core took the name.
-    fn write(self: &Rc<Self>, then: impl Fn(&Rc<Inner>) + 'static) {
-        let named = self.shown.borrow().as_ref().is_some_and(|s| s.guest_name.is_some());
-        if named {
-            return then(self);
-        }
-        let then: OnInner = Rc::new(then);
-        let entry = gtk::Entry::builder().activates_default(true).build();
-        let body = match record_notice(self.shown.borrow().as_ref().and_then(|s| s.record_days)) {
-            Some(n) => format!("{}\n\n{}", words::share_guest_name_hint(), n),
-            None => words::share_guest_name_hint(),
-        };
-        let ask = adw::AlertDialog::builder().heading(words::share_guest_name_title()).body(body).extra_child(&entry).build();
-        ask.add_responses(&[("cancel", &words::entry_cancel()), ("name", &words::share_save())]);
-        ask.set_response_appearance("name", adw::ResponseAppearance::Suggested);
-        ask.set_default_response(Some("name"));
-        ask.set_close_response("cancel");
-        let w = Rc::downgrade(self);
-        ask.connect_response(None, move |_, response| {
-            let name = entry.text().trim().to_string();
-            if response != "name" || name.is_empty() {
-                return;
-            }
-            let Some(i) = w.upgrade() else { return };
-            let (id, w, then) = (i.received, Rc::downgrade(&i), then.clone());
-            glib::spawn_future_local(async move {
-                let answer = bridge::call(&Call::ReceivedName { received: id, name }).await.map(|(a, _)| a);
-                let Some(i) = w.upgrade() else { return };
-                match answer {
-                    Ok(Answer::Done) => then(&i),
-                    other => {
-                        eprintln!("veyq: the guest's name answered {}", answer_kind(&other));
-                        i.root.add_toast(said::word_toast("share_failed", &words::share_failed()));
-                    }
-                }
-            });
-        });
-        ask.present(Some(&self.root));
     }
 
     /// The core's name dialog while a write waits for the guest's name ([ReceivedShown::naming]): its save answered as a

@@ -71,8 +71,9 @@ structure, attachments and guests, and the user interface. What a verified uploa
   namespace in `I18N_NAMESPACES` (`scripts/validate_web_core_imports_no_applications.py`, which derives every
   application's client from that script) land together with a catalog for the namespace, or that guard is red. Its
   kinds file `contracts/platform/kinds/<application>.json` lands with its first kind: the backend's `KindsContractTest`
-  is red on a kind constant no file states, and the web's `kindsContract.test.ts` on a registered kind no file states
-  (and on an application without its rights function in the test's `RIGHTS`).
+  is red on a kind constant no file states, the web's `kindsContract.test.ts` on a registered kind no file states
+  (and on an application without its rights function in the test's `RIGHTS`), and the core's `KindsContractTest`
+  (`src/mobile/composition`) on a kind its registry holds that no file states.
 - **Crypto unchanged.** No application shares a key with another by accident: a node's key is random and wrapped
   under its parent's ([ADR 0080](../decisions/0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md)),
   and a blob's key is sealed bound to its node and its application's role token — so no application so far needed a
@@ -189,7 +190,9 @@ kind `FOLDER` only.
   `WriteOnlyGuestKinds`) and the web through its registry (`placement`, `cover`, `shareDialog`, `app.shareBody`) and its
   rights functions. Each side keeps its own code and is held to the file by a test: the backend's `KindsContractTest`
   (the root's, where every module runs together: every bean answers the file, and every kind constant of the compiled
-  code is in one) and the web's `src/web/src/kindsContract.test.ts` (every registered kind is in a file and answers it).
+  code is in one), the web's `src/web/src/kindsContract.test.ts` (every registered kind is in a file and answers it) and
+  the Kotlin core's `KindsContractTest` (`src/mobile/composition/src/jvmTest`: every kind of the registry is in a file
+  and answers it through what the apps read — the registry, the share sheet, the guest level, the move plan).
   A new kind is written there first; a fact changed on one side only is red on that side.
   `PublicShare.rootKind` is the root row's kind as stored, served for every unlocked role (a `WRITE_ONLY` guest, served
   no node, learns this one structural fact) and omitted on a locked response and while the root is in the trash.

@@ -9,6 +9,7 @@ import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.crypto.V1
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeRef
+import me.raddatz.veyq.mobile.session.OfflineAsOf
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Piece
@@ -27,6 +28,9 @@ class ContributionsTest {
     private val me = "u-me"
     private val ownerPrimary = "p-owner"
     private val ownerSub = "s-owner"
+    private val myPrimary = "p-me"
+    private val mySub = "s-me"
+    private fun photo(name: String) = UploadSource.of(name, 4, "image/jpeg", null) { _, n -> ByteArray(n) }
 
     private fun blob(id: String) = MemoryMedia.Blob(id, 1, 29L + V1.FRAME_OVERHEAD, "", null)
 
@@ -37,7 +41,7 @@ class ContributionsTest {
     )
 
     /** The server the test plays: the gallery's media and the buckets, a move re-filing a medium as the server would. */
-    private inner class Server {
+    private inner class Server(val ownRoot: Boolean = false) {
         var items = listOf(
             item("o1", "user:u-owner", ownerPrimary, 3),
             item("o2", "user:u-owner", ownerPrimary, 2),
@@ -51,19 +55,34 @@ class ContributionsTest {
             listOf(
                 Buckets.Bucket(ownerPrimary, "user:u-owner", null, true, items.count { it.bucketId == ownerPrimary }, null, null, null),
                 Buckets.Bucket(ownerSub, "user:u-owner", ownerPrimary, false, items.count { it.bucketId == ownerSub }, null, null, null),
+            ) + if (!ownRoot) emptyList() else listOf(
+                Buckets.Bucket(myPrimary, "user:$me", null, true, 0, null, null, null),
+                Buckets.Bucket(mySub, "user:$me", myPrimary, false, 0, null, null, null),
             ),
             null,
         )
 
+        /** What the page uploaded: each batch's names, and the filer it was handed (null: none, it lands in the primary). */
+        val uploads = mutableListOf<Pair<List<String>, (suspend (String) -> Unit)?>>()
+        val queuedOffline = mutableListOf<List<String>>()
+        val reach = MutableStateFlow(true)
+        var offline: OfflineAsOf? = null
+        var moveAnswer = Buckets.Outcome.DONE
+
         val gallery = object : GalleryModel.Door {
-            override suspend fun gallery() = MemoryMedia.Gallery(MemoryMedia.order(items), 1, 0)
+            override suspend fun gallery() = MemoryMedia.Gallery(MemoryMedia.order(items), 1, 0, offline)
+            override val online get() = reach
+            override val queues get() = true
+            override suspend fun queueMedia(sources: List<UploadSource>) = sources.size.also { queuedOffline += sources.map { it.name } }
             override suspend fun scopeNodes() = emptyList<NodeRef>()
             override suspend fun read(item: MemoryMedia.Item, blob: MemoryMedia.Blob) = blob.blobId.encodeToByteArray()
             override fun reader(item: MemoryMedia.Item) = null
             override suspend fun stream(item: MemoryMedia.Item, sink: suspend (ByteArray) -> Unit) = false
             override suspend fun exif(item: MemoryMedia.Item): MediaDetails.Exif? = null
             override suspend fun uploaders(items: List<MemoryMedia.Item>) = emptyMap<String, MediaDetails.Uploader>()
-            override fun upload(sources: List<UploadSource>) = 0
+            override fun upload(sources: List<UploadSource>) = sources.size.also { uploads += sources.map { it.name } to null }
+            override fun upload(sources: List<UploadSource>, filed: suspend (mediaId: String) -> Unit) =
+                sources.size.also { uploads += sources.map { it.name } to filed }
             override val revisions = MutableStateFlow<Any?>(Any())
             override val uploaded = MutableSharedFlow<String>()
         }
@@ -77,6 +96,7 @@ class ContributionsTest {
             override suspend fun delete(bucketId: String) = Buckets.Outcome.DONE
             override suspend fun move(mediaIds: List<String>, target: String?): Buckets.Outcome {
                 moves += mediaIds to target
+                if (moveAnswer != Buckets.Outcome.DONE) return moveAnswer
                 items = items.map { if (it.mediaId in mediaIds) item(it.mediaId, it.ownerKey!!, target, it.meta!!.capturedAt!!) else it }
                 return Buckets.Outcome.DONE
             }
@@ -150,5 +170,74 @@ class ContributionsTest {
         runCurrent()
         assertEquals(listOf("o2"), box.current.rows.map { it.mediaId }, "it follows the bucket across a re-read")
         box.close()
+    }
+
+    // inbox #1065: an upload into the bucket shown — the web's Beiträge drop and the apps' alike. The caller's own sub-bucket
+    // files each medium by a move once it is in; their primary needs none; another uploader's root takes none (the server
+    // moves within one root only). Levers: drop the filer, file into the primary, or let `intake` take another's root.
+    @Test
+    fun anUploadIntoTheCallersSubBucketIsFiledThereByAMoveOnceItIsIn() = runTest {
+        val s = Server(ownRoot = true)
+        val c = open(s)
+        c.pick(mySub)
+        assertEquals(Contributions.Intake.TAKES, c.intake())
+        assertEquals(2, c.upload(listOf(photo("a.jpg"), photo("b.jpg"))))
+        val (names, filed) = s.uploads.single()
+        assertEquals(listOf("a.jpg", "b.jpg"), names)
+        assertNotNull(filed, "a sub-bucket's upload is filed").invoke("new-a")
+        assertEquals(listOf<Pair<List<String>, String?>>(listOf("new-a") to mySub), s.moves, "each medium in is moved into the bucket shown")
+        assertEquals(null, c.current.refused)
+    }
+
+    @Test
+    fun anUploadIntoTheCallersPrimaryLandsThereWithNoMove() = runTest {
+        val s = Server(ownRoot = true)
+        val c = open(s)
+        c.pick(myPrimary)
+        assertEquals(1, c.upload(listOf(photo("a.jpg"))))
+        assertEquals(listOf(listOf("a.jpg") to true), s.uploads.map { it.first to (it.second == null) }, "the primary is where an upload lands: no filer")
+        val virtual = Server()
+        val v = open(virtual)
+        assertEquals(Buckets.SELF, v.current.selected, "control: the virtual 'You'")
+        assertEquals(1, v.upload(listOf(photo("b.jpg"))))
+        assertEquals(listOf(listOf("b.jpg") to true), virtual.uploads.map { it.first to (it.second == null) })
+    }
+
+    @Test
+    fun anotherUploadersRootTakesNoUpload() = runTest {
+        val s = Server(ownRoot = true)
+        val c = open(s)
+        for (bucket in listOf(ownerPrimary, ownerSub)) {
+            c.pick(bucket)
+            assertEquals(Contributions.Intake.NOT_OWN, c.intake(), bucket)
+            assertEquals(0, c.upload(listOf(photo("a.jpg"))), bucket)
+        }
+        assertEquals(emptyList(), s.uploads)
+    }
+
+    // offline a sub-bucket's filing would be a move, a write (ADR 0140 decision 7): refused; the primary still queues
+    @Test
+    fun offlineASubBucketTakesNoUploadThePrimaryStillQueues() = runTest {
+        val s = Server(ownRoot = true).also { it.reach.value = false; it.offline = OfflineAsOf(1L) }
+        val c = open(s)
+        c.pick(mySub)
+        assertEquals(Contributions.Intake.OFFLINE, c.intake())
+        assertEquals(0, c.upload(listOf(photo("a.jpg"))))
+        c.pick(myPrimary)
+        assertEquals(Contributions.Intake.TAKES, c.intake())
+        assertEquals(1, c.upload(listOf(photo("b.jpg"))))
+        runCurrent()
+        assertEquals(listOf(listOf("b.jpg")), s.queuedOffline)
+        assertEquals(emptyList(), s.uploads)
+    }
+
+    @Test
+    fun aRefusedFilingIsSaidAsACurationsRefusal() = runTest {
+        val s = Server(ownRoot = true).also { it.moveAnswer = Buckets.Outcome.REFUSED }
+        val c = open(s)
+        c.pick(mySub)
+        c.upload(listOf(photo("a.jpg")))
+        assertNotNull(s.uploads.single().second).invoke("new-a")
+        assertEquals(Buckets.Outcome.REFUSED, c.current.refused, "the medium stays in the primary, and that is said")
     }
 }

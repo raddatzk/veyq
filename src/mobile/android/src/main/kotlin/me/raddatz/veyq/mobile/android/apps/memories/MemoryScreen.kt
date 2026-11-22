@@ -158,13 +158,14 @@ internal fun MemoryScreen(ref: ObjectRef, model: AppModel) {
 /**
  * [gallery]'s page as [MemoryScreen] draws it (a debug build's `DevMemory` draws it over a played gallery). A link's guest
  * ([guest], ADR 0150 decision 5) sees the member's page with a guest's rights: its chapters open inside the link
- * ([onChapter]), it adds once it named itself ([canAdd]), and what is the account's — the map's tracks, the music player,
- * the pick mode of a share from another app — is not offered.
+ * ([onChapter]), it adds where the rights let it, named or not (the core asks an unnamed guest's name at the upload,
+ * `GalleryModel.uploadAsking`, #1044), and what is the account's — the map's tracks, the music player, the pick mode of a
+ * share from another app — is not offered.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun MemoryGallery(
-    gallery: GalleryModel, model: AppModel, guest: Boolean = false, canAdd: Boolean = true,
+    gallery: GalleryModel, model: AppModel, guest: Boolean = false,
     onChapter: ((me.raddatz.veyq.mobile.navigation.NodeRef) -> Unit)? = null,
 ) {
     val palette = LocalPalette.current
@@ -222,11 +223,14 @@ internal fun MemoryGallery(
     val tracks = if (view == MemoryView.MAP) remember(gallery) { model.memories.trackList(gallery) } else null
     val contributions = if (contributionsOffered && view == MemoryView.CONTRIBUTIONS) remember(gallery) { model.memories.contributions(gallery) } else null
     // photos and videos dropped from another app onto the gallery: core's one drop judges and sorts (ADR 0154 decision 1).
-    // Only where the gallery's media show: the Music and Map views take no drop, as the web's tabs take none (#1054)
-    val dropped = Modifier.sharedFilesDrop { drop -> model.drop(me.raddatz.veyq.mobile.composition.DropTarget.Gallery(gallery), drop) }
+    // Only where the gallery's media show: the Music and Map views take no drop, as the web's tabs take none (#1054); on the
+    // Contributions view they go into the bucket it shows (#1065)
+    val dropped = Modifier.sharedFilesDrop { drop ->
+        model.drop(contributions?.let { me.raddatz.veyq.mobile.composition.DropTarget.Bucket(it) } ?: me.raddatz.veyq.mobile.composition.DropTarget.Gallery(gallery), drop)
+    }
     // a member adds photos through the header's Upload (core's `GalleryModel.headerActions`); a guest's link page has no
     // core header, so its page offers them here
-    val adds = guest && state.rights.upload && canAdd
+    val adds = guest && state.rights.upload
     Box(Modifier.fillMaxSize().then(if (!guest && music == null && tracks == null) dropped else Modifier)) {
     if (tracks != null) MemoryMapView(gallery, tracks, model, snackbar, viewSwitch) else
     if (music != null) MusicView(gallery, music, model, snackbar, viewSwitch) else
@@ -272,6 +276,8 @@ internal fun MemoryGallery(
             items(state.chapters, key = { "chapter:" + it.nodeId }) { c ->
                 ListItem(
                     headlineContent = { Text(c.name) },
+                    // made offline and not sent yet: core's line under its name (#1040)
+                    supportingContent = state.chapterSaid[c.nodeId]?.let { said -> { Text(say(said), color = MaterialTheme.colorScheme.onSurfaceVariant) } },
                     leadingContent = { ChapterCover(gallery, c) },
                     colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
                     modifier = Modifier.clickableRow { if (onChapter != null) onChapter(c) else GalleryModel.rowPage(c)?.let(model::open) },

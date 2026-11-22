@@ -95,7 +95,7 @@ internal static class ExpensesUi
 
         // Add entry where the core offers it (PotView.offersEntries: a READ_WRITE link, named or not); an unnamed guest's
         // save asks its name through the core's naming (AskNaming), as the web's requestGuest at the write
-        public override ICommandBarElement? GuestCreate(Action<Action> write) =>
+        public override ICommandBarElement? GuestCreate() =>
             _page.OffersAdd ? CreateAction.Button(Words.PotAdd(), "received-add", _page.AddEntry) : null;
 
         public override void Dispose() => _page.Dispose();
