@@ -24,6 +24,7 @@ import { expensesRights } from './features/expenses/rights'
 import { CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX } from './features/platform/capabilities'
 import { guestAccessOf, memberAccessOf } from './test/models'
 import { folderUploadShareAt } from './core/sharing/folderUploadShare'
+import { treeFactsOf } from './core/node/treeRules'
 
 interface KindFacts {
   placement: { root: boolean; parents: string[] }
@@ -66,7 +67,7 @@ function treeOfOneFolder(rootId: string | null): { tree: TreeSource; folder: Sou
     keyOf: () => null,
     nameOf: () => 'f',
     inIdentityFolder: () => false,
-    linkTo: () => '/',
+    linkTo: () => '/', facts: () => treeFactsOf([]),
   }
   return { tree, folder }
 }

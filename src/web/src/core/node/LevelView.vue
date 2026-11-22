@@ -38,8 +38,9 @@
 // move, delete, share, copy, download, import and trash dialogs - goes through the one host the page provides, the very
 // object a `detail` injects; an absent door is an action the level does not offer (fail closed).
 //
-// **The order** (`levelList.ts`): folders first, then every other node MIXED BY NAME - natural, locale-aware, case-insensitive,
-// equal names in creation order (the rule that numbers equal names everywhere else). The folder cards' labels are numbered
+// **The order** (the platform's `LevelOrder` through `treeRules.ts`, the apps' too): folders first, then every other node
+// MIXED BY NAME - digits as numbers, case and accents aside, equal names in creation order (the rule that numbers equal
+// names everywhere else). The folder cards' labels are numbered
 // the same way (`Anna`, `Anna (2)`, inbox #393).
 //
 // **The tabs are a FILTER** (inbox #348, `levelTabs.ts`): `All | <one tab per application>`, each tab named by its kinds'
@@ -114,8 +115,7 @@ import { createLevelActions } from './levelActions'
 import { folderRights, rowRightsOf, targetOf, type Access, type TreeSource } from '../access'
 import { useViewMode } from '../../shared/state/useViewMode'
 import { setLevelTab, useLevelTab } from '../../shared/state/useLevelTab'
-import { compareByCreation, displayNamesOf } from './location'
-import { orderLevel } from './levelList'
+import { displayNamesOf, orderLevel } from './treeRules'
 import { FOLDER_VIEWS, effectiveViewMode, unionViews } from './levelViews'
 import { ALL_TAB, effectiveTab, kindVisible, offeredTabs, showTabBar } from './levelTabs'
 import type { CoreRowAction, LevelRow, LevelRowSelection, LevelRowsContext, LevelRowsHost } from './levelRow'
@@ -166,7 +166,7 @@ const props = defineProps<{
 // import a veyq download picked or dropped for an upload (ADR 0082 decision 7, under the folder on screen); the trash.
 const host = injectNodeHost()
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const { viewMode } = useViewMode()
 const { levelTab } = useLevelTab()
 
@@ -336,7 +336,7 @@ function withStandard(node: TreeNode, row: LevelRow): LevelRow {
 
 // --- the list: the folders, then the contents ----------------------------------------------------------------------------
 // The sub-folders' labels: a repeated name numbered, in creation order - the rule the URL segments follow too.
-const folderLabels = computed(() => displayNamesOf(listedLevel.value.folders, (n) => n.name, compareByCreation))
+const folderLabels = computed(() => displayNamesOf(listedLevel.value.folders))
 
 interface Item { key: string; node: TreeNode; kind: NodeKind; row: LevelRow; folder: boolean; unsupported: boolean }
 // A node's cover is the leading visual of its row or tile wherever its application did not supply one (a Memory's row draws its
@@ -348,7 +348,7 @@ function withCover(item: Item): Item {
   return { ...item, row: { ...item.row, leading: { component: NodeCoverImage, props: { src: loaded.url, crop: loaded.crop, alt: '' } } } }
 }
 const items = computed<Item[]>(() => {
-  const ordered = orderLevel(showFolders.value ? listedLevel.value.folders : [], visibleNodes.value, locale.value)
+  const ordered = orderLevel(showFolders.value ? listedLevel.value.folders : [], visibleNodes.value)
   return ordered.map((node): Item => withCover(rawItem(node)))
 })
 // The list's two groups (owner 2026-11-04): the folders, then everything else. Only where both have something under the shown

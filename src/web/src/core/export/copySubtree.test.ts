@@ -28,6 +28,7 @@ import { ImportFailed } from './importSubtree'
 import type { ManifestPayload } from './manifest'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 import { testKind } from '../../test/testApplication'
+import { treeFactsOf } from '../node/treeRules'
 
 const FILE = 'C_FILE' // a Depot-like file: its import reads the payload by frame (`importStreams`)
 const COLLECTION = 'C_COLLECTION' // a Memory-like kind: both hooks, but its import needs whole payloads (no `importStreams`)
@@ -47,7 +48,7 @@ const sourceOf = (nodes: TreeNode[]): TreeSource<TreeNode> => ({
   keyOf: (id) => (nodes.some((n) => n.id === id) ? new Uint8Array(32).fill(1) : null),
   nameOf: (id) => nodes.find((n) => n.id === id)?.name ?? '',
   inIdentityFolder: () => false,
-  linkTo: () => '/',
+  linkTo: () => '/', facts: () => treeFactsOf([]),
 })
 
 // The originals' plaintext; `frameReads` records every frame the copy read of each, `sliceSizes` every slice the hook read.

@@ -17,7 +17,7 @@ vi.mock('../../core/node/tree', async (orig) => ({ ...(await orig<typeof import(
 import { registry } from '../../core/applications/registry'
 import { FOLDER_KIND } from '../../core/node/kind'
 import { createContentNode, type TreeNode } from '../../core/node/tree'
-import { displayNamesOf, compareByCreation } from '../../core/node/location'
+import { displayNamesOf, treeFactsOf } from '../../core/node/treeRules'
 import { exportSubtree } from '../../core/export/exportSubtree'
 import { importSubtree, openExport, planImport } from '../../core/export/importSubtree'
 import { openZip } from '../../core/export/zip'
@@ -58,10 +58,11 @@ const tree: TreeSource<TreeNode> = {
   keyOf: (id) => (NODES.some((n) => n.id === id) ? new Uint8Array(32).fill(1) : null),
   nameOf: (id) => {
     const n = NODES.find((x) => x.id === id)
-    return n ? (displayNamesOf(NODES.filter((x) => x.parentId === n.parentId), (x) => x.name, compareByCreation).get(id) ?? n.name) : ''
+    return n ? (displayNamesOf(NODES.filter((x) => x.parentId === n.parentId)).get(id) ?? n.name) : ''
   },
   inIdentityFolder: (id) => !!id && id !== 'box',
   linkTo: () => '/',
+  facts: () => treeFactsOf(NODES),
 }
 const BODIES: Record<string, string> = { f1: 'from the first Anna', f2: 'from the second Anna' }
 const BLOB = (id: string) => ({ blobId: `b-${id}`, chunkCount: 1, byteSize: 1, wrappedBlobKey: 'k', wrappedBlobMeta: null })

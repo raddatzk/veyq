@@ -73,7 +73,8 @@ import type { ShareDialogCopy } from './shareDialogCopy'
 import { FOLDER_KIND } from '../node/kind'
 import type { NodeParent } from '../node/tree'
 import { treeStore } from '../node/treeStore'
-import { collidingSibling, nameTakenMessage } from '../node/siblingCollision'
+import { nameTakenMessage } from '../node/siblingCollision'
+import { collidingSibling } from '../node/treeRules'
 import { httpStatus, HttpStatus } from '../../shared/httpError'
 
 /** A password-protected link needs at least this many characters (the Memory dialog's convention, cr-0118). */

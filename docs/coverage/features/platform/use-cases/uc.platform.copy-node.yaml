@@ -13,7 +13,7 @@ acceptanceCriteria:
       "Copy to…" on a node and on a level's selection opens core's folder browser with "Copy here", which shows the places that take every copied kind, allows the node's current place, and blocks the node itself and anything inside it.
     coverage:
       web:
-        unit: [src/core/node/move.test.ts, src/core/export/CopyNodesDialog.test.ts, src/core/node/LevelView.copy.test.ts, src/core/export/copyActions.test.ts]
+        unit: [src/core/node/move.test.ts, src/core/node/tree.vectors.test.ts, src/core/export/CopyNodesDialog.test.ts, src/core/node/LevelView.copy.test.ts, src/core/export/copyActions.test.ts]
   - id: re-created-under-fresh-keys
     text: The copy re-creates the subtree through each kind's export and import hooks without a ZIP - every node under a fresh key, every file decrypted by chunk and uploaded again under a fresh K_blob, owned by the copier - and a name taken among the destination's children becomes `Name (2)`.
     coverage:

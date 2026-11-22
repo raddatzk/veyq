@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 // The node tree's rules against contracts/platform/tree/v1-vectors.json: a level's order, the numbering of equal names, a
-// name's sibling collision and the move's plan, every case through the web's own functions over the real registry
+// name's sibling collision and the move's plan, every case through the web's adapter (`treeRules.ts`) over the platform's
+// Kotlin (`@veyq/core-js/tree`) and the real registry
 // (`src/test/setup.ts` registers the applications, as `main.ts` does), whose kind table must be the file's. The core
 // records the vectors (its TreeVectorsTest's write mode, ADR 0155 § Consequences) and answers the same cases.
 import { describe, expect, it } from 'vitest'
@@ -8,10 +9,9 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { registry } from '../applications/registry'
 import { fileNameSlug } from '../../shared/naming'
-import { orderLevel } from './levelList'
-import { compareByCreation, compareById, displayNamesOf } from './location'
-import { collidingSibling } from './siblingCollision'
-import { moveHereBlock, moveHereBlockOf, movePlaces, moveStart, moveTrail, planMove, type PlaceIntent } from './move'
+import {
+  collidingSibling, displayNamesOf, moveHereBlock, moveHereBlockOf, movePlaces, moveStart, moveTrail, orderLevel, planMove, type PlaceIntent,
+} from './treeRules'
 import type { Access, TreeSource } from '../access'
 import type { TreeNode } from './tree'
 import { memberTreeOf, treeNode } from '../../test/models'
@@ -53,11 +53,9 @@ const collisionNodes = (c: any): TreeNode[] =>
 
 const answers: Record<string, (c: any) => unknown> = {
   order: (c) => {
-    const [en, de] = ['en', 'de'].map((locale) => orderLevel(c.folders.map(nodeOf), c.others.map(nodeOf), locale).map((n) => n.id))
-    expect(de, 'the two languages order alike').toEqual(en)
-    return en
+    return orderLevel(c.folders.map(nodeOf), c.others.map(nodeOf)).map((n) => n.id)
   },
-  displayNames: (c) => Object.fromEntries(displayNamesOf<TreeNode>(c.siblings.map(nodeOf), (n) => n.name, c.order === 'id' ? compareById : compareByCreation)),
+  displayNames: (c) => Object.fromEntries(displayNamesOf(c.siblings.map(nodeOf), c.order)),
   collision: (c) => collidingSibling(collisionNodes(c), c.parentId, c.kind, c.name, c.self)?.id ?? null,
   moveBlock: (c) => {
     const { source, byId } = treeOf(c.tree)

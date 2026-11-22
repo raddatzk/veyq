@@ -9,9 +9,6 @@ import {
   resolveSlugPath,
   slugPathOf,
   hashForNode,
-  compareByCreation,
-  compareById,
-  displayNamesOf,
   personHash,
   isUserIdToken,
   PEOPLE_SEGMENT,
@@ -265,10 +262,6 @@ describe('equal sibling slugs', () => {
       expect(lastSegment(list, LOW)).toBe('anna')
       expect(lastSegment(list, HIGH)).toBe('anna-2')
     }
-    expect(compareByCreation({ id: 'B', createdAt: 1 }, { id: 'a', createdAt: 1 })).toBeLessThan(0)
-    expect(compareByCreation({ id: 'a', createdAt: 1 }, { id: 'a', createdAt: 1 })).toBe(0)
-    // the instant decides before the id does
-    expect(compareByCreation({ id: 'a', createdAt: 1 }, { id: 'B', createdAt: 2 })).toBeLessThan(0)
   })
 
   // By design, and deterministic: a node keeps its createdAt through a trash and a restore (and a move or a rename), so
@@ -331,21 +324,6 @@ describe('equal sibling slugs', () => {
       'Root', 'Uploads', 'Anna (2)', 'Fotos',
     ])
     expect(breadcrumbOf(t, ANNA_1, 'Root', TENANT_SCOPE).at(-1)!.name).toBe('Anna')
-  })
-})
-
-// The one numbering of equal sibling names (inbox #393): display only, in the order the caller gives.
-describe('displayNamesOf', () => {
-  const s = (id: string, name: string, createdAt: number) => ({ id, name, createdAt })
-  it('keeps a unique name, and numbers a repeated one from (2) in the given order', () => {
-    const siblings = [s('c', 'Anna', 3), s('a', 'Anna', 1), s('b', 'Ben', 2), s('d', 'Anna', 2)]
-    expect(Object.fromEntries(displayNamesOf(siblings, (n) => n.name, compareByCreation))).toEqual({
-      a: 'Anna', d: 'Anna (2)', c: 'Anna (3)', b: 'Ben',
-    })
-    // a guest's view has no creation time: node-id order
-    expect(Object.fromEntries(displayNamesOf(siblings, (n) => n.name, compareById))).toEqual({
-      a: 'Anna', c: 'Anna (2)', d: 'Anna (3)', b: 'Ben',
-    })
   })
 })
 

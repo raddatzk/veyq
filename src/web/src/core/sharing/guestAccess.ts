@@ -12,8 +12,8 @@
 // **A served `ShareNode` as a `TreeNode`** (the views are `TreeNode`-typed): its name is the chain's (the root's the
 // share's own name), `wrappedMeta` is served on `ShareNode` (the kind's sealed payload — a Memory's date, place and
 // cover), `metaRevision` is not (a guest writes no meta: 0), and neither is a creation time — `createdAt` is 0 for every
-// node, so `compareByCreation` falls to its node-id tie-break and a guest numbers equal-named siblings by id
-// (`compareById`, `location.ts`; the numbers a guest sees may differ from a member's, documented there).
+// node, so the creation order falls to its node-id tie-break and a guest numbers equal-named siblings by id (the
+// platform's `DisplayNames`, `core/node/treeRules.ts`; the numbers a guest sees may differ from a member's).
 //
 // **Links keep `#k=`.** `linkTo` is the route `?node=<id>` (no query at the root) with the CURRENT route's hash, which
 // carries the share key the shell re-resolves with — a push without it leaves the next reload keyless (src/web/CLAUDE.md,
@@ -21,7 +21,7 @@
 import type { RouteLocationRaw } from 'vue-router'
 import type { GuestAccess, TreeSource } from '../access'
 import type { TreeNode } from '../node/tree'
-import { compareById, displayNamesOf } from '../node/location'
+import { displayNamesOf, treeFactsOf } from '../node/treeRules'
 import type { ShareNode } from '../../api/generated/sharing'
 import type { PublicShareHead } from './resolvePublicShare'
 import type { GuestIdentity } from './guestIdentity'
@@ -82,7 +82,7 @@ export function guestTreeSource(head: PublicShareHead, route: { readonly hash: s
   // A repeated name among siblings numbered in node-id order (core's `displayNamesOf`, inbox #393).
   const labels = new Map<string, string>()
   for (const group of byParent.values()) {
-    for (const [id, label] of displayNamesOf(group, (n) => n.name, compareById)) labels.set(id, label)
+    for (const [id, label] of displayNamesOf(group, 'id')) labels.set(id, label)
   }
 
   return {
@@ -101,6 +101,7 @@ export function guestTreeSource(head: PublicShareHead, route: { readonly hash: s
       return false
     },
     linkTo: (id): RouteLocationRaw => ({ query: id === null || id === rootId ? {} : { node: id }, hash: route.hash }),
+    facts: () => treeFactsOf(nodes),
   }
 }
 

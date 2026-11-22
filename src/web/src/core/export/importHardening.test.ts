@@ -32,6 +32,7 @@ import { contentDigest, payloadChecksums } from '../blob/sharedBlob'
 // on purpose the page-thread loop over the object's own bytes: what it answers is what those bytes hash to
 import { digestHere } from '../blob/digest'
 import { testKind } from '../../test/testApplication'
+import { treeFactsOf } from '../node/treeRules'
 
 const FILE = 'H_FILE'
 const COLLECTION = 'H_COLLECTION'
@@ -113,7 +114,7 @@ const sourceOf = (nodes: TreeNode[]): TreeSource<TreeNode> => ({
   keyOf: () => new Uint8Array(32).fill(1),
   nameOf: () => '',
   inIdentityFolder: () => false,
-  linkTo: () => '/',
+  linkTo: () => '/', facts: () => treeFactsOf([]),
 })
 const TREE = [
   node('r', null, 'FOLDER', 'Trip: 2025'),

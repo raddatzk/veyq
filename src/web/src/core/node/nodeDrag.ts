@@ -21,7 +21,7 @@
 import { shallowRef } from 'vue'
 import type { Access, TreeSource } from '../access'
 import type { TreeNode } from './tree'
-import { moveHereBlockOf } from './move'
+import { moveHereBlockOf } from './treeRules'
 import type { VeyqDropTarget, VeyqMenuItem } from '../../shared/ui/menu'
 
 /** The `dataTransfer` type of a drag of nodes from the level; its data is the dragged ids, as JSON. */

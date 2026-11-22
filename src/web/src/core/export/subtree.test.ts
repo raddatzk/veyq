@@ -25,6 +25,7 @@ import type { TreeSource } from '../access'
 import * as v1 from '@veyq/crypto/v1'
 import { nothingOfItsOwnToRekey } from '../node/rekey/hooks'
 import { testApp, testKind } from '../../test/testApplication'
+import { treeFactsOf } from '../node/treeRules'
 
 const FILE = 'T_FILE'
 const COLLECTION = 'T_COLLECTION'
@@ -57,7 +58,7 @@ const sourceOf = (nodes: TreeNode[]): TreeSource<TreeNode> => ({
   keyOf: (id) => (nodes.some((n) => n.id === id) ? new Uint8Array(32).fill(1) : null),
   nameOf: (id) => nodes.find((n) => n.id === id)?.name ?? '',
   inIdentityFolder: () => false,
-  linkTo: () => '/',
+  linkTo: () => '/', facts: () => treeFactsOf([]),
 })
 
 const contents = new Map<string, Uint8Array>([['f1', text('first file')], ['f2', text('second')], ['f3', text('third, in the subfolder')]])

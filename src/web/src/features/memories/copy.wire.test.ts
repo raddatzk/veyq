@@ -35,6 +35,7 @@ import { MEMORIES_CONTENT_VERSION, exportMemoryContent, importMemoryContent } fr
 import { MEDIA_PAGE_LIMIT } from './media'
 import { nothingOfItsOwnToRekey } from '../../core/node/rekey/hooks'
 import { testKind } from '../../test/testApplication'
+import { treeFactsOf } from '../../core/node/treeRules'
 
 const SCOPE = '44444444-4444-4444-8444-444444444444'
 const FOLDER = '5c09e000-0000-4000-8000-0000000000f1'
@@ -123,7 +124,7 @@ const tree: TreeSource<TreeNode> = {
   keyOf: (id) => keys.get(id) ?? null,
   nameOf: (id) => NODES.find((n) => n.id === id)?.name ?? '',
   inIdentityFolder: () => false,
-  linkTo: () => '/',
+  linkTo: () => '/', facts: () => treeFactsOf([]),
 }
 
 type Req = { method: string; host: string; path: string; json?: Record<string, unknown>; bytes?: Uint8Array }

@@ -43,6 +43,7 @@ import { appendPotWrites, readMemberPot, sealPotWrites } from './domain/potApi'
 import { buildLedger } from './domain/ledger'
 import { potReceiptSource, receiptMeta, RECEIPT_ROLE, uploadReceipt, type HeldReceipt } from './receipts'
 import { ANNA, BEN, CLEO, EUR, POT_ID, PotServer, SCOPE, expense, person, potNode } from './potTestUtil'
+import { treeFactsOf } from '../../core/node/treeRules'
 
 const TARGET = state.target
 const E1 = '0e000000-0000-4000-9000-000000000001'
@@ -182,7 +183,7 @@ const sourceTree = (): TreeSource<TreeNode> => {
   const pot = potNode(source().potKey)
   return {
     rootId: null, node: (id) => (id === POT_ID ? pot : null), children: () => [], keyOf: (id) => (id === POT_ID ? source().potKey : null),
-    nameOf: (id) => (id === POT_ID ? pot.name : ''), inIdentityFolder: () => false, linkTo: () => '/',
+    nameOf: (id) => (id === POT_ID ? pot.name : ''), inIdentityFolder: () => false, linkTo: () => '/', facts: () => treeFactsOf([]),
   }
 }
 

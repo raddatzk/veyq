@@ -12,8 +12,8 @@ import { useI18n } from 'vue-i18n'
 import type { TreeSource } from '../access'
 import type { TreeNode } from './tree'
 import { registry } from '../applications/registry'
-import { collidingSibling } from './siblingCollision'
-import { endsIdentity, moveRefusalOf, MoveDeclined, planMove, type NodeMover } from './move'
+import { moveRefusalOf, MoveDeclined, type NodeMover } from './move'
+import { collidingSibling, endsIdentity, planMove } from './treeRules'
 import { joinList } from './selection'
 import { TRASH_UNDO_MS } from './trashUndo'
 import { useConfirm } from '../../shared/state/useConfirm'
@@ -63,7 +63,7 @@ export function useMoveRun() {
     // A sibling there whose name folds to the same slug (core's `collidingSibling`, inbox #389): named before anything is sent.
     const sibling = collidingSibling(target.tree.children(to), to, node.kind, node.name, node.id)
     if (sibling) return { status: 'refused', text: nameTakenText(sibling) }
-    const identity = endsIdentity(node)
+    const identity = endsIdentity(target.tree, node)
     if (identity) {
       const accepted = await ask({
         header: t('node.move.identityTitle'),
@@ -117,7 +117,7 @@ export function useMoveRun() {
     )
     // Nothing would go: said as a whole.
     if (send.length === 0) return { status: 'refused', text: leftOutLines.join(' ') }
-    const identities = send.filter(endsIdentity)
+    const identities = send.filter((n) => endsIdentity(target.tree, n))
     if (identities.length > 0) {
       const accepted = await ask({
         header: t('node.move.identityTitle'),
@@ -148,7 +148,7 @@ export function useMoveRun() {
     const movedText = moved.length > 0 ? t('node.move.many.moved', { count: moved.length, to: destinationName(target, to) }) : t('node.move.many.noneMoved')
     if (moved.length > 0) {
       // Nothing moves back into a drop box: a guest's folder that left one has no undo, the rest move back where they were.
-      const undoable = moved.filter((n) => !endsIdentity(n))
+      const undoable = moved.filter((n) => !endsIdentity(target.tree, n))
       if (undoable.length === 0) {
         toast.success(movedText)
       } else {

@@ -34,6 +34,7 @@ import { type TreeNode } from './tree'
 import { slugify } from '../../shared/naming'
 import { registry } from '../applications/registry'
 import { FOLDER_KIND } from './kind'
+import { compareByCreation } from '@veyq/core-js/tree'
 
 /** A personal scope token is `~<username>` (ADR 0023) — your own opens your personal scope; a foreign one is still a
  *  personal-scope token, never a profile (a person's profile is `#people/<username>`, ADR 0083). `~me` remains a valid
@@ -111,48 +112,6 @@ export function buildHash(scope: string, segments: string[], folder = false): st
   return tokens.length ? `#${tokens.join('/')}${folder && segments.length > 0 ? '/' : ''}` : ''
 }
 
-/** Sibling order: the server-observed creation instant (`NodeSummary.createdAt`, to the millisecond, ADR 0015), then the
- *  node id in UTF-16 code units (locale-free) for two born in one millisecond — the one order that tells equal names
- *  apart, both in the URL ({@link segmentsOf}) and where an application numbers equal display names (Depot's drop box).
- *  Neither part can be steered by a client: the instant is the server's, and the id breaks only a same-millisecond tie. */
-export function compareByCreation(a: { id: string; createdAt: number }, b: { id: string; createdAt: number }): number {
-  if (a.createdAt !== b.createdAt) return a.createdAt - b.createdAt
-  if (a.id === b.id) return 0
-  return a.id < b.id ? -1 : 1
-}
-
-/** Node-id order (UTF-16 code units, locale-free): where no creation instant is served — a guest's resolve (inbox #377
- *  (e)) — the one stable order left for {@link displayNamesOf}. */
-export function compareById(a: { id: string }, b: { id: string }): number {
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
-}
-
-/**
- * The display label of each of one parent's children, keyed by node id: its name, and where several siblings carry the
- * SAME name — two drop-box guests named `Anna` (their entries sit under different guest keys, so the server's slug
- * uniqueness never sees the pair, ADR 0080 decision 11) — the first in `order` keeps it and the n-th reads `Anna (n)`.
- * Display only, never stored. The **one** numbering every view of such siblings uses (the drop box's list, the level
- * view's heading and cards, the breadcrumb, the guest's folder page, inbox #393), so a folder is called the same in the
- * list it is picked from and on the page it opens. A member's views order by {@link compareByCreation} — the order
- * {@link segmentsOf} gives the URL its `anna`, `anna-2` — and a guest's by {@link compareById}, its resolve serving no
- * creation time (the numbers a guest sees may then differ from the member's).
- */
-export function displayNamesOf<T extends { id: string }>(
-  siblings: readonly T[],
-  nameOf: (n: T) => string,
-  order: (a: T, b: T) => number,
-): Map<string, string> {
-  const seen = new Map<string, number>()
-  const labels = new Map<string, string>()
-  for (const n of [...siblings].sort(order)) {
-    const name = nameOf(n)
-    const count = (seen.get(name) ?? 0) + 1
-    seen.set(name, count)
-    labels.set(n.id, count === 1 ? name : `${name} (${count})`)
-  }
-  return labels
-}
-
 const childrenOfParent = (tree: readonly TreeNode[], parentId: string | null) =>
   tree.filter((n) => (n.parentId ?? null) === parentId)
 
@@ -165,7 +124,7 @@ const childrenOfParent = (tree: readonly TreeNode[], parentId: string | null) =>
  * `registry.tokenInputFor`, is not the URL's). Equal plain segments are numbered **within a class** of siblings — the folders;
  * one application's nodes (`registry.routeOf(kind).group`) — so a file `a.b` and a folder `a-b` are both `a-b` (the
  * trailing slash tells them apart), and a Memory and a folder of one name never meet. Among the siblings of one plain
- * segment of one class, in {@link compareByCreation} order, the first keeps it and each further one gets `<slug>-<n>`
+ * segment of one class, in creation order (the platform's `compareByCreation`: the server's instant, then the id), the first keeps it and each further one gets `<slug>-<n>`
  * with the smallest `n ≥ 2` above the previous one's that no sibling of the class holds as its plain segment — a real
  * sibling named `Anna 2` keeps `anna-2`, and the second `Anna` becomes `anna-3`. **A reserved plain segment** — an
  * application's route slug, among the classes whose nodes carry no application segment (folders, Depot) — has no
