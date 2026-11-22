@@ -37,7 +37,7 @@ const SEARCH_ALONE_GZ = 27_943 // ADR 0156 § Consequences: the search's entry a
 /** One row per moved slice: the gzip of the TypeScript it deleted, and — only where the owner granted it — a ratio of its
  *  own in place of R, with the owner's date. The rule stays R for every slice that names none. */
 const SLICES: { slice: string; deletedGz: number; allowed?: { ratio: number; owner: string } }[] = [
-  // cr-web-node-tree-on-the-core (ADR 0155 decision 7.2.1): levelList.ts, location.ts' order and numbering,
+  // the node tree's rules (ADR 0155 decision 7.2.1, § The node tree's slice): levelList.ts, location.ts' order and numbering,
   // siblingCollision.ts' collidingSibling, move.ts' plan - 3,086 B min / 1,326 B gz, measured on sources. Its own code
   // measured 4,158 B gz (3.14x): accepted at that ratio by the owner, 2026-11-22.
   { slice: 'the node tree\'s rules', deletedGz: 1_326, allowed: { ratio: 3.14, owner: '2026-11-22' } },

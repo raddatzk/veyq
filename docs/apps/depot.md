@@ -144,7 +144,7 @@ reads).
   `expectedBlobId` — nothing is written after it. The status menu shows progress; a final refusal (`slug_taken`, `illegal_structure`, `stale_file` — the job's `isFinal`, core's queue) fails the item at once and the menu offers no retry for it; the level shows, above the list, why a file of its
   folder was not uploaded (a taken name, `stale_file` with "replace anyway", no space). **A name another kind holds is
   not sent** (inbox #400): before anything is asked, every picked name is folded by the file's function and each
-  sibling's by its own kind's (core's `collidingSibling`, the dialogs' pre-check), and one that meets a folder or a drop
+  sibling's by its own kind's (core's `collidingSibling`, the platform's sibling check the dialogs run too), and one that meets a folder or a drop
   box is skipped with a notice naming that sibling by its kind (core's `nameTakenMessage`; a Memory or an Expenses Pot is
   another route group and never meets a file, ADR 0080 decision 16) — for a guest too, who
   is then not even asked to name itself; a server `409 slug_taken` for such a sibling (the race backstop) is named the
@@ -533,7 +533,7 @@ leading visual (ADR 0110 decision 10), the row/tile and the sidebar's Favorites 
   opens it to its guests' folders — under core's header (`NodeHeader`, the one a folder opens with: the
   drop box's name, its share, and its delete in the header's ⋯ menu; inbox #385 (b), ADR 0110) — (a repeated guest name numbered at display time, never stored: `Anna`, `Anna (2)` in
   creation order — the server-observed `createdAt` of core's listing, then the node id for one millisecond, core's
-  `compareByCreation`, by core's `displayNamesOf`, which the folder's heading and breadcrumb use too; the same two folders' URL segments are `anna`, `anna-2` by the same order,
+  `compareByCreation`, by the platform's numbering (`displayNamesOf`, `tree/DisplayNames` on every client), which the folder's heading and breadcrumb use too; the same two folders' URL segments are `anna`, `anna-2` by the same order,
   core's `segmentsOf` in `core/node/location.ts`; a download's ZIP names them so too, made safe by core's `archiveName`), opens a folder
   (core's level view, read-only there: download and a delete per file — a content-less one too — through the level's
   `deletable`, no share, and no tab that has nothing to show — core's `hideEmptyTabs`) and deletes a folder. **Members place nothing** in a drop box or

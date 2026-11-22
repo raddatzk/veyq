@@ -104,6 +104,14 @@ sequenceDiagram
   cross-scope move** — that is a copy + re-encrypt under the target scope's `K_SC`/`K_node` (a separate use-case),
   never a tree move.
 - **Reorder:** update `orderIndex` among siblings.
+- **The tree's client rules have one home** ([ADR 0155](../../../decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md)
+  § The node tree's slice): a level's order (folders first, then every kind mixed by name, digits as numbers, case and
+  accents aside, equal names by creation then id), the numbering of equal sibling names (`Anna`, `Anna (2)`), a name's
+  sibling collision and the move's plan (where the browser opens, its trail and places, why "Move here" is blocked, what of
+  a selection is left out) are the platform's `src/mobile/core/…/tree/`, which the apps call and the web draws through
+  `@veyq/core-js/tree` (`src/web/src/core/node/treeRules.ts`); held by `contracts/platform/tree/v1-vectors.json` on both
+  sides. The kinds' facts the rules read (route slug, folding, placement) are handed in: the apps' `AppKinds.facts`, the
+  web's `registry.kindFacts()`.
 
 ## Delete — soft-delete, trash, purge
 
@@ -175,7 +183,7 @@ a Depot file of one name still meet. `slugTokenFor` (`core/node/tree.ts`) derive
 node's kind on every write — create, rename and move, restore, a re-key, a guest's create and placement. The client names
 a colliding sibling before it sends, comparing token inputs, so only a sibling of the same group: a guest's pre-check
 (`core/sharing/guestTree.ts`) and a member's create, rename and move dialogs (core's `FolderNameDialog` and
-`MoveNodeDialog`, Memories', the Pot's and the drop box's create) check the loaded tree (`core/node/siblingCollision.ts`)
+`MoveNodeDialog`, Memories', the Pot's and the drop box's create) check the loaded tree (the platform's `tree/SiblingNames`, the web's through `core/node/treeRules.ts`)
 and name the sibling by its kind's `nounWithArticle`; an import or a copy (`core/export/importSubtree.ts`) and a folder
 upload number a name only against its group's siblings. A member's file upload onto a non-file sibling still ends on the
 server's `409 slug_taken`. A ZIP download names its directories by its own rule, so a Memory and a Pot of one name are

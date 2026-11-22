@@ -6,9 +6,11 @@
   gate passed (§ Consequences), decision 4 but its JSON seam, which comes with Expenses (the slice check in the
   package's `pnpm run check`), decision 5 for the search (`@veyq/core-js/search`, two opaque handles, the web's
   direction guard reading the entry); decision 7's ratio written; decision 7.1 (2026-11-22: the core's split into a
-  platform module and one module per application, [ADR 0156](0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md)). Decision 7.2, 7.3 and 8 are not built: Expenses' move is
-  parked, half built on branch `claude/p2-impl`, and the split's measurement (§ Consequences) missed the search's
-  budget — the owner's question (inbox #1046)
+  platform module and one module per application, [ADR 0156](0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md)). Decision 7.2's first slice (2026-11-22: the node tree's rules,
+  `@veyq/core-js/tree`, § The node tree's slice — accepted by the owner at 3.14×; its eager set 67 B gz over that
+  allowance, the owner's question, inbox #1046). Decision 7.3 and 8 are not built: Expenses' move is parked, half built on
+  branch `claude/p2-impl`; the owner (2026-11-22) counts the platform code its façade needs against the platform module's
+  running budget and retired the search-alone budget (§ Consequences)
 - Date: 2026-11-20
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -131,7 +133,7 @@ Measured before the decision (2026-11-20):
       TypeScript's min+gz measured on sources, each slice's exports bundled alone with every other import external):
       1. **the node tree's rules** — a level's order, equal names numbered, a name's sibling collision, the move's plan
          (1,326 B gz): eager, every application builds on them, the app and the web answer them differently today, no
-         key material and no JSON — [cr-web-node-tree-on-the-core](../../changes/cr-web-node-tree-on-the-core.md);
+         key material and no JSON — **built**, § The node tree's slice;
       2. **the share-link rules** — a received link's parsing and report link, a link's last end day, an instance's
          embeddability (1,251 B gz): pinned by `contracts/platform/share-links/cases.v1.json` on both sides already; the
          bookmark's sealed meta joins once Expenses has built decision 4's JSON seam;
@@ -150,7 +152,10 @@ Measured before the decision (2026-11-20):
       `:core`'s one JavaScript file, which a bundler cannot split, so a rule that is lazy in TypeScript turns eager when
       it moves — the reason slices 4 to 6 come last, each asking first whether a module of its own is cheaper — and the
       package's size check becomes one running bound on that file: the split's measured search alone plus R × each moved
-      slice's deleted TypeScript.
+      slice's deleted TypeScript (a slice the owner granted another ratio carries it, named with the owner's date, on its row
+      of `src/packages/core-js/src/slice.test.ts`; R stays the rule). Platform code an application's façade needs (Expenses'
+      JSON seam, money's formats) counts against that running bound, not against the search, and there is no separate
+      budget for the search alone: the platform module grows by design with every slice (the owner, 2026-11-22).
    3. **Then application by application, Expenses first.** Each move: its façade, its TypeScript twin deleted, its own
       size check and time check. The floor is paid, so a size check counts only a move's own code:
       - **size:** an application grows the eager set and its own chunks together by at most **25 KB gz** (Expenses'
@@ -227,10 +232,74 @@ Measured before the decision (2026-11-20):
     against 4.18–4.37), the answers identical — within decision 7.3. The search pays for the platform code Expenses'
     façade uses (the JSON seam and the shared formats the parked move placed in the platform: the platform's own code in
     the search's bundle 26,271 → 45,253 B minified), since a bundler drops nothing of a Kotlin module file. **A miss on
-    the search alone, handed to the owner** (decision 2's rule); the split stays for its direction, and the miss decides
+    the search alone, handed to the owner** (decision 2's rule) — answered 2026-11-22: such platform code counts against the
+    platform module's running budget (decision 7.2), and the search-alone budget is retired. The split stays for its
+    direction, and the run decides
     how Expenses resumes: what a façade needs of the platform out of the module every entry imports, a declaration file
     per entry (one for every module today, so the entries share their types), a conformance compilation per application
     (Expenses' decode runner has none). [ADR 0156](0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md) § Consequences holds the whole run.
+- **The node tree's slice** (decision 7.2's first, built 2026-11-22, branch `claude/node-tree`). A level's order, the
+  numbering of equal sibling names, a name's sibling collision and the move's plan are the platform's `tree/` (`:core`:
+  `KindFacts`, `TreeFacts`, `LevelOrder`, `DisplayNames`, `SiblingNames`, `MovePlan`), the apps' `Home.level`, `NodeMove`,
+  `NodeRename` and a drop box's page call them, and the web draws them through `@veyq/core-js/tree`
+  (`src/web/src/core/node/treeRules.ts` holds the two handles and maps ids back); `contracts/platform/tree/v1-vectors.json`
+  holds both, written by the core's `TreeVectorsTest`. Its gate (each number against `4c4743d16`, the tree before the slice):
+
+  | Criterion | Measured | Bound |
+  |---|---|---|
+  | size: the platform module, every entry | 32,101 B gz (the search alone 27,943; own code 4,158 = 3.14× the 1,326 B gz deleted) | 27,943 + 3.14 × 1,326 = 32,106 (the owner's allowance, 2026-11-22; R = 3.0 would be 31,921) |
+  | size: the eager set | +4,231 B gz (630,538 → 634,769: `activeSpace` +4,116, a new chunk `treeRules` +748, `main` −635) | 3,978 at R, 4,164 at 3.14 — **67 over**, the owner's question |
+  | size: any lazy chunk | +20 B gz at most (`jspdf.es.min`) | ≤ 1,024 |
+  | time (10,000 nodes, Node 22, median of 15) | `orderLevel` 1.51×, `displayNames` 1.96×, `collidingSibling` 0.04× on a held generation (3.5× on a generation's first call, 9.9 ms), `movePlaces` 0.36×, `planMove` of 1,000 0.005×; `treeFacts` 1.6 ms | ≤ 2.5× and ≤ 100 ms |
+  | delivery | three clean builds one digest; no `eval`, `new Function` or DOM sink; `verify:csp`, `verify:license-sources` green | identical |
+  | tests | the deleted TypeScript's cases each a vector case, a `TreeRulesTest` case or a staying web test; digits compared as text in `LevelOrder` and `self` not excluded in `SiblingNames` turn the package's `tree.test.ts` and the web's `tree.vectors.test.ts` red | — |
+  | behaviour | the web's tests pass, their imports changed, the eight hand-built `TreeSource` fakes given `facts()`; the browser pass (two builds over one backend, en and de) lists the same rows, refusals, move places and a selection's outcome — the upload-bound rows (a file `a.b`, a drop box's two `Anna`s, a link guest's move) owed | identical |
+
+  The slice's decision log, kept by its implementer (question, choice and why, evidence, cost; the refine's entries first):
+  - *The order of the slices:* the node tree first — eager, the base every application builds on, answered differently by
+    the app and the web, no key and no JSON, and it forces the shared module file and the running budget on the smallest
+    case. Formats move with their owner (alone 7.1× R); notices after one word catalog; the slug folding (`naming.ts`) and
+    the URL rules stay TypeScript (crypto vectors and Stryker hold the one, the router owns the other).
+  - *One order rule in common code, no platform collator* (four collators would differ where no test looks). It is a sort
+    key per name: white space, a table of ICU 78's punctuation, symbols and currency signs in its primary order (an unlisted
+    one after its group by code unit), digit runs as their length without leading zeros then their digits, letters by code
+    unit after NFKD, marks dropped, lower case, `ß æ œ ø ł đ ð` read as the collator reads them; equal keys by creation,
+    then id. A prototype matched `Intl.Collator('en'|'de', { numeric: true, sensitivity: 'base' })` under ICU 78.3 on 0 of
+    25,600 corpus pairs and 0 of 90,000 random ones; the core answers every `order` case, so no visible change on the
+    corpus. Residual: a script or digit the table does not reach, a dotless `ı`.
+  - *The kinds' facts are data the caller hands in* (`KindFacts`: route, folding, placement) — `:composition` is no
+    JavaScript entry, and a folding is frozen into stored tokens. The applications contribute `kindFacts` in place of their
+    `tokenInput`/`placement` answers; `AppKinds.facts` is built at install, the table sorted by kind (the web and the apps
+    register in different orders) and held to the vectors' `kinds` on both sides.
+  - *The tree crosses once per generation as an opaque handle, answers as ids*; a creation instant is a `Double` of epoch
+    milliseconds (a `Long` is emulated on JavaScript); a place's top (a guest's link root) is a parameter, not the handle's.
+  - *A place the tree does not read takes nothing* — the one case where the app's answer won over the web's: the browser
+    never lists one, and failing closed is the registry's rule (`TreeRulesTest`).
+  - *`NodeMove` keeps its API* (Swift, Android and the bridge read it) and adapts `MovePlan`, which takes the placement as a
+    function; the apps' collision checks call `SiblingNames` over the registry's `tokenInput`. `Naming.slugify` runs as
+    loops (no per-call `Regex`, no `Map`), `fnv1a`'s base 36 through a `Double` (`UInt.toString(radix)` goes through `Long`).
+  - *Phase 1's writer was the web test's write mode* (the kind table needs the registry, which only a DOM test fills),
+    deleted in phase 2: the core writes the file, byte for byte.
+  - *The entries:* `:composition:jsPackage` writes `dist/<entry>.d.mts` from each façade's `@JsExport` declarations;
+    `package.json` maps an entry's types there and its code to the module file. A re-exporting `.mjs` per entry broke a
+    test's `vi.mock` of one export (`SearchField.test.ts`, the parked Expenses branch's red, reproduced and measured fixed),
+    so entries differ by their types only — the web's direction guard reads them.
+  - *Squeezing the module* (33,404 → 32,101 B gz, each step behaviour-neutral): the collator's table a `val`, not an inlined
+    `const`, and trimmed to what code-unit order does not give; categories by their two-letter code; blocks, reasons and
+    foldings string constants, not enums; the façade writing plain arrays and objects; one list sort for order and numbering;
+    a moved node a `TreeFacts.Node`; token inputs cached on the node. The numbering by one sort of the exact name took
+    `displayNames` from 2.87× to 1.96× the TypeScript.
+  - *The gate's two readings:* the refine's probe allowed 4× own code (the eager set net of the deleted TypeScript), its
+    running budget 3× gross; the slice landed at 3.14× and went to the owner, who accepted it for this slice on 2026-11-22
+    (an explicit allowance on its row; R stays the rule) and ruled that platform code an application's façade needs counts
+    against the running budget, the search-alone budget retired. The eager set then measured 67 B gz above the allowance,
+    the adapter's own chunk being the difference: the owner's question.
+  - *The web's side:* `treeRules.ts` keeps the deleted functions' signatures where it could (`orderLevel` lost its locale,
+    `displayNamesOf` takes an order, `endsIdentity` the tree); `TreeSource` gained `facts()`; the time gate binds a rule as
+    the web calls it (a keystroke on a held generation), a generation's build only the 100 ms.
+  - *Left:* Depot's `DepotFiles.collision` and Memories' `MemoryCreate.check` keep their own loops (over the same
+    `AppKinds.tokenInput`); the apps' level and header plans do not hand the numbered name on yet (inbox #1062); a guest
+    moves nothing in the apps (inbox #1063).
 - **Expenses' move is parked, not merged** ([cr-web-expenses-on-the-core](../../changes/cr-web-expenses-on-the-core.md)),
   on branch `claude/p2-impl`: the vectors (`c76d3212f`), the JSON seam and Expenses' pure homes (`c5793db14`), the
   façade and its entry (`cbf54e21e`), `Big` over the engine's `BigInt` (`243e89185`), one optimisation round

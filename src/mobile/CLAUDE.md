@@ -545,7 +545,13 @@ A Gradle build of its own, run through its own wrapper.
   `SearchModelTest` (the visible spaces only, the open Memory's own photo winning, a result opened where it lives, chips,
   people and settings, a failing listing named), Memories' space walk by `MemoriesSearchWalkTest` (every `K_blob`, drop
   seed and `K_up` it unwraps zeroed, a thrown walk too) and the gallery's request and contribution by `GalleryModelTest`;
-  `scripts/validate_mobile_search_names_no_application.py` keeps the package free of an application. Live,
+  `scripts/validate_mobile_search_names_no_application.py` keeps the package free of an application. The node tree's rules
+  (`tree/`: a level's order, equal names numbered, a name's sibling collision, the move's plan; the web's through
+  `@veyq/core-js/tree`, `jsMain/…/tree/web/`) change only with `contracts/platform/tree/v1-vectors.json`: `TreeVectorsTest`
+  (`:composition`, the apps' kind table held to the file's; `VEYQ_WRITE_VECTORS=1 ./gradlew :composition:jvmTest --tests
+  '*TreeVectorsTest*'` rewrites it byte for byte where nothing changed) and `TreeRulesTest`, then `@veyq/core-js`'s check and
+  the web's `tree.vectors.test.ts`. Its code reached from the façade carries no `Long` and no enum (the web's bytes, ADR 0155
+  § The node tree's slice). Live,
   `SearchLiveTest` (`VEYQ_LIVE`: a Memory with a date, a place, a participant and a photo searched from another space,
   the photo opened through its gallery's request, a rename seen after a focus, an idle focus one `304` per tree and
   listing; the Memory purged). Its bounds are `SearchVolumeMeasure`'s, opt-in: `VEYQ_MEASURE=1 ./gradlew :composition:jvmTest
