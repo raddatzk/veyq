@@ -132,3 +132,14 @@ apps' link form counts an edited link's last day from its creation through the s
     2.05× — each at most 25 ms for its whole batch, within 2.5× and 100 ms;
   - bites: the package's `sharing.test.ts` red on a `withoutReport` that keeps empty parameters (2) and a `lastEndDay`
     without its `− 1` (8); the running budget red at a deleted 1,000 B gz; each restored with `/bin/cp -f`.
+- **D12 — The web's side keeps its modules and signatures** (phase 4). `bookmarkLink.ts`, `linkRules.ts`' `lastExpiryDay`
+  and `shareInstance.ts`' `embeddability` and `olderMajorsInWindow` keep their exports and hold no rule; no caller's import
+  changed. `MAX_LINK_LENGTH` left the web (its one reader, the test, reads the vectors' `maxLinkLength`); the `.embeddable`
+  constant stays in `features/platform/capabilities.ts` for the capability list. The deleted TypeScript's unit cases all
+  stay, as the adapters' tests over the shipped module (`bookmarkLink.test.ts`, `linkRules.test.ts`,
+  `shareInstance.test.ts`), each also reading its section of the vectors.
+- **D13 — The eager set** (`links-scratch/eager.py`, two `pnpm run build`s under Node 22.23.3): **634,769 → 637,425 B gz,
+  +2,656** — `activeSpace` +3,156 (the Kotlin), `main` −493, `capabilities` −10, `treeRules` +5, `StatementNotice` −2 —
+  within R × 1,253 = 3,759; no lazy chunk grows by more than 5 B gz. Delivery: three `--rerun-tasks` builds of
+  `:composition:jsPackage`, one digest (`5c952742…`); no `eval`, `new Function` or DOM sink in the module; the web's
+  `verify:csp` and `verify:license-sources` green.

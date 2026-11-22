@@ -209,6 +209,18 @@
     {
       "input": "https://photos.example.org:99999/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
       "problem": "notAUrl"
+    },
+    {
+      "input": "https://photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwd",
+      "problem": "noKey"
+    },
+    {
+      "input": "https://bücher.example/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "notAUrl"
+    },
+    {
+      "input": "https://:@photos.example.org/s/Ab3_-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx#k=BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+      "problem": "credentials"
     }
   ],
   "kept": [
