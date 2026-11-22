@@ -27,6 +27,13 @@ describe('the web reads the notices’ words from the apps’ catalog (inbox #10
     for (const key of Object.keys(generated.en)) expect(catalog[key], key).toBeDefined()
   })
 
+  it('reads every vue-i18n syntax character the generator escapes as itself', () => {
+    // generate_words_selftest.py holds the generator to write this line for "Mail a@b {2} | 50%% {x} $y {1:int}"
+    const SYNTAX_LINE = "Mail a{'@'}b {1} {'|'} 50% {'{'}x{'}'} {'$'}y {0}"
+    const i18n = createI18n({ legacy: false, locale: 'en', messages: { en: { line: SYNTAX_LINE } } })
+    expect(i18n.global.t('line', [7, ARG(2)])).toBe(`Mail a@b ${ARG(2)} | 50% {x} $y 7`)
+  })
+
   for (const lang of LANGS) {
     it(`says every word as words.json writes it, in ${lang}`, () => {
       const i18n = createI18n({ legacy: false, locale: lang, messages: { [lang]: { words: generated[lang] } } })

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Self-test of generate_words.py's manifest outputs (`--apple-infoplist`, `--metainfo`) and the catalog rules they rest
-on, against the real catalog and the real metainfo template, offline. Exit 0 green, 1 red.
+on, against the real catalog and the real metainfo template, offline, and of the web's message syntax (`--web`). Exit 0
+green, 1 red.
 
 The platform outputs (`--kotlin`, `--android-res`, `--apple-strings`, `--gettext`, `--resw`) are held by each
 platform's own words test against what its build compiles; the manifests have no build of their own that reads a
@@ -105,6 +106,14 @@ def main() -> int:
         failures.append("an Info.plist word an xcconfig cannot hold was accepted")
     except g.CatalogError:
         pass
+
+    # The web's syntax (`--web`): a placeholder by its list index, every vue-i18n syntax character a literal. The web's
+    # words.test.ts renders this same line through vue-i18n (SYNTAX_LINE there), so both halves are held.
+    sample = "Mail a@b {2} | 50%% {x} $y {1:int}"
+    want = "Mail a{'@'}b {1} {'|'} 50% {'{'}x{'}'} {'$'}y {0}"
+    check(g.web_text(sample) == want, f"web_text({sample!r}) is {g.web_text(sample)!r}, not {want!r}")
+    check(g.web_message({"one": "One {1:int}", "other": "{1:int} all"}) == "One {0} | {0} all",
+          "a plural's web forms are not `one | other`")
 
     for f in failures:
         print("FAILED:", f)
