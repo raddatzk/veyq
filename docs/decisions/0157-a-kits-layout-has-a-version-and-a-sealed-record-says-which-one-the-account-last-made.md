@@ -56,12 +56,14 @@ What the tree holds (read 2026-11-22 on `main` `28e3312c0`):
      has a record from its birth (decision 4), so "no record" never means a fresh kit.
 4. **Every request that makes a kit writes the record in the same step.**
    - **The two births carry it in their request**: the tenant join's `registerAndAcceptTenantInvite` and setup's
-     `createServerOwner` take an optional sealed `kitRecord`, sealed by the client under the new Master Key it holds at
+     `createServerOwner` take an optional sealed `kitRecord` (optional: a client that predates it still births, and the
+     account then reads as layout 1), sealed by the client under the new Master Key it holds at
      that moment. A birth has no session to write it after, and `admin-web` runs on another origin, so a later write from
      `web` cannot know it happened.
    - **Securing the account carries it in the rotation request** (`rotateAccountKeys`), sealed under the new Master Key,
-     as the device register is: the kit printed in the ceremony is the new Secret Key's, so the record belongs to the new
-     key and commits with it.
+     as the device register is, and **required** like every field of that request (ADR 0060 decision 1: an optional
+     field is a mode spelled by omission): the ceremony always prints a kit of the current layout, the record belongs to
+     the new Secret Key and commits with it, and the row the old Master Key sealed is replaced.
    - **The address change and the renewal write it with `PUT /api/account/kit-record`** once the PDF was saved: both have
      a session, the Master Key and the same Secret Key.
    - **Recovery and a password change write nothing**: neither makes a kit, and the kit the account has stays valid.

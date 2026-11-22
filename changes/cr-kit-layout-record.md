@@ -57,18 +57,23 @@ password and the Secret Key, the old kit staying valid.
    `GET /api/account/kit-record` → `KitRecord { blob: string | null }` (base64, `maxLength: 65532`, null when never
    written); `PUT /api/account/kit-record` with `KitRecordUpdate { blob }` (required) → `204`. Authenticated, the caller's
    own record only, `x-veyq-concurrency: last-writer-wins` with ADR 0157 decision 3's reason. One shared schema
-   `SealedKitRecord` (the same string) is added as an **optional** `kitRecord` to `RegisterAndAcceptTenantInviteRequest`
-   (`tenants.openapi.yaml`), `CreateServerOwnerRequest` (`setup.openapi.yaml`) and `RotateAccountKeysRequest`. Optional,
-   so a client that predates it still births and rotates; absent means "write nothing", never "clear".
+   `SealedKitRecord` (the same string, in `_common`; every `$ref` to it carries `contentEncoding: base64` beside it,
+   because the opacity oracle `validate_field_visibility.is_opaque` reads the property, never the scalar it refers to)
+   is added as an **optional** `kitRecord` to `RegisterAndAcceptRequest` (`tenants.openapi.yaml`) and
+   `CreateServerOwnerRequest` (`setup.openapi.yaml`) — optional, so a client that predates it still births; absent
+   means "write nothing" — and as a **required** `kitRecord` to `RotateAccountKeysRequest` (ADR 0060 decision 1: every
+   field of that request is required; `scripts/validate_rotation_shape.py` pins its property set). A `GET` with no
+   record omits `blob` (`{}` on the wire, the server's non-null inclusion), as `DeviceRegister` does. The two
+   operations are an **exclusion** in `OperatorBlindProbeTest` beside the device register's ("account-wide: addresses
+   the caller's own account, no space"): a probe needs a space address these have none of.
 2. **Seal.** Purpose `kit-record` with no binding field (`'kit-record': []` in `SEAL_PURPOSES`, as `master-key`): the
    Master Key is the account's alone, the account has one record, and a birth seals it before the account has an id.
    Plaintext the compact JSON `{"layout":n}`. Sealed with the Master Key the flow holds. A blob that does not open, or JSON without a
    positive integer `layout`, reads as **no record** (layout 1) — never an error on screen.
 3. **Backend.** Table `veyq_kit_record (account_id UUID PRIMARY KEY REFERENCES veyq_user, sealed_blob TEXT NOT NULL)`,
    upserted; `GET` answers `{ blob: null }` for no row. The two births store `kitRecord` in the transaction that creates
-   the account; the rotation stores it in the commit that installs the new Master Key and replaces a row the old key
-   sealed (a rotation without `kitRecord` **deletes** the row: it was sealed under a Master Key that no longer exists,
-   and "no record" — layout 1 — is the honest answer). `AccountPurge` deletes the row.
+   the account; the rotation stores its required `kitRecord` in the commit that installs the new Master Key, replacing
+   the row the old key sealed. `AccountPurge` deletes the row.
 4. **Web, the record.** `src/web/src/features/account/emergencyKit/kitRecord.ts`: `sealKitRecord(masterKey)`,
    `readKitLayout(masterKey)` (GET + open, 1 on no record or no open), `writeKitRecord(masterKey)`. `KIT_LAYOUT` is exported beside `renderKitPdf` in `emergencyKit.ts`; each layout ≥ 2 has one catalog
    sentence `kit.layoutNews.<n>` (EN + DE), and a test asserts a sentence exists for every layout from 2 to
@@ -94,7 +99,7 @@ password and the Secret Key, the old kit staying valid.
 - Kit producers: `grep -rn "EmergencyKitSave" src/web/src src/admin-web/src --include='*.vue' | grep -v "\.test\."`
 - `KIT_LAYOUT` and the layout code in both writers: `grep -rn "renderKitPdf" src/web/src src/admin-web/src | grep -v "\.test\."`
 - The rotation request's re-sealed documents (where `kitRecord` joins): `grep -rn "deviceRegister" contracts/api/account.openapi.yaml src/backend/core/src/main/kotlin/me/raddatz/veyq/core/account src/web/src/features/account/rotation`
-- The two birth requests: `grep -n "RegisterAndAcceptTenantInviteRequest:\|CreateServerOwnerRequest:" contracts/api/*.yaml` and their builders `grep -rn "registerAndAcceptTenantInvite\|createServerOwner" src/web/src src/admin-web/src src/backend/core/src/main | grep -v "\.test\."`
+- The two birth requests: `grep -n "RegisterAndAcceptRequest:\|CreateServerOwnerRequest:" contracts/api/*.yaml` and their builders `grep -rn "registerAndAcceptTenantInvite\|createServerOwner" src/web/src src/admin-web/src src/backend/core/src/main | grep -v "\.test\."`
 - Every other builder of those requests (dev seeder, e2e harness, backend tests), by their newest field: re-run the
   grep above over `src/web/scripts tests/e2e src/backend/core/src/test src/backend/src/test`.
 - Seal purposes and vectors: `grep -n "device-register\|favorites" src/packages/crypto/src/seal.ts contracts/crypto/vectors/v1.json`
@@ -122,7 +127,7 @@ and name the reds. The births' and rotation's optional field compiles everywhere
 Decision 3: migration (`V<yyyymmddHHMM>__core_kit_record.sql`, its line in `scripts/applied_migrations.sha256`),
 entity, store, handler, resource for the tag; the two births and the rotation store or delete the row in their
 transaction; `AccountPurge` deletes it. Tests: a member reads and writes only their own record; `GET` before any write is
-`{ blob: null }`; a birth with and without `kitRecord`; a rotation with `kitRecord` replaces, without it deletes; the
+`{ blob: null }`; a birth with and without `kitRecord`; a rotation replaces the row with its `kitRecord`; the
 erasure removes the row (`AccountErasureSliceTest`).
 
 **Done when:** `./gradlew check` green (`src/backend/`), the account-erasure and concurrency guards green.
@@ -156,4 +161,10 @@ this file deleted.
 
 ## Retrospective
 
-*(written by the implementer)*
+*(written by the implementers)*
+
+- Phase 1: a new tag's path is also a day-one red in `ApiMethodIndexContractTest`, beside `ModuleCompositionTest`
+  (`changes/README.md` § an operation on a NEW tag names only the latter). A `$ref` to a shared opaque scalar is invisible
+  to `is_opaque` and loops `validate_rotation_shape.py`'s body-bound resolver; a refine that adds a shared scalar greps
+  `is_opaque` and every `$ref`-resolving guard first, and one that adds a field to the rotation request reads
+  `validate_rotation_shape.py` (this CR had it optional against ADR 0060 decision 1).
