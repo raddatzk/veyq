@@ -520,13 +520,13 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun otherAccount() = session.otherAccount()
 
     /**
-     * The unlock's *Stop trusting this device* (inbox #1052): core's ask first while writes made offline wait
-     * (`QueuedShown.forgetAsk`), then the account forgotten here; the gate shows the next account or the sign-in.
+     * The unlock's *Stop trusting this device* (inbox #1052): core's ask first, always (owner 2026-11-22), naming the writes
+     * made offline that wait in the same question (`QueuedShown.forgetAsk`), then the account forgotten here; the gate
+     * shows the next account or the sign-in.
      */
     fun forgetUnlocked() {
         val go = { viewModelScope.launch { if (session.forgetUnlocked()) trustLog("unlock stop trusting") }; Unit }
-        val ask = me.raddatz.veyq.mobile.composition.QueuedShown.forgetAsk(session.waitingOnUnlock())
-        if (ask == null) go() else _lossAsk.value = LossAsk(ask, go, {})
+        _lossAsk.value = LossAsk(me.raddatz.veyq.mobile.composition.QueuedShown.forgetAsk(session.waitingOnUnlock()), go, {})
     }
 
     /** The switcher: another tenant of the same server is the same session at another domain; another server is its own. */

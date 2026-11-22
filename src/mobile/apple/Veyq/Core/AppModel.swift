@@ -499,14 +499,15 @@ final class AppModel {
     /// From the unlock to the full sign-in, for another account.
     func otherAccount() { session.otherAccount() }
 
-    /// The unlock's *Stop trusting this device* (inbox #1052): core's ask first while writes made offline wait
-    /// (`QueuedShown.forgetAsk`), then the account forgotten here; the gate shows the next account or the sign-in.
+    /// The unlock's *Stop trusting this device* (inbox #1052): core's ask first, always (owner 2026-11-22), naming the
+    /// writes made offline that wait in the same question (`QueuedShown.forgetAsk`), then the account forgotten here; the
+    /// gate shows the next account or the sign-in.
     func forgetUnlocked() {
         let go = { [weak self] in
             guard let self else { return }
             Task { if (try? await self.session.forgetUnlocked())?.boolValue == true { self.trustLog("unlock stop trusting") } }
         }
-        if let ask = QueuedShown.shared.forgetAsk(waiting: session.waitingOnUnlock()) { lossAsk = LossAsk(ask: ask, go: go) } else { go() }
+        lossAsk = LossAsk(ask: QueuedShown.shared.forgetAsk(waiting: session.waitingOnUnlock()), go: go)
     }
 
     /// The switcher: another tenant of the same server is the same session at another domain; another server is its own.

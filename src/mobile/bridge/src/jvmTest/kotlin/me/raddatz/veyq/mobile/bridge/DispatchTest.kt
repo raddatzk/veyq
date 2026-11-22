@@ -447,16 +447,18 @@ class DispatchTest {
         assertEquals(Update.Session(Gate.SignIn()), gate2.until { (it as Update.Session).takeIf { u -> u.gate is Gate.SignIn } })
         c.shutdown()
 
-        // "Stop trusting this device" from the unlock (inbox #1052): asked first while writes wait, then forgotten here, the sign-in next
+        // "Stop trusting this device" from the unlock (inbox #1052): always asked first, the writes waiting named in the one question, then forgotten here, the sign-in next
         val d = started(kept)
         val gate3 = d.watching(Watched.Session)
         assertEquals(Answer.Done, d.ask(Call.SessionStart))
         gate3.until { (it as Update.Session).gate as? Gate.Unlock }
-        assertEquals(Answer.QueuedAsked(null), d.ask(Call.UnlockForgetAsk), "nothing waits: nothing is asked")
+        val plain = (d.ask(Call.UnlockForgetAsk) as Answer.QueuedAsked).ask
+        assertEquals(Notice(Msg.UNLOCK_FORGET_CONFIRM), plain?.question, "nothing waits: still asked (owner 2026-11-22)")
+        assertEquals(Msg.MANAGE_FORGET_DEVICE, plain?.confirm)
         kept.waiting = 2
         val asked = (d.ask(Call.UnlockForgetAsk) as Answer.QueuedAsked).ask
         assertEquals(Msg.OFFLINE_STOP_TRUSTING_ANYWAY, asked?.confirm)
-        assertEquals(Notice(Msg.OFFLINE_WRITES_LOST, 2), asked?.question)
+        assertEquals(Notice(Msg.UNLOCK_FORGET_CONFIRM_WRITES_LOST, 2), asked?.question)
         assertEquals(Answer.Done, d.ask(Call.SessionForgetUnlocked))
         assertEquals(Update.Session(Gate.SignIn()), gate3.until { (it as Update.Session).takeIf { u -> u.gate is Gate.SignIn } })
         assertTrue(kept.records.isEmpty(), "the record outlived its forget")

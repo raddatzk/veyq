@@ -430,8 +430,8 @@ pub(crate) fn scan_said(shown: &ScanShown) -> Option<gtk::Widget> {
 /// An account this device trusts (ADR 0123 decision 8; `Gate.Unlock`): the password alone for a password-trusted one, a
 /// button that asks the core again for a remembered one; under it the core's entries (`Unlock.Plan`, ADR 0154 decision 2),
 /// each drawn, in their order — the buttons as GNOME draws a form's, the rows in a boxed list: the way to another account,
-/// *Open a link* and *Stop trusting this device* (inbox #1052), destructive, asked first by the core where writes made
-/// offline wait (`Unlock.ForgetAsk`).
+/// *Open a link* and *Stop trusting this device* (inbox #1052), destructive, always asked first by the core
+/// (`Unlock.ForgetAsk`).
 pub struct Unlock {
     pub page: adw::ToolbarView,
     account: adw::ActionRow,
@@ -545,9 +545,9 @@ impl Unlock {
     }
 }
 
-/// The unlock's *Stop trusting this device*: the core's ask first (`Unlock.ForgetAsk`) while writes made offline wait for
-/// the account shown, its question in an `AdwAlertDialog` over [page] whose confirm forgets it; where none waits, at once
-/// (`Session.ForgetUnlocked`). The gate that follows shows the next account or the sign-in.
+/// The unlock's *Stop trusting this device*: the core's ask first, always (`Unlock.ForgetAsk`, owner 2026-11-22) — one
+/// question that names the writes made offline waiting for the account shown, if any —, in an `AdwAlertDialog` over
+/// [page] whose confirm forgets it (`Session.ForgetUnlocked`). The gate that follows shows the next account or the sign-in.
 fn forget_unlocked(page: &adw::ToolbarView) {
     let page = page.clone();
     glib::spawn_future_local(async move {
@@ -560,11 +560,11 @@ fn forget_unlocked(page: &adw::ToolbarView) {
             }
         };
         let Some(q) = ask else {
-            eprintln!("veyq: unlock stop trusting");
-            bridge::send(Call::SessionForgetUnlocked);
+            // the core always asks: an answer without one forgets nothing unasked
+            eprintln!("veyq: Unlock.ForgetAsk answered no ask");
             return;
         };
-        eprintln!("veyq: queued ask before the unlock's stop trusting");
+        eprintln!("veyq: ask before the unlock's stop trusting");
         let alert = adw::AlertDialog::builder().heading(words::account_settings_untrust_confirm_title()).body(said::notice(&q.question)).build();
         alert.add_responses(&[("cancel", &words::signin_cancel()), ("confirm", &said::key(&q.confirm))]);
         alert.set_response_appearance("confirm", adw::ResponseAppearance::Destructive);

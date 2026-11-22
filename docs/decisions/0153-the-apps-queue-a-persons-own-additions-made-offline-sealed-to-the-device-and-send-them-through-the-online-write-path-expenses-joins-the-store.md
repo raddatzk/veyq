@@ -85,8 +85,8 @@ Measured 2026-11-19 on `claude/offline-refine` at `4f3b57ecd` (commands from `sr
    "Storage on this device", and refused below ADR 0140's 5 % free-space floor with a notice. **No store, no queue:** a
    device that keeps no trust keeps offline read-only, as today.
    - **What wipes it:** every wipe of ADR 0140 decision 11. Signing out, "Stop trusting" and "Remove all offline content"
-     with writes waiting **ask first**, naming how many will be lost. The unlock's "Stop trusting" (inbox #1052) has no
-     Master Key to open the outbox with, so the outbox notes its count beside the trusted record at each change of its
+     with writes waiting **ask first**, naming how many will be lost. The unlock's "Stop trusting" (inbox #1052), asked
+     always, names them in its one question (`QueuedShown.forgetAsk`). It has no Master Key to open the outbox with, so the outbox notes its count beside the trusted record at each change of its
      order (`OfflineStores.waiting`) — a number, never what a write is; the wipe removes it. A refused refresh and a wrap the server no longer
      serves wipe them **without asking**: a revoked device must not send writes, and that is the escalation's point
      (ADR 0058).

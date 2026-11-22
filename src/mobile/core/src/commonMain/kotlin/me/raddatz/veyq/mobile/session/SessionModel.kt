@@ -480,8 +480,8 @@ class SessionModel<A : Connection, T : Any>(
     }
 
     /**
-     * How many writes made offline the account the unlock shows keeps on this device: what is asked before
-     * [forgetUnlocked] deletes them (ADR 0153 decision 2, `QueuedShown.forgetAsk`). 0 outside the unlock.
+     * How many writes made offline the account the unlock shows keeps on this device: what the ask before
+     * [forgetUnlocked] names, which deletes them (ADR 0153 decision 2, `QueuedShown.forgetAsk`). 0 outside the unlock.
      */
     fun waitingOnUnlock(): Int = (current as? Gate.Unlock)?.let { door.waiting(it.record) } ?: 0
 
@@ -491,7 +491,7 @@ class SessionModel<A : Connection, T : Any>(
      * elsewhere, which this device cannot tell from a wrong password (anti-enumeration) —, then where the start would go
      * without it: the next account this device trusts, or the sign-in. Nothing is sent. False outside the unlock, while it
      * works, in the share extension (the app keeps this device's trust), and where the account is held as a connection
-     * (its own stop is Manage servers'). The caller asked first where writes wait ([waitingOnUnlock]).
+     * (its own stop is Manage servers'). The caller asked first, always (`QueuedShown.forgetAsk` over [waitingOnUnlock]).
      */
     suspend fun forgetUnlocked(): Boolean {
         val state = current as? Gate.Unlock ?: return false

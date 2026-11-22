@@ -102,12 +102,18 @@ object QueuedShown {
 
     /**
      * The ask before the unlock's *Stop trusting this device* ([me.raddatz.veyq.mobile.session.SessionModel.forgetUnlocked],
-     * inbox #1052) while [waiting] writes made offline wait for the account it shows — its
+     * inbox #1052): always asked (owner 2026-11-22) — the account goes from this device, and signing in here again takes
+     * the Secret Key. [waiting] is how many writes made offline wait for the account it shows — its
      * [me.raddatz.veyq.mobile.session.SessionModel.waitingOnUnlock], counted as the outbox last noted them, no key being
-     * open there; null where none waits, and outside the unlock (nothing to ask). The count, not the model: a generic
-     * model reaches Swift as one it cannot pass back.
+     * open there. One question, never two: none waiting, [Msg.UNLOCK_FORGET_CONFIRM] confirmed by [Msg.MANAGE_FORGET_DEVICE]
+     * (the Settings' own confirm); some waiting, [Msg.UNLOCK_FORGET_CONFIRM_WRITES_LOST] — the same words with
+     * [Msg.OFFLINE_WRITES_LOST]'s after them, the Secret Key not dropped for the count — confirmed by
+     * [Msg.OFFLINE_STOP_TRUSTING_ANYWAY], as every [QueuedLoss.STOP_TRUSTING] ask is. Outside the unlock the forget itself
+     * is refused. The count, not the model: a generic model reaches Swift as one it cannot pass back.
      */
-    fun forgetAsk(waiting: Int): QueuedAsk? = ask(QueuedLoss.STOP_TRUSTING, waiting)
+    fun forgetAsk(waiting: Int): QueuedAsk =
+        if (waiting > 0) QueuedAsk(Notice(Msg.UNLOCK_FORGET_CONFIRM_WRITES_LOST, waiting), QueuedLoss.STOP_TRUSTING.confirm)
+        else QueuedAsk(Notice(Msg.UNLOCK_FORGET_CONFIRM), Msg.MANAGE_FORGET_DEVICE)
 
     /**
      * What *Save a copy* of a refused write's file [name] came to ([QueuedTray.saveCopy] into the path the host's save

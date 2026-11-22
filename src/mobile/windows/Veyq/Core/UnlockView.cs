@@ -5,7 +5,7 @@
 // typed); without Hello (LOGIN) it says the resume failed and tries again (TrustWords.Unlock). Linux's sign_in::Unlock.
 // The controls under the account are the core's entries (Unlock.Plan, ADR 0154 decision 2), each drawn in its order:
 // the button, the way to another account, *Open a link* (ADR 0150 decision 4: a received link needs no session,
-// ReceivedView) and *Stop trusting this device* (inbox #1052), asked first by the core where writes made offline wait.
+// ReceivedView) and *Stop trusting this device* (inbox #1052), always asked first by the core.
 
 namespace Veyq.Core;
 
@@ -134,25 +134,22 @@ internal sealed class UnlockView
         UnlockEntry.Forget => _forget,
     };
 
-    /// <summary>*Stop trusting this device* from the unlock: the core's ask first (Unlock.ForgetAsk) while writes made
-    /// offline wait for the account shown, then Session.ForgetUnlocked; the gate that follows shows the next account or
-    /// the sign-in.</summary>
+    /// <summary>*Stop trusting this device* from the unlock: the core's ask first, always (Unlock.ForgetAsk, owner
+    /// 2026-11-22) — one question that names the writes made offline waiting for the account shown, if any —, then
+    /// Session.ForgetUnlocked; the gate that follows shows the next account or the sign-in.</summary>
     private async void Forget()
     {
         try
         {
             var (answer, _) = await Core.CallAsync(new Call.UnlockForgetAsk());
-            if (answer is not Answer.QueuedAsked asked)
+            if (answer is not Answer.QueuedAsked { ask: { } ask })
             {
-                // unanswered, nothing is lost unasked: the forget waits for the next try
-                Log.Write($"Unlock.ForgetAsk answered {answer.GetType().Name}");
+                // unanswered, or answered without the ask the core always makes: nothing is lost unasked
+                Log.Write($"Unlock.ForgetAsk answered {answer.GetType().Name} without an ask");
                 return;
             }
-            if (asked.ask is { } ask)
-            {
-                Log.Write("queued ask before the unlock's stop trusting");
-                if (!await Dialogs.Confirm(_window, "unlock-forget-ask", Words.AccountSettingsUntrustConfirmTitle(), Said.Notice(ask.question), Said.Key(ask.confirm))) return;
-            }
+            Log.Write("ask before the unlock's stop trusting");
+            if (!await Dialogs.Confirm(_window, "unlock-forget-ask", Words.AccountSettingsUntrustConfirmTitle(), Said.Notice(ask.question), Said.Key(ask.confirm))) return;
             Log.Write("unlock stop trusting");
             Act.Send(new Call.SessionForgetUnlocked());
         }

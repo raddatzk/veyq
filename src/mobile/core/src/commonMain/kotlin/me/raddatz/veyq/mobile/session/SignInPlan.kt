@@ -70,8 +70,8 @@ enum class UnlockEntry {
     /** *Open a link* (ADR 0150 decision 4): a received link opened as its guest, no session needed. */
     @SerialName("open-link") OPEN_LINK,
     /**
-     * *Stop trusting this device* for the account shown (`SessionModel.forgetUnlocked`, inbox #1052): forgotten here, asked
-     * first where writes made offline wait (`QueuedShown.forgetAsk`); the start then falls through to the next account.
+     * *Stop trusting this device* for the account shown (`SessionModel.forgetUnlocked`, inbox #1052): forgotten here, always
+     * asked first, the writes made offline that wait named in that one question (`QueuedShown.forgetAsk`); the start then falls through to the next account.
      */
     @SerialName("forget") FORGET,
 }
