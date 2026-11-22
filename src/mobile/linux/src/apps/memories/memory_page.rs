@@ -489,7 +489,8 @@ impl Inner {
             });
         }
         // a drop of files onto the page goes to the core's one drop, which judges the gallery's rights and sorts it — only
-        // where the gallery's media show: the Music and Map views take no drop, as the web's tabs take none (#1054)
+        // where the gallery's media show: the Music and Map views take no drop, as the web's tabs take none (#1054); on the
+        // Contributions view into the bucket it shows, one of the caller's own root alone (#1065)
         let target = gtk::DropTarget::new(gdk::FileList::static_type(), gdk::DragAction::COPY);
         let weak = Rc::downgrade(this);
         target.connect_drop(move |_, value, _, _| {
@@ -499,7 +500,13 @@ impl Inner {
             }
             let Some(gallery) = inner.id.get() else { return false };
             let Ok(list) = value.get::<gdk::FileList>() else { return false };
-            crate::core_ui::drop::send(inner.window.upcast_ref(), DropOn::DropOnGallery { gallery }, crate::core_ui::drop::items(&list.files()), &inner.toasts);
+            let on = if inner.contributions_slot.is_visible() {
+                let Some(buckets) = inner.contributions.borrow().as_ref().and_then(ContributionsView::id) else { return false };
+                DropOn::DropOnBuckets { buckets }
+            } else {
+                DropOn::DropOnGallery { gallery }
+            };
+            crate::core_ui::drop::send(inner.window.upcast_ref(), on, crate::core_ui::drop::items(&list.files()), &inner.toasts);
             true
         });
         this.root.add_controller(target);

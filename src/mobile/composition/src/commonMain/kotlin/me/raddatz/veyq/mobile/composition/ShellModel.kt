@@ -487,7 +487,8 @@ class ShellModel(
 
     /**
      * Files and folders dropped onto [target] (ADR 0154 decision 1, ADR 0138 decision 9), the platforms' one drop: judged —
-     * the level shown ([dropLevel]), a folder's row ([dropTarget]), a gallery (its rights, `GalleryModel.takesUploads`) —,
+     * the level shown ([dropLevel]), a folder's row ([dropTarget]), a gallery (its rights, `GalleryModel.takesUploads`), a
+     * Contributions view's bucket (`Contributions.intake`) —,
      * sorted through the target's answer, and uploaded into [depot] (a level's) or the gallery at once; a level's veyq
      * download offered as an import, one per drop. Each file a target does not keep is handed to [left] once no run reads
      * it again; [deletedName] names an imported Pot's erased person. A target that takes none is [DropOutcome.Refused] and
@@ -498,6 +499,7 @@ class ShellModel(
         left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit = {}, deletedName: String = "",
     ): DropOutcome = when (target) {
         is DropTarget.Gallery -> target.drop(items, left)
+        is DropTarget.Bucket -> target.drop(items, left)
         is DropTarget.Level -> {
             val level = shell?.let(::dropLevel)
             if (level == null || depot == null) DropOutcome.notHere
@@ -1229,6 +1231,8 @@ class ShellModel(
             override suspend fun uploaders(items: List<me.raddatz.veyq.mobile.memories.MemoryMedia.Item>) =
                 me.raddatz.veyq.mobile.memories.MediaDetails.uploaders(tenant, ref.scopeId, items)
             override fun upload(sources: List<me.raddatz.veyq.mobile.blob.UploadSource>) = uploads.upload(ref.scopeId, ref.nodeId, ref.name, sources)
+            override fun upload(sources: List<me.raddatz.veyq.mobile.blob.UploadSource>, filed: suspend (mediaId: String) -> Unit) =
+                uploads.upload(ref.scopeId, ref.nodeId, ref.name, sources, filed)
             // each read of the lists is a new one (a rebuild after a refresh); a move of the shell alone keeps them
             override val revisions = state.map { it?.lists }.distinctUntilChanged { a, b -> a === b }
             override val uploaded = uploads.uploaded

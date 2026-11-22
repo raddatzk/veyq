@@ -330,7 +330,10 @@ struct MemoryScreen: View {
         // (no types asked there, rather than no modifier: the page's identity stays as the view switches)
         .onDrop(of: showsMusic || showsMap ? [] : IncomingFiles.accepted, isTargeted: nil) { providers in
             guard guest == nil, !showsMusic, !showsMap, let gallery = model.memories.galleryModel(node) else { return false }
-            Task { await model.drop(providers, onto: DropTarget.Gallery(gallery: gallery)) }
+            // on the Contributions view into the bucket it shows (#1065), one of the caller's own root alone (core's `Contributions.intake`)
+            let target: DropTarget = showsContributions ? (contributions.map { DropTarget.Bucket(contributions: $0.model) } ?? DropTarget.Gallery(gallery: gallery))
+                : DropTarget.Gallery(gallery: gallery)
+            Task { await model.drop(providers, onto: target) }
             return true
         }
         // the header's `upload` entry asked for a picker (`MemoriesUi`'s own action)

@@ -91,9 +91,10 @@ final class MemoriesHolding: Holding {
         return true
     }
 
-    /// Files dropped onto a Memory's or chapter's gallery: its photos and videos uploaded there (core's one drop).
+    /// Files dropped onto a Memory's or chapter's gallery, or onto the bucket its Contributions view shows: its photos and
+    /// videos uploaded there (core's one drop).
     func drop(_ shell: ShellModel, _ target: DropTarget, _ items: [Dropped]) async -> DropOutcome? {
-        guard target is DropTarget.Gallery else { return nil }
+        guard target is DropTarget.Gallery || target is DropTarget.Bucket else { return nil }
         return try? await shell.drop(target: target, items: items, depot: nil, left: { @Sendable source in
             if let url = ApplePlatform.shared.urlOf(source: source) { AppModel.removePicked(url) }
         }, deletedName: say(.potDeletedPerson))

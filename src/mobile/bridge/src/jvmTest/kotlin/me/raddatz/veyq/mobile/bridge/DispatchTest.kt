@@ -1922,6 +1922,7 @@ class DispatchTest {
                             is me.raddatz.veyq.mobile.composition.DropTarget.Level -> "level:${target.label}"
                             is me.raddatz.veyq.mobile.composition.DropTarget.Row -> "row:${target.folder.nodeId}"
                             is me.raddatz.veyq.mobile.composition.DropTarget.Gallery -> "gallery"
+                            is me.raddatz.veyq.mobile.composition.DropTarget.Bucket -> "bucket"
                         }
                         seen += items.map {
                             when (it) {

@@ -118,6 +118,7 @@ fn on_name(on: &DropOn) -> String {
         DropOn::DropOnLevel { label } => format!("the level {label}"),
         DropOn::DropOnRow { folder } => format!("the row {}", folder.name),
         DropOn::DropOnGallery { gallery } => format!("gallery {gallery}"),
+        DropOn::DropOnBuckets { buckets } => format!("the bucket of contributions {buckets}"),
     }
 }
 

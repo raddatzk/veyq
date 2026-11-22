@@ -115,13 +115,16 @@ class MediaUploads(
 
     /**
      * The picked [sources] queued into Memory or chapter [nodeId] of [scopeId], one batch labelled [label] (its name).
-     * The number queued; a source that is no medium ([MediaUpload.isMedia]) is handed back at once and not queued.
+     * The number queued; a source that is no medium ([MediaUpload.isMedia]) is handed back at once and not queued. With
+     * [filed], each medium once it is in is handed to it by id before its node is said in ([uploaded]): an upload lands in
+     * its uploader's primary bucket and a move files it (`en.memory.buckets`, inbox #1065), so the gallery's read after it
+     * lists the medium where it was filed.
      */
-    fun upload(scopeId: String, nodeId: String, label: String, sources: List<UploadSource>): Int {
+    fun upload(scopeId: String, nodeId: String, label: String, sources: List<UploadSource>, filed: (suspend (mediaId: String) -> Unit)? = null): Int {
         val (media, others) = sources.partition { MediaUpload.isMedia(it.type, it.name) }
         others.forEach { door.left(it) }
         if (media.isEmpty()) return 0
-        return enqueue(scopeId, nodeId, label, media.map { door.job(scopeId, nodeId, it) to it })
+        return enqueue(scopeId, nodeId, label, media.map { door.job(scopeId, nodeId, it) to it }, filed)
     }
 
     /**
@@ -145,12 +148,24 @@ class MediaUploads(
         return enqueue(scopeId, nodeId, label, tracks.map { (t, l) -> door.trackJob(scopeId, nodeId, t, l) to t.source })
     }
 
-    private fun enqueue(scopeId: String, nodeId: String, label: String, jobs: List<Pair<UploadQueue.Job, UploadSource>>): Int {
+    private fun enqueue(
+        scopeId: String, nodeId: String, label: String, jobs: List<Pair<UploadQueue.Job, UploadSource>>,
+        filed: (suspend (mediaId: String) -> Unit)? = null,
+    ): Int {
         scope.launch {
             jobs.forEach { (job, source) -> held[job] = source }
             queue.enqueue(
                 jobs.map { it.first }, label, nodeId,
-                onSettled = { item -> if (item.status == UploadQueue.Status.DONE) _uploaded.tryEmit(nodeId) },
+                onSettled = { item ->
+                    if (item.status == UploadQueue.Status.DONE) {
+                        val id = (item.job as? MediaUpload.Adds)?.mediaId
+                        if (filed == null || id == null) _uploaded.tryEmit(nodeId)
+                        else scope.launch {
+                            runCatching { filed(id) } // a move that fails leaves the medium in the primary; the filer says so
+                            _uploaded.tryEmit(nodeId)
+                        }
+                    }
+                },
                 onFinished = {
                     scope.launch {
                         runCatching { door.settled(scopeId, nodeId) }
