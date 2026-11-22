@@ -207,7 +207,13 @@ struct MemoryScreen: View {
                         } label: {
                             HStack(spacing: 12) {
                                 ChapterCover(model: model, node: node, chapter: c)
-                                Text(c.name)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(c.name)
+                                    // made offline and not sent yet: core's line under its name (#1040)
+                                    if let said = state?.chapterSaid[c.nodeId] {
+                                        Text(say(notice: said)).font(.caption).foregroundStyle(Role.muted)
+                                    }
+                                }
                                 Spacer(minLength: 0)
                             }
                             .contentShape(Rectangle())

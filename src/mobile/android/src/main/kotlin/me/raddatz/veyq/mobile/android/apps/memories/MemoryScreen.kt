@@ -272,6 +272,8 @@ internal fun MemoryGallery(
             items(state.chapters, key = { "chapter:" + it.nodeId }) { c ->
                 ListItem(
                     headlineContent = { Text(c.name) },
+                    // made offline and not sent yet: core's line under its name (#1040)
+                    supportingContent = state.chapterSaid[c.nodeId]?.let { said -> { Text(say(said), color = MaterialTheme.colorScheme.onSurfaceVariant) } },
                     leadingContent = { ChapterCover(gallery, c) },
                     colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
                     modifier = Modifier.clickableRow { if (onChapter != null) onChapter(c) else GalleryModel.rowPage(c)?.let(model::open) },

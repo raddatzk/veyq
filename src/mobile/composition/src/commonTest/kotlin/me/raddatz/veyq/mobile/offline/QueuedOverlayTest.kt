@@ -47,6 +47,10 @@ import kotlin.test.assertTrue
  * `current.offline == null`) → [a_gallery_offline_shows_a_queued_medium_as_a_waiting_tile_a_trash_and_a_mark_in_place] red.
  * `QueuedShown.forgetAsk` back to the loss's ask (`ask(QueuedLoss.STOP_TRUSTING, waiting)`, nothing asked while none
  * waits) → [the_unlocks_forget_is_always_asked_and_says_whether_writes_wait] red.
+ * #1040's three (each seen red with its overlay taken out, then restored): `GalleryModel.read` without the queued times →
+ * [a_capture_time_set_offline_reorders_the_gallery_in_place] red ("the grid kept its order"); `ShellModel.rebuild` over the
+ * raw nodes → [a_rename_made_offline_shows_in_its_level_and_on_its_open_page] red; the gallery door's `madeOffline` answer
+ * dropped → [a_memory_made_offline_opens_and_takes_media_and_a_chapter] red ("did not read").
  */
 class QueuedOverlayTest {
     init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
@@ -144,6 +148,102 @@ class QueuedOverlayTest {
         assertNull(gallery.toggleMark(x2))
         assertEquals(true, gallery.current.marks[x2]?.mine)
         assertEquals(listOf(Queued.MEDIA_ADD, Queued.MEDIA_TRASH, Queued.MEDIA_MARK).map { it.name }, a.outbox!!.writes().map { it.op })
+        gallery.close()
+        a.retire()
+    }
+
+    /** #1040 (1): a capture time set offline moves its medium to where its new time puts it, and the details show the time. */
+    @Test
+    fun a_capture_time_set_offline_reorders_the_gallery_in_place() = runTest {
+        val (t, a, sm) = offlineMemory()
+        val (s, m) = sm
+        val shell = shellOf(tenantOf(a))
+        shell.load(openLastUsed = false)
+        val gallery = shell.galleryModel(assertNotNull(shell.galleryAt(s.id, m.id)), shell.mediaUploads(UploadQueue(), deriver, {}, {}))
+        val (x1, x2) = t.id("x1") to t.id("x2")
+        // neither has a time: by id, so the later id is last
+        val (first, last) = listOf(x1, x2).sorted().let { it[0] to it[1] }
+        assertEquals(listOf(first, last), waitFor { gallery.current.rows?.takeIf { it.size == 2 } }?.map { it.mediaId })
+        val at = 1_780_000_000_000L
+        val editor = assertNotNull(gallery.captureTimeEditor(last), "offline no capture time is offered although they are queued")
+        assertIs<me.raddatz.veyq.mobile.memories.CaptureTime.Outcome.Done>(editor.set(at))
+        // a medium with a time comes before one without: the one set offline leads, its time the one set
+        val moved = assertNotNull(waitFor { gallery.current.rows?.takeIf { r -> r.firstOrNull()?.mediaId == last } }, "the grid kept its order")
+        assertEquals(me.raddatz.veyq.mobile.memories.CaptureTime.minute(at), moved.first().capturedAt)
+        // discarded from the tray, the medium goes back to its place
+        shell.queuedTray().discard(a.outbox!!.writes().single().id)
+        gallery.reload()
+        assertNotNull(waitFor { gallery.current.rows?.takeIf { r -> r.map { it.mediaId } == listOf(first, last) && r.all { it.capturedAt == null } } }, "the discarded time still shows")
+        gallery.close()
+        a.retire()
+    }
+
+    /** #1040 (2): a rename made offline shows in its level, on the page open on it, and goes with a *Discard*. */
+    @Test
+    fun a_rename_made_offline_shows_in_its_level_and_on_its_open_page() = runTest {
+        val (_, a, sm) = offlineMemory()
+        val (s, m) = sm
+        val shell = shellOf(tenantOf(a))
+        shell.load(openLastUsed = false)
+        shell.switchSpace(s.id)
+        val ref = assertNotNull(shell.current?.lists?.objects?.firstOrNull { it.nodeId == m.id })
+        shell.open(ref)
+        val r = shell.rename(ref.at, "Winter")
+        assertEquals(Notice(Msg.OFFLINE_WAITING), r.notice)
+        assertEquals("Winter", shell.current?.lists?.nodes?.first { it.nodeId == m.id }?.name, "the level shows the old name")
+        assertEquals("Winter", shell.current?.lists?.objects?.first { it.nodeId == m.id }?.name)
+        assertEquals("Winter", shell.shell?.openObject?.name, "the open page heads the old name")
+        // a Discard in the tray: the name the server holds again
+        shell.queuedTray().discard(a.outbox!!.writes().single().id)
+        assertNotNull(waitFor { shell.current?.lists?.nodes?.firstOrNull { it.nodeId == m.id && it.name == "Summer" } }, "the discarded name still shows")
+        assertNotNull(waitFor { shell.shell?.openObject?.takeIf { it.name == "Summer" } }, "the open page heads the discarded name")
+        a.retire()
+    }
+
+    /**
+     * #1040 (3): a Memory made offline opens from its level's row as its page — empty but for what waits —, takes media and
+     * a chapter made in it, the chapter listed marked and opening in turn.
+     */
+    @Test
+    fun a_memory_made_offline_opens_and_takes_media_and_a_chapter() = runTest {
+        val (_, a, sm) = offlineMemory()
+        val (s, _) = sm
+        val shell = shellOf(tenantOf(a))
+        shell.load(openLastUsed = false)
+        shell.switchSpace(s.id)
+        assertTrue(shell.createMemory(s.id, null, "Autumn").queued)
+        val row = shell.queuedHere.first().single()
+        val page = assertNotNull(row.page, "the Memory made offline opens nothing")
+        assertEquals("Autumn", page.name)
+        assertEquals("MEMORY", page.kind)
+        shell.open(page)
+        assertEquals(page, shell.shell?.openObject)
+        val uploads = shell.mediaUploads(UploadQueue(), deriver, {}, {})
+        val gallery = shell.galleryModel(page.at, uploads)
+        val read = assertNotNull(waitFor { gallery.current.rows }, "the page of the Memory made offline did not read")
+        assertTrue(read.isEmpty())
+        assertNotNull(gallery.current.offline)
+        assertNull(gallery.current.failure, "the page says it failed")
+        assertTrue(gallery.takesUploads)
+        assertEquals(1, gallery.upload(listOf(photo("leaf.png", "PNG-leaf"))))
+        assertTrue(assertNotNull(waitFor { gallery.current.uploading.firstOrNull() }, "no waiting tile in the Memory made offline").waiting)
+        // a chapter made on its page: listed, marked, and opening as a page of its own
+        val made = gallery.createChapter("Day one")
+        assertTrue(made.queued)
+        val chapter = assertNotNull(waitFor { gallery.current.chapters.firstOrNull() }, "the chapter made offline is not listed")
+        assertEquals("Day one", chapter.name)
+        assertEquals(Notice(Msg.OFFLINE_WAITING), gallery.current.chapterSaid[chapter.nodeId])
+        val chapterPage = shell.galleryModel(assertNotNull(me.raddatz.veyq.mobile.memories.GalleryModel.rowPage(chapter)).at, uploads)
+        assertNotNull(waitFor { chapterPage.current.rows }, "the chapter made offline does not open")
+        // all three wait, the medium and the chapter for the Memory
+        val writes = a.outbox!!.writes()
+        assertEquals(listOf(Queued.MEMORY_CREATE, Queued.MEDIA_ADD, Queued.MEMORY_CREATE).map { it.name }, writes.map { it.op })
+        assertEquals(listOf(null, page.nodeId, page.nodeId), writes.map { it.after })
+        // renamed on its page: the row and the open page follow
+        shell.rename(page.at, "Fall")
+        assertEquals("Fall", shell.shell?.openObject?.name)
+        assertEquals(Notice(Msg.QUEUED_MEMORY, "Fall"), shell.queuedAt(s.id, null).first().single().title)
+        chapterPage.close()
         gallery.close()
         a.retire()
     }

@@ -634,7 +634,7 @@ struct HomeView: View {
                         NodeTiles(items: group.nodes.compactMap(tile), width: tilesWidth, model: model).padding(.horizontal)
                     }
                     // what was made here offline and waits to be sent, in place (core's `queuedHere`)
-                    ForEach(queuedHere, id: \.id) { QueuedRow(item: $0).padding(.horizontal) }
+                    ForEach(queuedHere, id: \.id) { QueuedRow(item: $0, open: { ref in model.open(ref) }).padding(.horizontal) }
                 }
                 .padding(.vertical, 8)
             }
@@ -658,7 +658,7 @@ struct HomeView: View {
                 }
                 // what was made here offline and waits to be sent, in place (core's `queuedHere`)
                 if !queuedHere.isEmpty {
-                    Section { ForEach(queuedHere, id: \.id) { QueuedRow(item: $0).listRowBackground(Role.surface) } }
+                    Section { ForEach(queuedHere, id: \.id) { QueuedRow(item: $0, open: { ref in model.open(ref) }).listRowBackground(Role.surface) } }
                 }
             }
         }

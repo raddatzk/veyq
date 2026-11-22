@@ -444,7 +444,9 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
                         s.rows.as_ref().map_or(-1, |r| r.len() as i64), s.chapters.len(), s.failed, s.undo.is_some(), s.can_upload, s.can_save,
                         s.creates.iter().map(|c| &c.create).collect::<Vec<_>>());
                 }
-                let chapters_changed = inner.shown.borrow().as_ref().map(|s| &s.chapters) != shown.as_ref().map(|s| &s.chapters);
+                // a chapter made offline and its line under it (#1040) redraw the rows as a chapter added does
+                let chapters_changed = inner.shown.borrow().as_ref().map(|s| (&s.chapters, &s.chapters_unsent))
+                    != shown.as_ref().map(|s| (&s.chapters, &s.chapters_unsent));
                 *inner.shown.borrow_mut() = shown;
                 if chapters_changed {
                     inner.draw_chapters();
@@ -940,10 +942,15 @@ impl Inner {
         }
         let shown = self.shown.borrow();
         let chapters = shown.as_ref().map(|s| s.chapters.clone()).unwrap_or_default();
+        let unsent = shown.as_ref().map(|s| s.chapters_unsent.clone()).unwrap_or_default();
         self.chapters.set_visible(!chapters.is_empty());
         let Some(gallery) = self.id.get() else { return };
         for chapter in chapters {
             let row = adw::ActionRow::builder().title(glib_escape(&chapter.name)).activatable(true).build();
+            // made offline and not sent yet: core's line under its name (#1040)
+            if let Some(u) = unsent.iter().find(|u| u.node == chapter.node_id) {
+                row.set_subtitle(&glib_escape(&said::notice(&u.said)));
+            }
             let cover = gtk::Picture::builder().content_fit(gtk::ContentFit::Cover).can_shrink(true).width_request(64).height_request(36).valign(gtk::Align::Center).build();
             cover.set_overflow(gtk::Overflow::Hidden);
             cover.add_css_class("card");

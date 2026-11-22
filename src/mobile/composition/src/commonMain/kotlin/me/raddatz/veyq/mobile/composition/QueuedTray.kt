@@ -22,7 +22,8 @@ import me.raddatz.veyq.mobile.words.Notice
  * ([tenant], [scope], [node]: the platform groups under the destination's label, [QueuedTray]'s `nameOf`), what it is
  * ([title]: a kind's word with the name the person gave, never more of its content), where it is ([state]) with the line
  * under it ([said]: *Waiting to send*, or why it is held or refused), and what it offers: *Discard* always, *Open* for a
- * held one ([opens]), *Save a copy* for a refused one carrying a file ([copies], how many files it carries).
+ * held one ([opens]), *Save a copy* for a refused one carrying a file ([copies], how many files it carries) — and, for a
+ * Memory or a chapter made offline that is not refused, the page it opens as before it is sent ([page], #1040).
  */
 @Serializable
 @SerialName("QueuedItem")
@@ -40,6 +41,12 @@ data class QueuedItem(
     val opens: Boolean,
     val copies: Int,
     val at: Long,
+    /**
+     * A Memory or a chapter made offline, not refused: the object its level's row opens (`ShellModel.open`) — its page,
+     * empty but for what waits to go into it, taking media and chapters made offline into it (ADR 0153 decision 5, #1040).
+     * Null for every other write.
+     */
+    val page: me.raddatz.veyq.mobile.navigation.ObjectRef? = null,
 )
 
 /**
@@ -165,7 +172,14 @@ object QueuedShown {
     fun item(write: QueuedWrite, where: String?): QueuedItem = QueuedItem(
         write.id, Queued.of(write.op) ?: Queued.NODE_TRASH, write.tenant, write.scope, write.node, where, title(write), write.state, said(write),
         opens = write.state == QueuedWrite.State.HELD, copies = if (write.state == QueuedWrite.State.REFUSED) carried(write).size else 0, at = write.at,
+        page = if (write.op == Queued.MEMORY_CREATE.name && write.state != QueuedWrite.State.REFUSED) madeNode(write).asObject() else null,
     )
+
+    /** Memory or chapter create [write] as the node it will be: its id the write's, its parent, kind and name the person's. */
+    internal fun madeNode(write: QueuedWrite): me.raddatz.veyq.mobile.navigation.NodeRef {
+        fun field(k: String) = (write.intent[k] as? JsonPrimitive)?.contentOrNull
+        return me.raddatz.veyq.mobile.navigation.NodeRef(write.scope, write.id, field("parent"), field("kind") ?: "MEMORY", field("name").orEmpty())
+    }
 
     /** The files [write] carries that a person would save: a medium's original (never its tiers), a file, each receipt. */
     internal fun carried(write: QueuedWrite): List<QueuedBlob> {

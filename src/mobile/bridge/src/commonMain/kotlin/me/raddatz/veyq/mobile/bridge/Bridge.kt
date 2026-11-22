@@ -3170,6 +3170,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             )
         },
         searchOpened = s.searchOpened,
+        chaptersUnsent = s.chapters.mapNotNull { c -> s.chapterSaid[c.nodeId]?.let { ChapterUnsent(c.nodeId, it) } },
     )
 
     /** One participant of the people line, as `Participants.Entry` says it. */
