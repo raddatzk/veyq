@@ -165,6 +165,9 @@ object DepotKinds : ApplicationKinds {
         else -> null
     }
 
+    // a guest moves a file of a folder (the web's Depot `guestRights`); a drop box below the link is read-only for it
+    override fun guestMoves(kind: String): Boolean = kind == FILE
+
     override fun guestLevelUpload(access: GuestAccess, session: GuestSession, parent: OpenNode, source: UploadSource): UploadQueue.Job =
         DepotGuest.LevelUpload(access, session, parent, source)
 }

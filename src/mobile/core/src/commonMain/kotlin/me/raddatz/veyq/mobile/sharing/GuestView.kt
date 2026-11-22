@@ -47,6 +47,9 @@ class GuestLevel internal constructor(
     /** The guest's session: a write asks the guest's name first ([GuestAccess.nameGuest]) while it is null. */
     val guest: StateFlow<GuestSession?>? get() = access?.session
 
+    /** The level's move (inbox #1063): each row's menu, Select and its selection, the member's move sheet over the guest's door. */
+    val move: GuestLevelMoves = GuestLevelMoves(node, tree, access, view)
+
     /**
      * New folder [name] here as the guest, as New Folder's dialog answers it ([NameAnswer], ADR 0154 decision 1): an empty
      * name or a sibling's is a problem (the dialog asks again); once made the link is read anew; a refusal, a thrown error

@@ -90,9 +90,16 @@ class MoveSheet(
         suspend fun noRoom(ref: NodeAt): Long?
         /** After each write, for what the app keeps around the lists (its rows' details). */
         fun changed()
+
+        /**
+         * The top of what the sheet walks (inbox #1063): null for a member — the space's root —, a link's root for its
+         * READ_WRITE guest, who places into the link's folders only ([NodeMove]'s `top`; the guest's door,
+         * `sharing/GuestMove`). [rootName] then names that root.
+         */
+        val top: String? get() = null
     }
 
-    /** A place on the trail: the space's root ([nodeId] null) or a node, with its name. */
+    /** A place on the trail: the top ([nodeId] null: the space's root; a guest's link root by its id) or a node, with its name. */
     data class Crumb(val nodeId: String?, val name: Piece)
 
     data class State(
@@ -214,19 +221,20 @@ class MoveSheet(
         if (m.size != nodes.size) return@withContext
         tree = read
         moved = m
-        show(NodeMove.start(read, m), loaded = true)
+        show(NodeMove.start(read, m, door.top), loaded = true)
     }
 
     private fun show(at: String?, loaded: Boolean = current.loaded) {
         if (moved.isEmpty()) return
-        val root = Crumb(null, door.rootName(node.scopeId))
-        val trail = listOf(root) + NodeMove.trail(tree, at).drop(1).filterNotNull().map { Crumb(it.nodeId, Piece.Plain(it.name)) }
-        val blocked = if (many) NodeMove.hereBlockOf(tree, moved, at, door.placement, copy = copying) else null
+        val top = door.top
+        val root = Crumb(top, door.rootName(node.scopeId))
+        val trail = listOf(root) + NodeMove.trail(tree, at, top).drop(1).filterNotNull().map { Crumb(it.nodeId, Piece.Plain(it.name)) }
+        val blocked = if (many) NodeMove.hereBlockOf(tree, moved, at, door.placement, copy = copying, top = top) else null
         _state.update {
             it.copy(
                 loaded = loaded, at = at, trail = trail, problem = null,
-                places = if (many) NodeMove.places(tree, moved, at, door.placement) else NodeMove.places(tree, moved.single(), at, door.placement),
-                block = if (many) blocked?.block else NodeMove.hereBlock(tree, moved.single(), at, door.placement, copy = copying),
+                places = if (many) NodeMove.places(tree, moved, at, door.placement, top) else NodeMove.places(tree, moved.single(), at, door.placement, top),
+                block = if (many) blocked?.block else NodeMove.hereBlock(tree, moved.single(), at, door.placement, copy = copying, top = top),
                 blockedBy = blocked?.node?.name,
             )
         }
@@ -289,6 +297,8 @@ class MoveSheet(
         for ((i, n) in moved.withIndex()) {
             if (n.parentId == to) continue
             val outcome = runCatching { door.move(nodes[i], to) }.getOrDefault(NodeMove.Outcome.FAILED)
+            // a guest who declined to name itself sends nothing more (the web's `moveMany`: named once, for all of them)
+            if (outcome == NodeMove.Outcome.DECLINED && went.isEmpty() && lines.isEmpty()) return declined()
             if (outcome == NodeMove.Outcome.MOVED) {
                 if (!NodeMove.endsIdentity(n)) went += Back(nodes[i], n.parentId)
             } else {
@@ -308,6 +318,7 @@ class MoveSheet(
 
     private suspend fun movedOne(m: NodeRef, to: String?, toName: Any): State {
         val outcome = runCatching { door.move(node, to) }.getOrDefault(NodeMove.Outcome.FAILED)
+        if (outcome == NodeMove.Outcome.DECLINED) return declined()
         door.changed()
         if (outcome != NodeMove.Outcome.MOVED) {
             _state.update { it.copy(busy = false, problem = Notices.moveRefused(outcome) ?: Notice(Msg.MOVE_REFUSED_FAILED)) }
@@ -316,6 +327,12 @@ class MoveSheet(
         val said = Notice(Msg.MOVE_MOVED, node.name, toName)
         // a guest's folder moved out has ended: nothing brings it back into its drop box, so no undo is offered
         offerBack(if (NodeMove.endsIdentity(m)) emptyList() else listOf(Back(node, m.parentId)), said)
+        return current
+    }
+
+    /** A guest declined to name itself: nothing was sent, nothing is said, the sheet stays where it was. */
+    private fun declined(): State {
+        _state.update { it.copy(busy = false) }
         return current
     }
 
@@ -376,8 +393,8 @@ class MoveSheet(
         }
     }
 
-    /** The name of place [at] as a notice takes it: the node's, or the space's root's words. */
-    private fun placeName(at: String?): Any = at?.let { a -> tree.firstOrNull { it.nodeId == a }?.name }
+    /** The name of place [at] as a notice takes it: the node's (a guest's link root: as [Door.rootName] names it), or the space's root's words. */
+    private fun placeName(at: String?): Any = at?.takeIf { it != door.top }?.let { a -> tree.firstOrNull { it.nodeId == a }?.name }
         ?: when (val root = door.rootName(node.scopeId)) {
             is Piece.Said -> root.notice
             is Piece.Plain -> root.text

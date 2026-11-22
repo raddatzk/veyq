@@ -39,6 +39,12 @@ class PlayedGuestContent(private val share: PlayedShare) {
     val created = mutableListOf<JsonObject>()
     var dropFolders = 0
 
+    /** Every placement write the guest sent (a move), by node id with its body, in order. */
+    val placed = mutableListOf<Pair<String, JsonObject>>()
+
+    /** Refusals the next placement writes are answered with first (status, code), in order. */
+    val placementRefusals = ArrayDeque<Pair<Int, String>>()
+
     /** A blob of [plaintext] put in the store under a fresh key wrapped for [ownerId] in [role] under [ownerKey]: its JSON ref. */
     fun blob(ownerId: String, role: String, ownerKey: ByteArray, plaintext: ByteArray, type: String = "application/octet-stream", name: String? = null): JsonObject {
         val blobId = share.uuid()
@@ -125,6 +131,34 @@ class PlayedGuestContent(private val share: PlayedShare) {
                             put("created", true)
                         }.toString(),
                     )
+                }
+                // a guest's placement write (`updateShareNode`, inbox #1063): the next of [placementRefusals] answered first,
+                // else compare-and-set on the served placement revision, the row re-parented under its new wrap and name
+                rec.method == "PATCH" && path.startsWith("$base/nodes/") -> {
+                    val id = path.substringAfterLast('/')
+                    val o = rec.json()
+                    placed += id to o
+                    val i = share.children.indexOfFirst { it["id"]!!.jsonPrimitive.content == id }
+                    val refusal = placementRefusals.removeFirstOrNull()
+                    when {
+                        refusal != null -> answer("""{"code":"${refusal.second}"}""", HttpStatusCode.fromValue(refusal.first))
+                        i < 0 -> answer("""{"code":"node_not_found"}""", HttpStatusCode.NotFound)
+                        else -> {
+                            val row = share.children[i]
+                            val revision = row["placementRevision"]!!.jsonPrimitive.content.toLong()
+                            if (o["placementRevision"]!!.jsonPrimitive.content.toLong() != revision) {
+                                answer("""{"code":"stale_placement"}""", HttpStatusCode.Conflict)
+                            } else {
+                                share.children[i] = JsonObject(
+                                    row + mapOf(
+                                        "parentId" to o["parentId"]!!, "encryptedName" to o["encryptedName"]!!,
+                                        "wrappedContentKey" to o["wrappedContentKey"]!!, "placementRevision" to JsonPrimitive(revision + 1),
+                                    ),
+                                )
+                                respond("", HttpStatusCode.NoContent)
+                            }
+                        }
+                    }
                 }
                 path == "$base/nodes" -> {
                     val o = rec.json()
