@@ -8,7 +8,7 @@
   direction guard reading the entry); decision 7's ratio written; decision 7.1 (2026-11-22: the core's split into a
   platform module and one module per application, [ADR 0156](0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md)). Decision 7.2's first slice (2026-11-22: the node tree's rules,
   `@veyq/core-js/tree`, § The node tree's slice — accepted by the owner at 3.14×; its eager set 67 B gz over that
-  allowance, the owner's question, inbox #1046). Decision 7.3 and 8 are not built: Expenses' move is parked, half built on
+  allowance, accepted by the owner 2026-11-22 as chunk overhead). Decision 7.3 and 8 are not built: Expenses' move is parked, half built on
   branch `claude/p2-impl`; the owner (2026-11-22) counts the platform code its façade needs against the platform module's
   running budget and retired the search-alone budget (§ Consequences)
 - Date: 2026-11-20
@@ -248,7 +248,7 @@ Measured before the decision (2026-11-20):
   | Criterion | Measured | Bound |
   |---|---|---|
   | size: the platform module, every entry | 32,101 B gz (the search alone 27,943; own code 4,158 = 3.14× the 1,326 B gz deleted) | 27,943 + 3.14 × 1,326 = 32,106 (the owner's allowance, 2026-11-22; R = 3.0 would be 31,921) |
-  | size: the eager set | +4,231 B gz (630,538 → 634,769: `activeSpace` +4,116, a new chunk `treeRules` +748, `main` −635) | 3,978 at R, 4,164 at 3.14 — **67 over**, the owner's question |
+  | size: the eager set | +4,231 B gz (630,538 → 634,769: `activeSpace` +4,116, a new chunk `treeRules` +748, `main` −635) | 3,978 at R, 4,164 at 3.14 — **67 over**, accepted by the owner 2026-11-22 (the adapter's own chunk, not Kotlin code) |
   | size: any lazy chunk | +20 B gz at most (`jspdf.es.min`) | ≤ 1,024 |
   | time (10,000 nodes, Node 22, median of 15) | `orderLevel` 1.51×, `displayNames` 1.96×, `collidingSibling` 0.04× on a held generation (3.5× on a generation's first call, 9.9 ms), `movePlaces` 0.36×, `planMove` of 1,000 0.005×; `treeFacts` 1.6 ms | ≤ 2.5× and ≤ 100 ms |
   | delivery | three clean builds one digest; no `eval`, `new Function` or DOM sink; `verify:csp`, `verify:license-sources` green | identical |
@@ -293,7 +293,7 @@ Measured before the decision (2026-11-20):
     running budget 3× gross; the slice landed at 3.14× and went to the owner, who accepted it for this slice on 2026-11-22
     (an explicit allowance on its row; R stays the rule) and ruled that platform code an application's façade needs counts
     against the running budget, the search-alone budget retired. The eager set then measured 67 B gz above the allowance,
-    the adapter's own chunk being the difference: the owner's question.
+    the adapter's own chunk being the difference; the owner accepted it 2026-11-22 as chunk overhead, the eager set recorded at +4,231 B gz.
   - *The web's side:* `treeRules.ts` keeps the deleted functions' signatures where it could (`orderLevel` lost its locale,
     `displayNamesOf` takes an order, `endsIdentity` the tree); `TreeSource` gained `facts()`; the time gate binds a rule as
     the web calls it (a keystroke on a held generation), a generation's build only the 100 ms.
