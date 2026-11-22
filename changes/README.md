@@ -2502,6 +2502,24 @@ own way, `src/mobile/CLAUDE.md` § Prove your work), measured *could not be chec
 and how the app is pointed at it (a served address the pass may change, a proxy that rewrites it), or writes the answer
 as the unit test's case and the pass as the failure path.
 
+### An inventory of what one layer knows of another reads literals and shapes, not only names
+
+The core's split ([ADR 0156](../docs/decisions/0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md))
+was refined from a guard that reads package names: 18 platform files named an application. The platform knew the
+applications in three more places the guard could not see — kind literals (`navigation/Library.kt`'s `"MEMORY"`,
+`Notices`' `"EXPENSES_POT"`, the share sheet's words by kind) and the JSON shape of an application's kept answers, which
+the offline store walked to reach a pin's blobs. Each surfaced only as a compile error once the modules existed, and
+grew the registry by five members the CR had not planned. A refine that inventories one layer's knowledge of another
+greps for the other's literals (its kinds, its roles, its routes) and for data the first parses of it, beside the
+imports.
+
+### A move of tests compares the cases that ran, before and after
+
+The same split moved ~90 test files between modules and a shared test module. The totals looked right; a list of the
+executed JVM cases (`testcase` names of every `build/test-results/jvmTest`) from a scratch tree at the phase before,
+against the tree after, showed twelve contract cases gone — their two subclasses sat in the helper file that moved into
+the test module, which runs no tests. A CR that moves tests diffs the executed cases' names, not their count.
+
 ### Every CR closes with a short, honest retrospective
 
 A `## Retrospective` section: what went wrong
