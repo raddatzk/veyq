@@ -14,11 +14,12 @@ vi.mock('../../../sw/register', () => ({
 }))
 
 // PDFs are `FileViewer.pdf.test.ts`'s; here the engine is a stub so no test loads pdf.js by accident.
-vi.mock('../svgRaster', () => ({ rasterizeSvg: vi.fn() }))
+vi.mock('../svgRaster', async (orig) => ({ ...(await orig<typeof import('../svgRaster')>()), decodeSvg: vi.fn() }))
 vi.mock('../../../shared/pdf/pdfEngine', async (orig) => ({ ...(await orig<typeof import('../../../shared/pdf/pdfEngine')>()), openPdf: vi.fn() }))
 
 import FileViewer from './FileViewer.vue'
-import { rasterizeSvg } from '../svgRaster'
+import { decodeSvg } from '../svgRaster'
+import { fakePicture } from './svgFakes'
 import { registerPlayback, revokePlayback } from '../../../sw/register'
 import { PLAINTEXT_CHUNK_SIZE } from '../../../sw/range'
 import { IMAGE_CAP, TEXT_CAP } from '../view'
@@ -39,7 +40,7 @@ beforeEach(() => {
   vi.spyOn(URL, 'revokeObjectURL').mockImplementation((u) => void revoked.push(u))
   vi.mocked(registerPlayback).mockReset().mockResolvedValue(null)
   vi.mocked(revokePlayback).mockClear()
-  vi.mocked(rasterizeSvg).mockReset().mockResolvedValue(new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' }))
+  vi.mocked(decodeSvg).mockReset().mockImplementation(async () => fakePicture())
 })
 afterEach(() => vi.restoreAllMocks())
 
@@ -95,14 +96,16 @@ describe('an image', () => {
     expect(w.find('img').exists()).toBe(false)
   })
 
-  it('shows an SVG only as the PNG it draws, from a blob URL - never inline, never by the SVG\'s own URL (inbox #1059)', async () => {
+  it('shows an SVG only as pixels painted on a canvas - no <img>, no URL, never inline (inbox #1059, ADR 0155 D14)', async () => {
     const svg = utf8('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>')
-    const w = mountViewer(target(providerOf(svg), { type: 'image/svg+xml', name: 'logo.svg' }))
+    const w = mountViewer(target(providerOf(svg), { type: 'image/svg+xml', name: 'logo.svg' }), { name: 'logo.svg' })
     await flushPromises()
-    expect(vi.mocked(rasterizeSvg)).toHaveBeenCalledTimes(1)
-    expect(vi.mocked(rasterizeSvg).mock.calls[0][0].type).toBe('image/svg+xml')
-    expect(w.find('img').attributes('src')).toBe('blob:viewer-1')
-    expect(minted.map((b) => b.type), 'the page mints a URL for the PNG alone').toEqual(['image/png'])
+    expect(vi.mocked(decodeSvg)).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(decodeSvg).mock.calls[0][0].type).toBe('image/svg+xml')
+    expect(w.find('img').exists(), 'no <img>: nothing a tab could open').toBe(false)
+    expect(w.find('canvas[role="img"]').attributes('aria-label')).toBe('logo.svg')
+    expect(minted, 'the page mints no URL for an SVG (decodeSvg revokes its own, svgRaster.test.ts)').toHaveLength(0)
+    expect(w.html()).not.toContain('blob:')
     // The layer's own icons are inline SVGs (`VeyqIcon`: `<span class="veyq-icon"><svg class="veyq-icon__svg">`, ADR
     // 0107); every other <svg> in the viewer would be the FILE's markup parsed into the page.
     const inline = w.findAll('svg').filter((s) => !(s.classes('veyq-icon__svg') && s.element.parentElement?.classList.contains('veyq-icon')))
@@ -112,10 +115,10 @@ describe('an image', () => {
   })
 
   it('an SVG the browser cannot draw is a clear message and the download', async () => {
-    vi.mocked(rasterizeSvg).mockRejectedValueOnce(new Error('the SVG did not draw'))
+    vi.mocked(decodeSvg).mockRejectedValueOnce(new Error('the SVG did not draw'))
     const w = mountViewer(target(providerOf(utf8('<svg><broken')), { type: 'image/svg+xml', name: 'logo.svg' }))
     await flushPromises()
-    expect(w.find('img').exists()).toBe(false)
+    expect(w.find('img, canvas').exists()).toBe(false)
     expect(minted).toHaveLength(0)
     expect(w.text()).toContain(t('depot.viewer.unsupported.format'))
   })

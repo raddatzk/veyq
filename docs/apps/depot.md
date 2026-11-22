@@ -194,7 +194,7 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
 | What the bytes are | Shown as | Cap |
 |---|---|---|
 | JPEG, PNG, GIF, WebP, AVIF, BMP (HEIC is tried) | `<img>` on an object URL typed with the **sniffed** type (`useObjectUrl`, revoked on replace/unmount) | 64 MiB, then the download |
-| SVG (its markup **and** its claim) | the PNG it draws (`svgRaster.ts`): decoded off the page in image mode, drawn onto a canvas, its own URL revoked; `<img>` on the PNG's object URL | 64 MiB, drawn at most 4096 px on its longer side |
+| SVG (its markup **and** its claim) | pixels painted on `<canvas>` elements (`svgRaster.ts`, `SvgView.vue`): decoded off the page in image mode, its own URL revoked at once; painted again at each zoom (×1–×16), so it stays sharp | 64 MiB; no canvas over 4096 × 4096 px or 8192 px on a side |
 | text: valid UTF-8 (BOM dropped) or UTF-16 with a BOM, no NUL or other control byte, and a text-ish type or extension | `<pre>` through `textContent`, monospace, wrapping (a toggle), selectable, with a Copy button | first 1 MiB, a note says so; Copy copies what is shown |
 | MP4, MOV, WebM, Matroska, Ogg, MP3, AAC, WAV, FLAC, M4A | `<video controls playsinline>` / `<audio controls>` on the service worker's `/__media/<handle>` ([ADR 0047](../decisions/0047-inline-video-playback-range-streaming.md); the page holds the key, the worker none) | none: streamed |
 | PDF (`%PDF-` in the first KiB) | drawn page by page onto `<canvas>` elements by pdf.js, in the page (below) | 64 MiB and 1000 pages, then the download |
@@ -213,11 +213,20 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
 - **An SVG never reaches the page by its own URL** (inbox #1059). A blob URL is the app's origin, and a blob URL document
   opened in a tab of its own does **not** inherit the page's CSP: an SVG's `<script>`, `onload` and `foreignObject` script
   ran there (measured 2026-11-22, headless Chrome, the file facts' browser pass — the earlier note here that it inherits
-  `script-src 'self'` was remembered and wrong). So the SVG is drawn once into a PNG (`features/depot/svgRaster.ts`) and
-  the page, and any tab opened from it, holds only the PNG. The same pass: five SVGs (benign; script and `onload`;
-  `<image href>`, `xlink:href`, `<use>`, CSS `@import`/`url()`, a `javascript:` link; a `foreignObject` frame, image and
-  script; an external and a file entity) named a loopback listener: no request reached it and nothing ran, in the page or
-  in a tab. One the canvas refuses (a `foreignObject` taints it) is shown as "cannot be shown" with the download.
+  `script-src 'self'` was remembered and wrong). So the SVG is decoded in image mode into an `Image` no document holds,
+  its URL revoked before anything else happens (`features/depot/svgRaster.ts`), and the page shows only pixels painted from
+  it onto `<canvas>` elements (`components/SvgView.vue`): no `<img>`, no URL a tab could open. The same pass: five SVGs
+  (benign; script and `onload`; `<image href>`, `xlink:href`, `<use>`, CSS `@import`/`url()`, a `javascript:` link; a
+  `foreignObject` frame, image and script; an external and a file entity) named a loopback listener: no request reached it
+  and nothing ran, in the page or in a tab. One the canvas refuses (a `foreignObject` taints it: a one-pixel read-back
+  throws, checked before anything is shown and after every paint) is shown as "cannot be shown" with the download.
+- **A zoomed SVG stays sharp** (owner 2026-11-22; ADR 0155 § The file facts' slice D14). The viewer has zoom out / in / fit
+  buttons (×1–×16) for an SVG. A base canvas holds the whole picture at the size that fits (never larger than its own) ×
+  the screen's ratio; zoomed, a tile canvas holds only the part in view, painted again at the zoom's actual scale (zoom ×
+  `devicePixelRatio` × a pinch zoom's scale) 150 ms after the last zoom, scroll or resize — the vectors drawn anew, never a
+  bitmap enlarged. No canvas holds more than 4096 × 4096 pixels or 8192 px on a side (the ratio is lowered past it), and
+  as the tile is the view's size, not the zoom's, a huge SVG at 16× holds no more than the view (measured: the hostile set
+  at 1×, 4× and 16× — nothing ran or was fetched, the device ratio kept at every zoom, the cap held at dpr 3 in full screen).
 - **On the apps an SVG is the platform's** (inbox #1059; ADR 0155 § The file facts' slice holds the threat model). The core
   decides it as an image only where a platform proved it draws one with nothing in it run or fetched
   (`FileView.svgAsImage`): **Linux** draws it — GTK decodes it through glycin's sandboxed librsvg, which runs no script and

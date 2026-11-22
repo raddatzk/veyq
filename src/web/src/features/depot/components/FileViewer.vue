@@ -8,8 +8,10 @@
 //
 // **What is rendered, and how** (every rule is a security rule - the bytes are a peer's):
 // - the kind is decided by the decrypted BYTES (`view.ts`), never by the claimed type alone;
-// - an image is an `<img>` on an object URL typed with the SNIFFED type (SVG included: never inline, never `<object>`/
-//   `<iframe>`); a decode failure (`error`) is the "cannot be shown" message, not an exception;
+// - an image is an `<img>` on an object URL typed with the SNIFFED type; a decode failure (`error`) is the "cannot be
+//   shown" message, not an exception;
+// - an SVG is never inline, never `<object>`/`<iframe>`, never an `<img>` or any URL: `SvgView` paints its decoded picture
+//   onto canvases, sharp at every zoom (`svgRaster.ts`, ADR 0155 § The file facts' slice D11, D14);
 // - a text is interpolated (`textContent`), never `innerHTML`: markup in it stays visible characters;
 // - a PDF is never handed to the browser's own viewer (no <iframe>/<object>/<embed>: the policy forbids them): pdf.js draws
 //   it onto <canvas> elements with a selectable text layer over each, no annotation layer and no script - a link inside it is not clickable;
@@ -29,6 +31,7 @@ import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import { formatBytes } from '../../../shared/formatBytes'
 import { useFileViewer, type ViewerTarget } from '../useFileViewer'
 import PdfPages from '../../../shared/pdf/PdfPages.vue'
+import SvgView from './SvgView.vue'
 import { TEXT_CAP } from '../view'
 
 const props = defineProps<{
@@ -192,6 +195,7 @@ onBeforeUnmount(() => {
         :alt="name"
         @error="imageFailed"
       />
+      <SvgView v-else-if="ready?.kind === 'svg'" :picture="ready.picture" :name="name" :full="full" @failed="imageFailed" />
       <template v-else-if="ready?.kind === 'text'">
         <div class="file-viewer-text-tools" role="toolbar" :aria-label="t('depot.viewer.text.toolbar')">
           <VeyqButton

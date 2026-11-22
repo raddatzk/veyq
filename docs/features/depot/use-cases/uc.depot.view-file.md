@@ -28,8 +28,9 @@
 1. The page opens. Only now does the client read the file (not for a row in a list): it opens the first chunk under the
    file's key and **sniffs the bytes** (magic numbers) — the sealed type and the name only narrow, never decide.
 2. **Image** (JPEG, PNG, GIF, WebP, AVIF, BMP, SVG; HEIC is tried and falls back where the browser cannot decode it):
-   the chunks are opened a few at a time into one typed `Blob` and shown as an `<img>` from a blob URL (an SVG only so,
-   never inline), up to 64 MiB.
+   the chunks are opened a few at a time into one typed `Blob` and shown as an `<img>` from a blob URL, up to 64 MiB. An
+   SVG is never inline and never by its own URL: it is decoded in image mode and painted onto canvases, again at each zoom
+   (zoom out / in / fit, ×1–×16), so it stays sharp.
 3. **Text** (plain text, Markdown, code, JSON, CSV …: valid UTF-8, or UTF-16 with a byte-order mark, no control bytes,
    and a text-ish type or extension): the first 1 MiB is shown as text in a monospace block — as characters, never as
    markup — with a note when the file is longer. The text is ordinary selectable page text; a **Copy** button copies exactly

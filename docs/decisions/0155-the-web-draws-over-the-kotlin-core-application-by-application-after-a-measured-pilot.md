@@ -622,8 +622,8 @@ Measured before the decision (2026-11-20):
     size × the screen's ratio ≤ 2, at most 4096 px) and the page shows the PNG; the SVG's URL is revoked once drawn. Re-run:
     four SVGs shown as PNGs, each tab opening a PNG, no listener hit, no off-origin request, no `PWNED`; the `foreignObject`
     one taints the canvas and is "cannot be shown" with the download. `FileViewer.test.ts` holds it (bitten: the SVG's blob
-    shown again → two red). *Cost:* an SVG is a raster at a fixed resolution (zoom shows pixels); one with a `foreignObject`
-    no longer shows.
+    shown again → two red). *Cost:* an SVG is a raster at a fixed resolution (zoom shows pixels — lifted by D14); one with a
+    `foreignObject` no longer shows.
   - **D12 — Left:** a renderer and its hostile-file proof for Windows, Android and Apple (#1059's next step); the installed
     Flatpak's glycin sandbox was not exercised (the test runs in the Fedora container, where glycin's loaders run as in
     `run.py run`; the GNOME 51 runtime carries the same loaders, remembered from the manifest); the browser pass ran against
@@ -635,6 +635,53 @@ Measured before the decision (2026-11-20):
     change of its own). A name of decrypted UTF-8 cannot hold one; a browser's picked file name can. *Cost:* such a name's ZIP
     segment differs between the desktops and the other clients (follow-up: `nfc` on the bridged targets keeping lone
     surrogates, under the crypto suite's vectors).
+  - **D14 — The web's SVG stays sharp when zoomed: painted again at the zoom's scale, onto canvases** (owner 2026-11-22,
+    branch `claude/svg-zoom`). *Q:* D11's PNG is drawn once (≤ 2 × its size, ≤ 4096 px): zoomed, it shows pixels. How does a
+    zoom stay sharp without giving up any of D9's must-nots? *Options:* (a) re-encode a PNG at each zoom and swap the
+    `<img>` (a PNG encode per step; a 16× PNG of a large picture is the canvas the cap forbids); (b) paint the decoded image
+    onto in-page `<canvas>` elements at the zoom's scale, only the part in view; (c) a sandboxed, opaque-origin rendering
+    (an `<iframe sandbox>` of the SVG — not measured: the brief rules out an `<iframe>`/`<object>` of the SVG and a CSP
+    change, the policy's `frame-src` admits none, and an opaque origin stops the keys' theft but not a beacon — D9 must-not
+    2 — unless the frame carries a policy of its own; remembered, not built). *Choice:* (b). `svgRaster.ts`' `decodeSvg`
+    decodes the SVG in image mode off the DOM (as D11), revokes its URL **before** it returns, and reads one pixel back from
+    a 1 × 1 probe draw — a tainted canvas (`foreignObject`) throws, so the SVG is refused before anything is shown, as D11's
+    `toBlob` refused it; every later paint reads a pixel back too and empties its canvas if it throws. `SvgView.vue` paints
+    the decoded image onto a **base** canvas (the whole picture at the size that fits, never larger than its own, × the
+    screen's ratio) and, zoomed (×1 to ×16 in nine steps, labelled buttons as the PDF's), a **tile** canvas holding only
+    the part in view at the zoom's actual scale: zoom × `devicePixelRatio` × a pinch zoom's `visualViewport.scale`,
+    repainted 150 ms after the last zoom, scroll or resize (a stale tile is stretched with the zoom meanwhile, the base
+    under it). A canvas is a drawing, not a URL: the page holds no `<img>`, no blob URL, nothing a tab could open but the
+    canvas' own pixels. **The cap** (`planRaster`): no painted canvas holds more than 4096 × 4096 = 16,777,216 pixels
+    (64 MiB RGBA; iOS Safari's canvas area limit) or 8192 px on a side — past it the ratio is lowered, the cap wins over
+    sharpness; since the tile is the view's size, not the zoom's, a 16× zoom of a 100,000-unit SVG holds no more than the
+    view. *Evidence:* measured. A probe (headless system Chrome, `page.evaluate`): a decoded SVG drawn after its URL was
+    revoked still draws (`naturalWidth` kept), a 10-unit edge drawn at 100× has 0 grey pixels (vectors, not a stretched
+    bitmap), a draw of a 1,000,000-unit picture offset into a 1,000 px canvas takes 13 ms, a `foreignObject` SVG makes
+    `getImageData` throw `SecurityError`, a `viewBox`-only SVG decodes as 300 × 150. The pass (headless system Chrome
+    through Playwright, a throwaway on this worktree's Vite at `tw-…localhost:8213` over the dev backend; the store's
+    presigned URLs name origin 8081 and its CORS only that origin, so `/blobs/` on 8081 was passed by Playwright's
+    `route.fetch` straight to the store at 127.0.0.1:19000 with the signed Host kept and the page's origin added — the
+    pass's one workaround, the listener never routed): six SVGs uploaded and opened — benign; `<script>` and `onload`;
+    `<image href>`, `xlink:href`, `<use>`, CSS `@import` and `url()`, `<feImage>`, a `javascript:` link; a
+    `foreignObject` frame, image and script; an external `http` and a `file` entity; a 100,000 × 100,000 one — each
+    naming a loopback listener. At 1×, 4× and 16× (dpr 2, 1280 × 900): no `PWNED`, the title unchanged, 0 listener hits,
+    0 off-origin requests, no `<img>`/`<object>`/`<iframe>` in the viewer and no blob or `.svg` URL in the DOM; the 200 ×
+    100 SVGs' base 400 × 200 px for 200 × 100 CSS (×2), the tile at 4× 1600 × 800 px for 800 × 400 CSS (×2, the picture at
+    4×), at 16× 1872 × 1260 px for the 936 × 630 CSS view (×2, the picture laid out at 3200 × 1600) — the device ratio
+    kept at every zoom, 0 grey pixels across the black/white edge in view; the `foreignObject` one "cannot be shown" with
+    the download. The cap, dpr 3, 2560 × 1600, full screen, the huge SVG: base 4095 × 4095 px for 1456 CSS (ratio 2.81 < 3,
+    16,769,025 px), the tile at 4× and 16× 5397 × 3108 px for 2528 × 1456 CSS (16,773,876 px, ratio 2.13) — both under
+    16,777,216. The web's tests: `svgRaster.test.ts` (the cap over six regions, the URL revoked before the picture is
+    handed out and on a failed decode, the taint gate, a paint's draw arguments) and `FileViewer.svg.test.ts` (a zoom
+    repaints the view at zoom × ratio, debounced, within the cap at 16× and a ratio of 8; fit frees the tile; a refused
+    paint is "cannot be shown"; unmount empties both canvases). Bitten, each restored with `/bin/cp -f`: the cap removed
+    from `planRaster` (2 red), the tile painted at the fitted scale (2 red), the taint read-back dropped (1 red), the URL
+    kept unrevoked (2 red), the debounce at 0 ms (1 red). *Cost:* two canvases instead of one `<img>` (the base ≤ the fitted
+    view × ratio², the tile ≤ the cap); a repaint per zoom step or scroll pause, and a one-pixel read-back per paint (a GPU
+    read); a stale tile shows the stretched base for 150 ms after a scroll; the right-click menu offers a canvas' "Save
+    image as" (its pixels, a PNG) where it offered the `<img>`. Left: a pinch zoom and a browser zoom repaint through
+    `visualViewport` and a `resolution` media query — not exercised by the pass (headless Chrome changes neither live);
+    Firefox and Safari not run (their image mode and canvas taint are remembered, not measured here).
 
 - **Expenses' move is parked, not merged** ([cr-web-expenses-on-the-core](../../changes/cr-web-expenses-on-the-core.md)),
   on branch `claude/p2-impl`: the vectors (`c76d3212f`), the JSON seam and Expenses' pure homes (`c5793db14`), the
