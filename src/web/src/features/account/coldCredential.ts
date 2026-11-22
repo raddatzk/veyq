@@ -126,7 +126,8 @@ type OpenedFloor = { masterKey: Uint8Array; wrappedIdentityPrivateKey: string }
 /** Open the stored `PASSWORD` floor with the offered password and Secret Key: the Master Key it holds, or a refusal. */
 async function openFloor(password: string, secretKeyText: string): Promise<OpenedFloor> {
   // A typed key that does not read as one (`readSecretKey`: a typo or not a key at all) is a credential that does not
-  // match, refused before anything is fetched; the field has already said which of the two it is.
+  // match, refused before anything is fetched. No screen submits one — each greys its submit with `secretKeyReady` and
+  // the field says why (`shared/ui/secretKeyEntry.ts`) — so this is the backstop for a screen that forgot to.
   const typed = readSecretKey(secretKeyText)
   if (!typed.ok) throw new ColdCredentialRefused('credentialRejected')
   const secretKey = typed.key

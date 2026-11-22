@@ -11,6 +11,7 @@ import VeyqInput from '../../../shared/ui/VeyqInput.vue'
 import VeyqPassword from '../../../shared/ui/VeyqPassword.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import SecretKeyField from '../../../shared/ui/SecretKeyField.vue'
+import { secretKeyReady } from '../../../shared/ui/secretKeyEntry'
 import { requestEmailChange, requestErrorKey } from './emailChange'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 
@@ -27,7 +28,7 @@ const sentTo = ref('')
 
 const normalized = (s: string) => s.trim().toLowerCase()
 const canSubmit = computed(
-  () => newEmail.value.trim().length > 0 && password.value.length > 0 && secretKey.value.trim().length > 0,
+  () => newEmail.value.trim().length > 0 && password.value.length > 0 && secretKeyReady(secretKey.value),
 )
 
 const { run, pending: busy } = useAsyncAction(

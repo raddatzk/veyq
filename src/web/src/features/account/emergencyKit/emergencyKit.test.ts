@@ -73,6 +73,8 @@ describe('emergencyKit', () => {
       const text = latin1(bytes)
       const groups = data.secretKey.split('-')
       for (const line of [0, 1, 2]) expect(text).toContain(`(${groups.slice(line * 3, line * 3 + 3).join('-')})`)
+      // …under a label that says they are one key: a kit's first line alone was once typed as the whole key.
+      expect(text).toContain(`(${i18n.global.t('kit.pdfSecretKey', {}, { locale }).toUpperCase()})`)
       expect(fieldValues(text)).toEqual({ address1: 'familie.example.org:8443', address2: '', address3: '' })
       expect(text).toContain(`/URI (${i18n.global.t('kit.pdfHelpUrl', {}, { locale })})`)
     })

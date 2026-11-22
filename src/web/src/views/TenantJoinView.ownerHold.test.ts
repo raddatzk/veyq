@@ -61,6 +61,7 @@ import { buildAccount } from '@veyq/crypto/accountBirth'
 import { realI18n, t } from '../test/i18n'
 import { invitePreview, setupStatus } from '../test/models'
 import * as v1 from '@veyq/crypto/v1'
+import { TYPED_SECRET_KEY } from '../test/secretKey'
 
 const TENANT_ID = '5c09e000-0000-4000-8000-0000000000e3'
 const EMAIL = 'owner@acme.example'
@@ -142,7 +143,7 @@ describe('TenantJoinView - an OWNER\'s accept holds the tenant key its birth min
     const w = await mountView(true)
     await w.find('input[name="username"]').setValue('kevin')
     await w.find('input[type="password"]').setValue('the password')
-    await w.find('input.secret-key').setValue('A3-SECRET')
+    await w.find('input.secret-key').setValue(TYPED_SECRET_KEY)
     await w.find('form').trigger('submit')
     await settled(w, t('tenant.join.doneNote'))
     expect(await heldUnder(VAULT_MK)).toEqual(BORN)

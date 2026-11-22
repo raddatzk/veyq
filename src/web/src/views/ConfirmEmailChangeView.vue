@@ -24,6 +24,7 @@ import { readdressRemembered } from '../features/account/rememberMe/deviceKeyWra
 import { readdressSessionVault } from '../features/account/rememberMe/sessionVault'
 import { session } from '../app/session'
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
+import { secretKeyReady } from '../shared/ui/secretKeyEntry'
 import VeyqPassword from '../shared/ui/VeyqPassword.vue'
 import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.vue'
 import { ColdCredentialRefused, checkColdCredential } from '../features/account/coldCredential'
@@ -132,7 +133,7 @@ onUnmounted(() => window.removeEventListener('hashchange', consumeFragment))
               :label="t('emailChange.kitCheck')"
               icon="check"
               variant="secondary"
-              :disabled="!kitPassword || !secretKey.trim() || checking"
+              :disabled="!kitPassword || !secretKeyReady(secretKey) || checking"
               :loading="checking"
             />
           </form>

@@ -32,6 +32,7 @@ import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
 import VeyqCheckbox from '../../../shared/ui/VeyqCheckbox.vue'
 import SecretKeyField from '../../../shared/ui/SecretKeyField.vue'
+import { secretKeyReady } from '../../../shared/ui/secretKeyEntry'
 import { account } from '../../../app/account'
 import VeyqPassword from '../../../shared/ui/VeyqPassword.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
@@ -133,7 +134,7 @@ const coldUnlock = computed(() => unlockOrigin() === 'cold')
 const passwordChosen = computed(
   () => !choosePassword.value || (newPassword.value.length >= MIN_PASSWORD_LENGTH && confirmPassword.value.length > 0),
 )
-const gateFilled = computed(() => password.value.length > 0 && secretKey.value.trim().length > 0 && passwordChosen.value)
+const gateFilled = computed(() => password.value.length > 0 && secretKeyReady(secretKey.value) && passwordChosen.value)
 /** The publish waits for the new kit: downloaded AND confirmed (decision 7, `EmergencyKitSave`'s ready). */
 const canPublish = computed(() => step.value === 'kit' && kitReady.value && !!newSecretKey.value)
 

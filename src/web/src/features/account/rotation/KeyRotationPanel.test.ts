@@ -54,6 +54,7 @@ import { useBreachCheck } from '../passwordWarning'
 import { renderKitPdf } from '../emergencyKit/emergencyKit'
 import { i18n } from '../../../i18n'
 import { myTenant } from '../../../test/models'
+import { TYPED_SECRET_KEY } from '../../../test/secretKey'
 
 const field = {
   props: ['modelValue', 'inputId'],
@@ -122,7 +123,7 @@ const row = (w: VueWrapper, attr: string, id: string) => w.find(`[${attr}="${id}
 /** Fill the gate: current password + Secret Key, and (pre-selected) the new password twice. */
 async function fillGate(w: VueWrapper, { newPassword = true } = {}) {
   await w.find('#rotation-password').setValue('pw')
-  await w.find('#rotation-secret-key').setValue('secret')
+  await w.find('#rotation-secret-key').setValue(TYPED_SECRET_KEY)
   if (newPassword) {
     await w.find('#rotation-new-password').setValue(NEW_PASSWORD)
     await w.find('#rotation-new-password-confirm').setValue(NEW_PASSWORD)
@@ -193,7 +194,7 @@ describe('the gate and the new password (decision 7)', () => {
     const w = await mountPanel()
     expect(w.find('#rotation-new-password-choice').attributes('data-state')).toBe('checked')
     await throughTheCeremony(w)
-    expect(rotateKeys).toHaveBeenCalledWith('pw', 'secret', { secretKeyText: MINTED, password: NEW_PASSWORD })
+    expect(rotateKeys).toHaveBeenCalledWith('pw', TYPED_SECRET_KEY, { secretKeyText: MINTED, password: NEW_PASSWORD })
   })
 
   it('control: unticked, the password is kept — the publish names none', async () => {
@@ -205,7 +206,7 @@ describe('the gate and the new password (decision 7)', () => {
     await toKit(w)
     await saveKit(w)
     await publish(w)
-    expect(rotateKeys).toHaveBeenCalledWith('pw', 'secret', { secretKeyText: MINTED, password: undefined })
+    expect(rotateKeys).toHaveBeenCalledWith('pw', TYPED_SECRET_KEY, { secretKeyText: MINTED, password: undefined })
   })
 
   it('the gate proves the current credential before a kit is printed; a refusal stays on the gate', async () => {
@@ -213,7 +214,7 @@ describe('the gate and the new password (decision 7)', () => {
     const w = await mountPanel()
     await fillGate(w)
     await toKit(w)
-    expect(proveColdCredential).toHaveBeenCalledWith('pw', 'secret')
+    expect(proveColdCredential).toHaveBeenCalledWith('pw', TYPED_SECRET_KEY)
     expect(w.text()).toContain(t('rotation.errorCredential'))
     expect(buttons(w, t('kit.download'))).toHaveLength(0)
   })
