@@ -590,7 +590,7 @@ internal sealed class ShellView
         // the title as every app heads the screen: the open object, the chosen application, the folder, the space
         _title.Text = shell.openObject is { } open ? open.name
             : shell.application is { } app ? HomeView.AppName(shown, app)
-            : shell.path.Count > 0 ? shell.path[^1].name
+            : shell.path.Count > 0 ? shell.path[^1].label ?? shell.path[^1].name
             : Said.Piece(shown.spaceName);
         _nav.IsBackEnabled = shown.canGoBack;
 

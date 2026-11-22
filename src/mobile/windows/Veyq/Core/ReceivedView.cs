@@ -371,7 +371,7 @@ internal sealed class ReceivedView : IDisposable
             return;
         }
         var ready = s.gate == ReceivedGate.Ready;
-        var name = s.page?.name is { Length: > 0 } pageName ? pageName : s.rootName;
+        var name = s.page?.title is { Length: > 0 } pageName ? pageName : s.rootName;
         _title.Text = ready && name.Length > 0 ? name : s.host;
         _subtitle.Text = ready ? s.host : "";
         _subtitle.Visibility = ready ? Visibility.Visible : Visibility.Collapsed;
@@ -552,7 +552,7 @@ internal sealed class ReceivedView : IDisposable
         switch (p.kind)
         {
             case ReceivedPageKind.Level:
-                _content.Content = p.rows.Count == 0 ? Scrolled(Empty(p.name, null)) : Rows(p.rows);
+                _content.Content = p.rows.Count == 0 ? Scrolled(Empty(p.title, null)) : Rows(p.rows);
                 break;
             case ReceivedPageKind.DropBox or ReceivedPageKind.Uploader:
                 DrawUploadPage(p);
@@ -589,7 +589,7 @@ internal sealed class ReceivedView : IDisposable
             line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             line.Children.Add(HomeView.Glyph(HomeView.KindGlyph(r.kind)));
-            var title = new TextBlock { Text = r.name, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
+            var title = new TextBlock { Text = r.displayName, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
             Grid.SetColumn(title, 1);
             line.Children.Add(title);
             var chevron = HomeView.Glyph("");
@@ -609,7 +609,7 @@ internal sealed class ReceivedView : IDisposable
                 item.ContextFlyout = menu;
             }
             AutomationProperties.SetAutomationId(item, $"received-row:{r.name}");
-            AutomationProperties.SetName(item, r.name);
+            AutomationProperties.SetName(item, r.displayName);
             list.Items.Add(item);
         }
         list.ItemClick += (_, e) =>

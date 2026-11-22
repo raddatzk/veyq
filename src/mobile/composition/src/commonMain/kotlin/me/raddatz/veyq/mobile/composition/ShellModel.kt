@@ -414,7 +414,7 @@ class ShellModel(
             uses = recent.resolve(objects),
         )
         put { prior ->
-            State(next(prior?.shell.takeUnless { start }, spaces, if (openLastUsed) recent.lastUsed(objects) else null), lists, offlineNow(), prior?.gone.orEmpty(), tenant.pagesOffline.shown.value)
+            State(next(prior?.shell.takeUnless { start }, spaces, if (openLastUsed) recent.lastUsed(objects) else null).relabelled(nodes), lists, offlineNow(), prior?.gone.orEmpty(), tenant.pagesOffline.shown.value)
         }
     }
 

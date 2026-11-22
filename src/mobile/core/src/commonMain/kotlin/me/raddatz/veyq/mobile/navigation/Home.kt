@@ -3,9 +3,14 @@ package me.raddatz.veyq.mobile.navigation
 import kotlinx.serialization.Serializable
 import me.raddatz.veyq.mobile.words.Msg
 
-/** A folder on Home's path. */
+/**
+ * A folder on Home's path: its [name] (what a rename prefills) and, where a sibling folder shares it, its [label]
+ * (`Anna (2)`, [me.raddatz.veyq.mobile.tree.DisplayNames]; null where the name is the label) — Home's title draws [displayName].
+ */
 @Serializable
-data class FolderRef(val nodeId: String, val name: String)
+data class FolderRef(val nodeId: String, val name: String, val label: String? = null) {
+    val displayName: String get() = label ?: name
+}
 
 /**
  * Home (ADR 0122): one space's tree, as the web's level view shows it — folders and the objects of every application
@@ -26,7 +31,18 @@ object Home {
         val (folders, others) = nodes.filter { it.scopeId == scopeId && it.parentId == parentId }
             .filter { it.isFolder || (it.isBookmark && filter == null) || (it.application != null && (filter == null || it.application == filter)) }
             .partition { it.isFolder }
-        return me.raddatz.veyq.mobile.tree.LevelOrder.order(folders, others, { it.nodeId }, { it.name }, { it.createdAt })
+        return me.raddatz.veyq.mobile.tree.LevelOrder.order(labelled(folders), others, { it.nodeId }, { it.name }, { it.createdAt })
+    }
+
+    /**
+     * [folders] (one parent's) each with its [NodeRef.label] where a sibling folder shares its name, numbered in creation
+     * order — the web's level (`LevelView`'s `displayNamesOf` of its folders), its breadcrumb and Home's path ([Shell.at])
+     * number alike. Only folders are numbered: an object's name is unique among its application's siblings, and a folder
+     * beside a Memory of one name is told apart by its icon (inbox #1062).
+     */
+    fun labelled(folders: List<NodeRef>): List<NodeRef> {
+        val labels = me.raddatz.veyq.mobile.tree.DisplayNames.of(folders, { it.nodeId }, { it.name }, { it.createdAt }, byCreation = true)
+        return folders.map { f -> labels[f.nodeId]?.takeIf { it != f.name }.let { if (it == f.label) f else f.copy(label = it) } }
     }
 
     /**

@@ -63,6 +63,10 @@ internal static class HomeView
 
     private static void OpenBookmark(NodeRef n) => Act.Send(new Call.ShellOpenBookmark { node = At(n) });
 
+    /// <summary>What a folder's row and tile draw: its label where a sibling folder shares its name (<c>Anna (2)</c>, the
+    /// core's <c>NodeRef.displayName</c>, inbox #1062), else its name — which a rename, a move and the AutomationId keep.</summary>
+    private static string ShownName(NodeRef n) => n.label ?? n.name;
+
     private static NodeAt At(NodeRef n) => new() { scopeId = n.scopeId, nodeId = n.nodeId, kind = n.kind, name = n.name };
 
     private static NodeAt At(ObjectRef r) => new() { scopeId = r.scopeId, nodeId = r.nodeId, kind = r.kind, name = r.name };
@@ -120,13 +124,13 @@ internal static class HomeView
             () => Act.Send(new Call.ShellOpen { Ref = r }), Node: At(r));
 
     private static LevelTiles.Item FolderTile(NodeRef n, Drops? drops) =>
-        new(KindGlyph(n.kind), n.nodeId, n.name, null, $"folder:{n.name}",
-            () => Act.Send(new Call.ShellEnter { folder = new FolderRef { nodeId = n.nodeId, name = n.name } }),
+        new(KindGlyph(n.kind), n.nodeId, ShownName(n), null, $"folder:{n.name}",
+            () => Act.Send(new Call.ShellEnter { folder = new FolderRef { nodeId = n.nodeId, name = n.name, label = n.label } }),
             drops is not null && drops.Rows.Contains(n.nodeId) ? tile => drops.OntoFolder(tile, n) : null, At(n));
 
     private static ListViewItem FolderRow(NodeRef n) =>
-        Row(KindGlyph(n.kind), n.name, $"folder:{n.name}", true,
-            () => Act.Send(new Call.ShellEnter { folder = new FolderRef { nodeId = n.nodeId, name = n.name } }),
+        Row(KindGlyph(n.kind), ShownName(n), $"folder:{n.name}", true,
+            () => Act.Send(new Call.ShellEnter { folder = new FolderRef { nodeId = n.nodeId, name = n.name, label = n.label } }),
             glyph => RowCovers.Prefix(glyph, n.nodeId), node: At(n));
 
     /// <summary>A section: its heading (if any), then its rows as one list whose item click opens the row.</summary>

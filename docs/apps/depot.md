@@ -557,7 +557,7 @@ leading visual (ADR 0110 decision 10), the row/tile and the sidebar's Favorites 
   opens it to its guests' folders — under core's header (`NodeHeader`, the one a folder opens with: the
   drop box's name, its share, and its delete in the header's ⋯ menu; inbox #385 (b), ADR 0110) — (a repeated guest name numbered at display time, never stored: `Anna`, `Anna (2)` in
   creation order — the server-observed `createdAt` of core's listing, then the node id for one millisecond, core's
-  `compareByCreation`, by the platform's numbering (`displayNamesOf`, `tree/DisplayNames` on every client), which the folder's heading and breadcrumb use too; the same two folders' URL segments are `anna`, `anna-2` by the same order,
+  `compareByCreation`, by the platform's numbering (`displayNamesOf`, `tree/DisplayNames` on every client), which the folder's heading and breadcrumb use too, and every app's level, title and guest page (among sibling folders only, inbox #1062); the same two folders' URL segments are `anna`, `anna-2` by the same order,
   core's `segmentsOf` in `core/node/location.ts`; a download's ZIP names them so too, made safe by core's `archiveName`), opens a folder
   (core's level view, read-only there: download and a delete per file — a content-less one too — through the level's
   `deletable`, no share, and no tab that has nothing to show — core's `hideEmptyTabs`) and deletes a folder. **Members place nothing** in a drop box or

@@ -175,7 +175,7 @@ internal fun GuestLinkScreen(screen: GuestScreen, model: AppModel) {
                 TopAppBar(
                     title = {
                         Column {
-                            Text(page?.node?.name?.takeIf { ready } ?: screen.host, fontWeight = FontWeight.Bold, maxLines = 1)
+                            Text(((page as? me.raddatz.veyq.mobile.sharing.GuestPage.Level)?.model?.title ?: page?.node?.name)?.takeIf { ready } ?: screen.host, fontWeight = FontWeight.Bold, maxLines = 1)
                             if (ready) Text(screen.host, style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
                         }
                     },
@@ -373,7 +373,7 @@ private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, vie
         else LazyColumn(Modifier.fillMaxSize().testTag("guest-level"), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottom)) {
             items(rows, key = { it.nodeId }) { r ->
                 ListItem(
-                    headlineContent = { Text(r.name) },
+                    headlineContent = { Text(r.displayName) },
                     leadingContent = { Icon(kindIcon(r.kind), null, tint = role(LocalPalette.current.accent)) },
                     colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
                     modifier = Modifier.clickableRow { scope.launch(Dispatchers.IO) { view.open(r.nodeId) } },

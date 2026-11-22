@@ -2421,9 +2421,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ReceivedPage(kind, node.name, node.kind, rows, file, gallery, pot, sent)
         h.page.value = when (page) {
             is me.raddatz.veyq.mobile.sharing.GuestPage.Level -> ReceivedPage(
-                ReceivedPageKind.LEVEL, node.name, node.kind, page.model.rows.map { ReceivedRow(it.nodeId, it.kind, it.name, it.identity) },
+                ReceivedPageKind.LEVEL, node.name, node.kind, page.model.rows.map { ReceivedRow(it.nodeId, it.kind, it.name, it.identity, it.displayName) },
                 null, null, null, emptyList(), writes = page.model.writes,
-                creates = page.model.creates.map { ShellShown.ShownCreate(it, it.word) },
+                creates = page.model.creates.map { ShellShown.ShownCreate(it, it.word) }, title = page.model.title,
             )
             is me.raddatz.veyq.mobile.depot.DepotGuest.File -> shown(ReceivedPageKind.FILE, file = ids.incrementAndFetch().also { filePages.put(it, page.model) })
             is me.raddatz.veyq.mobile.memories.MemoriesGuest.Gallery -> shown(ReceivedPageKind.GALLERY, gallery = ids.incrementAndFetch().also { galleries.put(it, page.model) })
