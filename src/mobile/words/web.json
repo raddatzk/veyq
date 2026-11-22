@@ -341,6 +341,7 @@
     "memory_buckets_delete_bucket_copy": ["memory.buckets.deleteBucketCopy"],
     "memory_buckets_delete_bucket_name_label": ["memory.buckets.deleteBucketNameLabel"],
     "memory_buckets_delete_bucket_title": ["memory.buckets.deleteBucketTitle"],
+    "memory_buckets_drop_not_own": ["memory.buckets.dropNotOwn"],
     "memory_buckets_empty_bucket": ["memory.buckets.emptyBucket"],
     "memory_buckets_member": ["memory.buckets.member"],
     "memory_buckets_move_empty": ["memory.buckets.moveEmpty"],

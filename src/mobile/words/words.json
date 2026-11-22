@@ -3137,6 +3137,11 @@
     "en": "Contributions",
     "de": "Beiträge"
   },
+  "memory_buckets_drop_not_own": {
+    "note": "photos or videos dropped onto another uploader's bucket on a Memory's Contributions view: an upload is filed only within its uploader's own root (inbox #1065)",
+    "en": "Your uploads go into your own buckets. Choose one of yours to drop photos or videos into it.",
+    "de": "Deine Uploads landen in deinen eigenen Buckets. Wähle eines davon, um Fotos oder Videos dort abzulegen."
+  },
   "memory_buckets_empty_bucket": {
     "en": "Nothing in this bucket yet.",
     "de": "Noch nichts in diesem Bucket."

@@ -28,6 +28,7 @@ import { openedBlobMeta, openedMeta } from '../openedListing'
 import { useMemoryView } from '../source'
 import { guestDisplayName } from '../../../core/sharing/guestIdentity'
 import { refusalsByReason, sealedMediaName } from '../mediaRefusal'
+import { isSupportedMediaFile } from '../uploadQueue'
 import { useToast } from '../../../shared/state/useToast'
 import { useUndo } from '../../../shared/state/useUndo'
 
@@ -44,7 +45,9 @@ const props = defineProps<{
 const emit = defineEmits<{
   changed: [] // a bucket/media mutation landed — the parent should reload media (ownerKey/bucketId change)
   openLightbox: [{ items: MediaItem[]; index: number }]
-  uploadBucket: [string | null] // open the upload scoped to this bucket (null = your primary)
+  uploadBucket: [string | null] // open the picker for this bucket of the caller's own root (null = your primary)
+  /** Photos and videos dropped onto a bucket of the caller's own root, to upload into it (null = your primary, inbox #1065). */
+  dropFiles: [files: File[], bucketId: string | null]
   /** The tiles its grid mounts, nearest first: the parent gallery reads their thumbnails (ADR 0105 decision 2). */
   window: [ids: string[]]
 }>()
@@ -254,7 +257,12 @@ const canCreateSub = computed(() => !!activeBucket.value?.isPrimary)
 const canRenameBucket = computed(() => !!activeBucket.value && !activeBucket.value.isPrimary)
 const canDeleteBucket = computed(() => !!activeBucket.value && !activeBucket.value.isPrimary && !activeBucket.value.virtual)
 
-function uploadToActive() { const b = activeBucket.value; if (b) emit('uploadBucket', b.virtual ? null : b.id) }
+// An upload lands in its uploader's primary and a move files it (en.memory.buckets): only a bucket of the caller's own root
+// can take one — the server never moves a medium across owners — so the picker and a drop are offered there alone (#1065).
+const takesUpload = computed(() => !!activeBucket.value && activeBucket.value.ownerKey === mine.value)
+/** Where an upload into the active bucket is filed: a sub-bucket by its id; the primary, virtual or not, needs no move (null). */
+const uploadTarget = (b: BucketRow): string | null => (b.isPrimary ? null : b.id)
+function uploadToActive() { const b = activeBucket.value; if (b && takesUpload.value) emit('uploadBucket', uploadTarget(b)) }
 
 function openCreate() {
   if (!activeBucket.value?.isPrimary) return
@@ -402,16 +410,23 @@ onBeforeUnmount(() => { toast.dismissUndo() }) // drop any lingering undo-toast 
 
 // The windowed grid (ADR 0105): the detail hands the focus back here when a lightbox opened from this view closes.
 const grid = ref<{ focusItem: (id: string) => Promise<void> } | null>(null)
-defineExpose({ focusItem: (id: string) => grid.value?.focusItem(id) })
+defineExpose({ focusItem: (id: string) => grid.value?.focusItem(id), reload: () => loadBuckets() })
 
 // --- upload / drag-drop into the active bucket ------------------------------
 
+// The dropped files themselves go into the bucket shown (inbox #1065: the drop used to open the picker and lose both). The
+// photos and videos are kept as the picker keeps them (`isSupportedMediaFile`, Safari's empty types too); a drop onto
+// another uploader's bucket is refused and said, nothing uploaded.
 function onDrop(event: DragEvent) {
   dropActive.value = false
-  const files = Array.from(event.dataTransfer?.files ?? []).filter((f) => f.type.startsWith('image/') || f.type.startsWith('video/'))
-  if (!files.length || !activeBucket.value) return
-  // reuse the parent's upload; the target bucket materializes on complete (null = your primary)
-  emit('uploadBucket', activeBucket.value.virtual ? null : activeBucket.value.id)
+  const b = activeBucket.value
+  if (!b) return
+  if (!takesUpload.value) {
+    toast.error(t('memory.buckets.dropNotOwn'))
+    return
+  }
+  const files = Array.from(event.dataTransfer?.files ?? []).filter(isSupportedMediaFile)
+  if (files.length) emit('dropFiles', files, uploadTarget(b))
 }
 
 function openTile(index: number) { emit('openLightbox', { items: filteredMedia.value, index }) }
@@ -460,7 +475,7 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
             </template>
           </VeyqSelect>
           <!-- Bucket actions — shown only where they apply (was the 3-dot menu). -->
-          <button v-if="activeBucket" type="button" class="bucket-action-button" :title="t('memory.buckets.upload')" :aria-label="t('memory.buckets.upload')" @click="uploadToActive">
+          <button v-if="takesUpload" type="button" class="bucket-action-button" :title="t('memory.buckets.upload')" :aria-label="t('memory.buckets.upload')" @click="uploadToActive">
             <VeyqIcon name="upload" />
           </button>
           <button v-if="canCreateSub" type="button" class="bucket-action-button" :title="t('memory.buckets.createBucket')" :aria-label="t('memory.buckets.createBucket')" @click="openCreate">
@@ -490,7 +505,7 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
       </div>
 
       <!-- dropzone banner -->
-      <div v-if="dropActive && activeBucket" class="bucket-dropzone">
+      <div v-if="dropActive && activeBucket && takesUpload" class="bucket-dropzone">
         <VeyqIcon name="cloud-upload" />
         <div>
           <strong>{{ t('memory.buckets.dropTitle', { bucket: activeBucket.displayName }) }}</strong>

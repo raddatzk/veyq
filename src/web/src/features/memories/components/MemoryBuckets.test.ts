@@ -433,6 +433,68 @@ describe("MemoryBuckets — another member's primary is never the caller's (inbo
   })
 })
 
+// Inbox #1065: a drop on the Beiträge view used to emit `uploadBucket` alone, which the detail answered by opening the
+// picker — the dropped files and the bucket they landed on were both lost. Levers: emit `uploadBucket` again (no
+// `dropFiles`), drop the file list, or take a drop onto another uploader's root.
+describe('MemoryBuckets — a drop goes into the bucket it landed on (inbox #1065)', () => {
+  const drop = (w: ReturnType<typeof mountBuckets>, files: File[]) =>
+    w.find('.bucket-detail').trigger('drop', { dataTransfer: { files } })
+  const photo = new File([new Uint8Array([1])], 'a.jpg', { type: 'image/jpeg' })
+  const heic = new File([new Uint8Array([2])], 'b.HEIC', { type: '' }) // Safari's Photos: no type, the extension decides
+  const text = new File(['x'], 'notes.txt', { type: 'text/plain' })
+
+  beforeEach(() => {
+    vi.mocked(loadScopePeople).mockResolvedValue([person('u-anna', 'anna', 'Anna Meyer'), person('me', 'me', 'Zoe Self')])
+    vi.mocked(openBucketName).mockImplementation((_s, _n, _k, b) => `Sub ${b.bucketId}`)
+    vi.mocked(listBuckets).mockResolvedValue([
+      bucket('b-anna', 'user:u-anna', 0),
+      bucket('s-anna', 'user:u-anna', 0, 'ct', false, 'b-anna'),
+      bucket('b-me', 'user:me', 0),
+      bucket('s-me', 'user:me', 0, 'ct', false, 'b-me'),
+    ])
+  })
+
+  it("hands the dropped photos and videos up with the caller's sub-bucket, never the picker, the rest left out", async () => {
+    const w = mountBuckets([])
+    await flushPromises()
+    await selectBucket(w, 's-me')
+    await drop(w, [photo, text, heic])
+    expect(w.emitted('uploadBucket'), 'the picker is not opened').toBeUndefined()
+    expect(w.emitted('dropFiles')).toEqual([[[photo, heic], 's-me']])
+  })
+
+  it("files a drop onto the caller's own primary as an upload with no move", async () => {
+    const w = mountBuckets([])
+    await flushPromises()
+    await selectBucket(w, 'b-me')
+    await drop(w, [photo])
+    expect(w.emitted('dropFiles')).toEqual([[[photo], null]])
+  })
+
+  it("refuses a drop onto another uploader's root, says why, and offers no upload there", async () => {
+    const w = mountBuckets([])
+    await flushPromises()
+    for (const id of ['b-anna', 's-anna']) {
+      await selectBucket(w, id)
+      await drop(w, [photo])
+      expect(w.find(`.bucket-picker .bucket-action-button[aria-label="${t('memory.buckets.upload')}"]`).exists(), id).toBe(false)
+    }
+    expect(w.emitted('dropFiles')).toBeUndefined()
+    expect(toastError).toHaveBeenCalledTimes(2)
+    expect(toastError).toHaveBeenCalledWith(t('memory.buckets.dropNotOwn'))
+    await selectBucket(w, 's-me')
+    expect(w.find(`.bucket-picker .bucket-action-button[aria-label="${t('memory.buckets.upload')}"]`).exists(), 'control').toBe(true)
+  })
+
+  it('takes nothing from a drop without a photo or video', async () => {
+    const w = mountBuckets([])
+    await flushPromises()
+    await selectBucket(w, 's-me')
+    await drop(w, [text])
+    expect(w.emitted('dropFiles')).toBeUndefined()
+  })
+})
+
 describe('MemoryBuckets — a guest\'s name is marked as a guest\'s (inbox #433)', () => {
   it('a contributor primary reads "<name> (guest)"; a member\'s primary and a member\'s sub-bucket stay as they are', async () => {
     vi.mocked(loadScopePeople).mockResolvedValue([person('u-anna', 'anna', 'Anna Meyer')])

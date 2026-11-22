@@ -596,9 +596,12 @@ const showBeitraege = computed(() => can.value.buckets)
 
 /** The organizer changed buckets/media (create/rename/delete/move) — re-list so each item's ownerKey/bucketId refresh. */
 function onBucketChanged() { void load() }
-/** Upload from the organizer — reuses the Memory upload; the caller's primary materializes on complete (moving into a
- *  specific sub-bucket after upload is a follow-up; for now uploads land in the primary, then move them in). */
-function onBucketUpload() { triggerUpload() }
+/** Upload from the organizer into bucket [bucketId] of the caller's own root (null: their primary): the picker opens, and
+ *  what it picks is filed there (`enqueueBatch`). */
+function onBucketUpload(bucketId: string | null) { triggerUpload(bucketId) }
+/** Photos and videos dropped onto the organizer's bucket [bucketId] (null: the caller's primary) — uploaded into it as they
+ *  are, never through the picker (inbox #1065: the drop opened the picker, and the files and the bucket were lost). */
+function onBucketDrop(files: File[], bucketId: string | null) { enqueueBatch(files, bucketId) }
 
 // --- upload trigger (uc.memory.upload). The Safari Photos picker populates input.files LATE / across repeated
 // picks with empty MIME types, so a pick runs through `collectPickedFiles` — the shared E3 window that re-reads
@@ -606,8 +609,11 @@ function onBucketUpload() { triggerUpload() }
 // contributor's picker in ShareView needs the identical behaviour; the window's rules (and why the deferred
 // clear is load-bearing) are documented there, once.
 let cancelPickWindow: (() => void) | null = null
+/** The organizer's bucket the next pick is filed into (null: the uploader's primary, the header's upload). */
+let pickBucket: string | null = null
 
-function triggerUpload() {
+function triggerUpload(bucketId: string | null = null) {
+  pickBucket = bucketId
   const upload = props.source.upload
   if (upload && !upload.ready()) {
     // A guest names itself first, through the page's one flow; the next click opens the picker (one opened after an
@@ -622,16 +628,23 @@ function onFilesPicked() {
   const input = fileInput.value
   if (!input) return
   cancelPickWindow?.() // a fresh pick supersedes whatever the previous window was still waiting for
-  cancelPickWindow = collectPickedFiles(input, enqueueBatch)
+  const into = pickBucket
+  cancelPickWindow = collectPickedFiles(input, (picked) => enqueueBatch(picked, into))
 }
 
 onBeforeUnmount(() => cancelPickWindow?.())
 
-function enqueueBatch(picked: File[]) {
+/**
+ * [picked] uploaded into the node on screen; with [bucketId] (a sub-bucket of the caller's own root) each medium is filed
+ * there once it is in: an upload lands in its uploader's primary and a move files it — the completion names no bucket
+ * (en.memory.buckets). A refused move leaves the medium in the primary, and says so.
+ */
+function enqueueBatch(picked: File[], bucketId: string | null = null) {
   const key = props.memoryKey
   const upload = props.source.upload
   if (!key || !can.value.upload || !upload) return
   const targetNodeId = props.node.id
+  const buckets = bucketId ? props.source.buckets : null
   // Into the node on screen, sealed under its key: a member's `addMedia`; a guest's upload names this node (the server
   // creates the guest's own bucket there).
   const target = upload.target(targetNodeId, key, props.node.epoch)
@@ -643,8 +656,17 @@ function enqueueBatch(picked: File[]) {
       label: props.node.name,
       // cr-0111: reconcile each file's optimistic tile the moment IT finishes — a targeted live poll lists just
       // the newly-attached media so its tile flips to the real thumbnail without waiting for the whole batch.
-      onFileDone: () => { if (props.node.id === targetNodeId) void pollMedia() },
-      onComplete: () => { if (props.node.id === targetNodeId) void load() }, // final settle (date/location self-heal)
+      onFileDone: (file) => {
+        const filed = buckets && bucketId && file.mediaId
+          ? buckets.move(targetNodeId, [file.mediaId], bucketId).catch(() => { toast.error(t('memory.buckets.moveFailed')) })
+          : Promise.resolve()
+        void filed.then(() => { if (props.node.id === targetNodeId) void pollMedia() })
+      },
+      onComplete: () => {
+        if (props.node.id !== targetNodeId) return
+        void load() // final settle (date/location self-heal)
+        bucketsView.value?.reload?.() // the organizer's counts, and the primary the first upload materialized
+      },
     },
   )
 }
@@ -851,7 +873,7 @@ const exifLoader = loaders.exif ? (it: MediaItem) => loaders.exif!(it, lightboxK
 
 // The grids a lightbox opens from: closing it scrolls the shown item's tile into view and focuses it (ADR 0105
 // decision 5) — in the gallery, or in the contributors' view when it was opened there.
-type FocusableGrid = { focusItem: (id: string) => Promise<void> | void }
+type FocusableGrid = { focusItem: (id: string) => Promise<void> | void; reload?: () => Promise<void> | void }
 const galleryGrid = ref<FocusableGrid | null>(null)
 const bucketsView = ref<FocusableGrid | null>(null)
 async function onLightboxClose(mediaId: string | null) {
@@ -1138,6 +1160,7 @@ watch(
             @open-lightbox="openBucketLightbox"
             @changed="onBucketChanged"
             @upload-bucket="onBucketUpload"
+            @drop-files="onBucketDrop"
             @window="(ids) => wantThumbs('buckets', ids)"
           />
         </VeyqTabPanel>
