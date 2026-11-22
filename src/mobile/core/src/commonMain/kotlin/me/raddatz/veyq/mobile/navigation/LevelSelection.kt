@@ -7,7 +7,7 @@ import me.raddatz.veyq.mobile.words.Notice
 
 /**
  * What a level's selection may do, in the web's bar's order (`LevelView.vue`'s selection bar, inbox #421): move, copy,
- * report, delete. Every platform draws every entry of [LevelSelection.Shown.entries], in this order (ADR 0154 decision 2).
+ * report, delete. Every platform draws every entry of [LevelSelection.Picking.entries], in this order (ADR 0154 decision 2).
  */
 @Plan
 @Serializable
@@ -115,10 +115,10 @@ object LevelSelection {
     /**
      * What a level in Select mode shows: the [selected] ids (each row drawn checked or not, a tap turning it), the
      * [count]'s words (the web's `node.select.count` / `countHidden`), and the bar's [entries], each with its words and
-     * what it cannot reach ([Shown.BarAction.cannot]: the web's `node.select.cannotMove` hints).
+     * what it cannot reach ([Picking.BarAction.cannot]: the web's `node.select.cannotMove` hints).
      */
     @Serializable
-    data class Shown(
+    data class Picking(
         /** The place it belongs to (space, folder): another place clears it. */
         val place: String,
         val selected: Set<String>,
@@ -143,11 +143,11 @@ object LevelSelection {
 
         companion object {
             /** The shown selection at [place] over [rows], [selected] and [shown] ([bar]), in words. */
-            fun of(place: String, rows: Map<String, Rights>, selected: Set<String>, shown: Collection<String>): Shown {
+            fun of(place: String, rows: Map<String, Rights>, selected: Set<String>, shown: Collection<String>): Picking {
                 val kept = retained(selected, rows.keys)
                 val b = bar(rows, kept, shown)
                 val count = if (b.hidden > 0) Notice(Msg.SELECT_COUNT_HIDDEN, b.count, b.hidden) else Notice(Msg.SELECT_COUNT, b.count)
-                return Shown(place, kept, count, b.entries.map { BarAction(it.action, it.enabled, cannot(it, b.count)) })
+                return Picking(place, kept, count, b.entries.map { BarAction(it.action, it.enabled, cannot(it, b.count)) })
             }
 
             private fun cannot(e: BarEntry, of: Int): Notice? = if (e.cannot <= 0) null else when (e.action) {

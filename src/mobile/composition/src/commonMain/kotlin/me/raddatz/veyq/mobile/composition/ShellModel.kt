@@ -110,7 +110,7 @@ class ShellModel(
          * The shown level's selection while its Select mode is on ([LevelSelection], inbox #1049); null otherwise. Another
          * place clears it, and a node that left the level drops out of it.
          */
-        val selection: LevelSelection.Shown? = null,
+        val selection: LevelSelection.Picking? = null,
     ) {
         /**
          * The banner offline: "Offline — content as of {time}", the time the open page's own (a Pot's kept ledger, a
@@ -626,14 +626,14 @@ class ShellModel(
         if (place == null || place != sel.place) return next.cleared()
         val rights = selectionRights(levelRows(next.shell, next.lists))
         if (!LevelSelection.offered(rights.values)) return next.cleared()
-        return next.withSelection(LevelSelection.Shown.of(place, rights, sel.selected, next.lists.level(next.shell).map { it.nodeId }))
+        return next.withSelection(LevelSelection.Picking.of(place, rights, sel.selected, next.lists.level(next.shell).map { it.nodeId }))
     }
 
     private fun State.cleared() = if (selection == null) this else State(shell, lists, offline, gone, pages, null)
-    private fun State.withSelection(sel: LevelSelection.Shown?) = State(shell, lists, offline, gone, pages, sel)
+    private fun State.withSelection(sel: LevelSelection.Picking?) = State(shell, lists, offline, gone, pages, sel)
 
     /** The selection changed by [change] (the ids), shown anew; nothing where the level is in no Select mode. */
-    private fun changeSelection(change: (LevelSelection.Shown, List<String>) -> Set<String>) = _state.update { s ->
+    private fun changeSelection(change: (LevelSelection.Picking, List<String>) -> Set<String>) = _state.update { s ->
         val sel = s?.selection ?: return@update s
         val shown = s.lists.level(s.shell).map { it.nodeId }
         reselected(null, s.withSelection(sel.copy(selected = change(sel, shown))))
@@ -647,7 +647,7 @@ class ShellModel(
         reportOffered()
         _state.update { s ->
             val place = s?.let { selectionPlace(it.shell) } ?: return@update s
-            reselected(null, s.withSelection(LevelSelection.Shown(place, emptySet(), Notice(Msg.SELECT_COUNT, 0), emptyList())))
+            reselected(null, s.withSelection(LevelSelection.Picking(place, emptySet(), Notice(Msg.SELECT_COUNT, 0), emptyList())))
         }
     }
 
