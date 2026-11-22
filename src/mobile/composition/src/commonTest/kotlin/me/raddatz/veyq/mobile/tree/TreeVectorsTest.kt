@@ -64,10 +64,7 @@ class TreeVectorsTest {
         return Tree(TreeFacts(nodes(t["nodes"]!!)), t["rootId"].str())
     }
 
-    private fun moved(t: Tree, c: JsonObject): List<MovePlan.Moved> = c["nodes"]!!.ids().map { id ->
-        val n = t.facts.node(id)!!
-        MovePlan.Moved(n.id, n.kind, n.parentId, n.name)
-    }
+    private fun moved(t: Tree, c: JsonObject): List<TreeFacts.Node> = c["nodes"]!!.ids().map { t.facts.node(it)!! }
 
     private fun guest(c: JsonObject) = c["mode"].str() == "guest"
     private fun copy(c: JsonObject) = c["intent"].str() == "copy"
@@ -75,7 +72,7 @@ class TreeVectorsTest {
     private fun kindsJson(k: KindFacts): JsonArray = JsonArray(k.kinds.map {
         JsonObject(
             linkedMapOf(
-                "kind" to JsonPrimitive(it.kind), "route" to JsonPrimitive(it.route), "folding" to JsonPrimitive(it.folding.name),
+                "kind" to JsonPrimitive(it.kind), "route" to JsonPrimitive(it.route), "folding" to JsonPrimitive(it.folding),
                 "root" to JsonPrimitive(it.root), "parents" to ids(it.parents),
             ),
         )
@@ -86,8 +83,14 @@ class TreeVectorsTest {
             ids(LevelOrder.order(entries(c["folders"]), entries(c["others"]), { it.id }, { it.name }, { it.createdAt }).map { it.id })
         },
         "displayNames" to { c ->
-            val labels = DisplayNames.of(entries(c["siblings"]), { it.id }, { it.name }, { it.createdAt }, byCreation = c["order"].str() == "creation")
-            JsonObject(labels.mapValues { JsonPrimitive(it.value) })
+            val byCreation = c["order"].str() == "creation"
+            val siblings = entries(c["siblings"])
+            val labels = DisplayNames.of(siblings, { it.id }, { it.name }, { it.createdAt }, byCreation)
+            // written in the siblings' order (creation, or id), as the file has them
+            val ordered = siblings.sortedWith { a, b ->
+                if (byCreation) DisplayNames.compareByCreation(a.createdAt, a.id, b.createdAt, b.id) else DisplayNames.compareById(a.id, b.id)
+            }
+            JsonObject(LinkedHashMap<String, JsonElement>().also { m -> for (e in ordered) m[e.id] = JsonPrimitive(labels.getValue(e.id)) })
         },
         "collision" to { c ->
             val listed = c["nodes"]!!.let { n -> n.str()?.let { vectors["collisionNodes"]!!.jsonObject[it]!! } ?: n }
@@ -99,12 +102,12 @@ class TreeVectorsTest {
         },
         "moveBlock" to { c ->
             val t = tree(c)
-            JsonPrimitive(MovePlan.hereBlock(kinds::placementAllows, t.facts, moved(t, c), guest(c), c["at"].str(), copy(c))?.word)
+            JsonPrimitive(MovePlan.hereBlock(kinds::placementAllows, t.facts, moved(t, c), guest(c), c["at"].str(), copy(c)))
         },
         "moveBlockOf" to { c ->
             val t = tree(c)
             MovePlan.hereBlockOf(kinds::placementAllows, t.facts, moved(t, c), guest(c), c["at"].str(), copy(c))
-                ?.let { JsonObject(linkedMapOf("block" to JsonPrimitive(it.block.word), "node" to JsonPrimitive(it.node?.id))) } ?: JsonNull
+                ?.let { JsonObject(linkedMapOf("block" to JsonPrimitive(it.block), "node" to JsonPrimitive(it.node?.id))) } ?: JsonNull
         },
         "planMove" to { c ->
             val t = tree(c)
@@ -113,7 +116,7 @@ class TreeVectorsTest {
                 linkedMapOf(
                     "send" to ids(plan.send.map { it.id }),
                     "leftOut" to JsonArray(plan.leftOut.map { l ->
-                        val fields = linkedMapOf<String, JsonElement>("node" to JsonPrimitive(l.node.id), "reason" to JsonPrimitive(l.reason.word))
+                        val fields = linkedMapOf<String, JsonElement>("node" to JsonPrimitive(l.node.id), "reason" to JsonPrimitive(l.reason))
                         l.sibling?.let { fields["sibling"] = JsonPrimitive(it.id) }
                         JsonObject(fields)
                     }),
@@ -123,7 +126,7 @@ class TreeVectorsTest {
         "movePlaces" to { c ->
             val t = tree(c)
             JsonArray(MovePlan.places(kinds::placementAllows, t.facts, moved(t, c), guest(c), c["at"].str()).map {
-                JsonObject(linkedMapOf("node" to JsonPrimitive(it.node.id), "blocked" to JsonPrimitive(it.blocked?.word)))
+                JsonObject(linkedMapOf("node" to JsonPrimitive(it.node.id), "blocked" to JsonPrimitive(it.blocked)))
             })
         },
         "moveTrail" to { c -> val t = tree(c); ids(MovePlan.trail(t.facts, t.top, c["at"].str())) },

@@ -53,7 +53,7 @@ object ExpensesKinds : ApplicationKinds {
     override fun queuedSender(q: Queued): QueuedSender? = if (q == Queued.POT_ENTRY) QueuedExpenses.entrySender else null
 
     /** A Pot folds as a container behind Expenses' route slug, at the top or in a folder. */
-    override val kindFacts = listOf(KindFacts.Kind(POT, PotCreate.ROUTE, KindFacts.Folding.NAME, root = true, parents = listOf(FOLDER)))
+    override val kindFacts = listOf(KindFacts.Kind(POT, PotCreate.ROUTE, KindFacts.NAME, root = true, parents = listOf(FOLDER)))
 
     override fun rekey(kind: String): NodeRekey.ContentRekey? = if (kind == POT) PotRekey.content else null
 

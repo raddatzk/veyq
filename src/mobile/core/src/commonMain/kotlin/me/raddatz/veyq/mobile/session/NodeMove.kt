@@ -57,14 +57,14 @@ object NodeMove {
     private fun facts(tree: List<NodeRef>): TreeFacts =
         TreeFacts(tree.map { TreeFacts.Node(it.nodeId, it.parentId, it.kind, it.name, it.createdAt, it.identity) })
 
-    private fun moved(n: NodeRef): List<MovePlan.Moved> = listOf(MovePlan.Moved(n.nodeId, n.kind, n.parentId, n.name))
+    private fun moved(n: NodeRef): List<TreeFacts.Node> = listOf(TreeFacts.Node(n.nodeId, n.parentId, n.kind, n.name, n.createdAt, n.identity))
 
-    private fun block(b: MovePlan.Block): Block = when (b) {
-        MovePlan.Block.SELF -> Block.ITSELF
-        MovePlan.Block.INSIDE -> Block.INSIDE
-        MovePlan.Block.CURRENT -> Block.CURRENT
-        MovePlan.Block.IDENTITY_FOLDER -> Block.IDENTITY_FOLDER
-        MovePlan.Block.KIND -> Block.KIND
+    private fun block(b: String): Block = when (b) {
+        MovePlan.SELF -> Block.ITSELF
+        MovePlan.INSIDE -> Block.INSIDE
+        MovePlan.CURRENT -> Block.CURRENT
+        MovePlan.IDENTITY_FOLDER -> Block.IDENTITY_FOLDER
+        else -> Block.KIND
     }
 
     /** Where the browser opens: the place the node is in, else the scope root (null) — the platform's [MovePlan.start]. */

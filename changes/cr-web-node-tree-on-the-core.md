@@ -396,11 +396,59 @@ and what it costs.
   `KindFacts` (the web: each sibling's input folded once per tree generation and kind table, so a keystroke compares strings),
   and over a list the caller holds with the registry's `tokenInput` (the apps' `NodeRename`, `NodeMove.move`: null for a kind
   the build does not know, which meets nothing, as before). Cost: a second entry point, one rule.
+- **D24 — The entry files, rebuilt in `:composition:jsPackage`.** Each core module's `jsMain/**/web/*.kt` is a façade; its
+  `@JsExport` declarations (read from the sources, the parked writer's regular expression) become `dist/<entry>.mjs`
+  (`export { … } from './<the module's file>'`, values only) and `dist/<entry>.d.mts` (every name, types too, `from
+  './veyq-mobile-composition.mjs'`: TypeScript refuses an `import` from a `.d.mts` path, TS2846, and resolves the `.mjs`
+  to the composition's one declaration file). `package.json` maps `./search` and `./tree` to them; `entries.typetest.ts`
+  refuses `orderLevel` through `./search` and `fold` through `./tree`; `conformance.test.ts` names the three declaration
+  files. Evidence: measured, `pnpm run build && pnpm run check` in `src/packages/core-js` (all but the budget green). Cost:
+  the generator's 20 lines.
+- **D25 — The façade's surface.** The CR's list, plus `compareByCreation` (the web's `segmentsOf` and the drop box's page
+  sort by it) and minus `compareById` (its one web caller numbered a guest's names, which `displayNames(…, byId)` does).
+  Handles: `KindFactsHandle`, `TreeFactsHandle` (no member in their `.d.ts`). Moved nodes cross as the web's own objects
+  (`MovedShape`: id, kind, parent, name), answers as ids. A place the session browses from (`top`) is a parameter, not part of
+  the tree handle, so a source whose root differs (a guest's) needs no second handle. Cost: none.
+- **D26 — Squeezing the platform module (the size probe).** First build: the platform module with both entries 33,404 B gz
+  against the running budget's 31,921 (27,943 + 3 × 1,326). Measured per change (`size.sh`: the module bundled, minified,
+  gzip 9, Node 22.23.3), each behaviour-neutral (the vectors green on the JVM and through the package after each): the
+  collator's table a `val`, not a `const` (inlined four times) and its last code-unit-ordered characters and the currency
+  signs between `¥` and `₧` left to the by-code-unit rule; a category by its two-letter `code` rather than enum entries; the
+  move's blocks and reasons and the kinds' foldings as string constants rather than enums (no enum machinery, the words the
+  web already spells); the façade writing plain arrays and objects (no `Pair`, no `map`); one list sort for the order and the
+  numbering (no `Array.sortWith`, no `plus`, no `toList`, no library `indexOf`); a moved node a `TreeFacts.Node` (no class of
+  its own); a node's token input cached on the node. 33,404 → 32,101 B gz (own code 37,094 B minified against the search
+  alone's 26,271; the standard library +460). Cost: `MovePlan`'s and `KindFacts`' constants are strings, not enums (the
+  apps' `NodeMove.Block` stays an enum over them).
+- **D27 — The time gate, measured.** Corpus (`bench.*.test.ts`, scratch, never committed; Node 22.23.3, median of 15 after 3
+  warm-ups, answers compared by digest): one folder of 10,000 siblings of every kind, and 10,000 folders six levels deep;
+  the TypeScript in the phase-1 tree (`claude/node-tree` at `4c4743d16`), the façade through the web's adapter in this one.
+  `orderLevel` 16.8 ms against 11.1 (1.51×), `displayNames` 5.17 against 2.64 (1.96×; a first form, sorting every sibling
+  by creation and counting names in a `HashMap`, was 2.87× — one sort by the exact name, equal names by creation, replaced
+  it), `collidingSibling` 0.10 against 2.78 per keystroke on a held generation (a new generation's first: 9.85, 3.5×, once
+  per tree read), `movePlaces` 26.8 against 73.4, `planMove` of 1,000 into the wide folder 9.2 against 1,843; `treeFacts`
+  over 20,000 nodes 1.6 ms (no TypeScript twin: the TypeScript held no index). Answers identical but `displayNames`' entry
+  order (a map; its labels equal). Reading: decision 12's 2.5× binds a rule per call as the web calls it (a keystroke on a
+  held generation); a generation's build is held to 100 ms only. Cost: none.
+- **D28 — The size gate misses; stopped before the web's rewiring.** The CR's two bounds read one ratio two ways: phase 3's
+  probe allows 4 × 1,326 = 5,304 B gz of own code (decision 12's net eager-set bound, the deleted TypeScript counted);
+  decision 10's running budget in the package allows 3 × 1,326 = 3,978 (gross, nothing deleted there). Measured: own code
+  4,158 B gz (32,101 − 27,943), 3.14× the deleted TypeScript — inside the probe, **180 B gz over the running budget**. Per the
+  owner's mandate the miss goes to the owner with its numbers; the gate is not loosened. The web's rewiring (built, unverified,
+  uncommitted on this branch) is parked on `claude/node-tree-p4-wip`. The owner's options, priced: (a) take 3.14× for this
+  slice (the eager-set bound is expected to hold: own growth minus the 1,326 deleted is ~2,830 plus the adapter); (b) give up
+  the collator's table (196 B gz, measured by removing it from the bundle) — names led by punctuation or a symbol outside
+  ASCII then sort by code unit, a visible change, and still ~10 B gz over without a further cut; (c) the CR's cheapest cut,
+  the move plan and the collision alone, the order and the numbering staying TypeScript (the order is LevelOrder's 2.1 KB
+  minified of the 10.8 KB). Cost: the slice waits for the owner.
 
 ## Questions for the owner
 
-None: every choice above is technical. The ways this reaches the owner are a missed number (phase 3's probe or decision
-12's gate), handed over with the measurement.
+Open (2026-11-22, D28): **the platform module's running budget misses by 180 B gz** (32,101 against 31,921; the slice's
+own code 3.14× its deleted TypeScript against R = 3.0), while phase 3's probe (4×) and the time gate (D27) pass. Phases 1–3
+are committed; the web's rewiring is parked, unverified, on `claude/node-tree-p4-wip`. Which of D28's options (a) take
+3.14× for this slice, (b) drop the collator's table (a visible change for names led by non-ASCII punctuation, and still a
+few bytes over), (c) the move plan and collision alone — or another bound?
 
 ## Definition of done
 

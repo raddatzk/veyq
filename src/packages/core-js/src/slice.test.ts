@@ -7,48 +7,71 @@ import { build } from 'esbuild'
 
 // The slice check (ADR 0155 decision 4): what an entry ships, bundled and minified as a web build bundles it, carries
 // no kotlinx.serialization, coroutines or Ktor and no `NotOnTheWeb` refusal — by the sources its source map lists,
-// through the compiled modules' own maps to the Kotlin files — and stays inside the budget ADR 0155 decision 2 fixed.
-// The size is printed beside the budget, the Kotlin standard library's share apart from the façade's own.
+// through the compiled modules' own maps to the Kotlin files — and the platform module stays inside its running budget
+// (ADR 0155 decision 7.2). The size is printed beside the budget, the Kotlin standard library's share apart from the core's own.
 const here = dirname(fileURLToPath(import.meta.url))
 const dist = resolve(here, '../dist')
 if (!existsSync(resolve(dist, 'kotlin_veyq_mobile_core.mjs'))) {
   throw new Error('dist/ is missing: run `pnpm run build` (the core compiled by Gradle) before the check')
 }
 
-/** ADR 0155 decision 2: the eager set grows by at most 40 KB gz, the TypeScript the pilot deletes counted. The bundle
- *  alone above it can only miss. */
-const BUDGET_GZ = 40 * 1024
 const FORBIDDEN = /kotlinx-serialization|kotlinx-coroutines|kotlinx\.coroutines|kotlinx\/serialization|ktor|NotOnTheWeb\.kt/i
 
-// each entry's module file (Kotlin's per-module output: the platform's search in the platform's file, ADR 0155 decision 7.1)
-const ENTRIES = { search: 'kotlin_veyq_mobile_core.mjs' }
+/** Each entry of the platform's module file (`dist/<entry>.mjs`, written by `:composition:jsPackage`) and a Kotlin source its
+ *  map must list: the map does reach the Kotlin sources, so an absence of a forbidden one is an absence. */
+const ENTRIES: Record<string, { control: string }> = {
+  search: { control: 'search/Query.kt' },
+  tree: { control: 'tree/LevelOrder.kt' },
+}
+
+/**
+ * The platform module's running budget (ADR 0155 decision 7.2): every platform façade lands in the one module file, which
+ * a bundler cannot split, so the bound is on the module bundled with all its entries — the search alone as the core's
+ * split measured it, plus R × the gzip of each moved slice's deleted TypeScript (R = 3.0, the pilot's ratio rounded up).
+ * One row per slice, with the work order and the numbers it measured.
+ */
+const R = 3.0
+const SEARCH_ALONE_GZ = 27_943 // ADR 0156 § Consequences: the search's entry alone on the split
+const SLICES: { slice: string; deletedGz: number }[] = [
+  // cr-web-node-tree-on-the-core (ADR 0155 decision 7.2.1): levelList.ts, location.ts' order and numbering,
+  // siblingCollision.ts' collidingSibling, move.ts' plan - 3,086 B min / 1,326 B gz, measured on sources
+  { slice: 'the node tree\'s rules', deletedGz: 1_326 },
+]
+const BUDGET_GZ = Math.floor(SEARCH_ALONE_GZ + SLICES.reduce((n, s) => n + R * s.deletedGz, 0))
+
+/** [entries] bundled together, minified, as a web build bundles them. */
+async function bundle(entries: string[]) {
+  const out = await build({
+    bundle: true, minify: true, format: 'esm', platform: 'browser', write: false, metafile: true, sourcemap: 'external',
+    outdir: resolve(here, '../.slice'), logLevel: 'silent', external: ['@noble/*'],
+    stdin: { contents: entries.map((e) => `export * from './${e}.mjs'`).join('\n'), resolveDir: dist, sourcefile: 'entries.mjs' },
+  })
+  const js = out.outputFiles.find((f) => f.path.endsWith('.js'))!
+  const map = JSON.parse(out.outputFiles.find((f) => f.path.endsWith('.map'))!.text) as { sources: string[] }
+  const inputs = Object.values(out.metafile.outputs).find((o) => o.entryPoint)!.inputs
+  const share = (re: RegExp) => Object.entries(inputs).filter(([m]) => re.test(m)).reduce((n, [, i]) => n + i.bytesInOutput, 0)
+  return { js: js.contents, gz: gzipSync(js.contents, { level: 9 }).length, map, inputs, stdlib: share(/kotlin-kotlin-stdlib/), own: share(/kotlin_veyq_mobile_core\.mjs$/) }
+}
 
 describe('what an entry ships', () => {
-  for (const [entry, file] of Object.entries(ENTRIES)) {
-    it(`@veyq/core-js/${entry}: no serialization, coroutines, Ktor or refusal, within the budget`, async () => {
-      const out = await build({
-        entryPoints: [resolve(dist, file)], bundle: true, minify: true, format: 'esm', platform: 'browser', write: false,
-        metafile: true, sourcemap: 'external', outdir: resolve(here, '../.slice'), logLevel: 'silent',
-        external: ['@noble/*'],
-      })
-      const js = out.outputFiles.find((f) => f.path.endsWith('.js'))!
-      const map = JSON.parse(out.outputFiles.find((f) => f.path.endsWith('.map'))!.text) as { sources: string[] }
-      const inputs = Object.values(out.metafile.outputs).find((o) => o.entryPoint)!.inputs
+  for (const [entry, { control }] of Object.entries(ENTRIES)) {
+    it(`@veyq/core-js/${entry}: no serialization, coroutines, Ktor or refusal`, async () => {
+      const { js, gz, map, inputs, stdlib, own } = await bundle([entry])
       const modules = Object.entries(inputs).filter(([, i]) => i.bytesInOutput > 0).map(([m]) => m)
       expect(modules.filter((m) => FORBIDDEN.test(m))).toEqual([])
       expect(map.sources.filter((src) => FORBIDDEN.test(src))).toEqual([])
-      // control: the map does reach the Kotlin sources, so an absence above is an absence
-      expect(map.sources.some((src) => src.endsWith('search/Query.kt'))).toBe(true)
-
-      const gz = gzipSync(js.contents, { level: 9 }).length
-      const share = (re: RegExp) => Object.entries(inputs).filter(([m]) => re.test(m)).reduce((n, [, i]) => n + i.bytesInOutput, 0)
-      const stdlib = share(/kotlin-kotlin-stdlib/)
-      const own = share(new RegExp(file.replace('.', '\\.') + '$'))
-      console.log(
-        `@veyq/core-js/${entry}: ${js.contents.length} B minified, ${gz} B gz (budget ${BUDGET_GZ}); of the minified: ` +
-          `standard library ${stdlib} B, the core's own ${own} B, other ${js.contents.length - stdlib - own} B`,
-      )
-      expect(gz).toBeLessThanOrEqual(BUDGET_GZ)
+      expect(map.sources.some((src) => src.endsWith(control))).toBe(true)
+      console.log(`@veyq/core-js/${entry}: ${js.length} B minified, ${gz} B gz; of the minified: standard library ${stdlib} B, ` +
+        `the platform's own ${own} B, other ${js.length - stdlib - own} B`)
     })
   }
+})
+
+describe('the platform module\'s running budget', () => {
+  it('every entry together stays within the search alone plus R × each slice\'s deleted TypeScript', async () => {
+    const whole = await bundle(Object.keys(ENTRIES))
+    console.log(`every platform entry together: ${whole.js.length} B minified, ${whole.gz} B gz (budget ${BUDGET_GZ}: ` +
+      `${SEARCH_ALONE_GZ} + ${SLICES.map((s) => `${R} × ${s.deletedGz}`).join(' + ')})`)
+    expect(whole.gz).toBeLessThanOrEqual(BUDGET_GZ)
+  })
 })

@@ -61,8 +61,8 @@ object MemoriesKinds : ApplicationKinds {
 
     /** A Memory and a chapter fold as containers behind Memories' route slug; a Memory at the top or in a folder, a chapter in a Memory. */
     override val kindFacts = listOf(
-        KindFacts.Kind(MEMORY, "memories", KindFacts.Folding.NAME, root = true, parents = listOf(FOLDER)),
-        KindFacts.Kind(CHAPTER, "memories", KindFacts.Folding.NAME, root = false, parents = listOf(MEMORY)),
+        KindFacts.Kind(MEMORY, "memories", KindFacts.NAME, root = true, parents = listOf(FOLDER)),
+        KindFacts.Kind(CHAPTER, "memories", KindFacts.NAME, root = false, parents = listOf(MEMORY)),
     )
 
     override fun rekey(kind: String): NodeRekey.ContentRekey? = if (kind in kinds) MemoryRekey.content else null

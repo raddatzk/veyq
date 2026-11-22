@@ -52,8 +52,8 @@ object DepotKinds : ApplicationKinds {
 
     /** A file folds by `fileNameSlug`, a drop box as a container; Depot claims no route; both at the top or in a folder. */
     override val kindFacts = listOf(
-        KindFacts.Kind(FILE, null, KindFacts.Folding.FILE_NAME, root = true, parents = listOf(FOLDER)),
-        KindFacts.Kind(DROPBOX, null, KindFacts.Folding.NAME, root = true, parents = listOf(FOLDER)),
+        KindFacts.Kind(FILE, null, KindFacts.FILE_NAME, root = true, parents = listOf(FOLDER)),
+        KindFacts.Kind(DROPBOX, null, KindFacts.NAME, root = true, parents = listOf(FOLDER)),
     )
 
     // nothing of their own under the node's key: their blobs are core's, the re-key moves them

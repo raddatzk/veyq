@@ -51,7 +51,7 @@ class TreeRulesTest {
 
     @Test
     fun aKindNotListedFoldsAsAContainerAndIsPlacedNowhere() {
-        val kinds = KindFacts(listOf(KindFacts.Kind("FILE", null, KindFacts.Folding.FILE_NAME, root = true, parents = listOf("FOLDER"))))
+        val kinds = KindFacts(listOf(KindFacts.Kind("FILE", null, KindFacts.FILE_NAME, root = true, parents = listOf("FOLDER"))))
         assertFalse(kinds.knows("UNKNOWN"))
         assertEquals("rom", kinds.tokenInput("UNKNOWN", "Rom"))
         assertFalse(kinds.placementAllows("UNKNOWN", null))
@@ -72,16 +72,16 @@ class TreeRulesTest {
         assertFalse(cycle.inIdentityFolder("a"))
         assertEquals(listOf(null, "b", "a"), MovePlan.trail(cycle, null, "a"))
         val allows = { _: String, _: String? -> true }
-        assertEquals(MovePlan.Block.INSIDE, MovePlan.hereBlock(allows, cycle, listOf(MovePlan.Moved("a", "FOLDER", "b")), false, "b"))
+        assertEquals(MovePlan.INSIDE, MovePlan.hereBlock(allows, cycle, listOf(TreeFacts.Node("a", "b", "FOLDER", "", null, false)), false, "b"))
     }
 
     @Test
     fun aPlaceTheTreeDoesNotReadTakesNothing() {
         val tree = TreeFacts(listOf(TreeFacts.Node("f", null, "FOLDER", "f", null, false)))
-        val moved = listOf(MovePlan.Moved("f", "FOLDER", null))
+        val moved = listOf(TreeFacts.Node("f", null, "FOLDER", "", null, false))
         val allows = { _: String, _: String? -> true }
-        assertEquals(MovePlan.Block.KIND, MovePlan.hereBlock(allows, tree, moved, false, "elsewhere"))
-        assertNull(MovePlan.hereBlock(allows, tree, listOf(MovePlan.Moved("g", "FOLDER", "f")), false, null), "control: the scope root")
+        assertEquals(MovePlan.KIND, MovePlan.hereBlock(allows, tree, moved, false, "elsewhere"))
+        assertNull(MovePlan.hereBlock(allows, tree, listOf(TreeFacts.Node("g", "f", "FOLDER", "", null, false)), false, null), "control: the scope root")
     }
 
     @Test
@@ -95,9 +95,9 @@ class TreeRulesTest {
     @Test
     fun aSelectionNamedLikeItselfThereIsNotTakenByItself() {
         // the plan folds the destination's children once; a node listed there but stale in the selection meets only others
-        val kinds = KindFacts(listOf(KindFacts.Kind("FOLDER", null, KindFacts.Folding.NAME, root = true, parents = listOf("FOLDER"))))
+        val kinds = KindFacts(listOf(KindFacts.Kind("FOLDER", null, KindFacts.NAME, root = true, parents = listOf("FOLDER"))))
         val tree = TreeFacts(listOf(TreeFacts.Node("d", null, "FOLDER", "d", null, false), TreeFacts.Node("x", "d", "FOLDER", "X", null, false)))
-        val plan = MovePlan.plan(kinds, tree, listOf(MovePlan.Moved("x", "FOLDER", "elsewhere", "x")), "d")
+        val plan = MovePlan.plan(kinds, tree, listOf(TreeFacts.Node("x", "elsewhere", "FOLDER", "x", null, false)), "d")
         assertEquals(listOf("x"), plan.send.map { it.id })
         assertNull(SiblingNames.colliding(kinds, tree, "d", "FOLDER", "X", "x"))
     }

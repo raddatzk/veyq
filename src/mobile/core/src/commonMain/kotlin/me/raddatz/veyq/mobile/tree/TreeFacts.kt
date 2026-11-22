@@ -7,22 +7,27 @@ package me.raddatz.veyq.mobile.tree
  * not scan the tree per step. A session builds one when it replaces its node list and drops it with the list (the web's
  * `treeStore` and a guest's tree source; the apps per call over the tree they read).
  *
- * Bounded against a served parent cycle: every walk up stops at a node it has seen.
+ * Bounded against a served parent cycle: no walk up takes more steps than the tree has nodes.
  */
 class TreeFacts(val nodes: List<Node>) {
     /**
      * A node: [createdAt] the server's creation instant in epoch milliseconds (null where none is served — a guest's), a
      * `Double` so no `Long` runs on JavaScript; [identity] a drop box guest's identity folder.
      */
-    class Node(val id: String, val parentId: String?, val kind: String, val name: String, val createdAt: Double?, val identity: Boolean)
-
-    private val byId: HashMap<String, Node> by lazy {
-        HashMap<String, Node>(nodes.size * 2).also { m -> for (n in nodes) if (n.id !in m) m[n.id] = n }
+    class Node(val id: String, val parentId: String?, val kind: String, val name: String, val createdAt: Double?, val identity: Boolean) {
+        /** Its token input under [inputOf], folded once ([TreeFacts.tokenInput]). */
+        internal var input: String? = null
+        internal var inputOf: KindFacts? = null
     }
-    private val byParent: HashMap<String?, ArrayList<Node>> by lazy {
-        val m = HashMap<String?, ArrayList<Node>>()
-        for (n in nodes) m.getOrPut(n.parentId) { ArrayList() }.add(n)
-        m
+
+    private val byId = HashMap<String, Node>(nodes.size * 2)
+    private val byParent = HashMap<String?, ArrayList<Node>>()
+
+    init {
+        for (n in nodes) {
+            if (byId[n.id] == null) byId[n.id] = n
+            byParent.getOrPut(n.parentId) { ArrayList() }.add(n)
+        }
     }
 
     /** The node [id], or null where the session does not read it. */
@@ -34,24 +39,20 @@ class TreeFacts(val nodes: List<Node>) {
     /** Whether [id] (null: the scope root, never) is a guest's identity folder or lies below one. */
     fun inIdentityFolder(id: String?): Boolean {
         var n = id?.let { node(it) }
-        val seen = HashSet<String>()
-        while (n != null && seen.add(n.id)) {
+        var steps = 0
+        while (n != null && steps++ <= nodes.size) {
             if (n.identity) return true
             n = n.parentId?.let { node(it) }
         }
         return false
     }
 
-    private var inputsOf: KindFacts? = null
-    private var inputs: HashMap<String, String>? = null
-
-    /** [node]'s token input under [kinds] ([KindFacts.tokenInput]), folded once per generation and kind table. */
+    /** [node]'s token input under [kinds] ([KindFacts.tokenInput]), folded once per node and kind table. */
     internal fun tokenInput(kinds: KindFacts, node: Node): String {
-        if (inputsOf !== kinds) {
-            inputsOf = kinds
-            inputs = HashMap()
+        if (node.inputOf !== kinds) {
+            node.input = kinds.tokenInput(node.kind, node.name)
+            node.inputOf = kinds
         }
-        val held = inputs!!
-        return held[node.id] ?: kinds.tokenInput(node.kind, node.name).also { held[node.id] = it }
+        return node.input!!
     }
 }

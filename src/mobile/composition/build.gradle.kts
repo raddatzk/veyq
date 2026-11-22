@@ -49,7 +49,7 @@ kotlin {
     }
 }
 
-// The compiled modules — one file each, the platform's `veyq-mobile-core.mjs`, each application's and this module's —,
+// The compiled modules — one file each, the platform's `kotlin_veyq_mobile_core.mjs`, each application's and this module's —,
 // their TypeScript definitions and source maps, into `@veyq/core-js`'s `dist/` (ADR 0155 decision 6): the one directory
 // where Gradle and pnpm meet. The platform's conformance binary lands in `dist/conformance/`, beside and never inside
 // the shipped modules. The package's `build` runs this task by name (src/packages/core-js/scripts/build.py).
@@ -84,6 +84,33 @@ fun sortFreeInterfaceLists(module: String): String {
         if (names.all(::free)) "${m.groupValues[1]}[${names.sorted().joinToString(", ")}]" else m.value
     }
 }
+// One entry file per façade (ADR 0155 decision 5): several façades share one module file (the platform's search and tree in
+// `kotlin_veyq_mobile_core.mjs`), so `dist/<entry>.mjs` and `.d.mts` re-export exactly the declarations the façade's
+// package exports (`jsMain/…/<entry>/web/`), read from those sources' `@JsExport` declarations, never listed by hand.
+// `package.json` maps `@veyq/core-js/<entry>` to them, so a name of another façade does not type-check through an entry
+// and the web's direction guard, which reads the entry's name, judges every name by its owner. An `external interface` is
+// a type only: it is re-exported by the `.d.mts` alone, which names the composition's module (`veyq-mobile-composition.mjs`,
+// whose one `.d.mts` declares every module's exports). Each module's façades re-export from that module's file, Kotlin's
+// per-module name (`:core` → `kotlin_veyq_mobile_core.mjs`, `:apps:<a>` → `kotlin_veyq_mobile_apps_<a>.mjs`).
+val facades: Map<String, FileTree> = (listOf(project(":core")) + rootProject.project(":apps").subprojects).associate { p ->
+    "kotlin_veyq_mobile_" + p.path.removePrefix(":").replace(':', '_') + ".mjs" to p.fileTree("src/jsMain/kotlin") { include("**/web/*.kt") }
+}
+fun writeEntries(dist: File) {
+    val declaration = Regex("""@JsExport\s+(?:@[\w.]+(?:\([^)]*\))?\s+)*(external\s+interface|class|object|fun|val)\s+(?:<[^>]*>\s*)?(\w+)""")
+    val seen = HashSet<String>()
+    facades.toSortedMap().forEach { (module, tree) ->
+        tree.files.groupBy { it.parentFile.parentFile.name }.toSortedMap().forEach { (entry, files) ->
+            check(seen.add(entry)) { "two façades named $entry" }
+            val found = files.sortedBy { it.name }.flatMap { f -> declaration.findAll(f.readText()).map { it.groupValues[1] to it.groupValues[2] } }
+            check(found.isNotEmpty()) { "the façade $entry exports nothing" }
+            val values = found.filter { !it.first.startsWith("external") }.map { it.second }.sorted()
+            val all = found.map { it.second }.sorted()
+            val head = "// @veyq/core-js/$entry: the declarations of the façade …mobile.$entry.web, written by :composition:jsPackage.\n"
+            dist.resolve("$entry.mjs").writeText(head + "export { ${values.joinToString(", ")} } from './$module';\n")
+            dist.resolve("$entry.d.mts").writeText(head + "export { ${all.joinToString(", ")} } from './veyq-mobile-composition.mjs';\n")
+        }
+    }
+}
 val jsPackage = tasks.register<Sync>("jsPackage") {
     group = "veyq"
     description = "Compiles the core's modules for JavaScript and writes them and the platform's conformance runner into src/packages/core-js/dist."
@@ -93,6 +120,7 @@ val jsPackage = tasks.register<Sync>("jsPackage") {
     }
     from(jsKotlinVersion)
     into(coreJsDist)
+    inputs.files(facades.values).withPropertyName("facades")
     val kotlinVersion = getKotlinPluginVersion()
     doLast {
         check(KotlinVersion(2, 5) > kotlinVersion.split('.', '-').take(2).map(String::toInt).let { KotlinVersion(it[0], it[1]) }) {
@@ -103,6 +131,7 @@ val jsPackage = tasks.register<Sync>("jsPackage") {
             val sorted = sortFreeInterfaceLists(module)
             if (sorted != module) file.writeText(sorted)
         }
+        writeEntries(coreJsDist)
     }
 }
 // The dev server's build (`build.py --watch`, src/web/vite.config.ts): the development link of the shipped modules alone —
@@ -115,6 +144,8 @@ tasks.register<Sync>("jsPackageDev") {
     from(tasks.named<org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrLink>("compileDevelopmentLibraryKotlinJs").flatMap { it.destinationDirectory })
     from(jsKotlinVersion)
     into(coreJsDist)
+    inputs.files(facades.values).withPropertyName("facades")
+    doLast { writeEntries(coreJsDist) }
 }
 // The plugin's check of the generated `.d.ts` runs `tsc` under Kotlin's own Node (ignored by default today); the package's
 // own typecheck reads them instead, so the task never runs.

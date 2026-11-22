@@ -51,7 +51,7 @@ object AppKinds {
     private val CORE = setOf("FOLDER", "SHARE_BOOKMARK")
 
     /** Core's own kinds' facts: a folder and a kept link fold as containers, at the root or in a folder, under no route. */
-    private val CORE_FACTS = CORE.map { KindFacts.Kind(it, null, KindFacts.Folding.NAME, root = true, parents = listOf(FOLDER)) }
+    private val CORE_FACTS = CORE.map { KindFacts.Kind(it, null, KindFacts.NAME, root = true, parents = listOf(FOLDER)) }
 
     @kotlin.concurrent.Volatile
     private var held: KindFacts? = null

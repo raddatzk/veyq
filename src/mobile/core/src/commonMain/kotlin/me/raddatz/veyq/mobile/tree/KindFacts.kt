@@ -9,25 +9,15 @@ import me.raddatz.veyq.mobile.crypto.Naming
  * the web's registry (`@veyq/core-js/tree` `kindFacts`). Both are held to `contracts/platform/tree/v1-vectors.json`'s
  * `kinds`.
  *
- * A kind not listed folds by [Folding.NAME] with no route — the server stores any kind, and a token must still be computable
+ * A kind not listed folds by [NAME] with no route — the server stores any kind, and a token must still be computable
  * for it — and is placed nowhere (fail closed).
  */
 class KindFacts(val kinds: List<Kind>) {
     /**
-     * How a name folds before its slug token HMACs it (ADR 0080; pinned by `contracts/crypto/vectors/v1.json#name_folding`).
-     * An enum, not a function an application brings: a folding is frozen into every stored token, so a new one is a platform
-     * change with its vectors.
+     * One kind's facts: [route] its application's route slug (null: none), [folding] how its names fold for the slug token
+     * ([NAME] or [FILE_NAME]), [root] and [parents] its placement.
      */
-    enum class Folding {
-        /** [Naming.slugify]: a container's (folders, Memories, chapters, Pots, drop boxes, kept links). */
-        NAME,
-
-        /** [Naming.fileNameSlug]: a file's, which keeps its punctuation. */
-        FILE_NAME,
-    }
-
-    /** One kind's facts: [route] its application's route slug (null: none), [root] and [parents] its placement. */
-    class Kind(val kind: String, val route: String?, val folding: Folding, val root: Boolean, val parents: List<String>)
+    class Kind(val kind: String, val route: String?, val folding: String, val root: Boolean, val parents: List<String>)
 
     private fun of(kind: String): Kind? {
         for (k in kinds) if (k.kind == kind) return k
@@ -39,12 +29,12 @@ class KindFacts(val kinds: List<Kind>) {
 
     /**
      * The string a node's slug token HMACs, and so what its name is unique by among its siblings (ADR 0080 decision 16):
-     * the name folded by its kind's [Folding], behind `<route>/` where its application claimed one. Two route groups never
+     * the name folded by its kind's folding, behind `<route>/` where its application claimed one. Two route groups never
      * meet: a Memory and a Pot of one name coexist; the plain names (folders, Depot, kept links) are one group.
      */
     fun tokenInput(kind: String, name: String): String {
         val k = of(kind)
-        val slug = if (k?.folding == Folding.FILE_NAME) Naming.fileNameSlug(name) else Naming.slugify(name)
+        val slug = if (k?.folding == FILE_NAME) Naming.fileNameSlug(name) else Naming.slugify(name)
         val route = k?.route
         return if (route != null) "$route/$slug" else slug
     }
@@ -58,5 +48,15 @@ class KindFacts(val kinds: List<Kind>) {
     companion object {
         /** The platform's container kind: the way down in the move's browser, the one a guest places into. */
         const val FOLDER = "FOLDER"
+
+        /**
+         * A container's folding, [Naming.slugify] (folders, Memories, chapters, Pots, drop boxes, kept links). The foldings are
+         * named, never a function an application brings: a folding is frozen into every stored token (ADR 0080; pinned by
+         * `contracts/crypto/vectors/v1.json#name_folding`), so a new one is a platform change with its vectors.
+         */
+        const val NAME = "NAME"
+
+        /** A file's folding, [Naming.fileNameSlug], which keeps its punctuation. */
+        const val FILE_NAME = "FILE_NAME"
     }
 }

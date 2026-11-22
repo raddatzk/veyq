@@ -26,16 +26,26 @@ object DisplayNames {
 
     /** The label of each of [siblings] by id, numbered in creation order ([byCreation]) or in id order. */
     fun <T> of(siblings: List<T>, id: (T) -> String, name: (T) -> String, createdAt: (T) -> Double?, byCreation: Boolean): Map<String, String> {
-        val ordered = if (byCreation) siblings.sortedWith { a, b -> compareByCreation(createdAt(a), id(a), createdAt(b), id(b)) }
-        else siblings.sortedWith { a, b -> compareById(id(a), id(b)) }
-        val seen = HashMap<String, Int>()
-        val labels = LinkedHashMap<String, String>()
-        for (n in ordered) {
-            val label = name(n)
-            val count = (seen[label] ?: 0) + 1
-            seen[label] = count
-            labels[id(n)] = if (count == 1) label else "$label ($count)"
-        }
+        val labels = HashMap<String, String>()
+        each(siblings, id, name, createdAt, byCreation) { n, label -> labels[n] = label }
         return labels
+    }
+
+    /**
+     * Hands [label] each sibling's id and label: its name, and `Name (n)` for the n-th of a name several carry. One sort by
+     * the exact name, equal names by creation (the tree's one sort; by id where [byCreation] is false), so a name's
+     * siblings stand together in their order and no table of names is kept.
+     */
+    fun <T> each(
+        siblings: List<T>, id: (T) -> String, name: (T) -> String, createdAt: (T) -> Double?, byCreation: Boolean, label: (String, String) -> Unit,
+    ) {
+        var previous: String? = null
+        var at = 0
+        for (n in LevelOrder.sortedByKey(siblings, name, id, if (byCreation) createdAt else { _ -> null })) {
+            val k = name(n)
+            at = if (k == previous) at + 1 else 1
+            previous = k
+            label(id(n), if (at == 1) k else "$k ($at)")
+        }
     }
 }

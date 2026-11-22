@@ -57,12 +57,12 @@ object Naming {
         // the unsigned value, exact in a Double (below 2^53), in base 36 (`UInt.toString(radix)` goes through `Long`)
         var u = hash.toDouble().let { if (it < 0) it + 4294967296.0 else it }
         if (u == 0.0) return "0"
-        val digits = StringBuilder()
+        var digits = ""
         while (u > 0) {
             val d = (u % 36).toInt()
-            digits.append(if (d < 10) '0' + d else 'a' + (d - 10))
+            digits = (if (d < 10) '0' + d else 'a' + (d - 10)) + digits
             u = (u - d) / 36
         }
-        return digits.reverse().toString()
+        return digits
     }
 }
