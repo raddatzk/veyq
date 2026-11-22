@@ -131,7 +131,7 @@ class WireTest {
             Call.HeaderFacts(7, me.raddatz.veyq.mobile.AppKinds.Facts()), Call.HeaderClose(7), Call.HeaderPin(7), Call.HeaderOffline(7), Call.HeaderOfflineConfirm(7), Call.HeaderOfflineCancel(7), Call.HeaderTrash(7), Call.HeaderUndo(7),
             Call.HeaderRename(7, "Trip to Lyon 2"), Call.ShellCreateFolder("Plans"),
             Call.Drop(DropOn.Level("Familie"), listOf(DropItem.File("/home/p/Büro 中文.pdf"), DropItem.Folder("C:\\Users\\p\\Trip"), DropItem.NotLocal("Phone photo")), "Gelöschte Personen"),
-            Call.Drop(DropOn.Row(me.raddatz.veyq.mobile.navigation.NodeAt("s1", "f1", "FOLDER", "Trip")), listOf(DropItem.File("/tmp/a.jpg")), "Deleted people"), Call.Drop(DropOn.Gallery(14), emptyList(), "Deleted people"), Call.TrashOpen("scope-1"), Call.TrashClose(8),
+            Call.Drop(DropOn.Row(me.raddatz.veyq.mobile.navigation.NodeAt("s1", "f1", "FOLDER", "Trip")), listOf(DropItem.File("/tmp/a.jpg")), "Deleted people"), Call.Drop(DropOn.Gallery(14), emptyList(), "Deleted people"), Call.Drop(DropOn.Buckets(15), listOf(DropItem.File("/tmp/b.jpg")), "Deleted people"), Call.TrashOpen("scope-1"), Call.TrashClose(8),
             Call.TrashRestore(8, "node-1"), Call.TrashType(8, "Trip 2"), Call.TrashRetry(8, "node-1"), Call.TrashCancelRename(8), Call.TrashPurge(8, "node-1"),
             Call.HeaderDownload(7, "/home/p/Downloads/Holidays.zip", "deleted person"),
             Call.MoveOpen(me.raddatz.veyq.mobile.navigation.NodeAt("scope-1", "node-1", "EXPENSES_POT", "Trip to Lyon"), copy = true, deletedName = "deleted person"),

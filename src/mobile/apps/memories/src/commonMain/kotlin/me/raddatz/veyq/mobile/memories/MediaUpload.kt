@@ -101,10 +101,16 @@ object MediaUpload {
      * kept for a retry; [mediaId] is the medium it added. A quota fails it with [UploadQueue.QUOTA_EXCEEDED], Memories
      * switched off with [UploadQueue.APPLICATION_OFF]; [now] is the clock a video's capture time is bounded by.
      */
+    /** A queued job that adds one medium ([Job]; a test's own): the uploads read its id once it is done ([MediaUploads.upload]'s filer). */
+    interface Adds {
+        /** The medium this job added, once it is done. */
+        val mediaId: String?
+    }
+
     class Job(
         private val tenant: TenantSession, val scopeId: String, val nodeId: String, private val source: UploadSource,
         private val deriver: Derivation.Deriver, private val now: () -> Long,
-    ) : UploadQueue.Job {
+    ) : UploadQueue.Job, Adds {
         override val name get() = source.name
         override val sizeBytes get() = source.size
         override val prepares get() = true
@@ -113,7 +119,7 @@ object MediaUpload {
         val picked: UploadSource get() = source
 
         /** The medium this job added, once it is done. */
-        var mediaId: String? = null
+        override var mediaId: String? = null
             private set
 
         private val lock = Mutex()

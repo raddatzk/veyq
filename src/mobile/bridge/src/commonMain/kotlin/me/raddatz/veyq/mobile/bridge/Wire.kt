@@ -4456,6 +4456,9 @@ internal sealed class DropOn {
 
     /** Gallery [gallery]'s Memory or chapter (its page open, [Watched.Gallery]). */
     @Serializable @SerialName("DropOnGallery") data class Gallery(val gallery: Long) : DropOn()
+
+    /** The bucket Contributions view [buckets] shows ([Call.BucketsOpen]): its photos and videos go into it (inbox #1065). */
+    @Serializable @SerialName("DropOnBuckets") data class Buckets(val buckets: Long) : DropOn()
 }
 
 /** One dropped item as the host's file system tells it ([Call.Drop]; core's `Dropped`): never sorted or judged by the host. */

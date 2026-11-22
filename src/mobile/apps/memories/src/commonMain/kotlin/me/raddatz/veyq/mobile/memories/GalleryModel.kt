@@ -119,6 +119,13 @@ class GalleryModel(
         /** The picked [sources] queued into this node ([MediaUploads.upload]); how many were. */
         fun upload(sources: List<UploadSource>): Int
 
+        /**
+         * The picked [sources] queued into this node, each medium handed to [filed] by id once it is in ([MediaUploads.upload]
+         * with a filer: the Contributions view's upload into a sub-bucket, inbox #1065); how many were. Absent: none is
+         * taken — a door that cannot file uploads nothing rather than leave the media in the primary unsaid.
+         */
+        fun upload(sources: List<UploadSource>, filed: suspend (mediaId: String) -> Unit): Int = 0
+
         /** Each revision of the shell's lists (its first value: the lists as they are when the page opens). */
         val revisions: Flow<Any?>
 
@@ -876,6 +883,14 @@ class GalleryModel(
         scope.launch { runCatching { door.queueMedia(sources) } }
         return sources.count { MediaUpload.isMedia(it.type, it.name) }
     }
+
+    /**
+     * The picked [sources] added to this Memory or chapter online, each medium handed to [filed] once it is in (the
+     * Contributions view's upload into a sub-bucket: the move is a write, online only, ADR 0140 decision 7); how many were
+     * queued — none offline or where the rights take no upload.
+     */
+    fun upload(sources: List<UploadSource>, filed: suspend (mediaId: String) -> Unit): Int =
+        if (!takesUploads || current.offline != null) 0 else door.upload(sources, filed)
 
     /** Whether this page takes an upload now: the rights let whoever looks upload, online or queued offline. */
     val takesUploads: Boolean get() = rights.upload && (current.offline == null || current.queues)

@@ -3430,13 +3430,16 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      * one drop judges, sorts and uploads. Nothing is judged here.
      */
     private suspend fun drop(parts: Composition<A, T>, call: Call.Drop): Answer {
-        // a gallery's drop needs no tenant (a signed-out link's guest has none): judged by the gallery's rights alone
+        // a gallery's drop needs no tenant (a signed-out link's guest has none): judged by the gallery's rights alone; a
+        // Contributions view's bucket by the view alone (`Contributions.intake`)
         val gallery = (call.on as? DropOn.Gallery)?.let { on -> me.raddatz.veyq.mobile.composition.DropTarget.Gallery(galleries[on.gallery] ?: return noGallery) }
-        val drop = if (gallery != null) null else tenant.value?.models?.drop ?: return noTenant
+        val bucket = (call.on as? DropOn.Buckets)?.let { on -> me.raddatz.veyq.mobile.composition.DropTarget.Bucket(buckets[on.buckets]?.model ?: return noBuckets) }
+        val drop = if (gallery != null || bucket != null) null else tenant.value?.models?.drop ?: return noTenant
         val target = when (val on = call.on) {
             is DropOn.Level -> me.raddatz.veyq.mobile.composition.DropTarget.Level(on.label)
             is DropOn.Row -> me.raddatz.veyq.mobile.composition.DropTarget.Row(on.folder)
             is DropOn.Gallery -> gallery!!
+            is DropOn.Buckets -> bucket!!
         }
         val items = call.items.map { item ->
             when (item) {
@@ -3448,7 +3451,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         }
         // a desktop reads each file in place at its path: one the drop does not keep is closed, nothing else to hand back
         val left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit = { runCatching { it.close() } }
-        val outcome = if (drop == null) gallery!!.drop(items, left) else drop(target, items, uploads.value, left, call.deletedName)
+        val outcome = when {
+            gallery != null -> gallery.drop(items, left)
+            bucket != null -> bucket.drop(items, left)
+            else -> drop!!(target, items, uploads.value, left, call.deletedName)
+        }
         return when (outcome) {
             is me.raddatz.veyq.mobile.composition.DropOutcome.Uploaded -> Answer.Dropped(outcome.queued, outcome.notices)
             is me.raddatz.veyq.mobile.composition.DropOutcome.Offered -> Answer.Dropped(outcome.queued, outcome.notices, holdImport(outcome.offer))

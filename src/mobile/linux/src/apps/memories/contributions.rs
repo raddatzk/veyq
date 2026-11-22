@@ -107,6 +107,11 @@ impl ContributionsView {
     pub fn widget(&self) -> &gtk::Box {
         &self.inner.root
     }
+
+    /// The view's id in the core once it opened (`Buckets.Open`): a drop onto it goes into the bucket it shows (#1065).
+    pub fn id(&self) -> Option<i64> {
+        self.inner.id.get()
+    }
 }
 
 impl Inner {

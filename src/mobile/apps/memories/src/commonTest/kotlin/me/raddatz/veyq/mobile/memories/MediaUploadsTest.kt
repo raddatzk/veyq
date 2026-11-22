@@ -20,12 +20,14 @@ import kotlin.test.assertEquals
 @OptIn(ExperimentalCoroutinesApi::class)
 class MediaUploadsTest {
     /** A job the test steers: it fails while [fail] holds, waits for [gate] where one is set. */
-    private class Job(override val name: String, var fail: Boolean = false, var gate: CompletableDeferred<Unit>? = null) : UploadQueue.Job {
+    private class Job(override val name: String, var fail: Boolean = false, var gate: CompletableDeferred<Unit>? = null) : UploadQueue.Job, MediaUpload.Adds {
         override val sizeBytes = 4L
+        override var mediaId: String? = null
         override suspend fun run(progress: (Double) -> Unit) {
             progress(0.0)
             gate?.await()
             if (fail) throw UploadQueue.Failed("upload_failed")
+            mediaId = "id-$name"
         }
         override fun isFinal(code: String) = true // no automatic retry: the test retries
     }
@@ -94,6 +96,21 @@ class MediaUploadsTest {
         runCurrent()
         assertEquals(listOf("a.jpg", "b.jpg"), door.left, "the successor hands each back once it is in")
         assertEquals(emptyList(), m.door.left)
+    }
+
+    // inbox #1065: an upload into a sub-bucket lands in the uploader's primary and a move files it — each medium handed to the
+    // filer by its id once it is in, before its node is said in, so the gallery's read after it lists it where it was filed.
+    // Levers: emit before the filer, hand it no id, or file a failed medium.
+    @Test
+    fun aFiledUploadHandsEachMediumInToTheFilerBeforeItsNodeIsSaidIn() = runTest {
+        val m = model()
+        val events = mutableListOf<String>()
+        backgroundScope.launch { m.uploads.uploaded.collect { events += "in:$it" } }
+        runCurrent()
+        m.uploads.upload("s", "m", "Ostsee", listOf(source("a.jpg"), source("b.jpg"), source("c.txt", "text/plain"))) { id -> events += "filed:$id" }
+        m.door.jobs.getValue("b.jpg").fail = true
+        runCurrent()
+        assertEquals(listOf("filed:id-a.jpg", "in:m"), events, "the failed one is not filed; the text was never queued")
     }
 
     @Test

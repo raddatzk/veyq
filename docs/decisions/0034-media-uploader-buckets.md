@@ -51,6 +51,16 @@ model, [en.memory.buckets](../features/memory/enablers/en.memory.buckets.md); th
    membership, not `owner_key == caller`, so a curator can tidy a contributor's uploads; no reader may infer an
    owner-only guarantee.
 
+7. **An upload into a bucket is an upload and a move, within the uploader's own root** (inbox #1065, 2026-11-22). The
+   completion names no bucket — a medium lands in its uploader's primary (point 4) — so an upload into a sub-bucket is
+   filed by the organizer's own move once each medium is in; the primary, virtual or not, needs none. Only the caller's
+   own root takes one (a move never crosses owners, point 6): the Beiträge view's upload and a drop onto it are offered
+   there alone, and a drop onto another uploader's bucket is refused and said. The dropped files themselves are uploaded,
+   never the picker opened; what is no photo or video is left out. Offline a sub-bucket takes none (the move is a write,
+   ADR 0140 decision 7); the primary still queues (ADR 0153). One behaviour on the web (`MemoryBuckets.vue`
+   `dropFiles`, `MemoryDetail.vue` `enqueueBatch`) and in the apps (`Contributions.intake`/`upload`, ADR 0154 decision 1's
+   `DropTarget.Bucket`).
+
 ## Consequences
 
 - **Operator-visible surface, all opaque:** `owner_key`s, the bucket structure (node, parentage, `is_primary`, counts)
@@ -74,5 +84,9 @@ model, [en.memory.buckets](../features/memory/enablers/en.memory.buckets.md); th
   destructive delete belongs to the explicit media delete path, not to tidying a folder.
 - **Cleartext names + server-side name uniqueness** (the pre-E2EE code). Rejected — breaks operator-blindness.
 - **A unique key for the one primary.** Rejected (point 4): the loser's attach would fail instead of landing.
+- **A target bucket on the completion** (point 7: `completeMedia` naming the sub-bucket, atomic). Not taken: a contract
+  and backend change under the media writes' one lock order, for a filing a later move repeats. The residual: a medium
+  whose move failed, or whose client went between its completion and its move, stays in the primary — said where the
+  move failed, and moved by hand.
 - **A fully sealed `owner_key`** (hide attribution from the operator). Rejected — inconsistent with the already-visible
   identity stamp, and it would force client-side-only grouping and authorization; it stays a possible escalation.
