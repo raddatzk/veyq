@@ -308,6 +308,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      helpers would compile into nothing and every module's tests would fail to resolve them only at build time
   115 a `@PlatformApi` member of `:core` without `@HiddenFromObjC` — rejected: `validate_mobile_module_graph` rule (e);
      Swift would see a member that was `internal` before the split
+  116 Android's core UI (`android/core/UploadTray.kt`) importing Depot's `DepotUploads` — rejected:
+     `validate_mobile_ui_direction` rule (c); the core UI reaches an application only through the registry (inbox #1056)
+  117 Android's Memories UI importing Expenses' `PotModel` — rejected: `validate_mobile_ui_direction` rule (b), an
+     application naming another core application's package
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1259,6 +1263,21 @@ def forge_mobile_platform_api_shown(root: pathlib.Path) -> str:
     return "a @PlatformApi member without @HiddenFromObjC (must be REJECTED — Swift would see what was internal)"
 
 
+ANDROID_UI = "android/src/main/kotlin/me/raddatz/veyq/mobile/android"
+
+
+def forge_android_core_ui_names_core_application(root: pathlib.Path) -> str:
+    _mobile_edit(root, f"{ANDROID_UI}/core/UploadTray.kt", "import me.raddatz.veyq.mobile.blob.UploadQueue\n",
+                 "import me.raddatz.veyq.mobile.blob.UploadQueue\nimport me.raddatz.veyq.mobile.depot.DepotUploads\n")
+    return "Android's core UI importing Depot's DepotUploads (must be REJECTED — the core UI asks the registry's holdings)"
+
+
+def forge_android_application_names_other_core_application(root: pathlib.Path) -> str:
+    _mobile_edit(root, f"{ANDROID_UI}/apps/memories/MemoriesHolding.kt", "import me.raddatz.veyq.mobile.memories.Contributions\n",
+                 "import me.raddatz.veyq.mobile.memories.Contributions\nimport me.raddatz.veyq.mobile.expenses.PotModel\n")
+    return "Android's Memories UI importing Expenses' PotModel (must be REJECTED — an application never names another)"
+
+
 def forge_web_core_imports_second_application(root: pathlib.Path) -> str:
     _plant_depot(root, "core/node/guardGapProbe.ts", "export { FILE_KIND } from '../../features/depot/kinds'\n")
     return "a core/node file re-exporting features/depot/kinds (must be REJECTED — core depends on no application)"
@@ -1944,6 +1963,8 @@ CASES = [
     ("113", MOBILE_GRAPH, forge_mobile_convention_widened, False),
     ("114", MOBILE_GRAPH, forge_mobile_module_not_included, False),
     ("115", MOBILE_GRAPH, forge_mobile_platform_api_shown, False),
+    ("116", "validate_mobile_ui_direction.py", forge_android_core_ui_names_core_application, False),
+    ("117", "validate_mobile_ui_direction.py", forge_android_application_names_other_core_application, False),
     ("100", LINK_CLOSE_ARITY, forge_link_closed_outside_the_body, False),
     ("101", LINK_CLOSE_ARITY, forge_link_closed_by_a_bulk_update, False),
     ("85", WEB_GUARD, forge_web_core_catalog_carries_application_namespace, False),
