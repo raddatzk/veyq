@@ -1,6 +1,6 @@
 {
   "format": "veyq-plans-v1-vectors",
-  "note": "Conformance vectors for ADR 0154's node plans and core's own rights over a node: each kind's header order (`kinds`), a node header's plan (`header`: the rights its page and core grant, the kind's order, the page's own entries and, on an app, how many buttons fit (`maxButtons`, absent: all) -> buttons, the menu, the menu's last group), a level row's menu (`row`: rights and own entries -> the menu and its last group), and core's favourite, cover and bookmark rights (`rights`, every combination of their inputs). Entries are `HeaderAction`'s serial names. Each case names its rule (`rule`). Inputs chosen by hand; every `expected` first recorded from the web's TypeScript, where it can express the case, and read against its rule before commit.",
+  "note": "Conformance vectors for ADR 0154's node plans and core's own rights over a node: each kind's header order (`kinds`), a node header's plan (`header`: the rights its page and core grant, the kind's order, the page's own entries and, on an app, how many buttons fit (`maxButtons`, absent: all) -> buttons, the menu, the menu's last group), a level row's menu (`row`: rights and own entries -> the menu and its last group), and core's favourite, cover and bookmark rights (`rights`, every combination of their inputs). Entries are `HeaderAction`'s serial names. Each case names its rule (`rule`). Inputs chosen by hand; every `expected` first recorded from the web's TypeScript, where it can express the case, and read against its rule before commit. A level's plan (`level`): New's entries where they are offered (`creates`: a member's level or the drawer, the kept link where the platform draws its dialog; `guest`: a link guest's level by its role), in the web's order (`LevelView.vue`'s folder first, then the registry's `levelMenu` by `order`), and the level's tools (`tools`: the trash where offered, the view switch only where the level offers more than one view, the web's `showViews`). Entries of `creates` and `guest` are `AppKinds.Create`'s names, of `tools` `LevelTool`'s serial names.",
   "kinds": [
     {
       "kind": "CHAPTER",
@@ -986,7 +986,7 @@
       }
     },
     {
-      "rule": "an app's row: the share among the standard ones",
+      "rule": "a row's share among the standard ones (owner 2026-11-22: on every client)",
       "rights": {
         "favorite": true,
         "share": true,
@@ -3275,6 +3275,146 @@
           "move": true,
           "delete": true
         }
+      }
+    ]
+  },
+  "level": {
+    "creates": [
+      {
+        "rule": "a member's level: the web's order, the folder first, the uploads after the Memory, the Pot and the kept link last",
+        "at": "level",
+        "bookmarks": true,
+        "expected": [
+          "FOLDER",
+          "MEMORY",
+          "UPLOAD_FILES",
+          "UPLOAD_FOLDER",
+          "POT",
+          "BOOKMARK"
+        ]
+      },
+      {
+        "rule": "a member's level on a platform that draws no kept link's dialog",
+        "at": "level",
+        "bookmarks": false,
+        "expected": [
+          "FOLDER",
+          "MEMORY",
+          "UPLOAD_FILES",
+          "UPLOAD_FOLDER",
+          "POT"
+        ]
+      },
+      {
+        "rule": "the drawer's New: no upload",
+        "at": "drawer",
+        "bookmarks": true,
+        "expected": [
+          "FOLDER",
+          "MEMORY",
+          "POT",
+          "BOOKMARK"
+        ]
+      },
+      {
+        "rule": "the drawer's New without the kept link",
+        "at": "drawer",
+        "bookmarks": false,
+        "expected": [
+          "FOLDER",
+          "MEMORY",
+          "POT"
+        ]
+      }
+    ],
+    "guest": [
+      {
+        "rule": "a READ_WRITE guest's folder: a folder, files and a folder uploaded (owner 2026-11-22)",
+        "role": "READ_WRITE",
+        "inIdentityFolder": false,
+        "expected": [
+          "FOLDER",
+          "UPLOAD_FILES",
+          "UPLOAD_FOLDER"
+        ]
+      },
+      {
+        "rule": "a READ_WRITE guest in a guest's identity folder: nothing",
+        "role": "READ_WRITE",
+        "inIdentityFolder": true,
+        "expected": []
+      },
+      {
+        "rule": "a READ guest: nothing",
+        "role": "READ",
+        "inIdentityFolder": false,
+        "expected": []
+      },
+      {
+        "rule": "a WRITE_ONLY guest has no level",
+        "role": "WRITE_ONLY",
+        "inIdentityFolder": false,
+        "expected": []
+      }
+    ],
+    "tools": [
+      {
+        "rule": "a member's level: the trash, then the view switch",
+        "trash": true,
+        "mapTab": false,
+        "identityFolder": false,
+        "rows": 3,
+        "expected": [
+          "trash",
+          "view"
+        ]
+      },
+      {
+        "rule": "an empty level outside a guest's identity folder still switches its view",
+        "trash": true,
+        "mapTab": false,
+        "identityFolder": false,
+        "rows": 0,
+        "expected": [
+          "trash",
+          "view"
+        ]
+      },
+      {
+        "rule": "an empty guest's identity folder offers one view at most: no switch",
+        "trash": false,
+        "mapTab": false,
+        "identityFolder": true,
+        "rows": 0,
+        "expected": []
+      },
+      {
+        "rule": "a guest's identity folder with rows switches its view",
+        "trash": false,
+        "mapTab": false,
+        "identityFolder": true,
+        "rows": 2,
+        "expected": [
+          "view"
+        ]
+      },
+      {
+        "rule": "offline: no trash",
+        "trash": false,
+        "mapTab": false,
+        "identityFolder": false,
+        "rows": 3,
+        "expected": [
+          "view"
+        ]
+      },
+      {
+        "rule": "the Memories map tab shows no list: no switch",
+        "trash": false,
+        "mapTab": true,
+        "identityFolder": false,
+        "rows": 3,
+        "expected": []
       }
     ]
   }
