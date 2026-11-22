@@ -60,7 +60,7 @@ private fun potHeader(node: NodeAt, model: AppModel): HeaderContribution? {
  */
 @Composable
 private fun ExpensesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) -> Unit = model::open) {
-    ArrangedListScreen(s.applicationList(ApplicationId.EXPENSES), onOpen = onOpen, state = LocalListStates.current.of("app:EXPENSES"))
+    ArrangedListScreen(s.applicationList(ApplicationId.EXPENSES), model, onOpen = onOpen, state = LocalListStates.current.of("app:EXPENSES"))
 }
 
 /**

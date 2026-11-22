@@ -160,7 +160,7 @@ private fun MemoriesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) 
         MemoriesMapTab(s, model)
         return
     }
-    ArrangedListScreen(s.applicationList(ApplicationId.MEMORIES), onOpen = onOpen, state = LocalListStates.current.of("app:MEMORIES"))
+    ArrangedListScreen(s.applicationList(ApplicationId.MEMORIES), model, onOpen = onOpen, state = LocalListStates.current.of("app:MEMORIES"))
 }
 
 /**

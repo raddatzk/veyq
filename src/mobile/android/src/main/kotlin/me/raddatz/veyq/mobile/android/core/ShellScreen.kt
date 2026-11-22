@@ -360,7 +360,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                     shell.application == null -> HomeScreen(s, model, onEnter = model::enter, onOpen = model::open, onFilter = model::filter)
                     // an application's own list where it registered one (the registry's `list`), else core's arranged list
                     else -> Registry.application(shell.application!!)?.list?.let { list -> list(s, model, model::open) }
-                        ?: ArrangedListScreen(s.applicationList(shell.application!!), onOpen = model::open, state = listStates.of("app:${shell.application}"))
+                        ?: ArrangedListScreen(s.applicationList(shell.application!!), model, onOpen = model::open, state = listStates.of("app:${shell.application}"))
                 }
               }
                 if (s.switching) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -498,13 +498,13 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
                         val folder = node.asFolder()
                         val obj = node.asObject()
                         val bookmark = node.asBookmark()
-                        WithRowMenu(node, model, modifier) { menu ->
+                        WithRowMenu(node.at(), model, modifier) { menu ->
                             if (folder != null) {
                                 LevelTile(node.name, null, LocalCovers.current[node.nodeId]?.second, Icons.Outlined.Folder, folder = true, modifier = Modifier.rowDrop(node, model), onMenu = menu) { onEnter(folder) }
                             } else if (obj != null) ObjectTile(obj, Modifier, onOpen, menu)
                             else if (bookmark != null) LevelTile(bookmark.name, null, null, kindIcon(bookmark.kind), folder = false, modifier = Modifier, onMenu = menu) { model.openBookmark(bookmark) }
                         }
-                    } else items(group.nodes, key = { it.scopeId + it.nodeId }) { node -> WithRowMenu(node, model, Modifier) { menu ->
+                    } else items(group.nodes, key = { it.scopeId + it.nodeId }) { node -> WithRowMenu(node.at(), model, Modifier) { menu ->
                         val folder = node.asFolder()
                         if (folder != null) {
                             ListItem(
@@ -541,18 +541,20 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
 }
 
 /**
- * A level row or tile with its menu (core's `ShellModel.rowPlan`, [LevelRowMenu]): [content] gets the long press that opens
- * it, none while a share picks its place (a pick only chooses); the menu anchors at the row.
+ * A level's or an application list's row or tile with its menu (core's `ShellModel.rowPlan`, [LevelRowMenu]): [content]
+ * gets the long press that opens it, none while a share picks its place (a pick only chooses); the menu anchors at the row.
  */
 @Composable
-private fun WithRowMenu(node: me.raddatz.veyq.mobile.navigation.NodeRef, model: AppModel, modifier: Modifier, content: @Composable (onMenu: (() -> Unit)?) -> Unit) {
-    var open by remember(node.nodeId) { mutableStateOf(false) }
+private fun WithRowMenu(node: me.raddatz.veyq.mobile.navigation.NodeAt, model: AppModel, modifier: Modifier, content: @Composable (onMenu: (() -> Unit)?) -> Unit) {
+    var open by remember(node.scopeId, node.nodeId) { mutableStateOf(false) }
     val picking = LocalPicking.current
     Box(modifier) {
         content(if (picking) null else ({ open = true }))
-        LevelRowMenu(me.raddatz.veyq.mobile.navigation.NodeAt(node.scopeId, node.nodeId, node.kind, node.name), model, open) { open = false }
+        LevelRowMenu(node, model, open) { open = false }
     }
 }
+
+private fun me.raddatz.veyq.mobile.navigation.NodeRef.at() = me.raddatz.veyq.mobile.navigation.NodeAt(scopeId, nodeId, kind, name)
 
 /**
  * A folder's row as a drop target (ADR 0154 decision 1): only where core's `ShellModel.dropTarget` offers it — never by its
@@ -822,6 +824,7 @@ private fun ObjectItems(refs: List<ObjectRef>, open: ObjectRef?, onOpen: (Object
 @Composable
 internal fun ArrangedListScreen(
     list: ArrangedList,
+    model: AppModel,
     onOpen: (ObjectRef) -> Unit,
     state: androidx.compose.foundation.lazy.LazyListState = androidx.compose.foundation.lazy.rememberLazyListState(),
     /** Room below the last row: a floating button over the list keeps it clear (Material 3). */
@@ -836,13 +839,14 @@ internal fun ArrangedListScreen(
     androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxSize()) {
     val columns = if (tiles) tileColumns(maxWidth) else 0
     LazyColumn(Modifier.fillMaxSize().padding(horizontal = 8.dp), state = state, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottom)) {
-        group(R.string.drawer_favorites, list.favorites, onOpen, columns)
-        group(R.string.drawer_recent, list.recent, onOpen, columns)
+        // each row's and tile's menu a long press opens, as a level's (core's `ShellModel.rowPlan`, [LevelRowMenu])
+        group(R.string.drawer_favorites, list.favorites, model, onOpen, columns)
+        group(R.string.drawer_recent, list.recent, model, onOpen, columns)
         // the rest has no heading: under Favorites or Recent a divider sets it apart, else its rows ran on as theirs
         if (list.all.isNotEmpty() && (list.favorites.isNotEmpty() || list.recent.isNotEmpty())) {
             item { androidx.compose.material3.HorizontalDivider(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) }
         }
-        group(null, list.all, onOpen, columns)
+        group(null, list.all, model, onOpen, columns)
     }
     }
 }
@@ -887,12 +891,17 @@ private fun ObjectRow(ref: ObjectRef, onOpen: (ObjectRef) -> Unit, onMenu: (() -
     )
 }
 
-/** One group of an arranged list: its heading, then its objects as rows — or as [columns] tiles a row where above zero. */
-private fun LazyListScope.group(title: Int?, refs: List<ObjectRef>, onOpen: (ObjectRef) -> Unit, columns: Int = 0) {
+/**
+ * One group of an arranged list: its heading, then its objects as rows — or as [columns] tiles a row where above zero —,
+ * each with its row menu ([WithRowMenu]).
+ */
+private fun LazyListScope.group(title: Int?, refs: List<ObjectRef>, model: AppModel, onOpen: (ObjectRef) -> Unit, columns: Int = 0) {
     if (refs.isEmpty()) return
     if (title != null) item { Section(stringResource(title)) }
-    if (columns > 0) tileRows(refs, columns, key = { "${title}-${it.scopeId}-${it.nodeId}" }, inset = 8.dp) { ref, modifier -> ObjectTile(ref, modifier, onOpen) }
-    else items(refs, key = { "${title}-${it.scopeId}-${it.nodeId}" }) { ref -> ObjectRow(ref, onOpen) }
+    if (columns > 0) tileRows(refs, columns, key = { "${title}-${it.scopeId}-${it.nodeId}" }, inset = 8.dp) { ref, modifier ->
+        WithRowMenu(ref.at, model, modifier) { menu -> ObjectTile(ref, Modifier, onOpen, menu) }
+    }
+    else items(refs, key = { "${title}-${it.scopeId}-${it.nodeId}" }) { ref -> WithRowMenu(ref.at, model, Modifier) { menu -> ObjectRow(ref, onOpen, menu) } }
 }
 
 /** An object as a level's tile ([LevelTile]): its cover, its name, the application's facts; a pick dims what does not take it. */
@@ -1080,7 +1089,7 @@ private fun ListBeside(s: Screen.Signed, model: AppModel) {
             // the list pane beside an open object stays rows (a 360 dp pane of tiles would be a strip)
             androidx.compose.runtime.CompositionLocalProvider(LocalOpenObject provides shell.openObject?.nodeId, LocalLevelView provides me.raddatz.veyq.mobile.navigation.ViewMode.LIST) {
                 Registry.application(app)?.list?.let { list -> list(s, model, model::openBeside) }
-                    ?: ArrangedListScreen(s.applicationList(app), onOpen = model::openBeside)
+                    ?: ArrangedListScreen(s.applicationList(app), model, onOpen = model::openBeside)
             }
         }
         androidx.compose.material3.VerticalDivider(color = role(palette.line))
