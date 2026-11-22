@@ -33,7 +33,7 @@
 import { type TreeNode } from './tree'
 import { slugify } from '../../shared/naming'
 import { registry } from '../applications/registry'
-import { FOLDER_KIND } from './kind'
+import { FOLDER_KIND, type NodeKind } from './kind'
 
 /** The personal scope's one token (ADR 0015, amended 2026-11-18): `#~me`, the same for every member, never a username -
  *  the space is nobody else's to open, so its address names nobody, and a renamed member keeps their bookmarks. */
@@ -134,8 +134,14 @@ export function compareById(a: { id: string }, b: { id: string }): number {
  * list it is picked from and on the page it opens. A member's views order by {@link compareByCreation} — the order
  * {@link segmentsOf} gives the URL its `anna`, `anna-2` — and a guest's by {@link compareById}, its resolve serving no
  * creation time (the numbers a guest sees may then differ from the member's).
+ *
+ * Equal names are numbered **within a class** of siblings, the classes {@link segmentsOf} numbers the URL in
+ * (`registry.routeOf(kind).group`: the folders; one application's nodes): a folder `Seb` and a Memory `Seb` have two
+ * addresses (`#seb/`, `#memories/seb`) and both read `Seb`. Within a class the server already refuses an equal name
+ * (`ux_node_parent_slug` over `registry.tokenInputFor`, `slug_taken`), so a number appears only where it never compares
+ * the pair: the drop-box guests above.
  */
-export function displayNamesOf<T extends { id: string }>(
+export function displayNamesOf<T extends { id: string; kind: NodeKind }>(
   siblings: readonly T[],
   nameOf: (n: T) => string,
   order: (a: T, b: T) => number,
@@ -144,8 +150,9 @@ export function displayNamesOf<T extends { id: string }>(
   const labels = new Map<string, string>()
   for (const n of [...siblings].sort(order)) {
     const name = nameOf(n)
-    const count = (seen.get(name) ?? 0) + 1
-    seen.set(name, count)
+    const key = `${registry.routeOf(n.kind).group}\0${name}`
+    const count = (seen.get(key) ?? 0) + 1
+    seen.set(key, count)
     labels.set(n.id, count === 1 ? name : `${name} (${count})`)
   }
   return labels
