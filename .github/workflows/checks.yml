@@ -114,8 +114,8 @@ jobs:
   backend:
     name: Backend checks
     runs-on: ubuntu-latest
-    # Sized for a cold Gradle cache, which is no first-run accident: setup-java's `cache: gradle` keys on the build
-    # files' hash with no restore key and saves only from a green job, so every dependency bump starts cold. The first
+    # Sized for a cold Gradle cache, which is no first-run accident: GitHub evicts a cache a week unused or past the
+    # repository's 10 GB, and before 2026-11-22 every dependency bump started cold (the cache step below says why). The first
     # CI run (2026-11-05, cold, 4 vCPU) was cancelled at the old 15 with `:core:test` 6 min in: 5.5 min of dependency
     # resolution and buildSrc before the first project task, 2 min of compiling, the tests from minute 7.7; the whole
     # check is estimated at 18–21 min. The measurement behind the value is the stage map's (how-veyq-is-tested.md).
@@ -129,7 +129,22 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-          cache: gradle
+
+      # Gradle's dependency and wrapper caches, restored by prefix when the key missed: a dependency bump starts from the
+      # last cache and fetches only what changed, where it once fetched all of it (~500 MB) from Maven Central, whose rate
+      # limit failed a cold run's burst of jobs (429, 2026-11-22). The key hashes what decides the resolved graph: every
+      # build script, the version catalog, the verification metadata every dependency change rewrites, the wrapper. The job
+      # saves the cache at its end, only if green and only if the key missed. It replaces setup-java's `cache: gradle`,
+      # which had no restore key and hashed a root `gradle/*.versions.toml`, so src/backend's catalog never changed its key.
+      - name: Restore the Gradle cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/backend/**/*.gradle.kts', 'src/backend/gradle/libs.versions.toml', 'src/backend/gradle/verification-metadata.xml', 'src/backend/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Validate the Gradle wrapper JAR
         uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
@@ -157,7 +172,17 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-          cache: gradle
+
+      # The Gradle cache, keyed and restored as `backend`'s says.
+      - name: Restore the Gradle cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/backend/**/*.gradle.kts', 'src/backend/gradle/libs.versions.toml', 'src/backend/gradle/verification-metadata.xml', 'src/backend/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Validate the Gradle wrapper JAR
         uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
@@ -347,7 +372,17 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-          cache: gradle
+
+      # The Gradle cache, keyed and restored as `backend`'s says.
+      - name: Restore the Gradle cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/backend/**/*.gradle.kts', 'src/backend/gradle/libs.versions.toml', 'src/backend/gradle/verification-metadata.xml', 'src/backend/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Validate the Gradle wrapper JAR
         uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
@@ -437,7 +472,17 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-          cache: gradle
+
+      # The Gradle cache, keyed and restored as `backend`'s says.
+      - name: Restore the Gradle cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/backend/**/*.gradle.kts', 'src/backend/gradle/libs.versions.toml', 'src/backend/gradle/verification-metadata.xml', 'src/backend/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Validate the Gradle wrapper JAR
         uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
@@ -1072,7 +1117,17 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-          cache: gradle
+      # The Gradle cache, keyed and restored as `backend`'s says.
+      - name: Restore the Gradle cache
+        if: steps.predecessor.outputs.ref != ''
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/backend/**/*.gradle.kts', 'src/backend/gradle/libs.versions.toml', 'src/backend/gradle/verification-metadata.xml', 'src/backend/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-${{ runner.arch }}-
       - name: Validate the Gradle wrapper JAR
         if: steps.predecessor.outputs.ref != ''
         uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
