@@ -1,0 +1,193 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://veyq.dev/contracts/platform/tree/v1-vectors.schema.json",
+  "title": "veyq node tree rules, conformance vectors v1",
+  "description": "The shape of v1-vectors.json: the node tree's rules (a level's order, the numbering of equal names, a name's sibling collision, the move's plan) as cases both clients answer. Every case names the rule it pins (`rule`) and its answer (`expected`); a node is named by its id everywhere an answer names one.",
+  "type": "object",
+  "required": ["format", "note", "icu", "kinds", "order", "displayNames", "collision", "collisionNodes", "trees", "moveBlock", "moveBlockOf", "planMove", "movePlaces", "moveTrail", "moveStart"],
+  "additionalProperties": false,
+  "properties": {
+    "format": { "const": "veyq-tree-v1-vectors" },
+    "note": { "type": "string" },
+    "icu": { "type": "string", "description": "The ICU of the Node whose Intl.Collator the order section was first read from." },
+    "kinds": {
+      "description": "Each registered kind's facts as the rules read them (KindFacts): its application's route slug (null: none), its name's folding for the slug token (NAME: slugify, FILE_NAME: fileNameSlug), and its placement. A kind not listed folds by NAME with no route and is placed nowhere.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "route", "folding", "root", "parents"],
+        "additionalProperties": false,
+        "properties": {
+          "kind": { "type": "string" },
+          "route": { "type": ["string", "null"] },
+          "folding": { "enum": ["NAME", "FILE_NAME"] },
+          "root": { "type": "boolean" },
+          "parents": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "order": { "type": "array", "items": { "$ref": "#/$defs/orderCase" } },
+    "displayNames": { "type": "array", "items": { "$ref": "#/$defs/displayNamesCase" } },
+    "collision": { "type": "array", "items": { "$ref": "#/$defs/collisionCase" } },
+    "collisionNodes": { "type": "object", "additionalProperties": { "type": "array", "items": { "$ref": "#/$defs/sibling" } } },
+    "trees": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["rootId", "nodes"],
+        "additionalProperties": false,
+        "properties": {
+          "rootId": { "type": ["string", "null"], "description": "The top the session browses: a guest's link root, null for a member's scope root." },
+          "nodes": { "type": "array", "items": { "$ref": "#/$defs/treeNode" } }
+        }
+      }
+    },
+    "moveBlock": { "type": "array", "items": { "$ref": "#/$defs/blockCase" } },
+    "moveBlockOf": { "type": "array", "items": { "$ref": "#/$defs/blockCase" } },
+    "planMove": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rule", "tree", "nodes", "to", "expected"],
+        "additionalProperties": false,
+        "properties": {
+          "rule": { "type": "string" }, "tree": { "type": "string" }, "nodes": { "$ref": "#/$defs/ids" }, "to": { "$ref": "#/$defs/place" },
+          "expected": {
+            "type": "object",
+            "required": ["send", "leftOut"],
+            "properties": {
+              "send": { "$ref": "#/$defs/ids" },
+              "leftOut": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["node", "reason"],
+                  "properties": { "node": { "type": "string" }, "reason": { "enum": ["current", "nameTaken"] }, "sibling": { "type": "string" } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "movePlaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rule", "tree", "nodes", "mode", "at", "expected"],
+        "additionalProperties": false,
+        "properties": {
+          "rule": { "type": "string" }, "tree": { "type": "string" }, "nodes": { "$ref": "#/$defs/ids" }, "mode": { "$ref": "#/$defs/mode" },
+          "at": { "$ref": "#/$defs/place" },
+          "expected": {
+            "type": "array",
+            "items": { "type": "object", "required": ["node", "blocked"], "properties": { "node": { "type": "string" }, "blocked": { "enum": ["self", "inside", null] } } }
+          }
+        }
+      }
+    },
+    "moveTrail": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rule", "tree", "at", "expected"],
+        "additionalProperties": false,
+        "properties": {
+          "rule": { "type": "string" }, "tree": { "type": "string" }, "at": { "$ref": "#/$defs/place" },
+          "expected": { "type": "array", "items": { "$ref": "#/$defs/place" } }
+        }
+      }
+    },
+    "moveStart": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["rule", "tree", "nodes", "expected"],
+        "additionalProperties": false,
+        "properties": { "rule": { "type": "string" }, "tree": { "type": "string" }, "nodes": { "$ref": "#/$defs/ids" }, "expected": { "$ref": "#/$defs/place" } }
+      }
+    }
+  },
+  "$defs": {
+    "ids": { "type": "array", "items": { "type": "string" } },
+    "place": { "type": ["string", "null"], "description": "A node id; null is the scope root." },
+    "mode": { "enum": ["member", "guest"] },
+    "entry": {
+      "type": "object",
+      "required": ["id", "name", "createdAt"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "createdAt": { "type": ["number", "null"], "description": "The server's creation instant in epoch milliseconds; null where none is served (a guest's)." }
+      }
+    },
+    "sibling": {
+      "type": "object",
+      "required": ["id", "kind", "name", "parentId"],
+      "additionalProperties": false,
+      "properties": { "id": { "type": "string" }, "kind": { "type": "string" }, "name": { "type": "string" }, "parentId": { "$ref": "#/$defs/place" } }
+    },
+    "treeNode": {
+      "type": "object",
+      "required": ["id", "parentId", "kind", "name", "createdAt", "identity"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" }, "parentId": { "$ref": "#/$defs/place" }, "kind": { "type": "string" }, "name": { "type": "string" },
+        "createdAt": { "type": ["number", "null"] },
+        "identity": { "type": "boolean", "description": "A drop box guest's identity folder (ADR 0080 decision 11)." }
+      }
+    },
+    "orderCase": {
+      "type": "object",
+      "required": ["rule", "folders", "others", "expected"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "type": "string" },
+        "folders": { "type": "array", "items": { "$ref": "#/$defs/entry" } },
+        "others": { "type": "array", "items": { "$ref": "#/$defs/entry" } },
+        "expected": { "$ref": "#/$defs/ids" }
+      }
+    },
+    "displayNamesCase": {
+      "type": "object",
+      "required": ["rule", "order", "siblings", "expected"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "type": "string" },
+        "order": { "enum": ["creation", "id"] },
+        "siblings": { "type": "array", "items": { "$ref": "#/$defs/entry" } },
+        "expected": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "collisionCase": {
+      "type": "object",
+      "required": ["rule", "nodes", "parentId", "kind", "name", "self", "expected"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "type": "string" },
+        "nodes": { "oneOf": [{ "type": "string", "description": "A list of collisionNodes, by its key." }, { "type": "array", "items": { "$ref": "#/$defs/sibling" } }] },
+        "parentId": { "$ref": "#/$defs/place" },
+        "kind": { "type": "string" },
+        "name": { "type": "string" },
+        "self": { "type": ["string", "null"] },
+        "expected": { "type": ["string", "null"] }
+      }
+    },
+    "blockCase": {
+      "type": "object",
+      "required": ["rule", "tree", "nodes", "mode", "at", "intent", "expected"],
+      "additionalProperties": false,
+      "properties": {
+        "rule": { "type": "string" }, "tree": { "type": "string" }, "nodes": { "$ref": "#/$defs/ids" }, "mode": { "$ref": "#/$defs/mode" },
+        "at": { "$ref": "#/$defs/place" }, "intent": { "enum": ["move", "copy"] },
+        "expected": {
+          "oneOf": [
+            { "enum": ["self", "inside", "current", "identityFolder", "kind", null] },
+            { "type": "object", "required": ["block", "node"], "properties": { "block": { "type": "string" }, "node": { "type": ["string", "null"] } } }
+          ]
+        }
+      }
+    }
+  }
+}
