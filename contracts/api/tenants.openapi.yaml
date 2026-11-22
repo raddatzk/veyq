@@ -2772,8 +2772,10 @@ paths:
         server creates the account under that id and, for an OWNER invite, stores the OWNER membership + grant and
         flips the tenant ACTIVE; for a MEMBER invite it stores the MEMBER membership with the self-grant, the
         profile with the join record, after the invite key's proof verified (as `acceptTenantInvite`). Either way it
-        consumes the invite. A taken `userId` is `409 id_taken` (never overwritten, not idempotent). Public: gated
-        by the bootstrap secret. The new user logs in afterward (no session is issued here, mirroring setup).
+        consumes the invite. An optional `kitRecord` — the layout of the Emergency Kit the join printed, sealed under the
+        new Master Key (ADR 0157 decision 4) — is stored in the same step; absent, nothing is. A taken `userId` is `409
+        id_taken` (never overwritten, not idempotent). Public: gated by the bootstrap secret. The new user logs in
+        afterward (no session is issued here, mirroring setup).
       requestBody:
         required: true
         content:
@@ -2794,6 +2796,7 @@ paths:
                     kdfParams: AAAAAwAAgAAAAAABAAAAIHNhbHQtZXhhbXBsZS0xNmJ5dGVz
                 secretKeyProofPublicKey: c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5
               grant: AQ==
+              kitRecord: AgoLDA0ODxAREhMUFeLq88pk/r0L1Z9YaKvlghAsoXg4hvbKef2nvYo=
       responses:
         "201":
           description: The account was created, the tenant is active, and the caller owns it.
@@ -4974,6 +4977,15 @@ components:
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+        kitRecord:
+          # Optional (ADR 0157 decision 4): a client that predates the record still births; absent writes nothing.
+          # `contentEncoding` beside the `$ref` too: the opacity oracle (validate_field_visibility.is_opaque, the e2e
+          # sweep's name set) reads the property, never the scalar it `$ref`s.
+          $ref: "#/components/schemas/SealedKitRecord"
+          contentEncoding: base64
+
+    SealedKitRecord:
+      $ref: '_common.openapi.yaml#/components/schemas/SealedKitRecord'
 
     AccountRegistration:
       type: object

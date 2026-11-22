@@ -920,3 +920,20 @@ components:
           maxLength: 256
           example: AAAAAwAAgAAAAAABAAAAIHNhbHQtZXhhbXBsZS0xNmJ5dGVz
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    SealedKitRecord:
+      # Shared by the account, setup and tenants specs (ADR 0157 decision 4): the two births and the rotation carry it
+      # optionally as `kitRecord`, and the account's own record reads and writes it as `blob`. Its own annotation fits
+      # the optional uses (`@NotBlank` would refuse an absent one); the required `KitRecordUpdate.blob` writes its own
+      # beside the `$ref`.
+      type: string
+      description: >
+        The account's **kit record** (ADR 0157 decision 3): the layout of the last Emergency Kit the account made, the
+        compact JSON `{"layout":n}` sealed under the account's Master Key (`seal` purpose `kit-record`, no binding field).
+        Opaque base64 the server stores and serves verbatim and never interprets: it learns no layout number, only that
+        the account wrote a small document at a time.
+      contentEncoding: base64
+      minLength: 1
+      maxLength: 65532
+      example: AgoLDA0ODxAREhMUFeLq88pk/r0L1Z9YaKvlghAsoXg4hvbKef2nvYo=
+      x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 65532) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
