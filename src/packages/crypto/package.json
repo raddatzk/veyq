@@ -13,6 +13,7 @@
     "./accountBirth": "./src/accountBirth.ts",
     "./emergencyKit": "./src/emergencyKit.ts",
     "./secretKey": "./src/secretKey.ts",
+    "./crockford": "./src/crockford.ts",
     "./base64": "./src/base64.ts",
     "./testArgon": "./src/testArgon.ts",
     "./canaryRule": "./src/canaryRule.ts",

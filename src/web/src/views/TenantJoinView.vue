@@ -38,6 +38,7 @@ import type { ScopeKey } from '../features/spaces/epochs'
 import JoinPicturePicker from '../features/account/profile/JoinPicturePicker.vue'
 import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.vue'
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
+import { secretKeyReady } from '../shared/ui/secretKeyEntry'
 import { InviteRole } from '../api/generated/tenants'
 import { buildAccount, type BuiltAccount } from '@veyq/crypto/accountBirth'
 import { login } from '../features/account/login/login'
@@ -354,7 +355,7 @@ async function askForConfirmation() {
 
 /** Existing owner: sign in, unlock (identity key), then seal the grant to it and accept. */
 async function signInAndAccept() {
-  if (password.value.length === 0 || secretKey.value.trim().length === 0) return
+  if (password.value.length === 0 || !secretKeyReady(secretKey.value)) return
   if (!emailReady.value) {
     error.value = t('tenant.join.emailInvalid')
     return
@@ -620,7 +621,7 @@ async function mapError(e: unknown): Promise<string> {
             </label>
             <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
             <VeyqButton type="submit" :label="jcopy('join')" icon="check" :loading="busy"
-                    :disabled="!usernameReady || password.length === 0 || secretKey.trim().length === 0 || !inviteeEmail" />
+                    :disabled="!usernameReady || password.length === 0 || !secretKeyReady(secretKey) || !inviteeEmail" />
           </form>
           <VeyqButton v-if="linkInvite" :label="t('tenant.join.newAccount')" variant="secondary" appearance="text" size="small"
                       data-testid="join-new-account" :disabled="busy" @click="chooseAccount('register')" />

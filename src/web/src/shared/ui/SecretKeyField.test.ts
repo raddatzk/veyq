@@ -134,7 +134,7 @@ describe('SecretKeyField (uc.account.unlock § One Secret-Key control)', () => {
     expect(typed.emitted('kit')).toBeUndefined()
   })
 
-  it('says a full-length key with a typo has one — and says nothing while a key is still being typed', async () => {
+  it('says a full-length key with a typo has one — and no error while a key is still being typed', async () => {
     const w = mountField()
     await field(w).setValue(TYPO)
     await w.setProps({ modelValue: TYPO })
@@ -145,9 +145,42 @@ describe('SecretKeyField (uc.account.unlock § One Secret-Key control)', () => {
     // The key stays as typed: the message points at it, it does not rewrite it.
     expect(w.emitted('update:modelValue')).toEqual([[TYPO]])
 
-    // Controls on the same predicate: the right key in any spelling, and a key not yet complete, show nothing.
+    // Controls on the same predicate: the right key in any spelling, and a key not yet complete, show no error (the
+    // incomplete one its block count, the next test's subject).
     for (const quiet of [KIT.secretKey, KIT.secretKey.toLowerCase().replace(/-/g, ' '), KIT.secretKey.slice(0, 20), '']) {
       await w.setProps({ modelValue: quiet })
+      expect(messages(w), quiet).toHaveLength(0)
+    }
+  })
+
+  // The first person to sign in with a kit typed its first line alone — three of the nine blocks — and met the generic
+  // "didn't match" after the submit. Every screen greys its submit until the key is whole (`secretKeyReady`), so the
+  // field must say why for every state that is not: the count while typing, a reason for the rest.
+  it('counts the blocks while a key is incomplete, and says why for every key a screen may not submit', async () => {
+    const w = mountField()
+    const progress = () => w.find('.secret-key-progress')
+    const firstLine = KIT.secretKey.split('-').slice(0, 3).join('-')
+
+    await w.setProps({ modelValue: firstLine })
+    expect(progress().text()).toBe(t('unlock.secretKeyProgress', { block: 3, total: 9 }))
+    expect(progress().attributes('aria-live')).toBe('polite')
+    expect(messages(w)).toHaveLength(0)
+
+    const reasons: [string, string][] = [
+      [KIT.secretKey.split('-')[0] + 'U', t('unlock.secretKeyForeign')],
+      [KIT.secretKey + '0', t('unlock.secretKeyTooLong', { total: 9 })],
+      [TYPO, t('unlock.secretKeyTypo')],
+    ]
+    for (const [typed, reason] of reasons) {
+      await w.setProps({ modelValue: typed })
+      expect(progress().exists(), typed).toBe(false)
+      expect(messages(w).map((m) => [m.text(), m.attributes('data-tone')]), typed).toEqual([[reason, 'error']])
+    }
+
+    // Controls: a whole key and an empty field show neither a count nor a reason.
+    for (const quiet of [KIT.secretKey, '']) {
+      await w.setProps({ modelValue: quiet })
+      expect(progress().exists(), quiet).toBe(false)
       expect(messages(w), quiet).toHaveLength(0)
     }
   })

@@ -58,6 +58,12 @@
   width: 100%;
   padding-right: calc(var(--secret-icons, 2) * 1.75rem + 0.45rem);
 }
+/* The block count under the field is why the screen's submit is grey (`secretKeyEntry.ts`), so it stands apart from the
+   host's muted hint that often follows it. */
+.secret-key-progress {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
 .secret-icons {
   position: absolute;
   top: 50%;

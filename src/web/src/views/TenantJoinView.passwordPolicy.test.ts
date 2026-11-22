@@ -52,6 +52,7 @@ import { vaultState } from '../app/vault'
 import { pwnedCount } from '../shared/pwned'
 import { realI18n, t } from '../test/i18n'
 import { invitePreview, setupStatus } from '../test/models'
+import { TYPED_SECRET_KEY } from '../test/secretKey'
 
 // The layer's real components are stubbed: what this file asserts is a `:disabled` prop and a rendered hint, not
 // the layer's own rendering. Same stub set as
@@ -198,7 +199,7 @@ describe('TenantJoinView — where the password floor applies', () => {
     const field = w.find('input[type="password"]')
     await field.setValue('a long enough password')
     await field.trigger('blur')
-    await w.find('input[name="secret-key"]').setValue('the-secret-key')
+    await w.find('input[name="secret-key"]').setValue(TYPED_SECRET_KEY)
     await w.find('form').trigger('submit')
     await flushPromises()
     expect(login).toHaveBeenCalledWith('owner@acme.example', 'a long enough password')
@@ -214,7 +215,7 @@ describe('TenantJoinView — where it must NOT apply', () => {
     await w.find('input[name="username"]').setValue('kevin')
 
     await w.find('input[type="password"]').setValue('short')                  // 5 < 10
-    await w.find('input[name="secret-key"]').setValue('the-secret-key')
+    await w.find('input[name="secret-key"]').setValue(TYPED_SECRET_KEY)
     await flushPromises()
 
     expect(w.text()).not.toContain(t('password.minLength'))

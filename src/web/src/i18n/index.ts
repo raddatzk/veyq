@@ -771,7 +771,9 @@ const en = {
     pdfConfidentialBody: 'This sheet holds your Secret Key. Don’t give it to anyone, and don’t upload it anywhere.',
     pdfAccount: 'Your account',
     pdfEmail: 'Email',
-    pdfSecretKey: 'Secret Key',
+    // The label over the key's three printed lines: the first person to use a kit typed its first line alone (owner
+    // 2026-11-22), which looks like a whole key. admin-web's kit says the same.
+    pdfSecretKey: 'Secret Key · 9 blocks in 3 lines',
     pdfWhere: 'Where you sign in',
     pdfAddresses: 'Addresses where you sign in – type them here, or write them in after printing:',
     pdfRestore: 'Quick restore',
@@ -1427,7 +1429,12 @@ const en = {
     scanError: 'Camera unavailable — upload your kit or paste your Secret Key.',
     // Said in the scanner while it keeps looking: a readable code that is not a kit (owner 2026-11-12).
     notAKit: 'That is not an Emergency Kit.',
-    secretKeyTypo: 'This Secret Key has a typo. Compare it with your Emergency Kit, group by group.',
+    // Under the field while a key is shorter than a whole one: the kit prints it in three lines, and the first line alone
+    // looks like a key. The submit stays grey until the key is whole, so this count is the reason it is.
+    secretKeyProgress: 'Block {block} of {total}',
+    secretKeyForeign: 'This Secret Key holds a character no Secret Key has. Compare it with your Emergency Kit.',
+    secretKeyTooLong: 'This is longer than a Secret Key: it has {total} blocks of 6 characters.',
+    secretKeyTypo: 'This Secret Key has a typo. Compare it with your Emergency Kit, block by block.',
     kitUnreadable: 'Couldn’t read that kit. Try another file or paste your Secret Key.',
     kitEmailMismatch:
       'That kit belongs to {kitEmail}, but this is for {expected}. Carry on if you know it’s the right key — we can’t tell until it opens your account.',
@@ -3031,7 +3038,7 @@ const de: typeof en = {
     pdfConfidentialBody: 'Dieses Blatt enthält deinen Secret Key. Gib es niemandem und lade es nirgends hoch.',
     pdfAccount: 'Dein Konto',
     pdfEmail: 'E-Mail',
-    pdfSecretKey: 'Secret Key',
+    pdfSecretKey: 'Secret Key · 9 Blöcke in 3 Zeilen',
     pdfWhere: 'Wo du dich anmeldest',
     pdfAddresses: 'Adressen, unter denen du dich anmeldest – hier eintippen oder nach dem Ausdrucken eintragen:',
     pdfRestore: 'Schnell wiederherstellen',
@@ -3676,7 +3683,10 @@ const de: typeof en = {
     scanHint: 'Richte deine Kamera auf den QR-Code in deinem Notfall-Kit.',
     scanError: 'Kamera nicht verfügbar — lade dein Kit hoch oder füge deinen Secret Key ein.',
     notAKit: 'Das ist kein Notfall-Kit.',
-    secretKeyTypo: 'In diesem Secret Key steckt ein Tippfehler. Vergleiche ihn Gruppe für Gruppe mit deinem Notfall-Kit.',
+    secretKeyProgress: 'Block {block} von {total}',
+    secretKeyForeign: 'In diesem Secret Key steht ein Zeichen, das in keinem Secret Key vorkommt. Vergleiche ihn mit deinem Notfall-Kit.',
+    secretKeyTooLong: 'Das ist länger als ein Secret Key: Er hat {total} Blöcke mit je 6 Zeichen.',
+    secretKeyTypo: 'In diesem Secret Key steckt ein Tippfehler. Vergleiche ihn Block für Block mit deinem Notfall-Kit.',
     kitUnreadable: 'Konnte das Kit nicht lesen. Versuche eine andere Datei oder füge deinen Secret Key ein.',
     kitEmailMismatch:
       'Dieses Kit gehört zu {kitEmail}, hier geht es aber um {expected}. Mach weiter, wenn du weißt, dass es der richtige Schlüssel ist — sicher ist das erst, wenn er dein Konto öffnet.',

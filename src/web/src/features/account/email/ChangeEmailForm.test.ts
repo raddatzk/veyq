@@ -14,6 +14,7 @@ vi.mock('./emailChange', async (orig) => ({
 import ChangeEmailForm from './ChangeEmailForm.vue'
 import { requestEmailChange, EmailChangeRefused } from './emailChange'
 import { realI18n, t } from '../../../test/i18n'
+import { TYPED_SECRET_KEY } from '../../../test/secretKey'
 
 const CURRENT = 'me@example.com'
 const NEW = 'me.new@example.com'
@@ -38,7 +39,7 @@ async function fill(w: ReturnType<typeof mountForm>, email = NEW) {
   await w.find('[data-testid="change-email-open"]').trigger('click')
   await w.find('input[name="new-email"]').setValue(email)
   await w.find('input[name="password"]').setValue('the password')
-  await w.find('input[name="secret-key"]').setValue('c2VjcmV0')
+  await w.find('input[name="secret-key"]').setValue(TYPED_SECRET_KEY)
   await w.find('form').trigger('submit')
   await flushPromises()
 }
@@ -58,7 +59,7 @@ describe('ChangeEmailForm', () => {
   it('sends the new address, the password and the Secret Key, then says to check the new mailbox', async () => {
     const w = mountForm()
     await fill(w)
-    expect(requestEmailChange).toHaveBeenCalledWith(NEW, 'the password', 'c2VjcmV0')
+    expect(requestEmailChange).toHaveBeenCalledWith(NEW, 'the password', TYPED_SECRET_KEY)
     expect(w.find('[data-testid="change-email-sent"]').text()).toBe(t('emailChange.sent', { email: NEW }))
     expect(w.find('[data-testid="change-email-form"]').exists()).toBe(false)
   })
