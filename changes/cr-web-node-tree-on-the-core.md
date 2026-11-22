@@ -31,7 +31,7 @@ platform module's running budget (decision 10).
 
 - **The substrate** (named before every number below): branch `claude/platform-slices-refine` at `d089bffd2`,
   2026-11-21, the pilot merged, the core's split **not** landed (it is being built on `claude/core-split` in parallel:
-  [cr-core-platform-and-application-modules](cr-core-platform-and-application-modules.md)). Nothing was built for this
+  [ADR 0156](../docs/decisions/0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md), built 2026-11-22). Nothing was built for this
   refinement and no Gradle task ran; every size is measured on sources with esbuild (command below) or remembered from
   ADR 0155.
 - **Blocked until the split lands** (decision 11): this CR assumes the split's layout — `:core` the platform at
