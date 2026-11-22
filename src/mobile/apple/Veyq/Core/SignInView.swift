@@ -284,7 +284,7 @@ struct KitScannerView: View {
 /// An account this device trusts (ADR 0123 decision 8): the password alone for a password-trusted one, a button that
 /// asks for the person's authentication again for a remembered one; then the core's entries (`UnlockPlan.entries`,
 /// ADR 0154 decision 2), whole and in their order — the way to another account, *Open a link*, and *Stop trusting this
-/// device* (inbox #1052), destructive, asked first by the core where writes made offline wait.
+/// device* (inbox #1052), destructive, always asked first by the core.
 struct UnlockView: View {
     let record: TrustedDevice
     let working: Bool
