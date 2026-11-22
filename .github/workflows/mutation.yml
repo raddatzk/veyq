@@ -266,7 +266,17 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-          cache: gradle
+
+      # The Gradle cache, keyed and restored as checks.yml's `backend` job says.
+      - name: Restore the Gradle cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/backend/**/*.gradle.kts', 'src/backend/gradle/libs.versions.toml', 'src/backend/gradle/verification-metadata.xml', 'src/backend/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Validate the Gradle wrapper JAR
         uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1

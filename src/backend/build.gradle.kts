@@ -149,10 +149,11 @@ val thirdPartyLicenses = tasks.register<me.raddatz.veyq.buildlogic.ThirdPartyLic
     artifacts.set(
         configurations.named("quarkusProdRuntimeClasspathConfiguration").flatMap { it.incoming.artifacts.resolvedArtifacts },
     )
-    // A module's POM, each already pinned in gradle/verification-metadata.xml: resolving the graph read them all. Online
-    // through an artifact query; under `--offline` out of Gradle's file store, verified against that pin (buildSrc's
-    // CachedPoms says why: an artifact query, and a `g:a:v@pom` dependency alike, reads the artifact index, which only an
-    // online query fills — measured 2026-11-02: offline, 0 of 273 POMs resolved and the build failed after quarkusBuild).
+    // A module's POM, each already pinned in gradle/verification-metadata.xml: resolving the graph read them all. Out of
+    // Gradle's file store, verified against that pin, and only when no verified copy is there (online) through an artifact
+    // query (buildSrc's CachedPoms says why: an artifact query, and a `g:a:v@pom` dependency alike, reads the artifact
+    // index, which only an online query fills — measured 2026-11-02: offline, 0 of 273 POMs resolved and the build failed
+    // after quarkusBuild; and online it is a request per POM, which Maven Central rate-limited in CI on 2026-11-22).
     val deps = dependencies
     val offline = gradle.startParameter.isOffline
     val cachedPoms = me.raddatz.veyq.buildlogic.CachedPoms(
@@ -162,6 +163,7 @@ val thirdPartyLicenses = tasks.register<me.raddatz.veyq.buildlogic.ThirdPartyLic
     pomResolver.set(
         me.raddatz.veyq.buildlogic.PomResolver { g, a, v ->
             if (offline) return@PomResolver cachedPoms.pom(g, a, v)
+            cachedPoms.pomOrNull(g, a, v)?.let { return@PomResolver it }
             deps.createArtifactResolutionQuery().forModule(g, a, v)
                 .withArtifacts(org.gradle.maven.MavenModule::class.java, org.gradle.maven.MavenPomArtifact::class.java)
                 .execute().resolvedComponents.single()

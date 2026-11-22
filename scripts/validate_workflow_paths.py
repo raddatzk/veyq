@@ -15,7 +15,8 @@
      `cache-dependency-path:`, is a tracked file.
   4. **Cache paths.** Every line of an `actions/cache` step's `path:` names a tracked file, or lies under a tracked
      directory directly followed by a build-output segment (`build`, `reports`, `dist`, `node_modules`, `.gradle`):
-     a cache holds output, which no tree tracks, so its anchor is the project directory that writes it.
+     a cache holds output, which no tree tracks, so its anchor is the project directory that writes it. A line under
+     `~/` (the runner's home: Gradle's `~/.gradle/caches`) names no repository path, so nothing here can check it.
   5. **Dependabot.** Every `directory:` and `directories:` entry is `/` or a tracked directory.
   A value carrying a `${{ … }}` expression is resolved by the runner, not here, and is skipped.
 
@@ -175,7 +176,7 @@ def check_workflow(rel: str, doc: object, tree: Tree) -> int:
                 step = step[p]
             for entry in lines((step.get("with") or {}).get("path", "")):
                 count += 1
-                if EXPRESSION not in entry and not tree.holds_cache(entry):
+                if EXPRESSION not in entry and not entry.startswith("~/") and not tree.holds_cache(entry):
                     errors.append(f"{where}: the cache path `{entry}` lies under no tracked project directory")
     return count
 
