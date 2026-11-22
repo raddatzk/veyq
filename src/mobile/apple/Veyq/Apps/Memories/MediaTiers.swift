@@ -82,7 +82,7 @@ final class MediaDeriver: NSObject, DerivationDeriver, @unchecked Sendable {
 
     func derive(source: UploadSource, type: String, done: @escaping (Derivation.Derived) -> Void) {
         nonisolated(unsafe) let done = done
-        let url = AppleMemories.shared.urlOf(source: source)
+        let url = ApplePlatform.shared.urlOf(source: source)
         Task.detached {
             var tiers = MediaTiers.Derived()
             if let url {
@@ -90,7 +90,7 @@ final class MediaDeriver: NSObject, DerivationDeriver, @unchecked Sendable {
                 tiers = await MediaTiers.derive(url, type: type)
                 if scoped { url.stopAccessingSecurityScopedResource() }
             }
-            done(AppleMemories.shared.derived(
+            done(ApplePlatform.shared.derived(
                 preview: tiers.preview, thumbnail: tiers.thumbnail,
                 width: tiers.width.map { KotlinInt(value: Int32($0)) }, height: tiers.height.map { KotlinInt(value: Int32($0)) }
             ))

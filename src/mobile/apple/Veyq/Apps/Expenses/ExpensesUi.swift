@@ -8,13 +8,13 @@ import VeyqCore
 enum ExpensesUi {
     /// Expenses' Pot: its currency under its name, its cover and copy while Expenses is on, its ZIP.
     private static let pot = KindPage(header: { node, model in
-        guard let state = model.pot, state.ref.nodeId == node.nodeId, let view = state.view else { return nil }
+        guard let state = model.expenses.pot, state.ref.nodeId == node.nodeId, let view = state.view else { return nil }
         let ref = state.ref
         return HeaderContribution(
             subtitle: view.subtitle.map { say(notice: $0) },
             // a cover and a copy write: core offers them where Expenses is on (the web's `canCopy`, `expensesRights`)
             facts: AppKinds.Facts(canWrite: view.canWrite, hasContent: true),
-            download: { await model.downloadPot(ref, to: $0) }
+            download: { await model.expenses.downloadPot(ref, to: $0) }
         )
     }, body: { ref, key, model in AnyView(PotScreen(model: model, ref: ref, tab: key)) }, guest: { page, _, model in
         guard page is PotGuest.Pot else { return AnyView(EmptyView()) }
@@ -27,7 +27,8 @@ enum ExpensesUi {
             id: .expenses,
             list: { model, _ in AnyView(ExpensesList(model: model)) },
             // New pot at the shell's place now (`NewPotSheet`), the web's `createDialog` of a Pot
-            creates: [.pot: { model, _, _ in AnyView(NewPotSheet(model: model)) }]
+            creates: [.pot: { model, _, _ in AnyView(NewPotSheet(model: model)) }],
+            holding: { ExpensesHolding($0) }
         ))
     }
 }
@@ -52,7 +53,7 @@ private struct GuestPotView: View {
 
     /// The places offered now: Settings once the core offers them.
     private var places: [String] {
-        let settings = model.pot.map { $0.ref == ref && $0.view?.settingsOffered == true } ?? false
+        let settings = model.expenses.pot.map { $0.ref == ref && $0.view?.settingsOffered == true } ?? false
         return ["expenses.entries", "expenses.overview"] + (settings ? ["expenses.settings"] : [])
     }
 

@@ -50,7 +50,7 @@ struct MusicList<Switch: View>: View {
     @State private var downloaded: URL?
     @State private var failed: String?
 
-    private var state: MusicModel.State? { model.musicShown }
+    private var state: MusicModel.State? { model.memories.musicShown }
 
     var body: some View {
         List {

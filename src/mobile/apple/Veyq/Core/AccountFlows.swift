@@ -85,7 +85,7 @@ final class HeldFlow<M: AnyObject, S> {
     init(_ model: M, current: @escaping (M) -> S, flow: (M) -> any Kotlinx_coroutines_coreStateFlow) {
         self.model = model
         let stateFlow = flow(model)
-        state = CoreState({ current(model) }) { changed in AppleMemories.shared.watch(flow: stateFlow) { @Sendable _ in changed() } }
+        state = CoreState({ current(model) }) { changed in ApplePlatform.shared.watch(flow: stateFlow) { @Sendable _ in changed() } }
     }
 
     var value: S { state.value }

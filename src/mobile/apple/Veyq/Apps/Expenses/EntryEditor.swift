@@ -11,7 +11,7 @@ private func at(_ item: Int?) -> KotlinInt? { item.map { KotlinInt(value: Int32(
 /// their amounts (an expense's amount is their sum), items with exact amounts and their own splits, the rest by its split
 /// (by shares, percent or amount, "everyone equally" as one line), another currency with its rate, and the shares in the
 /// base currency as the save seals them. Every rule and the editor's state are core's `EntryEditor`, which the app model
-/// holds and watches (`openEditor` before this sheet shows); this draws `model.editorState` and sends the edits.
+/// holds and watches (`openEditor` before this sheet shows); this draws `model.expenses.editorState` and sends the edits.
 struct EntryEditorSheet: View {
     @Bindable var model: AppModel
     let view: PotView
@@ -28,7 +28,7 @@ struct EntryEditorSheet: View {
 
     var body: some View {
         NavigationStack {
-            if let s = model.editorState {
+            if let s = model.expenses.editorState {
                 form(s)
             } else {
                 ProgressView()
@@ -46,7 +46,7 @@ struct EntryEditorSheet: View {
     }
 
     private func bind(_ get: @escaping () -> String, _ change: @escaping (String) -> EditorChange) -> Binding<String> {
-        Binding(get: get, set: { model.edit(change($0)) })
+        Binding(get: get, set: { model.expenses.edit(change($0)) })
     }
 
     @ViewBuilder private func form(_ s: EntryEditor.State) -> some View {
@@ -60,14 +60,14 @@ struct EntryEditorSheet: View {
                     if let newer = s.newer { Text(say(notice: newer)) }
                     if s.discardsMine {
                         Button(say(.offlineDiscardMine), role: .destructive) {
-                            Task { if await model.discardMine() { dismiss() } }
+                            Task { if await model.expenses.discardMine() { dismiss() } }
                         }
                         .disabled(s.saving)
                     }
                 }
             }
             if s.invalid { Section { Text(say(.edInvalid)).foregroundStyle(Role.danger) } }
-            Picker(say(.entryKind), selection: Binding(get: { f.kind }, set: { model.edit(EditorChange.Kind(kind: $0)) })) {
+            Picker(say(.entryKind), selection: Binding(get: { f.kind }, set: { model.expenses.edit(EditorChange.Kind(kind: $0)) })) {
                 Text(say(.edExpense)).tag(EntryForm.Kind.expense)
                 Text(say(.edRefund)).tag(EntryForm.Kind.refund)
                 Text(say(.potTransfer)).tag(EntryForm.Kind.transfer)
@@ -75,15 +75,15 @@ struct EntryEditorSheet: View {
             .pickerStyle(.segmented)
             .disabled(!editable)
             Section {
-                TextField(f.kind == .transfer ? say(.edNote) : say(.entryTitle), text: bind({ model.editorState?.form.title ?? "" }) { EditorChange.Title(text: $0) })
+                TextField(f.kind == .transfer ? say(.edNote) : say(.entryTitle), text: bind({ model.expenses.editorState?.form.title ?? "" }) { EditorChange.Title(text: $0) })
                 problem(shown(s, "title"))
                 DatePicker(say(.edDate), selection: Binding(
-                    get: { IsoDay.date(model.editorState?.form.date ?? "") ?? IsoDay.date(model.today) ?? .distantPast },
-                    set: { model.edit(EditorChange.Day(iso: IsoDay.iso($0))) }
+                    get: { IsoDay.date(model.expenses.editorState?.form.date ?? "") ?? IsoDay.date(model.expenses.today) ?? .distantPast },
+                    set: { model.expenses.edit(EditorChange.Day(iso: IsoDay.iso($0))) }
                 ), displayedComponents: .date)
                 problem(shown(s, "date"))
                 if f.kind != .transfer {
-                    Picker(say(.entryCategory), selection: Binding(get: { f.category }, set: { model.edit(EditorChange.Category(id: $0)) })) {
+                    Picker(say(.entryCategory), selection: Binding(get: { f.category }, set: { model.expenses.edit(EditorChange.Category(id: $0)) })) {
                         ForEach(Self.defaults, id: \.self) { Text(categoryName($0, view)).tag($0) }
                         ForEach(Array(view.ownCategories.enumerated()), id: \.offset) { _, c in
                             Text(c.second as String? ?? "").tag(c.first as String? ?? "")
@@ -101,7 +101,7 @@ struct EntryEditorSheet: View {
                 Section { EntryHistory(view: view, entryId: id) }
                 if editable {
                     Section {
-                        Button(say(.entryDelete), role: .destructive) { model.askDelete() }
+                        Button(say(.entryDelete), role: .destructive) { model.expenses.askDelete() }
                             .disabled(s.saving)
                     }
                 }
@@ -111,11 +111,11 @@ struct EntryEditorSheet: View {
         .modifier(ReceiptPresenters(model: model, view: view, ui: $receiptsUI))
         .navigationTitle(s.isNew ? say(.potAdd) : editable ? say(.edEditTitle) : say(.edViewTitle))
         // The ask is ended by its buttons only: a binding that cancels on dismissal runs before the button's action.
-        .alert(say(.entryDeleteConfirm), isPresented: Binding(get: { model.editorState?.asking == true }, set: { _ in })) {
+        .alert(say(.entryDeleteConfirm), isPresented: Binding(get: { model.expenses.editorState?.asking == true }, set: { _ in })) {
             Button(say(.entryDelete), role: .destructive) {
-                Task { if await model.deleteEntry() { dismiss() } }
+                Task { if await model.expenses.deleteEntry() { dismiss() } }
             }
-            Button(say(.entryCancel), role: .cancel) { model.cancelAsk() }
+            Button(say(.entryCancel), role: .cancel) { model.expenses.cancelAsk() }
         }
         .toolbar {
             ToolbarItem(placement: .cancellationAction) { Button(editable ? say(.signinCancel) : say(.receiptsClose)) { dismiss() } }
@@ -123,7 +123,7 @@ struct EntryEditorSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(say(.entrySave)) {
                         Task {
-                            guard let saved = await model.saveEntry(), saved.done else { return }
+                            guard let saved = await model.expenses.saveEntry(), saved.done else { return }
                             onSaved?()
                             // a receipt the space's storage had no room for was left out; the entry is saved, the editor closes
                             if let left = saved.notice { model.show(left) }
@@ -143,11 +143,11 @@ struct EntryEditorSheet: View {
     @ViewBuilder private func currencyFields(_ s: EntryEditor.State) -> some View {
         let f = s.form
         if let base = view.currency {
-            Picker(say(.edCurrency), selection: Binding(get: { f.currency }, set: { model.edit(EditorChange.Currency(code: $0)) })) {
+            Picker(say(.edCurrency), selection: Binding(get: { f.currency }, set: { model.expenses.edit(EditorChange.Currency(code: $0)) })) {
                 ForEach(Self.currencies, id: \.self) { Text($0).tag($0) }
             }
             if f.currency != base {
-                TextField(say(.edRate, f.currency, base), text: bind({ model.editorState?.form.rate ?? "" }) { EditorChange.RateTyped(text: $0) })
+                TextField(say(.edRate, f.currency, base), text: bind({ model.expenses.editorState?.form.rate ?? "" }) { EditorChange.RateTyped(text: $0) })
                 #if os(iOS)
                     .keyboardType(.decimalPad)
                 #endif
@@ -166,13 +166,13 @@ struct EntryEditorSheet: View {
     @ViewBuilder private func transferFields(_ s: EntryEditor.State) -> some View {
         let f = s.form
         Section {
-            TextField(say(.entryAmount), text: bind({ model.editorState?.form.amount ?? "" }) { EditorChange.Amount(text: $0) })
+            TextField(say(.entryAmount), text: bind({ model.expenses.editorState?.form.amount ?? "" }) { EditorChange.Amount(text: $0) })
             #if os(iOS)
                 .keyboardType(.decimalPad)
             #endif
             problem(shown(s, "amount"))
-            Picker(say(.edFrom), selection: Binding(get: { f.from }, set: { model.edit(EditorChange.From(person: $0)) })) { ForEach(s.people, id: \.id) { Text($0.name).tag($0.id) } }
-            Picker(say(.edTo), selection: Binding(get: { f.to }, set: { model.edit(EditorChange.To(person: $0)) })) { ForEach(s.people, id: \.id) { Text($0.name).tag($0.id) } }
+            Picker(say(.edFrom), selection: Binding(get: { f.from }, set: { model.expenses.edit(EditorChange.From(person: $0)) })) { ForEach(s.people, id: \.id) { Text($0.name).tag($0.id) } }
+            Picker(say(.edTo), selection: Binding(get: { f.to }, set: { model.expenses.edit(EditorChange.To(person: $0)) })) { ForEach(s.people, id: \.id) { Text($0.name).tag($0.id) } }
             problem(shown(s, "transfer"))
         }
     }
@@ -184,24 +184,24 @@ struct EntryEditorSheet: View {
         Section {
             ForEach(f.payers.indices, id: \.self) { i in
                 HStack {
-                    Picker(say(.edPerson), selection: Binding(get: { f.payers[i].participant }, set: { model.edit(EditorChange.Payer(index: Int32(i), person: $0)) })) {
+                    Picker(say(.edPerson), selection: Binding(get: { f.payers[i].participant }, set: { model.expenses.edit(EditorChange.Payer(index: Int32(i), person: $0)) })) {
                         ForEach(people, id: \.id) { Text($0.name).tag($0.id) }
                     }
                     .labelsHidden()
-                    TextField(say(.entryAmount), text: bind({ model.editorState?.form.payers[safe: i]?.amount ?? "" }) { EditorChange.Paid(index: Int32(i), text: $0) })
+                    TextField(say(.entryAmount), text: bind({ model.expenses.editorState?.form.payers[safe: i]?.amount ?? "" }) { EditorChange.Paid(index: Int32(i), text: $0) })
                         .multilineTextAlignment(.trailing)
                     #if os(iOS)
                         .keyboardType(.decimalPad)
                     #endif
                     if f.canRemovePayer && editable {
-                        Button { model.edit(EditorChange.RemovePayer(index: Int32(i))) } label: { Image(systemName: "minus.circle") }
+                        Button { model.expenses.edit(EditorChange.RemovePayer(index: Int32(i))) } label: { Image(systemName: "minus.circle") }
                             .buttonStyle(.borderless)
                             .accessibilityLabel(say(.peopleRemove, people.first { $0.id == f.payers[i].participant }?.name ?? ""))
                     }
                 }
             }
             if editable, f.nextPayer(people: people.map(\.id)) != nil {
-                Button(say(.edAddPayer)) { model.edit(EditorChange.AddPayer.shared) }
+                Button(say(.edAddPayer)) { model.expenses.edit(EditorChange.AddPayer.shared) }
             }
             problem(shown(s, "payers"))
         } header: {
@@ -212,8 +212,8 @@ struct EntryEditorSheet: View {
         ForEach(f.items.indices, id: \.self) { i in
             Section {
                 HStack {
-                    TextField(say(.edItem), text: bind({ model.editorState?.form.items[safe: i]?.label ?? "" }) { EditorChange.ItemLabel(index: Int32(i), text: $0) })
-                    TextField(say(.entryAmount), text: bind({ model.editorState?.form.items[safe: i]?.amount ?? "" }) { EditorChange.ItemAmount(index: Int32(i), text: $0) })
+                    TextField(say(.edItem), text: bind({ model.expenses.editorState?.form.items[safe: i]?.label ?? "" }) { EditorChange.ItemLabel(index: Int32(i), text: $0) })
+                    TextField(say(.entryAmount), text: bind({ model.expenses.editorState?.form.items[safe: i]?.amount ?? "" }) { EditorChange.ItemAmount(index: Int32(i), text: $0) })
                         .multilineTextAlignment(.trailing)
                     #if os(iOS)
                         .keyboardType(.decimalPad)
@@ -221,11 +221,11 @@ struct EntryEditorSheet: View {
                 }
                 SplitEditor(model: model, split: f.items[i].split, item: i, people: people, part: f.itemAmount(item: f.items[i]), currency: f.currency, minorUnits: f.minorUnits)
                 problem(shown(s, "item", i))
-                if editable { Button(say(.edRemoveItem), role: .destructive) { model.edit(EditorChange.RemoveItem(index: Int32(i))) } }
+                if editable { Button(say(.edRemoveItem), role: .destructive) { model.expenses.edit(EditorChange.RemoveItem(index: Int32(i))) } }
             } header: { Text(say(.edItem)) }
         }
         Section {
-            if editable { Button(say(.edAddItem)) { model.edit(EditorChange.AddItem.shared) } }
+            if editable { Button(say(.edAddItem)) { model.expenses.edit(EditorChange.AddItem.shared) } }
             problem(shown(s, "items"))
         }
         if f.showsRest {
@@ -274,10 +274,10 @@ struct SplitEditor: View {
             HStack {
                 Text(say(notice: EntryForm.companion.collapsedWords(split: split, people: people)))
                 Spacer()
-                if editable { Button(say(.edAdjust)) { model.edit(EditorChange.Expand(item: at(item))) }.buttonStyle(.borderless) }
+                if editable { Button(say(.edAdjust)) { model.expenses.edit(EditorChange.Expand(item: at(item))) }.buttonStyle(.borderless) }
             }
         } else {
-            Picker(say(.edSplitTitle), selection: Binding(get: { split.mode }, set: { model.edit(EditorChange.SplitMode(item: at(item), mode: $0)) })) {
+            Picker(say(.edSplitTitle), selection: Binding(get: { split.mode }, set: { model.expenses.edit(EditorChange.SplitMode(item: at(item), mode: $0)) })) {
                 Text(say(.edByShares)).tag(EntryForm.Mode.shares)
                 Text(say(.edByPercent)).tag(EntryForm.Mode.percent)
                 Text(say(.entryAmount)).tag(EntryForm.Mode.amounts)
@@ -287,10 +287,10 @@ struct SplitEditor: View {
                 HStack {
                     Toggle(p.name, isOn: Binding(
                         get: { split.rows.contains { $0.participant == p.id } },
-                        set: { model.edit(EditorChange.Toggle(item: at(item), person: p.id, on: $0)) }
+                        set: { model.expenses.edit(EditorChange.Toggle(item: at(item), person: p.id, on: $0)) }
                     ))
                     if split.rows.contains(where: { $0.participant == p.id }) {
-                        TextField("", text: Binding(get: { value(p.id) }, set: { model.edit(EditorChange.Share(item: at(item), person: p.id, text: $0)) }))
+                        TextField("", text: Binding(get: { value(p.id) }, set: { model.expenses.edit(EditorChange.Share(item: at(item), person: p.id, text: $0)) }))
                             .multilineTextAlignment(.trailing)
                             .frame(maxWidth: 90)
                         #if os(iOS)
@@ -304,14 +304,14 @@ struct SplitEditor: View {
                 Text(say(notice: hint)).font(.caption)
             }
             if editable {
-                Button(say(.edEveryoneEqually)) { model.edit(EditorChange.Equally(item: at(item))) }
+                Button(say(.edEveryoneEqually)) { model.expenses.edit(EditorChange.Equally(item: at(item))) }
             }
         }
     }
 
     /// What is typed for `person` in the split's mode, as the editor holds it now (never a value this view kept).
     private func value(_ person: String) -> String {
-        let form = model.editorState?.form
+        let form = model.expenses.editorState?.form
         let s = item.map { form?.items[safe: $0]?.split } ?? form?.rest
         guard let row = s?.rows.first(where: { $0.participant == person }) else { return "" }
         switch s?.mode {

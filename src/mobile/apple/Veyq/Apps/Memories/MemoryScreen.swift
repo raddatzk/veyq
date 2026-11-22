@@ -46,7 +46,7 @@ struct MemoryScreen: View {
     #endif
 
     private var node: NodeAt { ref.at }
-    private var state: GalleryModel.State? { model.galleryState(node) }
+    private var state: GalleryModel.State? { model.memories.galleryState(node) }
     /// The rows the grid shows: the gallery's, narrowed by the filter (core's `shown`; the lightbox pages the same).
     private var rows: [GalleryModel.Row] { state?.shown ?? [] }
     private var uploading: [UploadTile] { state?.uploading ?? [] }
@@ -54,16 +54,16 @@ struct MemoryScreen: View {
     private var uploads: Bool { (state?.rights.upload ?? false) && (guest?.canAdd ?? true) }
     /// A link's guest adds through the page's own menu (it has no node header).
     private var guestUploads: Bool { uploads && guest != nil }
-    private var chapterHere: Bool { model.galleryModel(node)?.creates.contains(MemoryCreate.shared.CHAPTER) ?? false }
+    private var chapterHere: Bool { model.memories.galleryModel(node)?.creates.contains(MemoryCreate.shared.CHAPTER) ?? false }
     /// The room between the grid and the page's edges: the grid's own gap, so every side of a tile breathes alike.
     private static let margin = CGFloat(MediaGridLayout.shared.GAP)
 
     /// Whether the page offers its Music view: it has music, or whoever looks may add some (core's).
     private var musicOffered: Bool { guest == nil && (state.map { MusicModel.companion.shown(gallery: $0) } ?? false) }
     private var showsMusic: Bool { view == .music && musicOffered }
-    private var musicAdds: Bool { showsMusic && (model.musicShown?.rights.add ?? false) }
+    private var musicAdds: Bool { showsMusic && (model.memories.musicShown?.rights.add ?? false) }
     private var showsMap: Bool { view == .map && guest == nil }
-    private var tracksAdd: Bool { showsMap && (model.tracksShown?.rights.add ?? false) }
+    private var tracksAdd: Bool { showsMap && (model.memories.tracksShown?.rights.add ?? false) }
     /// The Contributions view, the fourth segment: a member's (core's `buckets` right), where offered (ADR 0149 decision 6).
     private var contributionsOffered: Bool { (state?.rights.buckets ?? false) && Contributions.companion.OFFERED }
     private var showsContributions: Bool { view == .contributions && contributionsOffered }
@@ -85,21 +85,21 @@ struct MemoryScreen: View {
 
     /// The page's date and place under its header (ADR 0143 D5).
     @ViewBuilder private var factsLine: some View {
-        if let state, let gallery = model.galleryModel(node) {
+        if let state, let gallery = model.memories.galleryModel(node) {
             MemoryFactsLine(model: model, gallery: gallery, state: state)
         }
     }
 
     /// The banner above the header, on every view (ADR 0144 decision 4): nothing where the Memory has none.
     @ViewBuilder private var bannerRow: some View {
-        if let shown = state?.banner, let gallery = model.galleryModel(node) {
+        if let shown = state?.banner, let gallery = model.memories.galleryModel(node) {
             MemoryBanner(model: model, gallery: gallery, shown: shown, viewport: page.height)
         }
     }
 
     /// Who was there, under the facts line (ADR 0144 decision 1): where core's line is shown.
     @ViewBuilder private var peopleLine: some View {
-        if let line = state?.people, let gallery = model.galleryModel(node) {
+        if let line = state?.people, let gallery = model.memories.galleryModel(node) {
             MemoryPeopleLine(model: model, gallery: gallery, line: line)
         }
     }
@@ -122,7 +122,7 @@ struct MemoryScreen: View {
                 MusicList(model: model, music: music, banner: listBanner, facts: listFacts, viewSwitch: viewSwitch)
             } else if showsMap, let tracks {
                 MemoryMapView(model: model, tracks: tracks, gallery: state, banner: listBanner, facts: listFacts, viewSwitch: viewSwitch)
-            } else if showsContributions, let contributions, let gallery = model.galleryModel(node) {
+            } else if showsContributions, let contributions, let gallery = model.memories.galleryModel(node) {
                 ContributionsView(model: model, gallery: gallery, held: contributions, marks: state?.marks ?? [:], head: AnyView(pageHead)) { mediaId in
                     // the lightbox over the chosen bucket, not the gallery (#996)
                     if let box = contributions.model.lightbox(mediaId: mediaId) { open = LightboxStart(gallery: gallery, box: box) }
@@ -133,50 +133,50 @@ struct MemoryScreen: View {
         }
         .onGeometryChange(for: CGSize.self, of: { $0.size }) { page = $0 }
         .navigationTitle(ref.name))
-        .modifier(GalleryFilterField(shown: filters && filterInBar, gallery: model.galleryModel(node), filter: state?.filter, text: $filterText))
+        .modifier(GalleryFilterField(shown: filters && filterInBar, gallery: model.memories.galleryModel(node), filter: state?.filter, text: $filterText))
         .task(id: showsMusic) {
-            guard showsMusic, let gallery = model.galleryModel(node) else { return }
-            music = model.musicModel(gallery)
+            guard showsMusic, let gallery = model.memories.galleryModel(node) else { return }
+            music = model.memories.musicModel(gallery)
         }
         // the Contributions view's model while it shows; read anew as the gallery's rows change (an upload, a move)
         .task(id: ContributionsKey(node: node, shown: showsContributions, rows: state?.rows?.count ?? -1)) {
             // another page's view goes with its page
-            if contributions?.gallery !== model.galleryModel(node) { contributions?.stop(); contributions = nil }
-            guard showsContributions, let gallery = model.galleryModel(node) else {
+            if contributions?.gallery !== model.memories.galleryModel(node) { contributions?.stop(); contributions = nil }
+            guard showsContributions, let gallery = model.memories.galleryModel(node) else {
                 contributions?.stop()
                 contributions = nil
                 return
             }
-            if contributions == nil, let made = model.contributions(gallery) { contributions = ContributionsHeld(made, gallery: gallery) }
+            if contributions == nil, let made = model.memories.contributions(gallery) { contributions = ContributionsHeld(made, gallery: gallery) }
             await contributions?.read()
         }
         // the page left: the view's watch stops (its task makes it anew when the page shows again)
         .onDisappear { contributions?.stop(); contributions = nil }
         // the filter is the page's (stored nowhere): what is typed goes to core, which narrows the grid
         .onChange(of: filterText) { _, now in
-            guard let gallery = model.galleryModel(node), now != gallery.current.filter.text else { return }
+            guard let gallery = model.memories.galleryModel(node), now != gallery.current.filter.text else { return }
             let f = gallery.current.filter
             gallery.filter(filter: GalleryFilter.State(mode: f.mode, chips: f.chips, text: now))
         }
         // another Memory's page: its filter starts empty, as core's does
         .onChange(of: ref) { filterText = "" }
         .task(id: showsMap) {
-            guard showsMap, let gallery = model.galleryModel(node) else { return }
-            tracks = model.trackList(gallery)
+            guard showsMap, let gallery = model.memories.galleryModel(node) else { return }
+            tracks = model.memories.trackList(gallery)
         }
         // "Add GPX track" in the Map view: the system's picker, filtered to GPX (ADR 0143 D8)
         .createAction(say(.trackAdd), shown: tracksAdd) { pickingTracks = true }
         .background(EmptyView().fileImporter(isPresented: $pickingTracks, allowedContentTypes: trackPickTypes, allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result, !urls.isEmpty, let tracks else { return }
             // the labels are asked by the Map view, what is refused said there (core's `asking`, `said`)
-            Task { await model.addTracks(tracks, urls: urls) }
+            Task { await model.memories.addTracks(tracks, urls: urls) }
         })
         // "Add music" in the Music view: the system's picker, filtered to audio (ADR 0142 decision 7)
         .createAction(say(.musicAdd), shown: musicAdds) { pickingMusic = true }
         .background(EmptyView().fileImporter(isPresented: $pickingMusic, allowedContentTypes: musicPickTypes, allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result, !urls.isEmpty, let music else { return }
             // what is refused is said by the Music view (core's `said`)
-            Task { await model.addMusic(music, urls: urls) }
+            Task { await model.memories.addMusic(music, urls: urls) }
         })
     }
 
@@ -195,7 +195,7 @@ struct MemoryScreen: View {
             LazyVStack(alignment: .leading, spacing: Self.margin) {
                 pageHead
                 // an iPad's and a Mac's filter: a field of the page's own (the toolbar's is the shell's search)
-                if filters, !filterInBar, let gallery = model.galleryModel(node), let filter = state?.filter {
+                if filters, !filterInBar, let gallery = model.memories.galleryModel(node), let filter = state?.filter {
                     GalleryFilterBar(gallery: gallery, filter: filter, text: $filterText).padding(.horizontal)
                 }
                 if let chapters = state?.chapters, !chapters.isEmpty {
@@ -232,7 +232,7 @@ struct MemoryScreen: View {
                     HStack {
                         if !shown.isEmpty { Text(say(.memoryItems, shown.count)).font(.footnote).foregroundStyle(Role.muted) }
                         Spacer(minLength: 0)
-                        if showsPhotos, let gallery = model.galleryModel(node), gallery.marksModeOffered, let filter = state?.filter {
+                        if showsPhotos, let gallery = model.memories.galleryModel(node), gallery.marksModeOffered, let filter = state?.filter {
                             MarksModeMenu(gallery: gallery, filter: filter)
                         }
                     }
@@ -286,9 +286,9 @@ struct MemoryScreen: View {
             TextField(say(.nodeName), text: $chapterName)
             Button(say(.folderCreate)) {
                 let name = chapterName
-                guard let gallery = model.galleryModel(node) else { return }
+                guard let gallery = model.memories.galleryModel(node) else { return }
                 Task {
-                    if let p = await model.createChapter(gallery, name: name) { chapterProblem = p; namingChapter = true }
+                    if let p = await model.memories.createChapter(gallery, name: name) { chapterProblem = p; namingChapter = true }
                 }
             }
             Button(say(.signinCancel), role: .cancel) {}
@@ -296,31 +296,31 @@ struct MemoryScreen: View {
             if let chapterProblem { Text(chapterProblem) }
         }
         // what a mark's toggle left to say (too many, not saved): the heart sprang back (the lightbox says it over itself)
-        .alert(state?.markSaid.map { say(notice: $0) } ?? "", isPresented: Binding(get: { open == nil && state?.markSaid != nil }, set: { if !$0 { model.galleryModel(node)?.markSeen() } })) {
+        .alert(state?.markSaid.map { say(notice: $0) } ?? "", isPresented: Binding(get: { open == nil && state?.markSaid != nil }, set: { if !$0 { model.memories.galleryModel(node)?.markSeen() } })) {
             Button(say(.ok), role: .cancel) {}
         }
         // a medium's delete said: "Moved to trash" with its Undo while core offers it, what a restore refused
         .overlay(alignment: .bottom) {
-            if state?.undo != nil || state?.said != nil, let gallery = model.galleryModel(node), open == nil {
+            if state?.undo != nil || state?.said != nil, let gallery = model.memories.galleryModel(node), open == nil {
                 GalleryNotice(gallery: gallery, undo: state?.undo, said: state?.said)
             }
         }
         .confirmationDialog(
             say(.memoryDeleteOwnTitle),
-            isPresented: Binding(get: { state?.purging != nil }, set: { if !$0 { model.galleryModel(node)?.cancelAsk() } }),
+            isPresented: Binding(get: { state?.purging != nil }, set: { if !$0 { model.memories.galleryModel(node)?.cancelAsk() } }),
             titleVisibility: .visible
         ) {
             Button(say(.memoryDeleteOwnAccept), role: .destructive) {
-                guard let gallery = model.galleryModel(node) else { return }
+                guard let gallery = model.memories.galleryModel(node) else { return }
                 Task { _ = try? await gallery.purge() }
             }
-            Button(say(.signinCancel), role: .cancel) { model.galleryModel(node)?.cancelAsk() }
+            Button(say(.signinCancel), role: .cancel) { model.memories.galleryModel(node)?.cancelAsk() }
         } message: {
-            if let gallery = model.galleryModel(node) { Text(say(notice: gallery.purgeQuestion)) }
+            if let gallery = model.memories.galleryModel(node) { Text(say(notice: gallery.purgeQuestion)) }
         }
         // live while the page is on screen and the app active: what another device or a guest adds shows up (core's poll)
         .task(id: GalleryLiveKey(node: node, active: phase == .active)) {
-            if phase == .active { await model.liveGallery(node) }
+            if phase == .active { await model.memories.liveGallery(node) }
         }
         // photos and videos dropped onto the gallery go into it at once, as a pick's (ADR 0138 decision 9) — judged, sorted
         // and said by core's one drop (`ShellModel.drop`, ADR 0154 decision 1); a guest's gallery is the link's, not the shell's.
@@ -329,14 +329,14 @@ struct MemoryScreen: View {
         // There the shell's drop takes it, a share as onto any place that is no target of its own (ADR 0138 decision 9)
         // (no types asked there, rather than no modifier: the page's identity stays as the view switches)
         .onDrop(of: showsMusic || showsMap ? [] : IncomingFiles.accepted, isTargeted: nil) { providers in
-            guard guest == nil, !showsMusic, !showsMap, let gallery = model.galleryModel(node) else { return false }
+            guard guest == nil, !showsMusic, !showsMap, let gallery = model.memories.galleryModel(node) else { return false }
             Task { await model.drop(providers, onto: DropTarget.Gallery(gallery: gallery)) }
             return true
         }
         // the header's `upload` entry asked for a picker (`MemoriesUi`'s own action)
-        .onChange(of: model.galleryAdd, initial: true) { _, asked in
+        .onChange(of: model.memories.galleryAdd, initial: true) { _, asked in
             guard let asked, asked.nodeId == node.nodeId else { return }
-            model.galleryAdd = nil
+            model.memories.galleryAdd = nil
             if asked.files { pickingFiles = true } else { pickingPhotos = true }
         }
         .photosPicker(isPresented: $pickingPhotos, selection: $photos, matching: .any(of: [.images, .videos]), preferredItemEncoding: .current)
@@ -350,30 +350,30 @@ struct MemoryScreen: View {
                     if let file = try? await item.loadTransferable(type: PickedMedia.self) { urls.append(file.url) }
                 }
                 // the page went meanwhile: no upload reads the copies
-                guard let gallery = model.galleryModel(node) else {
+                guard let gallery = model.memories.galleryModel(node) else {
                     urls.forEach(AppModel.removePicked)
                     return
                 }
-                model.uploadMedia(gallery, urls: urls, fromPhotos: true)
+                model.memories.uploadMedia(gallery, urls: urls, fromPhotos: true)
             }
         }
         .background(EmptyView().fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.image, .movie], allowsMultipleSelection: true) { result in
-            guard case .success(let urls) = result, !urls.isEmpty, let gallery = model.galleryModel(node) else { return }
-            model.uploadMedia(gallery, urls: urls, fromPhotos: false)
+            guard case .success(let urls) = result, !urls.isEmpty, let gallery = model.memories.galleryModel(node) else { return }
+            model.memories.uploadMedia(gallery, urls: urls, fromPhotos: false)
         })
         // the model is the shell's while the page is shown; asking for it here opens it
-        .task(id: ref) { _ = model.galleryModel(node) }
+        .task(id: ref) { _ = model.memories.galleryModel(node) }
         // a photo the search chose (ADR 0146 decision 8): core opened the gallery's lightbox on it, the page shows it
         .onChange(of: state?.searchOpened, initial: true) { _, asked in
-            guard asked != nil, let gallery = model.galleryModel(node), let box = gallery.openLightbox else { return }
+            guard asked != nil, let gallery = model.memories.galleryModel(node), let box = gallery.openLightbox else { return }
             open = LightboxStart(gallery: gallery, box: box)
             gallery.searchOpenedSeen()
         }
         // a Memory's curation (ADR 0144): the participants picker and the banner's dialog, the app model's while they show
-        .sheet(item: Binding(get: { model.participantsEdit }, set: { if $0 == nil { model.closeParticipants() } })) { edit in
+        .sheet(item: Binding(get: { model.memories.participantsEdit }, set: { if $0 == nil { model.memories.closeParticipants() } })) { edit in
             ParticipantsPickerSheet(model: model, edit: edit)
         }
-        .sheet(item: Binding(get: { model.bannerEdit }, set: { if $0 == nil { model.closeBanner() } })) { edit in
+        .sheet(item: Binding(get: { model.memories.bannerEdit }, set: { if $0 == nil { model.memories.closeBanner() } })) { edit in
             BannerSheet(model: model, edit: edit)
         }
         #if os(iOS)
@@ -397,7 +397,7 @@ struct MemoryScreen: View {
             #if os(macOS)
             if guest == nil, NSEvent.modifierFlags.contains(.command) { return openInWindow(row.mediaId) }
             #endif
-            if let gallery = model.galleryModel(node) { open = LightboxStart(gallery: gallery, box: gallery.lightbox(index: Int32(index))) }
+            if let gallery = model.memories.galleryModel(node) { open = LightboxStart(gallery: gallery, box: gallery.lightbox(index: Int32(index))) }
         } label: {
             MediaTile(model: model, node: node, row: row, mark: state?.marks[row.mediaId], width: CGFloat(frame.width), height: CGFloat(frame.height))
         }
@@ -406,7 +406,7 @@ struct MemoryScreen: View {
         // the tile's menu, core's (`GalleryModel.tileActions`, ADR 0154 decision 2): its mark where whoever looks may mark,
         // online, the own marks read; on a Mac "Open in New Window" beside it, the platform's (the plan's docs name it)
         .contextMenu {
-            if let gallery = model.galleryModel(node) {
+            if let gallery = model.memories.galleryModel(node) {
                 ForEach(gallery.tileActions(row: row), id: \.self) { a in
                     switch a.entry {
                     case .mark: MarkButton(gallery: gallery, mediaId: row.mediaId, mine: state?.marks[row.mediaId]?.mine ?? false)
@@ -485,7 +485,7 @@ private struct ChapterCover: View {
         .frame(width: 40, height: 40)
         .clipShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
         .task(id: chapter.nodeId) {
-            guard let gallery = model.galleryModel(node),
+            guard let gallery = model.memories.galleryModel(node),
                   let data = try? await AppleMemories.shared.chapterCover(gallery: gallery, nodeId: chapter.nodeId) else { return }
             picture = CoverImages.image(data as Data, maxPixels: 160)
         }
@@ -572,8 +572,8 @@ struct MediaTile: View {
             .accessibilityLabel(row.name ?? "")
             .accessibilityValue(mark.map(MarkBadge.said) ?? "")
             .task(id: row.mediaId) {
-                guard let blob = row.tile, let gallery = model.galleryModel(node) else { return }
-                picture = await model.mediaPicture(blob) {
+                guard let blob = row.tile, let gallery = model.memories.galleryModel(node) else { return }
+                picture = await model.memories.mediaPicture(blob) {
                     (try? await AppleMemories.shared.tile(gallery: gallery, mediaId: row.mediaId)).map { $0 as Data }
                 }
             }
@@ -946,7 +946,7 @@ private struct LightboxPage: View {
             if let blob = row.picture {
                 let box = held.box
                 let mediaId = row.mediaId
-                picture = await model.mediaPicture(blob) {
+                picture = await model.memories.mediaPicture(blob) {
                     (try? await AppleMemories.shared.picture(lightbox: box, mediaId: mediaId)).map { $0 as Data }
                 }
             }
@@ -1196,13 +1196,13 @@ struct LightboxCommands: Commands {
 struct LightboxWindow: View {
     let model: AppModel
     let value: LightboxWindowValue
-    @State private var opened: AppModel.WindowLightbox?
+    @State private var opened: MemoriesHolding.WindowLightbox?
     @State private var missing = false
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         Group {
-            if let opened, model.holdsWindowGallery(opened.gallery) {
+            if let opened, model.memories.holdsWindowGallery(opened.gallery) {
                 Lightbox(model: model, gallery: opened.gallery, box: opened.box, mode: .window) { dismiss() }
             } else if missing {
                 Text(say(.memoryGalleryFailed)).foregroundStyle(Role.muted).padding()
@@ -1213,15 +1213,15 @@ struct LightboxWindow: View {
         .frame(minWidth: 480, minHeight: 360)
         .task {
             guard opened == nil else { return }
-            opened = model.windowLightbox(value)
+            opened = model.memories.windowLightbox(value)
             missing = opened == nil
         }
         // the tenant closed (signed out, switched): its galleries went, the window goes with them
-        .onChange(of: opened.map { model.holdsWindowGallery($0.gallery) }) { _, holds in
+        .onChange(of: opened.map { model.memories.holdsWindowGallery($0.gallery) }) { _, holds in
             if holds == false { dismiss() }
         }
         .onDisappear {
-            if let opened { model.closeWindowGallery(opened.gallery) }
+            if let opened { model.memories.closeWindowGallery(opened.gallery) }
         }
     }
 }

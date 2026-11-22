@@ -18,15 +18,15 @@ struct NewPotSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                if let state = model.createState {
+                if let state = model.expenses.createState {
                     TextField(say(.peopleName), text: $name)
                     if state.spaces.count > 1 {
-                        Picker(say(.createPotSpace), selection: Binding(get: { state.scopeId ?? "" }, set: { model.createSpace($0) })) {
+                        Picker(say(.createPotSpace), selection: Binding(get: { state.scopeId ?? "" }, set: { model.expenses.createSpace($0) })) {
                             ForEach(state.spaces, id: \.scopeId) { Text(Names.spaceName($0)).tag($0.scopeId) }
                         }
                     }
                     Section {
-                        Picker(say(.potBaseCurrency), selection: Binding(get: { state.currency }, set: { model.createCurrency($0) })) {
+                        Picker(say(.potBaseCurrency), selection: Binding(get: { state.currency }, set: { model.expenses.createCurrency($0) })) {
                             ForEach(Self.currencies, id: \.self) { Text($0).tag($0) }
                         }
                     } footer: { Text(say(.settingsCurrencyHint)) }
@@ -35,18 +35,18 @@ struct NewPotSheet: View {
                             HStack {
                                 Text(p.name)
                                 Spacer()
-                                Button { model.createRemove(i) } label: { Image(systemName: "xmark.circle.fill") }
+                                Button { model.expenses.createRemove(i) } label: { Image(systemName: "xmark.circle.fill") }
                                     .buttonStyle(.borderless)
                                     .accessibilityLabel(say(.peopleRemove, p.name))
                             }
                         }
                         HStack {
                             TextField(say(.peopleName), text: $typed)
-                            Button(say(.peopleAdd)) { if model.createAddTyped(typed) { typed = "" } }
+                            Button(say(.peopleAdd)) { if model.expenses.createAddTyped(typed) { typed = "" } }
                                 .disabled(typed.trimmingCharacters(in: .whitespaces).isEmpty)
                         }
                         ForEach(state.offered, id: \.userId) { m in
-                            Button { model.createAddMember(m.userId) } label: {
+                            Button { model.expenses.createAddMember(m.userId) } label: {
                                 Label(m.displayName, systemImage: "person.badge.plus")
                             }
                         }
@@ -64,15 +64,15 @@ struct NewPotSheet: View {
                     Button(say(.createPotCreate)) {
                         let (n, t) = (name, typed)
                         typed = ""
-                        Task { if await model.createPot(name: n, typed: t) { dismiss() } }
+                        Task { if await model.expenses.createPot(name: n, typed: t) { dismiss() } }
                     }
-                    .disabled(!model.canCreatePot(name) || model.createState?.saving != false)
+                    .disabled(!model.expenses.canCreatePot(name) || model.expenses.createState?.saving != false)
                 }
             }
         }
         .tint(Role.accent)
         .sheetFrame(minWidth: 460, minHeight: 520)
-        .onAppear { model.openCreateSheet() }
-        .onDisappear { model.closeCreateSheet() }
+        .onAppear { model.expenses.openCreateSheet() }
+        .onDisappear { model.expenses.closeCreateSheet() }
     }
 }

@@ -99,14 +99,6 @@ enum MapMath {
     }
 
     static func coordinate(_ p: LatLng) -> CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: p.lat, longitude: p.lng) }
-
-    /// The camera framing `points` in a map of `size` (core's `Viewport.fit`); the world view without a point.
-    static func framing(_ points: [LatLng], size: CGSize) -> MapCameraPosition {
-        let w = max(size.width, 200), h = max(size.height, 200)
-        let v = Viewport.companion.fit(points: points, width: w, height: h, padding: Viewport.companion.FIT_PADDING_PX, maxZoom: Viewport.companion.FIT_MAX_ZOOM)
-            ?? Viewport(center: MemoryLocation.companion.WORLD_CENTER, zoom: MemoryLocation.companion.WORLD_ZOOM, width: w, height: h)
-        return .region(region(v))
-    }
 }
 
 /// A colour core hands as ARGB.

@@ -177,8 +177,6 @@ final class AppModel {
     var queued: QueuedHeld?
     /// The ask before a loss while writes made offline wait, until it is answered.
     var lossAsk: LossAsk?
-    /// A held Pot entry the tray's *Open* asked for: its Pot's page opens its held editor once the Pot is read.
-    var heldOpen: QueuedOpen.Entry?
     /// A held rename the tray's *Open* asked for: the node's header asks its name again with the person's.
     var renameAsked: QueuedOpen.Rename?
     typealias Opened = SessionModelOpened<VeyqAccount, TenantSession>
@@ -213,6 +211,41 @@ final class AppModel {
         }
     }
 
+    // MARK: What each application holds here (ADR 0154 decision 3, inbox #1066)
+
+    /// Each registered application's `Holding` (the registry's `holding`), built once, in the order they registered: the
+    /// core UI asks every one the tenant's moments and the flows an application answers, and names none.
+    @ObservationIgnored private var built: [any Holding]?
+    private var holdings: [any Holding] {
+        if let built { return built }
+        let made = Registry.registered().compactMap { $0.holding?(self) }
+        built = made
+        return made
+    }
+
+    /// The holding of type `T` an application registered: how its UI reaches what it holds here.
+    func held<T: Holding>(_ type: T.Type) -> T {
+        guard let h = holdings.lazy.compactMap({ $0 as? T }).first else { preconditionFailure("no holding \(T.self) registered") }
+        return h
+    }
+
+    private func eachHolding(_ act: (any Holding) -> Void) { holdings.forEach(act) }
+
+    /// The tray's *Open* of `opens` where an application opens it (a Pot's held entry); false where none does.
+    func holdingsOpen(_ opens: QueuedOpen) -> Bool { holdings.contains { $0.openQueued(opens) } }
+
+    /// The shell's uploads into a level (the tray, New's *Upload files* and *Upload folder*): the application's that keeps files.
+    var levelUploads: LevelUploads? { holdings.lazy.compactMap { $0.levelUploads }.first }
+
+    /// A picked photo's or video's tiers: the application's that derives them (a link guest's upload and a Mac's import too).
+    var deriver: DerivationDeriver? { holdings.lazy.compactMap { $0.deriver }.first }
+
+    /// Whether an application's editor is open over the page (a guest's naming waits while it is).
+    var editing: Bool { holdings.contains { $0.editing } }
+
+    /// The row of `nodeId` says `facts` now (an application's write moved what its row says, a Pot's new base currency).
+    func setRowDetail(_ nodeId: String, _ facts: [String]) { rowDetails[nodeId] = facts }
+
     // core's shell rules over its lists; the observed lists are read first, so a view follows them as before
     var space: SpaceRef? { _ = spaces; return shellModel?.current?.lists.space(shell: shell) }
 
@@ -233,7 +266,7 @@ final class AppModel {
         if !(session.current is SessionModelGate.Signed) {
             offer = nil
             // locked or gone: the open dialogs and the tenant's tree go — a person's index with it (ADR 0144 decision 12)
-            closeCuration()
+            eachHolding { $0.locked() }
             closeSearch()
             // a kept link shown in place goes with the tenant; a link open on its own screen is a guest's and stays
             closeBookmark()
@@ -571,15 +604,7 @@ final class AppModel {
                 try? await show(next)
             } else if out.wasCurrent {
                 managing = nil
-                shellWatch?.stop()
-                shellModel = nil
-                closeSearch()
-                tenantSession?.close()
-                closeDepot()
-                closeQueued()
-                closeMedia()
-                dropHeaders()
-                closeFile()
+                closeTenant()
             } else if managing != nil {
                 managing = managed()
             }
@@ -649,17 +674,24 @@ final class AppModel {
                 try? await show(next)
             } else if out.wasCurrent {
                 managing = nil
-                shellWatch?.stop()
-                shellModel = nil
-                closeSearch()
-                tenantSession?.close()
-                closeDepot()
-                closeQueued()
-                closeMedia()
-                dropHeaders()
-                closeFile()
+                closeTenant()
             }
         }
+    }
+
+    /// The account shown signed out and no other opened: the shell and everything of the tenant close — each application's
+    /// models (`Holding.signedOut`), the writes made offline, the music, the maps, the headers.
+    private func closeTenant() {
+        shellWatch?.stop()
+        shellModel = nil
+        closeSearch()
+        tenantSession?.close()
+        closeImport()
+        eachHolding { $0.signedOut() }
+        closeQueued()
+        closeMusic()
+        closeMaps()
+        dropHeaders()
     }
 
     /// "Manage servers" as core lists it, for SwiftUI's lists.
@@ -687,28 +719,19 @@ final class AppModel {
         // the tenant shown before closes: its tree and what was derived from it (a person's index) dropped now (ADR 0144 decision 12)
         if let was = tenantSession, was !== t { was.close() }
         tenantSession = t
-        let pots = PotModel(tenant: t, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) })
-        // a link's Pot shown in the member's place meanwhile: the member's goes with the tenant, the guest's with its page
-        memberPot?.watch?.stop()
-        memberPot = nil
-        potWatch?.stop()
-        potModel = pots
-        potWatch = pots.watch { @Sendable _ in
-            Task { @MainActor [weak self] in self?.syncPot() }
-        }
-        pot = nil
+        // what was open of the tenant before closes (each application's pages), then the new shell's models are built
+        eachHolding { $0.leave() }
         let model = ShellModel(tenant: t, hidden: hidden, recent: recent, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) })
         closeSearch()
         shellWatch?.stop()
         shellModel = model
-        openDepot(model, t)
+        closeImport()
+        eachHolding { $0.shown(model, t, switched: switched) }
         openQueued(model)
-        closeGallery(windows: true)
-        galleryShown = nil
-        openMedia(model, switched: switched)
+        openMaps(model)
+        pickUpHandoffs()
         openMusic(model, switched: switched)
         dropHeaders()
-        closeFile()
         try await model.load(openLastUsed: incoming == nil)
         shellWatch = model.watch { @Sendable _ in
             Task { @MainActor [weak self] in self?.applyShell(start: false) }
@@ -797,14 +820,14 @@ final class AppModel {
 
     /// The share's way from arrival to where its files went (core's `ShareInbox`): a file let go is a copy removed.
     let inbox = ShareInbox(release: { @Sendable source in
-        if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
+        if let url = ApplePlatform.shared.urlOf(source: source) { AppModel.removePicked(url) }
     })
     /// The files waiting (the pick mode is on); nil when none wait.
     private(set) var incoming: Incoming?
     /// How the share ends: true once its files were saved or handed to where they went, false when it was cancelled.
     var onShareDone: ((Bool) -> Void)?
 
-    private func syncInbox() { incoming = inbox.waiting.value as? Incoming }
+    func syncInbox() { incoming = inbox.waiting.value as? Incoming }
 
     /// Files arrive: the pick mode starts at the space's Home, never in the object last open, so the person chooses where
     /// they go (ADR 0138 decision 1) — the start does the same while the session is still opening.
@@ -814,10 +837,11 @@ final class AppModel {
         syncInbox()
     }
 
-    /// Files dropped onto the app (ADR 0138 decision 9): an open Pot that takes them opens its new expense with them at once;
-    /// anywhere else they wait in the pick mode, as a share's do (a Memory's gallery takes its own drop, `dropOnto`).
+    /// Files dropped onto the app (ADR 0138 decision 9): an open object that takes them at once — its application says so
+    /// (an open Pot opens its new expense with them) — gets them; anywhere else they wait in the pick mode, as a share's do
+    /// (a Memory's gallery takes its own drop, `drop`).
     func receiveDrop(_ incoming: Incoming) {
-        if let ref = shell.openObject, ref.kind == PotSession.companion.KIND, pot?.ref == ref, PotShare.shared.takesDropOn(view: pot?.view, incoming: incoming) {
+        if let ref = shell.openObject, holdings.contains(where: { $0.takesDrop(ref, incoming) }) {
             inbox.receive(incoming: incoming)
             syncInbox()
         } else {
@@ -843,66 +867,26 @@ final class AppModel {
     var addHereTarget: AddHere? {
         guard incoming != nil, let m = shellModel else { return nil }
         _ = spaces // observed: a level's rights move with the lists
-        var gallery: GalleryModel?
-        if let shown = galleryShown, let g = openGallery?.model, g.node == shown.node, shell.openObject?.nodeId == shown.node.nodeId {
-            gallery = g
-        }
-        return m.addHere(inbox: inbox, shell: shell, gallery: gallery)
-    }
-
-    /// The name a level's upload is labelled with (the folder's, else the space's); a gallery's is its node's.
-    private func label(_ target: AddHere) -> String {
-        if let g = target as? AddHere.Gallery { return g.gallery.node.name }
-        return levelLabel
+        // a page an application holds on screen answers first (a Memory's gallery), else the level shown
+        return holdings.lazy.compactMap { $0.addHereTarget(m, inbox: self.inbox, at: self.shell) }.first
+            ?? m.addHere(inbox: inbox, shell: shell, gallery: nil)
     }
 
     /// *Add here*: what `target` takes of the waiting files goes there — a gallery's photos and videos, a level's files into
-    /// Depot's queue — and the share ends. In the app they are queued at once; the share extension hands them to the app
-    /// through the app group and closes (ADR 0138 decision 6, owner 2026-11-19), the app queueing them the next time it has
-    /// the space open (`pickUpHandoffs`).
+    /// Depot's queue — and the share ends; the place's application answers it (`Holding.addHere`). In the app they are
+    /// queued at once; the share extension hands them to the app through the app group and closes (ADR 0138 decision 6,
+    /// owner 2026-11-19), the app queueing them the next time it has the space open (`pickUpHandoffs`).
     func addHere(_ target: AddHere) {
-        let taken: ShareInbox.Taken?
-        if inExtension {
-            if let g = target as? AddHere.Gallery {
-                guard g.gallery.takesUploads else { return }
-                let node = g.gallery.node
-                taken = inbox.queue(answer: target.answer) { sources in
-                    KotlinInt(int: Int32(ShareHandoff.write(sources, kind: node.kind, scopeId: node.scopeId, nodeId: node.nodeId, label: node.name)))
-                }
-            } else if let l = target as? AddHere.Level {
-                guard l.answer.mayChoose(place: l.place) else { return }
-                let name = levelLabel
-                taken = inbox.queue(answer: target.answer) { sources in
-                    KotlinInt(int: Int32(ShareHandoff.write(sources, kind: l.place.kind, scopeId: l.scopeId, nodeId: l.parentId, label: name)))
-                }
-            } else {
-                return
-            }
-        } else {
-            #if os(macOS)
-            // a Mac's level screens what it takes (ADR 0152 decision 1): a veyq download among it is offered as an import
-            if let level = target as? AddHere.Level {
-                let name = label(target)
-                Task {
-                    let offered = try? await level.takeOrOffer(inbox: inbox, label: name, depot: depot, left: { @Sendable source in
-                        if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
-                    }, deletedName: say(.potDeletedPerson))
-                    syncInbox()
-                    guard let offered else { return }
-                    offerImport(offered.offer)
-                    if let n = MediaUploads.companion.notTaken(count: offered.taken.refused) { show(n) }
-                    onShareDone?(true)
-                }
-                return
-            }
-            #endif
-            taken = target.take(inbox: inbox, label: label(target), depot: depot) { source in
-                if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
-            }
-        }
+        let label = levelLabel
+        _ = holdings.contains { $0.addHere(target, label: label) }
         syncInbox()
-        guard let taken else { return }
-        if let n = MediaUploads.companion.notTaken(count: taken.refused) { show(n) }
+    }
+
+    /// What an application's *Add here* took (`taken`; nil: nothing) and what it left out (`notice`): the share ends.
+    func shareTaken(_ taken: ShareInbox.Taken?, notice: VeyqCore.Notice?) {
+        syncInbox()
+        guard taken != nil else { return }
+        if let notice { show(notice) }
         onShareDone?(true)
     }
 
@@ -915,10 +899,18 @@ final class AppModel {
         let items = await IncomingFiles.dropped(providers)
         Self.dropLog("drop: \(items.map { "\(type(of: $0))" })")
         let files = items.compactMap { ($0 as? Dropped.File)?.source }
-        guard let m = shellModel, let outcome = try? await m.drop(target: target, items: items, depot: depot, left: { @Sendable source in
-            if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
-        }, deletedName: say(.potDeletedPerson)) else {
-            for s in files { if let url = AppleMemories.shared.urlOf(source: s) { Self.removePicked(url) } }
+        // the target's application answers (a gallery's Memories, a level's or a folder row's Depot); none, core's drop alone
+        var answered: DropOutcome?
+        if let m = shellModel {
+            for h in holdings where answered == nil { answered = await h.drop(m, target, items) }
+            if answered == nil {
+                answered = try? await m.drop(target: target, items: items, depot: nil, left: { @Sendable source in
+                    if let url = ApplePlatform.shared.urlOf(source: source) { AppModel.removePicked(url) }
+                }, deletedName: say(.potDeletedPerson))
+            }
+        }
+        guard let outcome = answered else {
+            for s in files { if let url = ApplePlatform.shared.urlOf(source: s) { Self.removePicked(url) } }
             return
         }
         if let refused = outcome as? DropOutcome.Refused {
@@ -927,7 +919,7 @@ final class AppModel {
                 receiveDrop(Incoming(files: files, refused: Int32(items.filter { $0 is Dropped.Unread }.count)))
                 return
             }
-            for s in files { if let url = AppleMemories.shared.urlOf(source: s) { Self.removePicked(url) } }
+            for s in files { if let url = ApplePlatform.shared.urlOf(source: s) { Self.removePicked(url) } }
             show(refused.notice)
             return
         }
@@ -961,31 +953,17 @@ final class AppModel {
         #endif
     }
 
-    /// What the share extension handed over for a space this tenant has open: queued into its Memory or chapter (Memories'
-    /// queue) or its folder or top (Depot's), each copy removed once the queue lets it go (ADR 0138 decision 6).
+    /// What the share extension handed over for a space this tenant has open: queued where its application keeps it — a
+    /// Memory or chapter (Memories' queue), a folder or a top (Depot's) —, each copy removed once the queue lets it go (ADR
+    /// 0138 decision 6); one no application takes is let go. Asked once the tenant's models were built.
     func pickUpHandoffs() {
-        guard !inExtension, let uploads = media, let d = depot, !spaces.isEmpty else { return }
+        guard !inExtension, shellModel != nil, !spaces.isEmpty else { return }
         for waiting in ShareHandoff.pending(in: Set(spaces.map(\.scopeId))) {
-            let t = waiting.target
-            if t.isLevel {
-                _ = d.upload(scopeId: t.scopeId, parentId: t.nodeId, label: t.label, sources: waiting.sources) { source in
-                    if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
-                }
-            } else if let nodeId = t.nodeId {
-                _ = uploads.upload(scopeId: t.scopeId, nodeId: nodeId, label: t.label, sources: waiting.sources)
-            } else {
-                for s in waiting.sources { if let url = AppleMemories.shared.urlOf(source: s) { AppModel.removePicked(url) } }
+            let sources = waiting.sources
+            if !holdings.contains(where: { $0.pickUp(waiting.target, sources) }) {
+                for s in sources { if let url = ApplePlatform.shared.urlOf(source: s) { AppModel.removePicked(url) } }
             }
         }
-    }
-
-    /// The waiting files, taken by the Pot opened as their place: its new expense's receipts (each read whole, within its
-    /// budget), and how many it left out.
-    func takeShare() async -> PotShare.Taken? {
-        let taken = try? await PotShare.shared.take(inbox: inbox, newId: { UUID().uuidString.lowercased() })
-        syncInbox()
-        if let taken, taken.refused > 0 { notice = Notice(text: say(.shareRefused, taken.refused)) }
-        return taken
     }
 
     /// The new expense's editor closed unsaved: the files wait again, for this Pot or another (from Home).
@@ -1021,11 +999,11 @@ final class AppModel {
         let key = "\(node.scopeId)/\(node.nodeId)/\(node.name)"
         if let held = headers[key] { return held.model }
         let made = m.header(node: node, facts: facts, closeOpen: { @Sendable ref in
-            let id = ref.nodeId
+            let (scopeId, id, kind, name) = (ref.scopeId, ref.nodeId, ref.kind, ref.name)
             Task { @MainActor [weak self] in
-                guard let self, let open = self.pot?.ref, open.nodeId == id else { return }
-                self.potModel?.close(ref: open)
-                self.syncPot()
+                guard let self else { return }
+                let trashed = NodeAt(scopeId: scopeId, nodeId: id, kind: kind, name: name)
+                self.eachHolding { $0.trashed(trashed) }
             }
         }, changed: { @Sendable in
             Task { @MainActor [weak self] in
@@ -1048,7 +1026,7 @@ final class AppModel {
         await refreshLists(t, people: true)
     }
 
-    private func refreshLists(_ t: TenantSession, people: Bool = false) async {
+    func refreshLists(_ t: TenantSession, people: Bool = false) async {
         try? await shellModel?.refresh(people: people)
         applyShell(start: false)
         await readDetails(t)
@@ -1182,187 +1160,6 @@ final class AppModel {
         }
     }
 
-    // MARK: Memories (core's GalleryModel, Lightbox and MediaUploads)
-
-    /// The Memory or chapter page on screen (core's `GalleryModel`, one at a time) and its watch; read anew as the core says.
-    @ObservationIgnored private var openGallery: (model: GalleryModel, watch: GalleryModel.Watch)?
-
-    /// What the Memory or chapter page on screen shows (`GalleryModel.State`) and of which node, on the main actor.
-    private var galleryShown: (node: NodeAt, state: GalleryModel.State)?
-
-    /// What `node`'s gallery shows, once its model delivered it; nil before, and for any other node.
-    func galleryState(_ node: NodeAt) -> GalleryModel.State? {
-        guard let shown = galleryShown, shown.node == node else { return nil }
-        return shown.state
-    }
-
-    /// The page of Memory or chapter `node` (core's `GalleryModel` over the shell, its uploads through `media`). Called while a
-    /// view is drawn, so it changes nothing observed: the state arrives through the watch.
-    func galleryModel(_ node: NodeAt) -> GalleryModel? {
-        if let held = openGallery, held.model.node == node { return held.model }
-        guard let m = shellModel, let uploads = media else { return nil }
-        closeGallery()
-        let made = m.galleryModel(ref: node, uploads: uploads, music: galleryMusic, calendar: Self.galleryCalendar)
-        holdGallery(made)
-        return made
-    }
-
-    /// `made` the gallery on screen, its state followed on the main actor (the shell's page, or a link's guest's).
-    private func holdGallery(_ made: GalleryModel) {
-        let id = ObjectIdentifier(made)
-        let watch = made.watch { @Sendable state in
-            nonisolated(unsafe) let state = state
-            Task { @MainActor [weak self] in
-                // a state of a page closed meanwhile is dropped
-                guard let self, let open = self.openGallery?.model, ObjectIdentifier(open) == id else { return }
-                self.galleryShown = (open.node, state)
-                // the search opened one of this page's photos (ADR 0146 decision 8): the page shows again, its lightbox on it
-                if state.searchOpened != nil, self.shell.searching { self.search(false) }
-            }
-        }
-        openGallery = (made, watch)
-    }
-
-    /// `node`'s page's live poll (core's `GalleryModel.live`, run by core) for as long as the calling task runs — the page
-    /// while the app is active, so nothing is asked in the background; its cancellation stops the poll.
-    func liveGallery(_ node: NodeAt) async {
-        guard let live = galleryModel(node)?.startLive() else { return }
-        await untilCancelled()
-        live.stop()
-    }
-
-    /// The gallery goes (another opened, the tenant closed): its lightbox and a video's reader close with it. The tenant's
-    /// close passes `windows`: every lightbox window's gallery goes too.
-    private func closeGallery(windows: Bool = false) {
-        closeCuration()
-        closeMusicView()
-        closeTrackList()
-        openGallery?.watch.stop()
-        openGallery?.model.close()
-        openGallery = nil
-        if windows {
-            windowGalleries.values.forEach { $0.close() }
-            windowGalleries = [:]
-        }
-    }
-
-    /// A lightbox in a window of its own (a Mac's "Open in New Window"): its own gallery and the lightbox on it.
-    struct WindowLightbox {
-        let gallery: GalleryModel
-        let box: VeyqCore.Lightbox
-    }
-
-    /// The galleries the lightbox windows opened, by identity: closed with their window, and all with the tenant.
-    private var windowGalleries: [ObjectIdentifier: GalleryModel] = [:]
-
-    /// A lightbox window's models for `value` (its ids): a gallery of its own over the shell — not the main window's page,
-    /// so each goes without the other — and core's lightbox on the medium named (`lightboxOn`: before the gallery's first
-    /// read it waits for it). Nil where the node is no longer a listed Memory or chapter, or no tenant is open.
-    func windowLightbox(_ value: LightboxWindowValue) -> WindowLightbox? {
-        guard let m = shellModel, let uploads = media, let node = m.galleryAt(scopeId: value.scopeId, nodeId: value.nodeId) else { return nil }
-        let gallery = m.galleryModel(ref: node, uploads: uploads, music: galleryMusic, calendar: Self.galleryCalendar)
-        windowGalleries[ObjectIdentifier(gallery)] = gallery
-        return WindowLightbox(gallery: gallery, box: gallery.lightboxOn(mediaId: value.mediaId))
-    }
-
-    /// Whether lightbox window gallery `gallery` is still open (the tenant's close closed it otherwise).
-    func holdsWindowGallery(_ gallery: GalleryModel) -> Bool { windowGalleries[ObjectIdentifier(gallery)] != nil }
-
-    /// A lightbox window went: its gallery closes, its lightbox and a video's reader with it.
-    func closeWindowGallery(_ gallery: GalleryModel) {
-        gallery.close()
-        windowGalleries[ObjectIdentifier(gallery)] = nil
-    }
-
-    /// Decoded tiers by blob id (a gallery asks for every tile as it scrolls past; the cache lets the system evict).
-    private let mediaPictures = NSCache<NSString, CGImageBox>()
-
-    /// Blob `blobId`'s bytes as `read` hands them, decoded as a picture and kept; nil where it does not read or is no picture.
-    func mediaPicture(_ blobId: String, read: () async -> Data?) async -> CGImage? {
-        if let hit = mediaPictures.object(forKey: blobId as NSString) { return hit.image }
-        guard let data = await read(), let image = CoverImages.image(data, maxPixels: 4096) else { return nil }
-        mediaPictures.setObject(CGImageBox(image), forKey: blobId as NSString)
-        return image
-    }
-
-    /// Memories' uploads of the open tenant (core's `MediaUploads` over `uploads`): a Photos pick's copy is removed once the
-    /// queue is done with it, and all of them when the tenant closes.
-    @ObservationIgnored private var media: MediaUploads?
-
-    /// Memories' uploads for shell `m`: a new tenant's hand the old one's picks back (its queue was emptied), the same
-    /// tenant opened again carries them on.
-    private func openMedia(_ m: ShellModel, switched: Bool) {
-        let made = m.mediaUploads(queue: uploads, deriver: MediaDeriver.shared, left: { @Sendable source in
-            if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
-        }) { @Sendable in
-            Task { @MainActor [weak self] in
-                guard let self, let t = self.tenantSession else { return }
-                await self.refreshLists(t)
-            }
-        }
-        if let old = media {
-            if switched { old.close() } else { old.handOver(next: made) }
-        }
-        media = made
-        openMaps(m)
-        pickUpHandoffs()
-    }
-
-    private func closeMedia() {
-        closeGallery(windows: true)
-        galleryShown = nil
-        media?.close()
-        media = nil
-        closeMusic()
-        closeMaps()
-    }
-
-    // MARK: A Memory's curation (ADR 0144)
-
-    /// The open gallery's participants picker while its sheet shows (core's `ParticipantsPicker`).
-    var participantsEdit: ParticipantsEdit?
-    /// The open gallery's banner dialog while its sheet shows (core's `BannerEditor`).
-    var bannerEdit: BannerEdit?
-
-    /// `gallery`'s participants picker opened over the space's current members, where its rights offer it.
-    func openParticipants(_ gallery: GalleryModel) {
-        guard let picker = gallery.participantsPicker() else { return }
-        participantsEdit?.close()
-        participantsEdit = ParticipantsEdit(picker: picker, gallery: gallery)
-    }
-
-    func closeParticipants() {
-        participantsEdit?.close()
-        participantsEdit = nil
-    }
-
-    /// `gallery`'s banner dialog opened, where whoever looks may set its banner, online.
-    func openBanner(_ gallery: GalleryModel) {
-        guard openGallery?.model === gallery, let editor = gallery.bannerEditor(pictures: BannerImages.pictures()) else { return }
-        bannerEdit?.close()
-        bannerEdit = BannerEdit(editor: editor, gallery: gallery)
-    }
-
-    /// The banner's dialog closed: a running save stopped (the old banner stays), a Photos copy removed.
-    func closeBanner() {
-        bannerEdit?.close()
-        bannerEdit = nil
-    }
-
-    /// The open gallery's dialogs closed with it (another gallery, a switch, a lock, a sign-out).
-    private func closeCuration() {
-        closeParticipants()
-        closeBanner()
-    }
-
-    /// The picked file at `url` as an upload's source (`fromPhotos`: a copy the Photos picker made, whose date is no capture
-    /// time); nil where it does not read.
-    func pickedSource(_ url: URL, fromPhotos: Bool) -> UploadSource? {
-        guard let p = Picked(url) else { return nil }
-        return AppleMemories.shared.source(url: url, name: p.name, size: p.size, type: p.type,
-                                           modifiedAt: fromPhotos ? nil : p.modifiedAt.map { KotlinLong(value: $0) })
-    }
-
     /// The Memory's music interrupted while a banner's video plays (ADR 0142 decision 13); nil where no player is open.
     func interruptMusic() -> MusicPlayer.Interruption? { musicPlayer?.interrupt() }
 
@@ -1384,16 +1181,6 @@ final class AppModel {
     func profile(_ userId: String) -> PersonProfile? { shellModel?.profile(userId: userId) }
 
     // MARK: The gallery's filter, the contributions and the view mode (ADR 0149 decisions 5, 6 and 8)
-
-    /// The viewer's calendar for a gallery filter's day chips (inbox #989): an instant's day in this device's time zone
-    /// (core's `LocalDays`) and its chip's words as the web writes them (`Shown.dayLabel`, ADR 0154 decision 5).
-    static let galleryCalendar = GalleryFilter.CalendarCompanion.shared.local(language: shownLanguage)
-
-    /// The Contributions view of the page `gallery` (core's `Contributions`): made when the view is asked for, its state
-    /// watched by the view.
-    func contributions(_ gallery: GalleryModel) -> Contributions? {
-        shellModel?.contributions(gallery: gallery)
-    }
 
     /// Moves with each view choice, so every level and a person's Memories draw the account's one choice anew.
     private(set) var viewRevision = 0
@@ -1459,72 +1246,6 @@ final class AppModel {
         syncMaps()
     }
 
-    /// The Memories bar's Map tab over the application's list (its All tab's set, core's `MemoriesMap`).
-    func memoriesMap() async -> MemoriesMap? {
-        guard let m = shellModel else { return nil }
-        let refs = memoriesListRefs()
-        return try? await m.memoriesMap(memories: refs)
-    }
-
-    /// The Memories of the application's list as the tree holds them (the Map tab's set is the All tab's, ADR 0143 D6).
-    private func memoriesListRefs() -> [NodeRef] {
-        let ids = Set(applicationList(.memories).all.map(\.nodeId))
-        return nodes.filter { ids.contains($0.nodeId) }
-    }
-
-    /// The pin's Memory opened, as its row opens it.
-    func openPin(_ pin: MemoriesMap.Pin) {
-        if let ref = objects.first(where: { $0.nodeId == pin.nodeId && $0.scopeId == pin.scopeId }) { open(ref) }
-    }
-
-    /// Memory or chapter `gallery`'s date editor (core's), nil where whoever looks may not edit its meta or offline.
-    func dateEditor(_ gallery: GalleryModel) -> DateEditor? { shellModel?.dateEditor(gallery: gallery) }
-
-    /// Memory or chapter `gallery`'s place editor (core's) over this tenant's map services.
-    func placeEditor(_ gallery: GalleryModel) -> PlaceEditor? { shellModel?.placeEditor(gallery: gallery) }
-
-    /// The open page's Map view tracks (core's `TrackList` over its gallery), while the view shows; its state arrives in
-    /// `tracksShown`.
-    @ObservationIgnored private var openTracks: (model: TrackList, watch: TrackList.Watch)?
-    private(set) var tracksShown: TrackList.State?
-
-    /// `gallery`'s tracks, made on the Map view's first ask.
-    func trackList(_ gallery: GalleryModel) -> TrackList? {
-        if let held = openTracks, held.model.gallery === gallery { return held.model }
-        guard let m = shellModel, let uploads = media else { return nil }
-        closeTrackList()
-        let made = m.trackList(gallery: gallery, uploads: uploads, left: { @Sendable source in
-            if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
-        })
-        let id = ObjectIdentifier(made)
-        let watch = made.watch { @Sendable state in
-            nonisolated(unsafe) let state = state
-            Task { @MainActor [weak self] in
-                guard let self, let open = self.openTracks?.model, ObjectIdentifier(open) == id else { return }
-                self.tracksShown = state
-            }
-        }
-        openTracks = (made, watch)
-        return made
-    }
-
-    private func closeTrackList() {
-        openTracks?.watch.stop()
-        openTracks?.model.close()
-        openTracks = nil
-        tracksShown = nil
-    }
-
-    /// Picked GPX files (`urls`) offered to `tracks`' node: each checked on the device; what is refused is said by the view.
-    func addTracks(_ tracks: TrackList, urls: [URL]) async {
-        let sources: [UploadSource] = urls.compactMap { url in
-            guard let p = Picked(url) else { return nil }
-            return AppleMemories.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) })
-        }
-        guard !sources.isEmpty else { return }
-        _ = try? await tracks.add(sources: sources)
-    }
-
     // MARK: Music (ADR 0142)
 
     /// The account's one music player (core's `MusicPlayer` over two `AVDeck`s and the system's controls), built when a
@@ -1544,7 +1265,7 @@ final class AppModel {
     var musicCommands: (any PlayerCommands)? { musicPlayer }
 
     /// What a gallery plays its music with: the account's player, an untitled track named by its number.
-    private var galleryMusic: PageMusic? {
+    var galleryMusic: PageMusic? {
         musicPlayer.map { PageMusic(player: $0, untitled: { @Sendable n in say(.musicUntitled, n) }) }
     }
 
@@ -1605,79 +1326,22 @@ final class AppModel {
         if let route = nowPlaying?.route { open(route) }
     }
 
-    /// The open page's Music view (core's `MusicModel` over its gallery), while the view shows; its state arrives in
-    /// `musicShown`.
-    @ObservationIgnored private var openMusicView: (model: MusicModel, watch: MusicModel.Watch)?
-    private(set) var musicShown: MusicModel.State?
-
-    /// `gallery`'s Music view model, made on its first ask.
-    func musicModel(_ gallery: GalleryModel) -> MusicModel? {
-        if let held = openMusicView, held.model.gallery === gallery { return held.model }
-        guard let m = shellModel, let uploads = media else { return nil }
-        closeMusicView()
-        let made = m.musicModel(gallery: gallery, uploads: uploads, measure: AssetMeasure(), left: { @Sendable source in
-            if let url = AppleMemories.shared.urlOf(source: source) { AppModel.removePicked(url) }
-        })
-        let id = ObjectIdentifier(made)
-        let watch = made.watch { @Sendable state in
-            nonisolated(unsafe) let state = state
-            Task { @MainActor [weak self] in
-                guard let self, let open = self.openMusicView?.model, ObjectIdentifier(open) == id else { return }
-                self.musicShown = state
-            }
-        }
-        openMusicView = (made, watch)
-        return made
-    }
-
-    private func closeMusicView() {
-        openMusicView?.watch.stop()
-        openMusicView?.model.close()
-        openMusicView = nil
-        musicShown = nil
-    }
-
-    /// Picked audio files (`urls`) added to `music`'s node as tracks: each checked on the device, the refused said.
-    @discardableResult func addMusic(_ music: MusicModel, urls: [URL]) async -> [String] {
-        let sources: [UploadSource] = urls.compactMap { url in
-            guard let p = Picked(url) else { return nil }
-            return AppleMemories.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) })
-        }
-        guard !sources.isEmpty, let said = try? await music.add(sources: sources) else { return [] }
-        return said.map { say(notice: $0) }
-    }
-
-    /// Queues the picked photos and videos (`urls`; `fromPhotos`: copies the Photos picker handed over, whose own dates are
-    /// no capture time) into `gallery`'s Memory or chapter (core's `MediaUploads`): each one's tiers derived here
-    /// (`MediaTiers`) while the one before it is on the wire; the core reads the gallery anew as each is in, the lists at
-    /// the batch's end, and hands each copy back once the queue is done with it.
-    func uploadMedia(_ gallery: GalleryModel, urls: [URL], fromPhotos: Bool) {
-        let sources: [UploadSource] = urls.compactMap { url in
-            guard let p = Picked(url) else {
-                if fromPhotos { Self.removePicked(url) }
-                return nil
-            }
-            return AppleMemories.shared.source(
-                url: url, name: p.name, size: p.size, type: p.type,
-                modifiedAt: fromPhotos ? nil : p.modifiedAt.map { KotlinLong(value: $0) }
-            )
-        }
-        _ = gallery.upload(sources: sources)
-    }
-
     // MARK: The move and copy sheet (core's MoveSheet)
 
     /// The move or copy sheet of `node` (core's `MoveSheet` over the shell: its browser, the guest folder's confirm, the
     /// kind's copy — a Pot by the open Pot —, the storage check, the move's undo); each write reads the lists anew.
     func moveSheet(_ node: NodeAt, copying: Bool) -> MoveSheet? {
         guard let m = shellModel else { return nil }
-        return m.moveSheet(node: node, copying: copying, pot: potModel, deletedName: say(.potDeletedPerson)) { @Sendable in
+        let changed: @Sendable () -> Void = {
             Task { @MainActor [weak self] in
                 guard let self, let t = self.tenantSession else { return }
                 self.applyShell(start: false)
                 await self.readDetails(t)
             }
         }
+        // the kind whose copy an application makes answers (a Pot's, by the open Pot); every other the composition's
+        return holdings.lazy.compactMap { $0.moveSheet(m, node, copying: copying, changed: changed) }.first
+            ?? m.moveSheet(node: node, copying: copying, pot: nil, deletedName: say(.potDeletedPerson)) { changed() }
     }
 
     // MARK: The space's trash (core's NodeTrash)
@@ -1746,108 +1410,34 @@ final class AppModel {
 
     /// The tenant the shell shows, opened: where an object's own view reads from.
     private(set) var tenantSession: TenantSession?
-    /// The Pot open in the app (core's `PotModel`): its views, its live poll, its writes.
-    @ObservationIgnored private(set) var potModel: PotModel?
-    @ObservationIgnored private var potWatch: PotModel.Watch?
-    private var potSession: PotSession? { potModel?.session }
-
-    /// The open Pot as core's model holds it now.
-    private func syncPot() {
-        pot = potModel?.current.map {
-            PotState(ref: $0.ref, view: $0.view, failed: $0.failed, failure: $0.failure, saving: $0.saving, message: $0.message)
-        }
-    }
-
-    /// An open Pot's views: `view` nil while it loads, `failed` when it did not open — `failure` what its page says then
-    /// (core's: offline not kept, else it did not open); `message` the last add's refusal.
-    struct PotState {
-        let ref: ObjectRef
-        var view: PotView?
-        var failed = false
-        var failure: Msg?
-        var saving = false
-        var message: String?
-    }
-
-    private(set) var pot: PotState?
-
     /// What each object's row says beside its name, by node id (an application's answer: Expenses' `PotRows`).
     private(set) var rowDetails: [String: [String]] = [:]
     /// Counts each read of the lists: a page of what lies below its node reads again on every one (as Android's does),
     /// not only when the number of rows moved.
     private(set) var listsRevision = 0
 
-    /// Drop box `ref`'s page (core's `DropBoxPage`: its guests' folders read anew with the lists, a delete asked first).
-    func dropBoxPage(_ ref: NodeAt) -> DropBoxPage? { shellModel?.dropBoxPage(ref: ref) }
-
     /// What the rows read last (core's `RowDetails`): a part that does not read next time keeps these.
     @ObservationIgnored private var rows = RowDetails.ReadCompanion.shared.EMPTY
 
     /// The rows' facts and the lists' covers, read anew (core's `RowDetails`: Pots, files, drop boxes, cover keys).
-    private func readDetails(_ t: TenantSession, reset: Bool = false) async {
+    func readDetails(_ t: TenantSession, reset: Bool = false) async {
         if reset { rows = RowDetails.ReadCompanion.shared.EMPTY }
         guard let read = try? await RowDetails.shared.read(tenant: t, previous: rows), tenantSession === t else { return }
         rows = read
-        // the file on screen reads itself anew: a replaced blob is shown
-        openFile?.model.reload()
+        // a page on screen reads itself anew (a replaced file's blob is shown)
+        eachHolding { $0.listsRead() }
         var details = read.details.mapValues { $0.map { say(piece: $0) } }
-        // a Memory's row shows its date as its second line (ADR 0143 D5): the facts its sealed meta holds
-        if let dates = try? await shellModel?.memoryDates(), tenantSession === t {
-            for (nodeId, date) in dates where details[nodeId] == nil {
-                if let text = MemoryDateText.row(date) { details[nodeId] = [text] }
+        // the last line an application's rows say (a Memory's date, ADR 0143 D5), where the core's details say none
+        if let m = shellModel {
+            var lines: [String: String] = [:]
+            for h in holdings { lines.merge(await h.rowLines(m)) { a, _ in a } }
+            if tenantSession === t {
+                for (nodeId, line) in lines where details[nodeId] == nil { details[nodeId] = [line] }
             }
         }
         rowDetails = details
         listsRevision += 1
         await readCovers(t, named: read.covers)
-    }
-
-    /// The file page on screen (core's `FileModel`, one at a time) and its watch; read anew whenever the lists are.
-    @ObservationIgnored private var openFile: (model: FileModel, watch: FileModel.Watch)?
-
-    /// What the file page on screen shows (`FileModel.State`) and of which node, on the main actor.
-    private var fileShown: (node: NodeAt, state: FileModel.State)?
-
-    /// What file `node`'s page shows, once its model delivered it; nil before, and for any other node.
-    func fileState(_ node: NodeAt) -> FileModel.State? {
-        guard let shown = fileShown, shown.node == node else { return nil }
-        return shown.state
-    }
-
-    /// The page of file `node` (core's `FileModel` over the shell): iOS hands a copy on through its share sheet, a Mac does
-    /// not. Called while a view is drawn, so it changes nothing observed: the state arrives through the watch.
-    func fileModel(_ node: NodeAt) -> FileModel? {
-        if let held = openFile, held.model.node == node { return held.model }
-        guard let m = shellModel else { return nil }
-        closeFile()
-        #if os(iOS)
-        let shares = true
-        #else
-        let shares = false
-        #endif
-        let made = m.fileModel(ref: node, shares: shares)
-        holdFile(made)
-        return made
-    }
-
-    /// `made` the file page on screen, its state followed on the main actor (the shell's page, or a link's guest's).
-    private func holdFile(_ made: FileModel) {
-        let id = ObjectIdentifier(made)
-        let watch = made.watch { @Sendable state in
-            nonisolated(unsafe) let state = state
-            Task { @MainActor [weak self] in
-                // a state of a page closed meanwhile is dropped
-                guard let self, let open = self.openFile?.model, ObjectIdentifier(open) == id else { return }
-                self.fileShown = (open.node, state)
-            }
-        }
-        openFile = (made, watch)
-    }
-
-    private func closeFile() {
-        openFile?.watch.stop()
-        openFile?.model.close()
-        openFile = nil
     }
 
     /// Something the shell asks or says once (an upload's refusal, its "Replace anyway"), with its action where it offers one.
@@ -1860,28 +1450,8 @@ final class AppModel {
 
     var notice: Notice?
 
-    /// The file page whose content the person is picking a replacement for (the header's "Replace…"), while they pick.
-    var replacing: FileModel? {
-        didSet { if let replacing { replaceChosen = replacing } }
-    }
-    /// The file page Replace was chosen on, kept past the importer's dismissal: its binding clears `replacing` before the
-    /// completion runs, which then found nothing to replace (the picked file was dropped, measured 2026-11-12).
-    @ObservationIgnored var replaceChosen: FileModel?
-
-    /// The file a person is about to send a copy of to another app ("Send a Copy…"), while the shell says first that the
-    /// copy leaves veyq decrypted. The data are theirs; the app says what happens and never forbids it.
-    var sendingCopy: NodeAt?
-
-    /// A decrypted copy on its way to the system's share sheet, until the sheet is done with it.
-    struct SentCopy: Identifiable {
-        let url: URL
-        var id: URL { url }
-    }
-
-    var sentCopy: SentCopy?
-
     /// Where copies sent to another app wait to be read: cleared before the next one, when the sheet is done and at start.
-    private static var sharedDir: URL { FileManager.default.temporaryDirectory.appendingPathComponent("shared", isDirectory: true) }
+    static var sharedDir: URL { FileManager.default.temporaryDirectory.appendingPathComponent("shared", isDirectory: true) }
 
     /// Where the Photos picker's copies wait for their upload (`PickedMedia`, one directory each): the person's own originals,
     /// never a decrypted veyq copy; each removed once the queue is done with it, all of them when the tenant closes and at
@@ -1928,78 +1498,13 @@ final class AppModel {
         try? FileManager.default.removeItem(at: Self.sharedDir)
     }
 
-    /// A decrypted copy of file `ref` under its own name (core's `downloadName`), for the system's share sheet.
-    func copyForSending(_ ref: NodeAt) async -> SentCopy? {
-        guard let header = fileModel(ref)?.current.header, header.facts.hasContent else { return nil }
-        clearSentCopies()
-        let dir = Self.sharedDir.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        guard (try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)) != nil else { return nil }
-        let url = dir.appendingPathComponent(header.downloadName)
-        // the file itself (core's download of a file): the one decrypted copy the person asked for, swept at the next start
-        guard await downloadNode(ref, to: url.path) != nil else { return nil }
-        return SentCopy(url: url)
-    }
-
     /// The app's one upload queue (core's `UploadQueue`, the web's `core/blob/queue.ts`): every application's uploads, one
     /// after another, retried once; the shell's uploads button shows it (`UploadsButton`). It outlives a screen, not the
     /// account: a sign-out or a switch of tenant empties it.
     let uploads = UploadQueue()
 
-    /// The uploads as the shell shows them (core's `DepotUploads` over `uploads`, one per open tenant): the uploads button
-    /// draws `depotState`, Depot's uploads go through it, and the shell shows what it says (`said`).
-    private(set) var depot: DepotUploads?
-    private(set) var depotState: DepotUploads.State?
-    @ObservationIgnored private var depotWatch: DepotUploads.Watch?
-
-    private func openDepot(_ m: ShellModel, _ t: TenantSession) {
-        closeDepot()
-        let changed: @Sendable () -> Void = {
-            Task { @MainActor [weak self] in
-                guard let self, let t = self.tenantSession else { return }
-                await self.refreshLists(t)
-            }
-        }
-        #if os(macOS)
-        // a Mac's uploads offer a download's import (ADR 0152 decision 1); the phones' do not (owner 2026-11-19)
-        let d = m.depotUploadsImporting(queue: uploads, deriver: MediaDeriver.shared, changed: changed)
-        #else
-        let d = m.depotUploads(queue: uploads, changed: changed)
-        #endif
-        depot = d
-        depotState = d.current
-        depotWatch = d.watch { @Sendable _ in
-            Task { @MainActor [weak self] in self?.syncDepot() }
-        }
-    }
-
-    private func closeDepot() {
-        #if os(macOS)
-        importing?.dialog.close()
-        importing = nil
-        #endif
-        depotWatch?.stop()
-        depotWatch = nil
-        depot?.close()
-        depot = nil
-        depotState = nil
-    }
-
-    /// The uploads' state on the main actor; what they say (`said`) the shell shows as an alert of its own, one at a time —
-    /// but a said that offers nothing and only says something went through lives as a success does (`show`), seen at once.
-    private func syncDepot() {
-        guard let d = depot else { return }
-        let state = d.current
-        if let said = state.said, said.action == nil, !said.notices.isEmpty, said.notices.allSatisfy({ $0.kind == .said }) {
-            show(said.notices)
-            d.seen(id: said.id)
-            depotState = d.current
-            return
-        }
-        depotState = state
-    }
-
     /// A picked file as an upload lists it: its name, size, type, modified time (read inside its security scope).
-    private struct Picked {
+    struct Picked {
         let name: String
         let size: Int64
         let type: String
@@ -2017,32 +1522,12 @@ final class AppModel {
     }
 
     /// The level shown, by name: where an upload lands.
-    private var levelLabel: String {
+    var levelLabel: String {
         shell.folder?.name ?? Names.spaceName(spaces.first { $0.scopeId == shell.space })
     }
 
     /// The level shown as a drop's target (core's `DropTarget.Level`), named as its title draws it.
     var levelDropTarget: DropTarget { DropTarget.Level(label: levelLabel) }
-
-    /// Queues the picked `urls` as new files under the level shown (core's `DepotUploads.upload`): a name a file already
-    /// holds offers its replace.
-    func uploadFiles(_ urls: [URL]) {
-        guard let d = depot, let scopeId = shell.space else { return }
-        let sources: [UploadSource] = urls.compactMap { url in
-            guard let p = Picked(url) else { return nil }
-            return AppleDepot.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) })
-        }
-        #if os(macOS)
-        // the first picked veyq download is offered as an import, *Upload as a file* beside it (ADR 0152 decision 1)
-        let (parentId, label) = (shell.folder?.nodeId, levelLabel)
-        Task {
-            let screened = try? await d.screen(scopeId: scopeId, parentId: parentId, label: label, sources: sources, left: nil, deletedName: say(.potDeletedPerson))
-            offerImport(screened?.offer)
-        }
-        #else
-        _ = d.upload(scopeId: scopeId, parentId: shell.folder?.nodeId, label: levelLabel, sources: sources)
-        #endif
-    }
 
     #if os(macOS)
     /// A download's import offered by an upload's screen (core's `ImportDialog`), its sheet shown while it is open
@@ -2067,53 +1552,33 @@ final class AppModel {
     }
     #endif
 
-    /// Depot's "Upload folder…": the directory at `url` (the system's folder picker) walked here — every entry by its path
-    /// below it, hidden ones included, a link said as one and never followed — and handed to core's
-    /// `DepotUploads.uploadFolder`, which keeps, prepares, queues and says.
-    func uploadFolder(_ url: URL) async {
-        guard let d = depot, let scopeId = shell.space else { return }
-        let scoped = url.startAccessingSecurityScopedResource()
-        let files = Self.folderFiles(url)
-        if scoped { url.stopAccessingSecurityScopedResource() }
-        let found = AppleDepot.shared.found(root: url, files: files)
+    /// An import offered and not answered goes with the tenant it was offered over (a switch, a sign-out).
+    private func closeImport() {
         #if os(macOS)
-        // a folder holding `.veyq/manifest.json` is a download unpacked, offered as an import (ADR 0152 decision 1); a screen
-        // that threw says so, never nothing (the macOS pass of 2026-11-20 saw a dropped folder do nothing)
-        do {
-            let screened = try await d.screenFolder(
-                scopeId: scopeId, parentId: shell.folder?.nodeId, label: levelLabel, shownName: nil, path: url.path, found: found,
-                deletedName: say(.potDeletedPerson)
-            )
-            Self.dropLog("folder screened: \(files.count) entries, import offered \(screened.offer != nil), queued \(screened.queued)")
-            offerImport(screened.offer)
-        } catch {
-            Self.dropLog("folder screen failed: \(type(of: error))")
-            notice = Notice(text: say(.depotFolderFailed, url.lastPathComponent))
-        }
-        #else
-        try? await d.uploadFolder(scopeId: scopeId, parentId: shell.folder?.nodeId, shownName: nil, path: url.path, found: found)
+        importing?.dialog.close()
+        importing = nil
         #endif
     }
 
     /// The entries below the directory at `url`, each by its path below it and what it is (hidden ones included, as the
     /// web's directory input holds them; a link reported, never followed; one the enumerator could not read reported); a
     /// directory enumerator is not iterated in an async context, so this is its own synchronous walk.
-    nonisolated static func folderFiles(_ url: URL) -> [AppleDepot.FolderFile] {
+    nonisolated static func folderFiles(_ url: URL) -> [ApplePlatform.Entry] {
         let keys: [URLResourceKey] = [.isRegularFileKey, .isDirectoryKey, .isSymbolicLinkKey, .isReadableKey, .fileSizeKey, .contentModificationDateKey, .contentTypeKey]
-        var files: [AppleDepot.FolderFile] = []
+        var files: [ApplePlatform.Entry] = []
         let base = url.standardizedFileURL.path
         func relative(_ file: URL) -> String {
             let full = file.standardizedFileURL.path
             return full.hasPrefix(base + "/") ? String(full.dropFirst(base.count + 1)) : file.lastPathComponent
         }
-        func entry(_ file: URL, _ kind: FolderUpload.Kind, _ v: URLResourceValues? = nil) -> AppleDepot.FolderFile {
-            AppleDepot.FolderFile(
+        func entry(_ file: URL, _ kind: ApplePlatform.EntryKind, _ v: URLResourceValues? = nil) -> ApplePlatform.Entry {
+            ApplePlatform.Entry(
                 relativePath: relative(file), path: file.standardizedFileURL.path, kind: kind, size: Int64(v?.fileSize ?? 0),
                 type: v?.contentType?.preferredMIMEType ?? "application/octet-stream",
                 modifiedAt: v?.contentModificationDate.map { KotlinLong(value: Int64($0.timeIntervalSince1970 * 1000)) }
             )
         }
-        var unreadable: [AppleDepot.FolderFile] = []
+        var unreadable: [ApplePlatform.Entry] = []
         let walk = FileManager.default.enumerator(at: url, includingPropertiesForKeys: keys) { failed, _ in
             unreadable.append(entry(failed, .unreadable))
             return true
@@ -2126,13 +1591,6 @@ final class AppModel {
             else { files.append(entry(file, .other)) }
         }
         return files + unreadable
-    }
-
-    /// The header's "Replace…": the content `file` showed when Replace was chosen replaced with the picked file at `url`.
-    func replaceFile(_ file: FileModel, url: URL) {
-        guard let d = depot, let p = Picked(url) else { return }
-        let source = AppleDepot.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) })
-        _ = d.replace(file: file, source: source)
     }
 
     /// Why `item` did not go up, in its application's words (the uploads list's line under it); nil while it may still.
@@ -2213,54 +1671,10 @@ final class AppModel {
         nameAnswered(answer) { show($0) }
     }
 
-    /// A Memory `name` made in space `scopeId` under `parentId` (nil: the space's top) — New Memory, core's
-    /// `ShellModel.createMemory` (the web's `MemoryNodeDialog`: checked against the loaded tree, then sent) —, opened once
-    /// made (the web's), its maker listed among its participants where `wasThere` (ADR 0144 decision 2), its place armed where
-    /// `autoPlace` (uc.memory.place A1). Why not, in the
-    /// dialog's words, or nil.
-    func createMemory(scopeId: String, parentId: String?, name: String, wasThere: Bool = false, autoPlace: Bool = false) async -> String? {
-        guard let m = shellModel else { return say(notice: MemoryCreate.shared.refused(reason: nil)) }
-        let made = try? await m.createMemory(scopeId: scopeId, parentId: parentId, name: name, wasThere: wasThere, autoPlace: autoPlace)
-        applyShell(start: false)
-        await readDetails(m.tenant)
-        return opened(made)
-    }
-
-    /// Whether New Memory in space `scopeId` offers *I was there* (a tenant or group space, ADR 0144 decision 2).
-    func offersWasThere(_ scopeId: String) -> Bool { shellModel?.offersWasThere(scopeId: scopeId) ?? false }
-
-    /// Whether New Memory offers *Determine location automatically* (uc.memory.place A1: this tenant's map services shown on this device).
-    func offersAutoPlace() -> Bool { shellModel?.offersAutoPlace() ?? false }
-
-    /// A chapter `name` made in `gallery`'s Memory (core's `GalleryModel.createChapter`, which reads the lists anew), opened
-    /// once made; why not, or nil.
-    func createChapter(_ gallery: GalleryModel, name: String) async -> String? {
-        let made = try? await gallery.createChapter(name: name)
-        applyShell(start: false)
-        if let m = shellModel { await readDetails(m.tenant) }
-        return opened(made)
-    }
-
-    /// What a Memory's or a chapter's create came to: the node made opened (both are Memories'), or why not in words.
-    private func opened(_ made: MemoryCreate.Made?) -> String? {
-        // made offline (ADR 0153): the dialog closes and says it waits to be sent; nothing to open until it is
-        if let made, made.queued {
-            if let n = made.notice { show(n) }
-            return nil
-        }
-        if let notice = made?.notice { return say(notice: notice) }
-        guard let n = made?.node else { return say(notice: MemoryCreate.shared.refused(reason: nil)) }
-        if let page = GalleryModel.companion.page(node: n) { open(page) }
-        return nil
-    }
-
     /// What the drawer's "New" asked Home to create, until Home opens its dialog.
     var newRequest: AppKinds.Create?
     /// The space whose trash is open (a level's tool, `LevelTools`), while non-nil.
     var trashShown: TrashOf?
-    /// What a Memory's header asked its page to add (its `upload` entry: the photo library, or files), until the page opens
-    /// the picker.
-    var galleryAdd: GalleryAdd?
 
     /// The drawer's "New": Home, where its dialog for `create` opens.
     func requestNew(_ create: AppKinds.Create) {
@@ -2286,216 +1700,6 @@ final class AppModel {
         avatars = AppleSessions.shared.pictures(tenant: t)
     }
 
-    /// Opens and reads the Pot `ref` unless it is the one shown.
-    func loadPot(_ ref: ObjectRef) {
-        guard let pots = potModel else { return }
-        Task {
-            try? await pots.open(ref: ref)
-            syncPot()
-        }
-    }
-
-    /// The open Pot's live poll (core's `LivePoll`, run by core) for as long as the calling task runs — the Pot's screen
-    /// while the app is active, so nothing is asked in the background; its cancellation stops the poll.
-    func livePot() async {
-        guard let live = potModel?.startLive() else { return }
-        await untilCancelled()
-        live.stop()
-    }
-
-    /// Reads the open Pot again now (pull to refresh).
-    func refreshPot() async {
-        try? await potModel?.refresh()
-        syncPot()
-    }
-
-    /// Records settle-up `rows` as paid, dated the core's today (core's `PotModel.record`); a refusal is the Pot's message.
-    func recordSettleUp(_ rows: [PotView.SettleRow]) async {
-        guard let pots = potModel else { return }
-        _ = try? await pots.record(rows: rows)
-        syncPot()
-    }
-
-    /// Whether deleted entry `entryId` may be restored now, by the core's clock.
-    func restorable(_ entryId: String) -> Bool { potModel?.restorable(entryId: entryId) ?? false }
-
-    /// Restores deleted entry `entryId` (core's `PotModel.restore`, its window the core's); true once it was.
-    func restoreEntry(_ entryId: String) async -> Bool {
-        guard let pots = potModel else { return false }
-        let done = (try? await pots.restore(entryId: entryId))?.boolValue ?? false
-        syncPot()
-        return done
-    }
-
-    /// The open Pot's settings and people (core's `PotSettings`), one per open Pot, held here; its tab draws `settingsState`,
-    /// set after each of its actions (only they change it).
-    @ObservationIgnored private var potSettings: PotSettings?
-    @ObservationIgnored private var potSettingsOf: String?
-    private(set) var settingsState: PotSettings.State?
-
-    /// The open Pot's settings model, made anew when another Pot is open.
-    @discardableResult func openSettings() -> PotSettings? {
-        guard let ref = pot?.ref, pot?.view != nil else { return nil }
-        if potSettingsOf != ref.nodeId {
-            potSettings = potModel?.settings()
-            potSettingsOf = ref.nodeId
-            settingsState = potSettings?.current
-        }
-        return potSettings
-    }
-
-    /// One change of the open Pot's settings or people (`op`, a `PotSettings` action); true once it was stored. A new
-    /// base currency is said on the Pot's row at once.
-    func settingsWrite(_ op: @escaping @MainActor (PotSettings) async throws -> KotlinBoolean) async -> Bool {
-        guard let s = openSettings(), let pots = potModel, let ref = pot?.ref else { return false }
-        let stored = (try? await op(s))?.boolValue ?? false
-        settingsState = s.current
-        syncPot()
-        if let facts = pots.rowDetails() { rowDetails[ref.nodeId] = facts }
-        return stored
-    }
-
-    /// A person's erase asked (core's state: done only by `settingsWrite { try await $0.erase() }`).
-    func askErase(_ personId: String) { openSettings()?.askErase(personId: personId); settingsState = potSettings?.current }
-
-    func cancelErase() { potSettings?.cancelAsk(); settingsState = potSettings?.current }
-
-    /// "New pot" (core's `PotCreateSheet`) open in the app, watched here (its members arrive on their own); its sheet draws
-    /// `createState`.
-    @ObservationIgnored private var createSheet: PotCreateSheet?
-    @ObservationIgnored private var createWatch: PotCreateSheet.Watch?
-    private(set) var createState: PotCreateSheet.State?
-
-    /// Opens "New pot" at the shell's place now, in the person's language's currency.
-    func openCreateSheet() {
-        closeCreateSheet()
-        guard let shellModel, let s = potModel?.createSheet(shell: shellModel, language: Locale.current.language.languageCode?.identifier ?? "") else { return }
-        createSheet = s
-        createState = s.current
-        createWatch = s.watch { @Sendable _ in
-            Task { @MainActor [weak self] in self?.createState = self?.createSheet?.current }
-        }
-    }
-
-    func createSpace(_ scopeId: String) { createSheet?.space(scopeId: scopeId); createState = createSheet?.current }
-    func createCurrency(_ code: String) { createSheet?.currency(code: code); createState = createSheet?.current }
-    func createAddMember(_ userId: String) { createSheet?.addMember(userId: userId); createState = createSheet?.current }
-    func createRemove(_ index: Int) { createSheet?.remove(index: Int32(index)); createState = createSheet?.current }
-
-    /// A name typed added; true when there was one (the field is emptied).
-    func createAddTyped(_ text: String) -> Bool {
-        let added = createSheet?.addTyped(text: text) ?? false
-        createState = createSheet?.current
-        return added
-    }
-
-    func canCreatePot(_ name: String) -> Bool { createSheet?.canCreate(name: name) ?? false }
-
-    /// Creates the Pot named `name` (a person still `typed` joins first) and opens it; true once it exists.
-    func createPot(name: String, typed: String) async -> Bool {
-        guard let s = createSheet, let shellModel else { return false }
-        let created = (try? await s.create(name: name, typed: typed))?.boolValue ?? false
-        createState = s.current
-        if created {
-            applyShell(start: false)
-            await readDetails(shellModel.tenant)
-        }
-        return created
-    }
-
-    /// Today by the core's clock (`yyyy-MM-dd`): the editor's date picker falls back to it.
-    var today: String { potModel?.today() ?? "" }
-
-    func closeCreateSheet() {
-        createWatch?.stop()
-        createWatch = nil
-        createSheet?.close()
-        createSheet = nil
-        createState = nil
-    }
-
-    /// The entry editor open in the app (core's `EntryEditor` over the Pot's model), watched by this model, not by its
-    /// sheet: what the sheet draws is `editorState`, set at once after each edit (a field never lags what was typed) and
-    /// from the watch for what the core changes itself (the rate's fill).
-    @ObservationIgnored private var editor: EntryEditor?
-    @ObservationIgnored private var editorWatch: EntryEditor.Watch?
-    private(set) var editorState: EntryEditor.State?
-
-    /// Opens the editor of `entryId` in the open Pot (nil: a new entry) with `pending` as its receipts; false when the
-    /// Pot cannot take one.
-    func openEditor(_ entryId: String?, pending: [PotSession.PendingReceipt] = []) -> Bool {
-        closeEditor()
-        guard let e = potModel?.editor(entryId: entryId, separator: decimalSeparator, pending: pending) else { return false }
-        adoptEditor(e)
-        return true
-    }
-
-    /// `e` as the editor open in the app, watched here.
-    func adoptEditor(_ e: EntryEditor) {
-        editor = e
-        editorState = e.current
-        editorWatch = e.watch { @Sendable _ in
-            Task { @MainActor [weak self] in self?.editorState = self?.editor?.current }
-        }
-    }
-
-    /// The editor open in the app (a held entry's *Discard mine* calls it).
-    var editorModel: EntryEditor? { editor }
-
-    func edit(_ change: EditorChange) {
-        editor?.change(change: change)
-        editorState = editor?.current
-    }
-
-    func addReceipts(_ picked: [EntryEditor.Picked]) {
-        editor?.addReceipts(picked: picked)
-        editorState = editor?.current
-    }
-
-    func dropReceipt(_ id: String) {
-        editor?.dropReceipt(id: id)
-        editorState = editor?.current
-    }
-
-    /// Saves the entry: done (close the editor, saying what the answer says), or not (the editor says why).
-    func saveEntry() async -> EntryEditor.Saved? {
-        guard let e = editor else { return nil }
-        let saved = try? await e.save()
-        editorState = e.current
-        return saved
-    }
-
-    func askDelete() { editor?.askDelete(); editorState = editor?.current }
-    func cancelAsk() { editor?.cancelAsk(); editorState = editor?.current }
-
-    /// Deletes the entry once asked; true when it was.
-    func deleteEntry() async -> Bool {
-        guard let e = editor else { return false }
-        let done = (try? await e.delete())?.boolValue ?? false
-        editorState = e.current
-        return done
-    }
-
-    func closeEditor() {
-        editorWatch?.stop()
-        editorWatch = nil
-        editor?.close()
-        editor = nil
-        editorState = nil
-    }
-
-
-    /// A receipt of the open Pot opened to its bytes, or nil (blocked, or it did not read).
-    /// Writes the open Pot `ref` as the web's ZIP (uc.platform.export-import, ADR 0082) to `path` (core's `FileSink`, which
-    /// removes a download that did not finish); nil when it did not complete.
-    func downloadPot(_ ref: ObjectRef, to path: String) async -> [NodeExport.Skipped]? {
-        guard let session = potSession, pot?.ref == ref else { return nil }
-        let written = try? await FileDownloads.shared.pot(
-            session: session, deletedName: say(.potDeletedPerson), nowMs: Int64(Date().timeIntervalSince1970 * 1000), path: path
-        )
-        return written == nil ? nil : []
-    }
-
     /// Writes node `ref`'s download to `path` (core's `ShellModel.download` into its `FileSink`: a file the file itself, any
     /// other node with everything under it as the web's ZIP); what it left out, nil when it did not finish (nothing left).
     func downloadNode(_ ref: NodeAt, to path: String) async -> [NodeExport.Skipped]? {
@@ -2504,18 +1708,6 @@ final class AppModel {
             shell: m, ref: ref, deletedName: say(.potDeletedPerson), nowMs: Int64(Date().timeIntervalSince1970 * 1000), path: path
         )
     }
-
-    func openReceipt(_ receiptId: String) async -> Data? {
-        guard let session = potSession else { return nil }
-        return (try? await AppleSessions.shared.openReceipt(pot: session, receiptId: receiptId)) ?? nil
-    }
-
-    /// Why the open Pot's receipt did not open (core's `PotModel.receiptFailure`): not kept offline, or unreadable.
-    func receiptFailure() -> Msg { potModel?.receiptFailure() ?? .receiptsUnreadable }
-
-
-    /// Forgets the open Pot's last refusal (a sheet closed).
-    func clearPotMessage() { potModel?.clearMessage(); syncPot() }
 
     func choose(_ app: ApplicationId?) { moveShell { $0.choose(app: app) }; drawerOpen = false }
     func switchSpace(_ scopeId: String) { moveShell { $0.switchSpace(scopeId: scopeId) } }
@@ -2532,68 +1724,13 @@ final class AppModel {
     /// The tenant a signed-in person keeps a link in (*Keep*); nil signed out.
     var guestTenant: TenantSession? { shellModel?.tenant }
 
-    /// The member's Pot while a link's Pot is shown in its place (its page and sheets read `potModel`).
-    @ObservationIgnored private var memberPot: (model: PotModel?, watch: PotModel.Watch?)?
-
-    /// A link's page `page` on screen: its kind's member page reads its model here (the gallery, the file, the Pot), so the
-    /// guest's model is held in the shell's place while it shows (ADR 0150 decision 5: share view = member view).
-    func adoptGuestPage(_ page: GuestPage) {
-        switch page {
-        case let g as MemoriesGuest.Gallery:
-            if openGallery?.model !== g.model {
-                closeGallery()
-                galleryShown = nil
-                holdGallery(g.model)
-            }
-        case let f as DepotGuest.File:
-            if openFile?.model !== f.model {
-                closeFile()
-                fileShown = nil
-                holdFile(f.model)
-            }
-        case let p as PotGuest.Pot:
-            if memberPot == nil { memberPot = (potModel, potWatch) } else { potWatch?.stop() }
-            potModel = p.model
-            potWatch = p.model.watch { @Sendable _ in
-                Task { @MainActor [weak self] in self?.syncPot() }
-            }
-            pot = nil
-            syncPot()
-        default:
-            break
-        }
-    }
+    /// A link's page `page` on screen: its kind's member page reads its model through its application's holding (the
+    /// gallery, the file, the Pot), so the guest's model is held in the shell's place while it shows (ADR 0150 decision 5:
+    /// share view = member view).
+    func adoptGuestPage(_ page: GuestPage) { _ = holdings.contains { $0.adopt(page) } }
 
     /// A link's page `page` left: its model goes, the member's place is the shell's again.
-    func releaseGuestPage(_ page: GuestPage) {
-        switch page {
-        case let g as MemoriesGuest.Gallery:
-            if openGallery?.model === g.model {
-                closeGallery()
-                galleryShown = nil
-            } else {
-                g.model.close()
-            }
-        case let f as DepotGuest.File:
-            if openFile?.model === f.model {
-                closeFile()
-                fileShown = nil
-            } else {
-                f.model.close()
-            }
-        case let p as PotGuest.Pot:
-            if potModel === p.model, let member = memberPot {
-                potWatch?.stop()
-                potModel = member.model
-                potWatch = member.watch
-                memberPot = nil
-                syncPot()
-            }
-            p.model.close(ref: nil)
-        default:
-            break
-        }
-    }
+    func releaseGuestPage(_ page: GuestPage) { _ = holdings.contains { $0.release(page) } }
 
     /// The bookmark page on screen (core's `BookmarkPage`): one at a time; an in-place link let go with it.
     @ObservationIgnored private var openBookmark: (page: BookmarkPage, held: BookmarkHeld)?
@@ -2641,31 +1778,10 @@ final class AppModel {
         Task { await refreshLists(t) }
     }
 
-    /// A READ_WRITE guest's replace of `file`'s content with the picked file (ADR 0150 decision 5): the job the guest's file
-    /// door makes, in the app's one queue; the page reads the file anew once it settled.
-    func guestReplace(_ access: GuestAccess, file: FileModel, url: URL) {
-        guard let source = guestSource(url) else { return }
-        // core's `GuestAccess.replaceAsking`: a guest not named yet is asked its name first (the core's one naming flow,
-        // ADR 0154 decision 1); then the link's own queue (the app's one, handed to the link), signed in or out (#1035)
-        Task {
-            let queued = (try? await access.replaceAsking(file: file, source: source))?.boolValue ?? false
-            if !queued { source.close() }
-        }
-    }
-
     /// A picked file as a guest's upload source (a drop box's, a replace's), read in place where it lies.
     func guestSource(_ url: URL) -> UploadSource? {
         guard let p = Picked(url) else { return nil }
-        return AppleDepot.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) })
-    }
-
-    /// A picked photo or video as a guest uploader's source; a copy the Photos picker made is removed if it does not read.
-    func guestMediaSource(_ url: URL, fromPhotos: Bool) -> UploadSource? {
-        guard let p = Picked(url) else {
-            if fromPhotos { Self.removePicked(url) }
-            return nil
-        }
-        return AppleMemories.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: fromPhotos ? nil : p.modifiedAt.map { KotlinLong(value: $0) })
+        return ApplePlatform.shared.source(url: url, name: p.name, size: p.size, type: p.type, modifiedAt: p.modifiedAt.map { KotlinLong(value: $0) })
     }
 
     func open(_ ref: ObjectRef) {
@@ -2746,9 +1862,3 @@ extension AppModel: SettingsActions {
     }
 }
 
-/// What a node's header asked its page to add (its `upload` entry): from the photo library, or from files
-/// (`AppModel.galleryAdd`).
-struct GalleryAdd: Equatable {
-    let nodeId: String
-    let files: Bool
-}

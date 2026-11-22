@@ -39,7 +39,7 @@ enum ShareHandoff {
         /// Its files as the upload reads them, a frame at a time.
         var sources: [UploadSource] {
             target.files.map {
-                AppleMemories.shared.source(url: dir.appendingPathComponent($0.path), name: $0.name, size: $0.size, type: $0.type, modifiedAt: nil)
+                ApplePlatform.shared.source(url: dir.appendingPathComponent($0.path), name: $0.name, size: $0.size, type: $0.type, modifiedAt: nil)
             }
         }
     }
@@ -68,7 +68,7 @@ enum ShareHandoff {
         do {
             try fm.createDirectory(at: staging, withIntermediateDirectories: true)
             for (n, source) in sources.enumerated() {
-                guard let url = AppleMemories.shared.urlOf(source: source) else { continue }
+                guard let url = ApplePlatform.shared.urlOf(source: source) else { continue }
                 let path = "\(n)/\(url.lastPathComponent)"
                 try fm.createDirectory(at: staging.appendingPathComponent("\(n)", isDirectory: true), withIntermediateDirectories: true)
                 try fm.moveItem(at: url, to: staging.appendingPathComponent(path))

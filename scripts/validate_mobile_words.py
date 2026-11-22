@@ -290,7 +290,7 @@ PLATFORM_FORMAT_EXCEPTIONS: dict[tuple[str, str, str], str] = {
         "a layout poll while the search's section is scrolled into view, no notice's",
     ("android", "android/src/debug/kotlin/me/raddatz/veyq/mobile/android/DevAudio.kt", "delay(1500)"):
         "a debug build's playback probe lets a deck play before it reads the position, no notice's",
-    ("apple", "apple/Veyq/Core/AppModel.swift", ".currency(code:"):
+    ("apple", "apple/Veyq/Apps/Expenses/ExpensesHolding.swift", ".currency(code:"):
         "the Pot create sheet's own `currency(code:)` — a currency picked, nothing formatted",
     ("apple", "apple/Veyq/Core/MusicPlayback.swift", ".milliseconds(2"):
         "a fade's 25 ms step (ADR 0142 decision 2: steps of at most 50 ms) — the player's timer, no notice's",

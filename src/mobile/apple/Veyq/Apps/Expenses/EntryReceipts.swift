@@ -35,7 +35,7 @@ struct EntryReceipts: View {
                         .disabled(r == nil || r?.blocked == true)
                     Spacer()
                     if state.editable {
-                        Button { model.dropReceipt(id) } label: { Image(systemName: "xmark.circle.fill") }
+                        Button { model.expenses.dropReceipt(id) } label: { Image(systemName: "xmark.circle.fill") }
                             .buttonStyle(.borderless)
                             .accessibilityLabel(say(.receiptsRemove))
                     }
@@ -45,7 +45,7 @@ struct EntryReceipts: View {
                 HStack {
                     Text(p.name).foregroundStyle(Role.muted)
                     Spacer()
-                    Button { model.dropReceipt(p.id) } label: { Image(systemName: "xmark.circle.fill") }
+                    Button { model.expenses.dropReceipt(p.id) } label: { Image(systemName: "xmark.circle.fill") }
                         .buttonStyle(.borderless)
                         .accessibilityLabel(say(.receiptsRemove))
                 }
@@ -81,7 +81,7 @@ struct ReceiptPresenters: ViewModifier {
                     let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate).map { KotlinLong(value: Int64($0.timeIntervalSince1970 * 1000)) }
                     return AppleSessions.shared.picked(data: data, type: type, name: url.lastPathComponent, modifiedAt: modified)
                 }
-                model.addReceipts(picked)
+                model.expenses.addReceipts(picked)
             }
             .onChange(of: ui.photos) { _, items in
                 guard !items.isEmpty else { return }
@@ -94,7 +94,7 @@ struct ReceiptPresenters: ViewModifier {
                         let ext = item.supportedContentTypes.first?.preferredFilenameExtension ?? "jpg"
                         picked.append(AppleSessions.shared.picked(data: data, type: type, name: "photo.\(ext)", modifiedAt: nil))
                     }
-                    model.addReceipts(picked)
+                    model.expenses.addReceipts(picked)
                 }
             }
             .sheet(item: Binding(get: { ui.viewing.map(ViewingId.init) }, set: { ui.viewing = $0?.id })) { v in
@@ -121,7 +121,7 @@ struct ReceiptViewer: View {
             Group {
                 if failed {
                     // offline, a receipt this device did not keep says so (no failure), else it is unreadable (core's words)
-                    let why = model.receiptFailure()
+                    let why = model.expenses.receiptFailure()
                     ContentUnavailableView(say(why), systemImage: why == .offlineNotKept ? "icloud.slash" : "exclamationmark.triangle")
                 } else if let data {
                     switch AppleSessions.shared.receiptKind(data: data) {
@@ -150,7 +150,7 @@ struct ReceiptViewer: View {
         }
         .sheetFrame(minWidth: 520, minHeight: 560)
         .task(id: receiptId) {
-            if let d = await model.openReceipt(receiptId) { data = d } else { failed = true }
+            if let d = await model.expenses.openReceipt(receiptId) { data = d } else { failed = true }
         }
     }
 

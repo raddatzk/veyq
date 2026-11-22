@@ -34,7 +34,7 @@ struct DeletedEntrySheet: View {
 
     var body: some View {
         // the window on the core's clock (`PotModel.restorable`), never the platform's
-        let restorable = model.restorable(row.id)
+        let restorable = model.expenses.restorable(row.id)
         let purge = view.purgeAfter(entryId: row.id)?.int64Value
         NavigationStack {
             Form {
@@ -50,19 +50,19 @@ struct DeletedEntrySheet: View {
                     }
                 }
                 Section { EntryHistory(view: view, entryId: row.id) }
-                if let message = model.pot?.message { Section { Text(potRefusal(message)).foregroundStyle(Role.danger) } }
+                if let message = model.expenses.pot?.message { Section { Text(potRefusal(message)).foregroundStyle(Role.danger) } }
             }
             .formStyle(.grouped)
             .navigationTitle(row.title ?? say(.potTransfer))
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { model.clearPotMessage(); dismiss() } }
+                ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { model.expenses.clearPotMessage(); dismiss() } }
                 if restorable {
                     ToolbarItem(placement: .confirmationAction) {
                         Button(say(.entryRestore)) {
                             let id = row.id
-                            Task { if await model.restoreEntry(id) { dismiss() } }
+                            Task { if await model.expenses.restoreEntry(id) { dismiss() } }
                         }
-                        .disabled(model.pot?.saving == true)
+                        .disabled(model.expenses.pot?.saving == true)
                     }
                 }
             }

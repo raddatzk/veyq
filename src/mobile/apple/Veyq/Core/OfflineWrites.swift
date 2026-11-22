@@ -19,16 +19,16 @@ final class QueuedHeld {
         let q = AppleQueued(shell: shell)
         queued = q
         items = CoreState({ (q.items.value as? [QueuedItem]) ?? [] }) { changed in
-            AppleMemories.shared.watch(flow: q.items) { @Sendable _ in changed() }
+            ApplePlatform.shared.watch(flow: q.items) { @Sendable _ in changed() }
         }
         banner = CoreState({ q.banner.value as? VeyqCore.Notice }) { changed in
-            AppleMemories.shared.watch(flow: q.banner) { @Sendable _ in changed() }
+            ApplePlatform.shared.watch(flow: q.banner) { @Sendable _ in changed() }
         }
         here = CoreState({ (q.here.value as? [QueuedItem]) ?? [] }) { changed in
-            AppleMemories.shared.watch(flow: q.here) { @Sendable _ in changed() }
+            ApplePlatform.shared.watch(flow: q.here) { @Sendable _ in changed() }
         }
         said = CoreState({ (q.said.value as? [VeyqCore.Notice]) ?? [] }) { changed in
-            AppleMemories.shared.watch(flow: q.said) { @Sendable _ in changed() }
+            ApplePlatform.shared.watch(flow: q.said) { @Sendable _ in changed() }
         }
     }
 
@@ -87,18 +87,13 @@ extension AppModel {
         Task { _ = try? await q.queued.tray.discard(id: id) }
     }
 
-    /// The tray's *Open* of a held write: where the core says it goes (`QueuedOpen`) — a Pot entry's held editor, the
-    /// node's rename with the person's name, the page it was made on.
+    /// The tray's *Open* of a held write: where the core says it goes (`QueuedOpen`) — the node's rename with the person's
+    /// name, the page it was made on, or an application's page (a Pot entry's held editor, `Holding.openQueued`).
     func openQueued(item id: String) {
         guard let q = queued, let m = shellModel else { return }
         Task {
             guard let opens = (try? await q.queued.tray.opens(id: id)) ?? nil else { return }
             switch opens {
-            case let e as QueuedOpen.Entry:
-                let ref = objects.first { $0.scopeId == e.scope && $0.nodeId == e.pot }
-                    ?? ObjectRef(scopeId: e.scope, nodeId: e.pot, kind: PotSession.companion.KIND, application: .expenses, name: "")
-                heldOpen = e
-                open(ref)
             case let r as QueuedOpen.Rename:
                 m.openFound(scopeId: r.scope, nodeId: r.node)
                 applyShell(start: false)
@@ -107,24 +102,10 @@ extension AppModel {
                 if let node = p.node { m.openFound(scopeId: p.scope, nodeId: node) } else { m.switchSpace(scopeId: p.scope) }
                 applyShell(start: false)
             default:
-                return
+                // a held write of an application's page (a Pot's entry): its application opens it
+                _ = holdingsOpen(opens)
             }
         }
-    }
-
-    /// The held entry `writeId`'s editor in the open Pot (core's `PotModel.heldEditor`: the person's values over the newer
-    /// version, named; *Discard mine* beside its save); false where the Pot holds no such write.
-    func openHeldEditor(_ writeId: String) async -> Bool {
-        closeEditor()
-        guard let pots = potModel, let e = (try? await pots.heldEditor(writeId: writeId, separator: decimalSeparator)) ?? nil else { return false }
-        adoptEditor(e)
-        return true
-    }
-
-    /// *Discard mine* in a held entry's editor: the change made offline deleted unsent, the newer version stays; whether it was.
-    func discardMine() async -> Bool {
-        guard let e = editorModel else { return false }
-        return (try? await e.discardMine())?.boolValue ?? false
     }
 
     /// The tray's *Save a copy* of a refused write's file `index` at `path` (the save panel's; core's `AppleQueued.saveCopy`).

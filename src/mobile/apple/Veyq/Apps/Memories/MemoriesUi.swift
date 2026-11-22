@@ -13,7 +13,7 @@ enum MemoriesUi {
     /// looks may set it, online (ADR 0144 decision 5; the web's header `banner`); its `upload` entry opens the page's pickers.
     private static let memory = KindPage(header: { node, model in
         let download: (String) async -> [NodeExport.Skipped]? = { await model.downloadNode(node, to: $0) }
-        guard let gallery = model.galleryModel(node), let state = model.galleryState(node) else { return HeaderContribution(download: download) }
+        guard let gallery = model.memories.galleryModel(node), let state = model.memories.galleryState(node) else { return HeaderContribution(download: download) }
         // the page's own entries of core's plan, whole (`GalleryModel.headerActions`: adding photos and videos, the music,
         // the banner), each worded by the gallery
         let actions: [OwnAction] = gallery.headerActions.compactMap { a in
@@ -22,20 +22,21 @@ enum MemoriesUi {
             case .upload:
                 // from the photo library or from files, as the page's pickers take them
                 return OwnAction(id: a, label: label, systemImage: "plus", choices: [
-                    OwnChoice(label: say(.photoLibrary), systemImage: "photo.on.rectangle") { model.galleryAdd = GalleryAdd(nodeId: node.nodeId, files: false) },
-                    OwnChoice(label: say(.tabDepotFiles), systemImage: "folder") { model.galleryAdd = GalleryAdd(nodeId: node.nodeId, files: true) },
+                    OwnChoice(label: say(.photoLibrary), systemImage: "photo.on.rectangle") { model.memories.galleryAdd = GalleryAdd(nodeId: node.nodeId, files: false) },
+                    OwnChoice(label: say(.tabDepotFiles), systemImage: "folder") { model.memories.galleryAdd = GalleryAdd(nodeId: node.nodeId, files: true) },
                 ]) {}
             case .music:
                 return OwnAction(id: a, label: label, systemImage: state.musicHere ? "stop.fill" : "music.note") { gallery.toggleMusic() }
             case .banner:
-                return OwnAction(id: a, label: label, systemImage: "photo.artframe") { model.openBanner(gallery) }
+                return OwnAction(id: a, label: label, systemImage: "photo.artframe") { model.memories.openBanner(gallery) }
             // core's own entries, never a gallery's
             case .favorite, .share, .rename, .move, .theCopy, .cover, .download, .offline, .report, .delete_, .replace, .send, .openOwnPage, .reportShared:
                 return nil
             }
         }
         return HeaderContribution(download: download, actions: actions)
-    }, body: { ref, _, model in AnyView(MemoryScreen(model: model, ref: ref)) }, guest: { page, held, model in guest(page, held, model) })
+    }, body: { ref, _, model in AnyView(MemoryScreen(model: model, ref: ref)) }, guest: { page, held, model in guest(page, held, model) },
+    guestActions: { page, _, model in AnyView(GuestMusicAction(model: model, page: page)) })
 
     static func register(_ registry: Registry.Type) {
         registry.kind(memory, "MEMORY", "CHAPTER")
@@ -49,7 +50,8 @@ enum MemoriesUi {
             creates: [.memory: { model, space, folder in
                 AnyView(Group { if let space { NewMemorySheet(model: model, scopeId: space, parentId: folder) } })
             }],
-            personSection: { profile, model, frame in AnyView(PersonMemoriesPage(model: model, profile: profile, frame: frame)) }
+            personSection: { profile, model, frame in AnyView(PersonMemoriesPage(model: model, profile: profile, frame: frame)) },
+            holding: { MemoriesHolding($0) }
         ))
     }
 
@@ -109,9 +111,9 @@ struct NewMemorySheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        let offers = model.offersWasThere(scopeId)
+        let offers = model.memories.offersWasThere(scopeId)
         // the place armed to come from the photos (uc.memory.place A1, the web's opt-in): where the map services are shown, off
-        let offersPlace = model.offersAutoPlace()
+        let offersPlace = model.memories.offersAutoPlace()
         NavigationStack {
             Form {
                 Section {
@@ -158,7 +160,7 @@ struct NewMemorySheet: View {
         problem = nil
         let typed = name
         Task {
-            let refused = await model.createMemory(scopeId: scopeId, parentId: parentId, name: typed, wasThere: offers && wasThere, autoPlace: offersPlace && autoPlace)
+            let refused = await model.memories.createMemory(scopeId: scopeId, parentId: parentId, name: typed, wasThere: offers && wasThere, autoPlace: offersPlace && autoPlace)
             saving = false
             if let refused { problem = refused } else { dismiss() }
         }
@@ -225,15 +227,15 @@ private struct GuestUploaderView: View {
                 for item in picked {
                     if let file = try? await item.loadTransferable(type: PickedMedia.self) { urls.append(file.url) }
                 }
-                _ = up.upload(sources: urls.compactMap { model.guestMediaSource($0, fromPhotos: true) })
+                _ = up.upload(sources: urls.compactMap { model.memories.guestMediaSource($0, fromPhotos: true) })
             }
         }
         .fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.image, .movie], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result, !urls.isEmpty else { return }
-            _ = up.upload(sources: urls.compactMap { model.guestMediaSource($0, fromPhotos: false) })
+            _ = up.upload(sources: urls.compactMap { model.memories.guestMediaSource($0, fromPhotos: false) })
         }
         .onAppear {
-            sent = CoreState({ (up.sent.value as? NSArray) ?? [] }) { changed in AppleMemories.shared.watch(flow: up.sent) { @Sendable _ in changed() } }
+            sent = CoreState({ (up.sent.value as? NSArray) ?? [] }) { changed in ApplePlatform.shared.watch(flow: up.sent) { @Sendable _ in changed() } }
         }
         .onDisappear { sent?.stop() }
     }
@@ -249,4 +251,20 @@ struct GuestGallery {
 
 extension EnvironmentValues {
     @Entry var guestGallery: GuestGallery?
+}
+
+/// A link's Memory's music played or stopped on the link's bar, as the member's header offers it (#1034).
+private struct GuestMusicAction: View {
+    @Bindable var model: AppModel
+    let page: GuestPage
+
+    var body: some View {
+        if let g = page as? MemoriesGuest.Gallery, let gallery = model.memories.galleryModel(g.node), let state = model.memories.galleryState(g.node),
+           gallery.headerActions.contains(HeaderAction.music) {
+            Button { gallery.toggleMusic() } label: {
+                Label(gallery.label(id: .music).map { say($0) } ?? "", systemImage: state.musicHere ? "stop.fill" : "music.note")
+            }
+            .accessibilityIdentifier("guest-music")
+        }
+    }
 }

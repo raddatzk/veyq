@@ -69,7 +69,7 @@ final class ReaderLoader: NSObject, AVAssetResourceLoaderDelegate, @unchecked Se
             var offset = data.currentOffset
             do {
                 while offset < end, !Task.isCancelled {
-                    let chunk = try await AppleMemories.shared.readRange(reader: reader, position: offset, length: Int32(min(end - offset, Self.piece)))
+                    let chunk = try await ApplePlatform.shared.readRange(reader: reader, position: offset, length: Int32(min(end - offset, Self.piece)))
                     if chunk.isEmpty { break }
                     offset += Int64(chunk.count)
                     queue.async { request.data.respond(with: chunk) }

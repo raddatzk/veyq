@@ -15,7 +15,7 @@ final class BookmarkHeld {
         self.page = page
         self.model = model
         state = CoreState({ page.state.value as! BookmarkPage.State }) { changed in
-            AppleMemories.shared.watch(flow: page.state) { @Sendable _ in changed() }
+            ApplePlatform.shared.watch(flow: page.state) { @Sendable _ in changed() }
         }
     }
 

@@ -25,7 +25,7 @@ struct MemoryMapView<Switch: View>: View {
     @State private var downloaded: URL?
     @State private var failed: String?
 
-    private var state: TrackList.State? { model.tracksShown }
+    private var state: TrackList.State? { model.memories.tracksShown }
     private var points: [LatLng] { gallery?.gpsPoints ?? [] }
 
     var body: some View {

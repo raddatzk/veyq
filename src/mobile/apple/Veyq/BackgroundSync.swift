@@ -20,7 +20,7 @@ enum BackgroundSync {
     private static let runTime: TimeInterval = 25
 
     private static var device: ThisDevice?
-    private static var watch: AppleMemories.Watch?
+    private static var watch: ApplePlatform.Watch?
     /// The run under way and the task it answers: held here, never captured by core's callback (neither is Sendable).
     private static var running: (run: AppleBackground.Run, task: BGTask)?
 
@@ -34,7 +34,7 @@ enum BackgroundSync {
             MainActor.assumeIsolated { run(task) }
         }
         if !registered { print("veyq: the background sync has no app-refresh task: not permitted here") }
-        watch = AppleMemories.shared.watch(flow: device.backgroundWanted) { @Sendable wanted in
+        watch = ApplePlatform.shared.watch(flow: device.backgroundWanted) { @Sendable wanted in
             let on = (wanted as? KotlinBoolean)?.boolValue == true
             Task { @MainActor in schedule(on) }
         }

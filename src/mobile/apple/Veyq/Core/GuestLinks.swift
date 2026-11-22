@@ -28,7 +28,7 @@ final class GuestLinks {
             store: AppleSharing.shared.store(defaults: Shared.defaults),
             sessions: AppleSharing.shared.sessions(keychain: KeychainStore(movesLegacy: false)),
             language: Locale.current.language.languageCode?.identifier ?? "en",
-            queue: model.uploads, deriver: MediaDeriver.shared
+            queue: model.uploads, deriver: model.deriver
         )
         o.music = model.guestMusic()
         made = o
@@ -77,7 +77,7 @@ final class AskedLink: Identifiable {
         self.link = link
         let field = link.field
         state = CoreState({ field.state.value as! OpenLink.State }) { changed in
-            AppleMemories.shared.watch(flow: field.state) { @Sendable _ in changed() }
+            ApplePlatform.shared.watch(flow: field.state) { @Sendable _ in changed() }
         }
     }
 
@@ -107,7 +107,7 @@ final class GuestHeld: Identifiable {
     private(set) var page: GuestPage?
     /// How deep inside the link the page on screen is (1: its root).
     private(set) var depth = 0
-    @ObservationIgnored private var pageWatch: AppleMemories.Watch?
+    @ObservationIgnored private var pageWatch: ApplePlatform.Watch?
     @ObservationIgnored private var closed = false
 
     init(_ screen: GuestScreen, model: AppModel) {
@@ -115,18 +115,18 @@ final class GuestHeld: Identifiable {
         self.model = model
         let view = screen.view
         state = CoreState({ screen.state.value as! GuestScreen.State }) { changed in
-            AppleMemories.shared.watch(flow: screen.state) { @Sendable _ in changed() }
+            ApplePlatform.shared.watch(flow: screen.state) { @Sendable _ in changed() }
         }
         gate = CoreState({ view.gates.state.value as! ShareGates.State }) { changed in
-            AppleMemories.shared.watch(flow: view.gates.state) { @Sendable _ in changed() }
+            ApplePlatform.shared.watch(flow: view.gates.state) { @Sendable _ in changed() }
         }
         busy = CoreState({ view.gates.busy.value as! KotlinBoolean }) { changed in
-            AppleMemories.shared.watch(flow: view.gates.busy) { @Sendable _ in changed() }
+            ApplePlatform.shared.watch(flow: view.gates.busy) { @Sendable _ in changed() }
         }
         guest = CoreState({ view.gates.guest.value as? GuestSession }) { changed in
-            AppleMemories.shared.watch(flow: view.gates.guest) { @Sendable _ in changed() }
+            ApplePlatform.shared.watch(flow: view.gates.guest) { @Sendable _ in changed() }
         }
-        pageWatch = AppleMemories.shared.watch(flow: view.page) { @Sendable _ in
+        pageWatch = ApplePlatform.shared.watch(flow: view.page) { @Sendable _ in
             Task { @MainActor [weak self] in self?.pageChanged() }
         }
     }
@@ -270,15 +270,8 @@ struct GuestLinkView: View {
                             .accessibilityIdentifier("guest-back")
                     }
                     ToolbarItemGroup(placement: .automatic) {
-                        if let file = held.page as? DepotGuest.File { GuestFileActions(model: model, held: held, file: file.model) }
-                        // a Memory's music played or stopped, as the member's header offers it (#1034)
-                        if let g = held.page as? MemoriesGuest.Gallery, let gallery = model.galleryModel(g.node), let state = model.galleryState(g.node),
-                           gallery.headerActions.contains(HeaderAction.music) {
-                            Button { gallery.toggleMusic() } label: {
-                                Label(gallery.label(id: .music).map { say($0) } ?? "", systemImage: state.musicHere ? "stop.fill" : "music.note")
-                            }
-                            .accessibilityIdentifier("guest-music")
-                        }
+                        // the kind's own actions (a file's download and replace, a Memory's music), as its application registered them
+                        if let page = held.page, let actions = Registry.page(page.node.kind)?.guestActions { actions(page, held, model) }
                         if ready, held.screen.keepOffered {
                             Button { keeping = true } label: { Label(say(.linkKeep), systemImage: "bookmark") }
                                 .accessibilityIdentifier("guest-keep")
@@ -378,7 +371,7 @@ struct GuestContent: View {
                     }
                     if let page = held.page {
                         GuestPageBody(model: model, held: held, page: page).id(ObjectIdentifier(page))
-                            .modifier(OptionalNaming(access: held.access, active: model.editorState == nil))
+                            .modifier(OptionalNaming(access: held.access, active: !model.editing))
                     } else {
                         ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
@@ -496,66 +489,6 @@ private struct GuestLevelView: View {
             nameAnswered(try? await AppleSharing.shared.createFolder(level: level, name: name)) { said = $0 }
         }
         .saidNotice($said)
-    }
-}
-
-/// A file's own actions on the link's bar: its download (a copy where the person picks) and a named READ_WRITE guest's
-/// replace (core's `FileModel` header decides whether it is offered).
-private struct GuestFileActions: View {
-    @Bindable var model: AppModel
-    let held: GuestHeld
-    let file: FileModel
-    @State private var replacing = false
-    @State private var downloaded: URL?
-    @State private var failed: String?
-
-    private var header: FileModel.Header? { model.fileState(file.node)?.header }
-
-    var body: some View {
-        if let h = header {
-            Button { Task { await download(h) } } label: { Label(say(.nodeDownload), systemImage: "arrow.down.circle") }
-                .fileMover(isPresented: Binding(get: { downloaded != nil }, set: { if !$0 { cleanUp() } }), file: downloaded) { _ in cleanUp() }
-                .alert(failed ?? "", isPresented: Binding(get: { failed != nil }, set: { if !$0 { failed = nil } })) {
-                    Button(say(.ok), role: .cancel) {}
-                }
-            // Replace where the file's rights hold it (`FileRights`, the header's own): a guest not named yet is asked its
-            // name at the write by the core (`GuestAccess.replaceAsking`), never here
-            if h.own.contains(HeaderAction.replace) {
-                Button { if file.chooseReplace() { replacing = true } } label: {
-                    Label(h.label(id: .replace).map { say($0) } ?? "", systemImage: "square.and.arrow.down.on.square")
-                }
-                .fileImporter(isPresented: $replacing, allowedContentTypes: [.item]) { result in
-                    if case .success(let url) = result, let access = held.screen.view.access { model.guestReplace(access, file: file, url: url) }
-                }
-            }
-        }
-    }
-
-    /// The file under its download name: a Mac asks where in its save panel, iOS writes into the app's downloads directory
-    /// and hands it to the save sheet (as a member's download, `NodeHeaderActions`).
-    private func download(_ h: FileModel.Header) async {
-        #if os(macOS)
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = h.downloadName
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        let end = try? await AppleSharing.shared.saveFile(file: file, path: url.path)
-        if end != .saved { failed = say(.fileOpenFailed) }
-        #else
-        guard let dir = AppModel.downloadDir() else { return }
-        let url = dir.appendingPathComponent(h.downloadName)
-        let end = try? await AppleSharing.shared.saveFile(file: file, path: url.path)
-        if end == .saved {
-            downloaded = url
-        } else {
-            try? FileManager.default.removeItem(at: dir)
-            failed = say(.fileOpenFailed)
-        }
-        #endif
-    }
-
-    private func cleanUp() {
-        if let url = downloaded { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        downloaded = nil
     }
 }
 
@@ -709,7 +642,7 @@ struct AskedNaming: ViewModifier {
             .task(id: ObjectIdentifier(access)) {
                 asking?.stop()
                 asking = CoreState({ naming.asking.value as! KotlinBoolean }) { changed in
-                    AppleMemories.shared.watch(flow: naming.asking) { @Sendable _ in changed() }
+                    ApplePlatform.shared.watch(flow: naming.asking) { @Sendable _ in changed() }
                 }
             }
             .onDisappear { asking?.stop() }
@@ -929,7 +862,7 @@ final class BookmarkCreateHeld {
         self.create = create
         self.placeName = placeName
         state = CoreState({ create.state.value as! BookmarkCreate.State }) { changed in
-            AppleMemories.shared.watch(flow: create.state) { @Sendable _ in changed() }
+            ApplePlatform.shared.watch(flow: create.state) { @Sendable _ in changed() }
         }
     }
 

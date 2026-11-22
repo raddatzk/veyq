@@ -39,7 +39,7 @@ enum IncomingFiles {
         let (folders, rest) = await folders(providers)
         for url in folders {
             let files = AppModel.folderFiles(url)
-            items.append(Dropped.Folder(path: url.path, shownName: nil, found: AppleDepot.shared.found(root: url, files: files)))
+            items.append(Dropped.Folder(path: url.path, shownName: nil, found: ApplePlatform.shared.found(root: url, entries: files)))
         }
         #else
         let rest = providers
@@ -60,7 +60,7 @@ enum IncomingFiles {
             return nil
         }
         let name = suggested.map { named($0, type: type) } ?? url.lastPathComponent
-        return AppleMemories.shared.source(url: url, name: name, size: Int64(size), type: type, modifiedAt: nil)
+        return ApplePlatform.shared.source(url: url, name: name, size: Int64(size), type: type, modifiedAt: nil)
     }
 
     /// Whether `provider` carries a file: a file's URL, or a type that is data other than a link — a text only where the

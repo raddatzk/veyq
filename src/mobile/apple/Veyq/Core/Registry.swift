@@ -12,6 +12,8 @@ struct KindPage {
     var body: (@MainActor (ObjectRef, String, AppModel) -> AnyView)?
     /// The page of the kind behind a link's gates (core's `GuestPage` of it), with the guest's link held.
     var guest: (@MainActor (GuestPage, GuestHeld, AppModel) -> AnyView)? = nil
+    /// The kind's own actions on a link's bar (a file's download and replace, a Memory's music), drawn before *Keep*.
+    var guestActions: (@MainActor (GuestPage, GuestHeld, AppModel) -> AnyView)? = nil
 }
 
 /// A create dialog an application registers (the web's `createDialog`): presented as a sheet by core's New over the space
@@ -27,12 +29,16 @@ struct PersonFrame {
 
 /// What an application registers for itself beside its kinds: its own list in the drawer (`list`, on the bar tab `key`;
 /// nil: core's arranged list), the dialogs of what it creates (`creates`, the web's `createDialog`: opened by core's New)
-/// and its section of a person's profile (`personSection`: it draws the profile with core's `PersonFrame`).
+/// and its section of a person's profile (`personSection`: it draws the profile with core's `PersonFrame`); what it holds in
+/// the app's model for the open tenant (`holding`, its `Holding`: built once per model, in registration order) and what it
+/// presents over the shell (`shell`: its own alerts and pickers, drawn behind the shell's content).
 struct ApplicationUi {
     let id: ApplicationId
     var list: (@MainActor (AppModel, String) -> AnyView)? = nil
     var creates: [AppKinds.Create: CreateDialog] = [:]
     var personSection: (@MainActor (PersonProfile, AppModel, PersonFrame) -> AnyView)? = nil
+    var holding: (@MainActor (AppModel) -> any Holding)? = nil
+    var shell: (@MainActor (AppModel) -> AnyView)? = nil
 }
 
 /// The core UI's one registry (the web's `core/applications/registry.ts`): each application registers into it from the
@@ -43,6 +49,8 @@ struct ApplicationUi {
 enum Registry {
     private static var kinds: [String: KindPage] = [:]
     private static var applications: [ApplicationId: ApplicationUi] = [:]
+    /// The applications in the order they registered (the holdings are built and asked in it).
+    private static var order: [ApplicationUi] = []
     private(set) static var isSealed = false
 
     static func kind(_ page: KindPage, _ kind: String...) {
@@ -53,6 +61,7 @@ enum Registry {
     static func application(_ ui: ApplicationUi) {
         precondition(!isSealed, "the registry is sealed")
         precondition(applications.updateValue(ui, forKey: ui.id) == nil, "the application \(ui.id) is registered twice")
+        order.append(ui)
     }
 
     /// Called once by the composition root after every registration.
@@ -66,6 +75,12 @@ enum Registry {
     static func application(_ id: ApplicationId) -> ApplicationUi? {
         ready()
         return applications[id]
+    }
+
+    /// Every registered application, in registration order.
+    static func registered() -> [ApplicationUi] {
+        ready()
+        return order
     }
 
     static func create(_ create: AppKinds.Create) -> CreateDialog? {

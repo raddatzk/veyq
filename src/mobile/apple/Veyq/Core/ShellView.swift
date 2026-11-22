@@ -429,54 +429,13 @@ struct Bar: View {
                 Button(say(.ok), role: .cancel) {}
             }
         }
-        // what the uploads say (core's `DepotUploads.said`: a folder's outcome, a replace offered), one at a time; the alert
-        // sits on a view of its own per said, since SwiftUI did not present a second alert of the same modifier after the
-        // first was answered (measured 2026-11-12, the second replace offer of a batch). Its dismissal sees it, its action
-        // takes the offer it shows — the said is handed in, not read back (the dismissal may run first).
+        // what each application presents over the shell (its `ApplicationUi.shell`: Depot's uploads' says, "Send a Copy…",
+        // a file's "Replace…" picker), each on a view of its own
         .background {
-            let said = model.depotState?.said
-            Color.clear
-                .alert(said.map { $0.notices.map { say(notice: $0) }.joined(separator: "\n") } ?? "",
-                       isPresented: Binding(get: { said != nil }, set: { if !$0, let said { model.depot?.seen(id: said.id) } }),
-                       presenting: said) { s in
-                    if let action = s.action {
-                        Button(say(action), role: .destructive) { model.depot?.take(said: s) }
-                        Button(say(.signinCancel), role: .cancel) {}
-                    } else {
-                        Button(say(.ok), role: .cancel) {}
-                    }
-                }
-                .id(said?.id ?? -1)
-        }
-        // "Send a Copy…": what happens is said first — the copy leaves veyq decrypted —, then the system's share sheet
-        .alert(say(.fileSendTitle), isPresented: Binding(get: { model.sendingCopy != nil }, set: { if !$0 { model.sendingCopy = nil } }), presenting: model.sendingCopy) { node in
-            Button(say(.fileSendTitle)) {
-                Task {
-                    if let copy = await model.copyForSending(node) { model.sentCopy = copy } else {
-                        model.notice = AppModel.Notice(text: say(.downloadFailed, node.name))
-                    }
-                }
-            }
-            Button(say(.signinCancel), role: .cancel) {}
-        } message: { node in
-            Text(say(.fileSendNotice, node.name))
-        }
-        #if os(iOS)
-        .sheet(item: Binding(get: { model.sentCopy }, set: { model.sentCopy = $0 })) { copy in
-            ActivitySheet(url: copy.url) { model.clearSentCopies() }
-        }
-        #endif
-        // a file's "Replace…": the system's picker hands over one file
-        .fileImporter(isPresented: Binding(get: { model.replacing != nil }, set: { if !$0 { model.replacing = nil } }), allowedContentTypes: [.item]) { result in
-            // the dismissal may clear `replacing` before this runs: the file Replace was chosen on is kept apart
-            let file = model.replacing ?? model.replaceChosen
-            model.replacing = nil
-            model.replaceChosen = nil
-            guard let file, case .success(let url) = result else { return }
-            model.replaceFile(file, url: url)
+            ForEach(Registry.registered().filter { $0.shell != nil }, id: \.id) { app in app.shell?(model) }
         }
         .overlay(alignment: .top) {
-            if let name = model.depotState?.preparing {
+            if let name = model.levelUploads?.tray?.preparing {
                 VStack(spacing: 4) {
                     ProgressView()
                     Text(say(.uploadPreparingFolder, name)).font(.footnote).foregroundStyle(Role.muted)
@@ -755,13 +714,13 @@ struct HomeView: View {
         // Depot's "Upload files": the system's picker hands over the files chosen, uploaded here one after another
         .fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result, !urls.isEmpty else { return }
-            model.uploadFiles(urls)
+            model.levelUploads?.upload(urls)
         }
         // Depot's "Upload folder…": the folder picker hands over one directory, uploaded here whole (a second importer on its
         // own view: SwiftUI presents only one per view)
         .background(EmptyView().fileImporter(isPresented: $pickingFolder, allowedContentTypes: [.folder]) { result in
             guard case .success(let url) = result else { return }
-            Task { await model.uploadFolder(url) }
+            Task { await model.levelUploads?.uploadFolder(url) }
         })
         .folderNaming($naming, name: $newName, problem: $nameProblem) { name in await model.createFolder(name: name) }
         // New Pot, New Memory (made at this level and opened): the dialog the application registered for it (`Registry.create`)
@@ -1310,7 +1269,7 @@ enum Names {
         case "expenses.entries": "list.bullet"
         case "expenses.overview": "chart.bar"
         case "expenses.settings": "gearshape"
-        case "depot.file": kind == DepotFiles.shared.DROPBOX ? "tray" : "doc"
+        case "depot.file": kind == "DEPOT_DROPBOX" ? "tray" : "doc"
         default: app.map(appSymbol) ?? "house"
         }
     }

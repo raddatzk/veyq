@@ -34,7 +34,7 @@ struct MemoryPeopleLine: View {
 
     var body: some View {
         if line.add {
-            Button { model.openParticipants(gallery) } label: { Label(say(.memoryParticipantsAdd), systemImage: "person.badge.plus") }
+            Button { model.memories.openParticipants(gallery) } label: { Label(say(.memoryParticipantsAdd), systemImage: "person.badge.plus") }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
         } else if !line.people.isEmpty {
@@ -53,13 +53,13 @@ struct MemoryPeopleLine: View {
                 .popover(isPresented: $listing) {
                     ParticipantsList(line: line, onOpen: { id in listing = false; model.openPerson(id) }, onEdit: {
                         listing = false
-                        model.openParticipants(gallery)
+                        model.memories.openParticipants(gallery)
                     })
                     .presentationCompactAdaptation(.sheet)
                     .presentationDetents([.medium, .large])
                 }
                 if line.edits {
-                    Button { model.openParticipants(gallery) } label: { Image(systemName: "pencil") }
+                    Button { model.memories.openParticipants(gallery) } label: { Image(systemName: "pencil") }
                         .buttonStyle(.borderless)
                         .accessibilityLabel(say(.memoryParticipantsEdit))
                         .help(say(.memoryParticipantsEdit))
@@ -194,14 +194,14 @@ struct ParticipantsPickerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { model.closeParticipants() }.disabled(s.saving) }
+                ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { model.memories.closeParticipants() }.disabled(s.saving) }
                 ToolbarItem(placement: .confirmationAction) {
                     if s.saving { ProgressView() } else {
                         Button(say(.entrySave)) {
                             let picker = edit.picker
                             Task {
                                 _ = try? await picker.save()
-                                if picker.current.saved { model.closeParticipants() }
+                                if picker.current.saved { model.memories.closeParticipants() }
                             }
                         }
                         .disabled(!s.canSave)
@@ -423,12 +423,12 @@ struct BannerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { model.closeBanner() }.disabled(s.saving) }
+                ToolbarItem(placement: .cancellationAction) { Button(say(.signinCancel)) { model.memories.closeBanner() }.disabled(s.saving) }
                 ToolbarItem(placement: .confirmationAction) { Button(say(.memoryBannerSave)) { edit.save() }.disabled(!s.canSave) }
             }
         }
         .interactiveDismissDisabled(s.saving)
-        .onChange(of: s.done) { _, done in if done { model.closeBanner() } }
+        .onChange(of: s.done) { _, done in if done { model.memories.closeBanner() } }
         #if os(iOS)
         .photosPicker(isPresented: $choosing, selection: $item, matching: .any(of: [.images, .videos]), preferredItemEncoding: .current)
         .onChange(of: item) {
@@ -436,13 +436,13 @@ struct BannerSheet: View {
             item = nil
             Task {
                 guard let file = try? await picked.loadTransferable(type: PickedMedia.self) else { return }
-                guard let source = model.pickedSource(file.url, fromPhotos: true) else { AppModel.removePicked(file.url); return }
+                guard let source = model.memories.pickedSource(file.url, fromPhotos: true) else { AppModel.removePicked(file.url); return }
                 edit.pick(source, copy: file.url)
             }
         }
         #else
         .fileImporter(isPresented: $choosing, allowedContentTypes: [.image, .movie]) { result in
-            guard case .success(let url) = result, let source = model.pickedSource(url, fromPhotos: false) else { return }
+            guard case .success(let url) = result, let source = model.memories.pickedSource(url, fromPhotos: false) else { return }
             edit.pick(source, copy: nil)
         }
         .frame(minWidth: 480, minHeight: 560)
@@ -508,7 +508,7 @@ struct CaptureTimeSheet: View {
 
     init(editor: CaptureTimeEditor) {
         self.editor = editor
-        let held = CoreState({ editor.current }) { changed in AppleMemories.shared.watch(flow: editor.state) { @Sendable _ in changed() } }
+        let held = CoreState({ editor.current }) { changed in ApplePlatform.shared.watch(flow: editor.state) { @Sendable _ in changed() } }
         _held = State(initialValue: held)
         _at = State(initialValue: Self.date(held.value.atMs))
     }
