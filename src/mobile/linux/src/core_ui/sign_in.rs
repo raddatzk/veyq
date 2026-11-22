@@ -23,7 +23,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::glib;
 
-use crate::bridge::{self, wire::Answer, wire::Call, wire::Gate, wire::KitShown, wire::Method, wire::ScanKind, wire::ScanShown, wire::ScanState, wire::SignInEntry, wire::StaySignedIn, wire::Why};
+use crate::bridge::{self, wire::Answer, wire::Call, wire::Gate, wire::KitShown, wire::Method, wire::ScanKind, wire::ScanShown, wire::ScanState, wire::SignInEntry, wire::StaySignedIn, wire::UnlockEntry, wire::Why};
 use crate::core_ui::qr_camera::ScanView;
 use crate::core_ui::dev_login::DevSignIn;
 use crate::core_ui::{said, theme, words};
@@ -428,7 +428,10 @@ pub(crate) fn scan_said(shown: &ScanShown) -> Option<gtk::Widget> {
 }
 
 /// An account this device trusts (ADR 0123 decision 8; `Gate.Unlock`): the password alone for a password-trusted one, a
-/// button that asks the core again for a remembered one, and the way to another account.
+/// button that asks the core again for a remembered one; under it the core's entries (`Unlock.Plan`, ADR 0154 decision 2),
+/// each drawn, in their order — the buttons as GNOME draws a form's, the rows in a boxed list: the way to another account,
+/// *Open a link* and *Stop trusting this device* (inbox #1052), destructive, asked first by the core where writes made
+/// offline wait (`Unlock.ForgetAsk`).
 pub struct Unlock {
     pub page: adw::ToolbarView,
     account: adw::ActionRow,
@@ -436,6 +439,8 @@ pub struct Unlock {
     password: adw::PasswordEntryRow,
     submit: gtk::Button,
     other: gtk::Button,
+    open_link: adw::ButtonRow,
+    forget: adw::ButtonRow,
     spinner: adw::Spinner,
     error: gtk::Label,
 }
@@ -455,11 +460,19 @@ impl Unlock {
         submit.add_css_class("pill");
         let other = gtk::Button::builder().label(words::unlock_other()).halign(gtk::Align::Center).build();
         other.add_css_class("flat");
+        // *Open a link* under the unlock too (ADR 0150 decision 4): a received link needs no session (`win.open-link`)
+        let open_link = adw::ButtonRow::builder().title(words::link_open()).start_icon_name("insert-link-symbolic").action_name("win.open-link").build();
+        open_link.set_widget_name("unlock-open-link");
+        let forget = adw::ButtonRow::builder().title(words::manage_forget_device()).build();
+        forget.add_css_class("destructive-action");
+        forget.set_widget_name("unlock-forget");
         let spinner = adw::Spinner::builder().visible(false).build();
+        let entries = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        entries.set_widget_name("unlock-entries");
         let heading = gtk::Label::new(Some(&words::unlock_title()));
-        let page = page(&heading, &[group.upcast_ref(), error.upcast_ref(), submit.upcast_ref(), other.upcast_ref(), spinner.upcast_ref()]);
+        let page = page(&heading, &[group.upcast_ref(), error.upcast_ref(), spinner.upcast_ref(), entries.upcast_ref()]);
 
-        let s = Self { page, account, group, password, submit, other, spinner, error };
+        let s = Self { page, account, group, password, submit, other, open_link, forget, spinner, error };
         let unlock = {
             let password = s.password.clone();
             move || {
@@ -473,6 +486,42 @@ impl Unlock {
         s.submit.connect_clicked(move |_| on_click());
         s.password.connect_entry_activated(move |_| unlock());
         s.other.connect_clicked(|_| bridge::send(Call::SessionOtherAccount));
+        let page = s.page.clone();
+        s.forget.connect_activated(move |_| forget_unlocked(&page));
+        // the plan is the same for every unlock here (no share extension on a desktop): asked once, drawn when answered
+        let (submit, other, open_link, forget) = (s.submit.clone(), s.other.clone(), s.open_link.clone(), s.forget.clone());
+        glib::spawn_future_local(async move {
+            match bridge::call(&Call::UnlockPlan).await.map(|(a, _)| a) {
+                Ok(Answer::UnlockPlan { entries: plan }) => {
+                    eprintln!("veyq: unlock entries: {}", plan.iter().map(|e| format!("{e:?}")).collect::<Vec<_>>().join(","));
+                    let mut rows: Option<gtk::ListBox> = None;
+                    for entry in &plan {
+                        let row = match entry {
+                            UnlockEntry::Submit => None,
+                            UnlockEntry::OtherAccount => None,
+                            UnlockEntry::OpenLink => Some(&open_link),
+                            UnlockEntry::Forget => Some(&forget),
+                        };
+                        match row {
+                            Some(row) => {
+                                let list = rows.get_or_insert_with(|| {
+                                    let list = gtk::ListBox::builder().selection_mode(gtk::SelectionMode::None).build();
+                                    list.add_css_class("boxed-list");
+                                    entries.append(&list);
+                                    list
+                                });
+                                list.append(row);
+                            }
+                            None => {
+                                rows = None;
+                                entries.append(if *entry == UnlockEntry::Submit { &submit } else { &other });
+                            }
+                        }
+                    }
+                }
+                other => eprintln!("veyq: Unlock.Plan answered {other:?}"),
+            }
+        });
         s
     }
 
@@ -489,9 +538,46 @@ impl Unlock {
         self.submit.set_label(&button);
         self.submit.set_sensitive(!working);
         self.other.set_sensitive(!working);
+        self.open_link.set_sensitive(!working);
+        self.forget.set_sensitive(!working);
         self.spinner.set_visible(*working);
         show_error(&self.error, error);
     }
+}
+
+/// The unlock's *Stop trusting this device*: the core's ask first (`Unlock.ForgetAsk`) while writes made offline wait for
+/// the account shown, its question in an `AdwAlertDialog` over [page] whose confirm forgets it; where none waits, at once
+/// (`Session.ForgetUnlocked`). The gate that follows shows the next account or the sign-in.
+fn forget_unlocked(page: &adw::ToolbarView) {
+    let page = page.clone();
+    glib::spawn_future_local(async move {
+        let ask = match bridge::call(&Call::UnlockForgetAsk).await.map(|(a, _)| a) {
+            Ok(Answer::QueuedAsked { ask }) => ask,
+            other => {
+                // unanswered, nothing is lost unasked: the forget waits for the next try
+                eprintln!("veyq: Unlock.ForgetAsk answered {other:?}");
+                return;
+            }
+        };
+        let Some(q) = ask else {
+            eprintln!("veyq: unlock stop trusting");
+            bridge::send(Call::SessionForgetUnlocked);
+            return;
+        };
+        eprintln!("veyq: queued ask before the unlock's stop trusting");
+        let alert = adw::AlertDialog::builder().heading(words::account_settings_untrust_confirm_title()).body(said::notice(&q.question)).build();
+        alert.add_responses(&[("cancel", &words::signin_cancel()), ("confirm", &said::key(&q.confirm))]);
+        alert.set_response_appearance("confirm", adw::ResponseAppearance::Destructive);
+        alert.set_default_response(Some("cancel"));
+        alert.set_close_response("cancel");
+        alert.connect_response(None, |_, response| {
+            if response == "confirm" {
+                eprintln!("veyq: unlock stop trusting");
+                bridge::send(Call::SessionForgetUnlocked);
+            }
+        });
+        alert.present(Some(&page));
+    });
 }
 
 impl Default for Unlock {
