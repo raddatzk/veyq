@@ -3,17 +3,12 @@
 
 Run by `.github/workflows/dependabot-follow-derive.yml` (read-only) and `.github/workflows/dependabot-follow.yml`
 (the one job that writes, and only to the Dependabot branch); `.github/dependabot.yml`'s header says how the two fit.
-Every pull request Dependabot opened on 2026-11-12 needed the same mechanical follow by hand. Of the three follows, the
-images one is gone: the images moved to Renovate, whose regex managers write the chart's values and the image constants
-in the same pull request as the compose files and Dockerfiles (cr-renovate phase 5b). Two remain, until their
-ecosystems move too, and this file goes with the last (phase 5d):
+Every pull request Dependabot opened on 2026-11-12 needed the same mechanical follow by hand. Of the three follows,
+two are gone with their ecosystems to Renovate (cr-renovate phase 5): the images (5b), whose regex managers write
+every image site in one pull request, and Playwright (5c), whose library and image are one Renovate group. One
+remains, and this file goes with it when Gradle moves (phase 5d):
 
-  1. **playwright** — `@playwright/test` moved (the npm `playwright` group); the image `mcr.microsoft.com/playwright`
-     must run the same version (`validate_image_pins.py`'s last check; PR #19/#22). The new tag keeps the old suffix
-     (`-noble`), its multi-arch INDEX digest is read from MCR's registry API — anonymous, no token — and is taken only
-     when the body hashes to the `Docker-Content-Digest` the registry named, is an image index, and carries
-     linux/amd64 and linux/arm64.
-  2. **gradle** — a Gradle bump regenerates `src/backend/gradle/verification-metadata.xml` by the cold-home recipe of
+  **gradle** — a Gradle bump regenerates `src/backend/gradle/verification-metadata.xml` by the cold-home recipe of
      `src/backend/CLAUDE.md` (PR #16). That run executes the bumped build, so it happens in the read-only workflow;
      what it wrote comes here as an artifact, as DATA, and is accepted only when it is an append: the
      `<configuration>` unchanged, every component already committed still there with exactly its committed
@@ -21,11 +16,10 @@ ecosystems move too, and this file goes with the last (phase 5d):
 
 **What it never reads.** Not the pull request's title or body (Dependabot copies upstream release notes into it —
 third-party text), no changelog, no commit message. The gate reads the pull request's author, head and base refs and
-SHAs, and its commits' author logins; everything else is the tree's files and the registry's bytes.
+SHAs, and its commits' author logins; everything else is the tree's files.
 
-**What makes it refuse** (exit 1, nothing written), each a case in `dependabot_follow_selftest.py`: a Playwright
-version that is not one exact `X.Y.Z`; a registry answer that is no index, lacks an architecture, or whose body is not the digest it was served under; a Playwright pin this tool already wrote that MCR
-no longer serves under that tag; a written metadata file with a DOCTYPE, another `<configuration>`, a committed
+**What makes it refuse** (exit 1, nothing written), each a case in `dependabot_follow_selftest.py`: a written
+metadata file with a DOCTYPE, another `<configuration>`, a committed
 component missing, or a committed checksum changed. A pull request whose branch carries a commit by anyone but
 Dependabot or this workflow is left alone (`gate` answers `follow=false`): a person has taken it over.
 
@@ -44,37 +38,14 @@ is not followed. The checks a person approves after the push are what prove the 
 from __future__ import annotations  # `str | None` below — the repo's scripts run on Python 3.9
 
 import argparse
-import dataclasses
-import hashlib
 import json
 import pathlib
 import re
 import subprocess
 import sys
-import urllib.error
-import urllib.request
 import xml.etree.ElementTree as ET
 from typing import Callable, Iterable
 
-# The same lines validate_image_pins.py draws: what a site is, and what a pinned reference looks like.
-SKIP_PREFIXES = ("changes/", "docs/", "site/src/content/")
-PINNED = re.compile(
-    r"^(?P<repo>[a-z0-9][a-z0-9._/-]*(?::[0-9]+)?(?:/[a-z0-9._-]+)*):(?P<tag>[A-Za-z0-9._-]+)@(?P<digest>sha256:[0-9a-f]{64})$"
-)
-YAML_SITE = re.compile(r"""^(\s*(?:-\s+)?image:\s*["']?)([^\s"'#]+)""")
-FROM_SITE = re.compile(r"^(\s*FROM\s+(?:--\S+\s+)*)(\S+)", re.IGNORECASE)
-COPY_SITE = re.compile(r"^(\s*COPY\s+.*--from=)(\S+)", re.IGNORECASE)
-PY_SITE = re.compile(r"""^([A-Z][A-Z0-9_]*IMAGE\s*=\s*["'])([^"']+)""")
-DOCKERFILE_NAME = re.compile(r"(?:.+\.)?(?:Dockerfile|Containerfile)(?:\..+)?")
-
-PLAYWRIGHT_REPO = "mcr.microsoft.com/playwright"
-PLAYWRIGHT_PACKAGE = "@playwright/test"
-PLAYWRIGHT_TAG = re.compile(r"^v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)(?P<suffix>(?:-[A-Za-z0-9._-]+)?)$")
-EXACT_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
-MCR_MANIFEST = "https://mcr.microsoft.com/v2/playwright/manifests/{tag}"
-INDEX_TYPES = ("application/vnd.oci.image.index.v1+json", "application/vnd.docker.distribution.manifest.list.v2+json")
-NEEDED_PLATFORMS = {("linux", "amd64"), ("linux", "arm64")}
-MAX_MANIFEST_BYTES = 1 << 20
 
 METADATA = "src/backend/gradle/verification-metadata.xml"
 GRADLE_INPUT = re.compile(r"^src/backend/(?:.+\.gradle\.kts|.+\.versions\.toml|gradle/wrapper/gradle-wrapper\.properties)$")
@@ -90,178 +61,6 @@ BASE_BRANCH = re.compile(r"^(?:main|release/[A-Za-z0-9._-]+)$")
 
 class Refusal(Exception):
     """The follow cannot be done mechanically; a person decides. Nothing is written."""
-
-
-# --- image sites -----------------------------------------------------------------------------------------------------
-
-
-@dataclasses.dataclass(frozen=True)
-class Site:
-    line: int  # 0-based
-    start: int
-    end: int
-    repo: str
-    tag: str
-    digest: str
-
-    @property
-    def ref(self) -> str:
-        return f"{self.repo}:{self.tag}@{self.digest}"
-
-
-def site_kind(rel: str) -> str | None:
-    if rel.startswith(SKIP_PREFIXES) or "node_modules/" in rel:
-        return None
-    name = rel.rsplit("/", 1)[-1]
-    if name.endswith((".yml", ".yaml")):
-        return "yaml"
-    if DOCKERFILE_NAME.fullmatch(name):
-        return "dockerfile"
-    if name.endswith(".py"):
-        return "python"
-    return None
-
-
-def sites(rel: str, text: str | None) -> list[Site]:
-    """Every pinned reference at a site `validate_image_pins.py` reads — by line, so it can be rewritten in place."""
-    kind = site_kind(rel)
-    if kind is None or text is None:
-        return []
-    patterns = {"yaml": (YAML_SITE,), "dockerfile": (FROM_SITE, COPY_SITE), "python": (PY_SITE,)}[kind]
-    found = []
-    for number, line in enumerate(text.splitlines()):
-        for pattern in patterns:
-            match = pattern.match(line)
-            if not match:
-                continue
-            pinned = PINNED.match(match.group(2))
-            if pinned:
-                found.append(Site(number, match.start(2), match.end(2), pinned.group("repo"), pinned.group("tag"),
-                                  pinned.group("digest")))
-            break
-    return found
-
-
-def rewrite(text: str, replacements: dict[int, list[tuple[int, int, str]]]) -> str:
-    lines = text.splitlines(keepends=True)
-    for number, spans in replacements.items():
-        line = lines[number]
-        for start, end, new in sorted(spans, reverse=True):
-            line = line[:start] + new + line[end:]
-        lines[number] = line
-    return "".join(lines)
-
-
-# --- Playwright -------------------------------------------------------------------------------------------------------
-
-Fetch = Callable[[str, str], "tuple[int, dict[str, str], bytes]"]
-
-
-def http_fetch(url: str, accept: str) -> tuple[int, dict[str, str], bytes]:
-    request = urllib.request.Request(url, headers={"Accept": accept, "User-Agent": "veyq-dependabot-follow"})
-    try:
-        with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310 — a fixed https URL
-            return response.status, {k.lower(): v for k, v in response.headers.items()}, response.read(MAX_MANIFEST_BYTES + 1)
-    except urllib.error.HTTPError as exc:
-        return exc.code, {k.lower(): v for k, v in exc.headers.items()}, b""
-
-
-def resolve_index(tag: str, fetch: Fetch) -> str:
-    """MCR's multi-arch index digest for `playwright:<tag>`, checked against the bytes it was served with."""
-    if not PLAYWRIGHT_TAG.match(tag):
-        raise Refusal(f"`{tag}` is no Playwright tag this tool resolves")
-    status, headers, body = fetch(MCR_MANIFEST.format(tag=tag), ", ".join(INDEX_TYPES))
-    if status != 200:
-        raise Refusal(f"MCR answered {status} for {PLAYWRIGHT_REPO}:{tag} — the tag may not be published yet")
-    if len(body) > MAX_MANIFEST_BYTES:
-        raise Refusal(f"MCR's manifest for {tag} is larger than {MAX_MANIFEST_BYTES} bytes — not an index")
-    content_type = headers.get("content-type", "").split(";")[0].strip()
-    if content_type not in INDEX_TYPES:
-        raise Refusal(f"MCR served {PLAYWRIGHT_REPO}:{tag} as `{content_type}`, not an image index — a single-platform "
-                      f"manifest would pin one architecture")
-    named = headers.get("docker-content-digest", "")
-    actual = "sha256:" + hashlib.sha256(body).hexdigest()
-    if not re.fullmatch(r"sha256:[0-9a-f]{64}", named) or named != actual:
-        raise Refusal(f"MCR named `{named}` for {PLAYWRIGHT_REPO}:{tag}, but the body it served hashes to `{actual}` — "
-                      f"nothing is pinned to a digest its bytes do not have")
-    try:
-        index = json.loads(body)
-    except ValueError as exc:
-        raise Refusal(f"MCR's index for {tag} is not JSON ({exc})") from None
-    platforms = {((m.get("platform") or {}).get("os"), (m.get("platform") or {}).get("architecture"))
-                 for m in index.get("manifests") or [] if isinstance(m, dict)}
-    missing = NEEDED_PLATFORMS - platforms
-    if missing:
-        raise Refusal(f"MCR's index for {PLAYWRIGHT_REPO}:{tag} carries no {', '.join('/'.join(p) for p in sorted(missing))} "
-                      f"image — lane L1 runs on both")
-    return actual
-
-
-def playwright_specs(files: dict[str, str | None]) -> dict[str, str]:
-    specs: dict[str, str] = {}
-    for rel, text in sorted(files.items()):
-        if rel.rsplit("/", 1)[-1] != "package.json" or "node_modules/" in rel or text is None:
-            continue
-        try:
-            manifest = json.loads(text)
-        except ValueError as exc:
-            raise Refusal(f"{rel} does not parse as JSON ({exc})") from None
-        for section in ("dependencies", "devDependencies", "optionalDependencies"):
-            spec = (manifest.get(section) or {}).get(PLAYWRIGHT_PACKAGE)
-            if spec is not None:
-                specs[f"{rel} ({section})"] = str(spec)
-    return specs
-
-
-def follow_playwright(head: dict[str, str], base_of: dict[str, str | None], fetch: Fetch) -> dict[str, str]:
-    """`head`: the tree's package.json files and image-site files. Returns the files to write."""
-    head_specs = playwright_specs(head)
-    base_specs = playwright_specs({rel: base_of.get(rel, head[rel]) for rel in head})
-    if head_specs == base_specs:
-        return {}  # this pull request did not move the library
-    versions = set(head_specs.values())
-    if len(versions) != 1 or not EXACT_VERSION.match(next(iter(versions))):
-        raise Refusal(f"{PLAYWRIGHT_PACKAGE} is not one exact version across the tree ({head_specs}) — the image "
-                      f"follows one `X.Y.Z`")
-    version = next(iter(versions))
-
-    found = [(rel, s) for rel in sorted(head) for s in sites(rel, head[rel]) if s.repo == PLAYWRIGHT_REPO]
-    if not found:
-        raise Refusal(f"no tracked image site pins `{PLAYWRIGHT_REPO}` — nothing to move to {version}")
-    suffixes = set()
-    for rel, site in found:
-        match = PLAYWRIGHT_TAG.match(site.tag)
-        if not match:
-            raise Refusal(f"{rel}:{site.line + 1}: `{site.tag}` does not read as `vX.Y.Z[-<suffix>]`")
-        suffixes.add(match.group("suffix"))
-    if len(suffixes) != 1:
-        raise Refusal(f"the Playwright image is pinned with {len(suffixes)} suffixes ({sorted(suffixes)}) — which "
-                      f"base image the new version takes is a person's call")
-    tag = f"v{version}{suffixes.pop()}"
-
-    if all(site.tag == tag for _, site in found):
-        changed = [(rel, s) for rel, s in found
-                   if rel in base_of and s.ref not in {b.ref for b in sites(rel, base_of[rel])}]
-        if not changed:
-            return {}
-        # This branch already moved the image (a run of this tool). Its digest must still be what MCR serves.
-        digest = resolve_index(tag, fetch)
-        for rel, site in changed:
-            if site.digest != digest:
-                raise Refusal(f"{rel}:{site.line + 1} pins `{site.ref}`, but MCR serves {tag} as `{digest}` — a pin "
-                              f"this tool did not resolve, or a tag re-pushed since; resolve it by hand")
-        return {}
-
-    new_ref = f"{PLAYWRIGHT_REPO}:{tag}@{resolve_index(tag, fetch)}"
-    out: dict[str, str] = {}
-    for rel in sorted({rel for rel, _ in found}):
-        replacements: dict[int, list[tuple[int, int, str]]] = {}
-        for site in sites(rel, head[rel]):
-            if site.repo == PLAYWRIGHT_REPO and site.ref != new_ref:
-                replacements.setdefault(site.line, []).append((site.start, site.end, new_ref))
-        if replacements:
-            out[rel] = rewrite(head[rel], replacements)
-    return out
 
 
 # --- Gradle verification metadata -------------------------------------------------------------------------------------
@@ -372,20 +171,10 @@ def gradle_needed(changed: Iterable[str]) -> bool:
     return any(GRADLE_INPUT.match(rel) for rel in changed)
 
 
-def follow(tree: pathlib.Path, base: str, derived: pathlib.Path | None,
-           fetch: Fetch = http_fetch) -> tuple[dict[str, str], list[str]]:
-    tracked = [p for p in git(tree, "ls-files", "-z").split("\0") if p]
+def follow(tree: pathlib.Path, base: str, derived: pathlib.Path | None) -> tuple[dict[str, str], list[str]]:
     changed = changed_files(tree, base)
-    base_of = {rel: base_text(tree, base, rel) for rel in changed}
-    relevant = [rel for rel in tracked if site_kind(rel) or rel.rsplit("/", 1)[-1] == "package.json"]
-    head = {rel: (tree / rel).read_text() for rel in relevant if (tree / rel).is_file() and not (tree / rel).is_symlink()}
     out: dict[str, str] = {}
     notes: list[str] = []
-
-    playwright = follow_playwright(head, base_of, fetch)
-    for rel in playwright:
-        notes.append(f"Playwright image moved to {PLAYWRIGHT_PACKAGE}'s version in {rel}")
-    out.update(playwright)
 
     if gradle_needed(changed):
         if derived is None:

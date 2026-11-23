@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
-"""Offline self-test of `dependabot_follow.py`: each of the three follows on the shape it was written for, and on the
-forgeries it must refuse or leave alone — a pin changed where Dependabot never writes, a registry that serves other
-bytes than the digest it names, a metadata "write" that changes a committed checksum. No network, no git: the trees are
-dicts, the registry is a fake. `checks.yml`'s `guards` job runs it.
+"""Offline self-test of `dependabot_follow.py`: the Gradle follow on the shape it was written for, and on the forgeries
+it must refuse — a metadata "write" that changes a committed checksum; the gate; and the command line on a real git
+tree, where an image or npm bump is no longer followed (cr-renovate phase 5b and 5c moved them to Renovate). No
+network. `checks.yml`'s `guards` job runs it.
 
     python3 scripts/dependabot_follow_selftest.py
 """
 from __future__ import annotations
 
-import hashlib
-import json
 import pathlib
 import subprocess
 import sys
@@ -43,8 +41,8 @@ def d(n: int) -> str:
     return "sha256:" + f"{n:064x}"
 
 
-# The images follow is gone (cr-renovate phase 5b): the images are Renovate's, and an image bump is no longer followed.
-# The end-to-end case below holds that an image bump on a Dependabot branch writes nothing.
+# The images and Playwright follows are gone (cr-renovate phase 5b, 5c). The end-to-end case below holds that an image
+# bump on a Dependabot branch writes nothing.
 
 OLD, NEW = f"rclone/rclone:1.75.0@{d(1)}", f"rclone/rclone:1.75.2@{d(2)}"
 DB = f"mariadb:12.3@{d(3)}"
@@ -59,71 +57,6 @@ def tree(dockerfile_rclone: str, constant: str) -> dict[str, str]:
 
 base = tree(OLD, OLD)
 head = tree(NEW, OLD)
-
-
-# --- Playwright -------------------------------------------------------------------------------------------------------
-
-def index_body(*arches: str) -> bytes:
-    return json.dumps({"schemaVersion": 2, "mediaType": df.INDEX_TYPES[0], "manifests": [
-        {"digest": d(i + 10), "platform": {"os": "linux", "architecture": a}} for i, a in enumerate(arches)]}).encode()
-
-
-GOOD = index_body("amd64", "arm64")
-GOOD_DIGEST = "sha256:" + hashlib.sha256(GOOD).hexdigest()
-
-
-def registry(body: bytes = GOOD, digest: str | None = None, content_type: str = df.INDEX_TYPES[0], status: int = 200):
-    calls: list[str] = []
-
-    def fetch(url: str, accept: str):
-        calls.append(url)
-        named = digest if digest is not None else "sha256:" + hashlib.sha256(body).hexdigest()
-        return status, {"content-type": content_type, "docker-content-digest": named}, body
-    return fetch, calls
-
-
-OLD_PW = f"{df.PLAYWRIGHT_REPO}:v1.64.1-noble@{d(7)}"
-
-
-def pw_tree(spec: str, image: str = OLD_PW) -> dict[str, str]:
-    return {
-        "tests/e2e/package.json": json.dumps({"devDependencies": {"@playwright/test": spec}}),
-        "tests/e2e/stack/docker-compose.e2e.yml": f"services:\n  a:\n    image: {image}\n  b:\n    image: {image}\n",
-    }
-
-
-pw_base = {"tests/e2e/package.json": pw_tree("1.64.1")["tests/e2e/package.json"]}
-fetch, calls = registry()
-out = df.follow_playwright(pw_tree("1.65.0"), pw_base, fetch)
-new_pw = f"{df.PLAYWRIGHT_REPO}:v1.65.0-noble@{GOOD_DIGEST}"
-check("playwright: both image lines move to the library's version, suffix kept, MCR's index digest",
-      out == {"tests/e2e/stack/docker-compose.e2e.yml": f"services:\n  a:\n    image: {new_pw}\n  b:\n    image: {new_pw}\n"},
-      str(out))
-check("playwright: the registry was asked for exactly the new tag",
-      calls == ["https://mcr.microsoft.com/v2/playwright/manifests/v1.65.0-noble"], str(calls))
-
-fetch, calls = registry()
-check("playwright: no library move, nothing written and no registry call",
-      df.follow_playwright(pw_tree("1.64.1"), {}, fetch) == {} and calls == [])
-refuses("playwright FORGERY: a body that is not the digest it was served under",
-        df.follow_playwright, pw_tree("1.65.0"), pw_base, registry(digest=d(666))[0])
-refuses("playwright FORGERY: an index without arm64", df.follow_playwright, pw_tree("1.65.0"), pw_base,
-        registry(body=index_body("amd64"))[0])
-refuses("playwright: a single-platform manifest is no index", df.follow_playwright, pw_tree("1.65.0"), pw_base,
-        registry(content_type="application/vnd.oci.image.manifest.v1+json")[0])
-refuses("playwright: an unpublished tag (404)", df.follow_playwright, pw_tree("1.65.0"), pw_base,
-        registry(status=404, body=b"")[0])
-refuses("playwright: a range instead of an exact version", df.follow_playwright, pw_tree("^1.65.0"), pw_base,
-        registry()[0])
-refuses("playwright: a version that would inject into the tag", df.follow_playwright, pw_tree("1.65.0/../x"), pw_base,
-        registry()[0])
-followed_base = dict(pw_base, **{"tests/e2e/stack/docker-compose.e2e.yml": pw_tree("1.64.1")[
-    "tests/e2e/stack/docker-compose.e2e.yml"]})
-check("playwright: a branch this tool already moved, still what MCR serves, is left alone",
-      df.follow_playwright(pw_tree("1.65.0", new_pw), followed_base, registry()[0]) == {})
-refuses("playwright FORGERY: the branch names the new tag under a digest MCR does not serve",
-        df.follow_playwright, pw_tree("1.65.0", f"{df.PLAYWRIGHT_REPO}:v1.65.0-noble@{d(666)}"), followed_base,
-        registry()[0])
 
 
 # --- Gradle verification metadata -------------------------------------------------------------------------------------
@@ -211,7 +144,9 @@ refuses("gate: a head branch that is not Dependabot's", df.gate, REPO, 7, SHA, a
 # --- end to end: the command line on a real git tree ------------------------------------------------------------------
 
 def run_git(cwd: pathlib.Path, *args: str) -> str:
-    return subprocess.run(["git", "-C", str(cwd), "-c", "user.name=t", "-c", "user.email=t@t", *args],
+    # A throwaway tree's commits are never signed: a host's signing agent (locked, or absent on a runner) is no input.
+    return subprocess.run(["git", "-C", str(cwd), "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false",
+                           *args],
                           capture_output=True, text=True, check=True).stdout.strip()
 
 

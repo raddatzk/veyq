@@ -303,19 +303,19 @@
     // them and its entry out of .github/dependabot.yml in the same change, so no pin has two updaters and none has none.
     // A disabled dependency is still extracted, so `pins` in checks.yml still sees it reached.
     {
-      description: "Still Dependabot's (cr-renovate phase 5 moves them in this order: npm with pnpm, gradle, the rest). Moved so far: github-actions; dockerfile and docker-compose with the image constants and the chart's values, which their regex managers read.",
-      matchManagers: ["npm", "gradle", "gradle-wrapper", "pip_requirements", "custom.regex"],
+      description: "Still Dependabot's (cr-renovate phase 5 moves them in this order: gradle, the rest). Moved so far: github-actions; dockerfile and docker-compose with the image constants and the chart's values, which their regex managers read; npm, both workspaces, with pnpm, whose regex manager reads the global installs.",
+      matchManagers: ["gradle", "gradle-wrapper", "pip_requirements", "custom.regex"],
       enabled: false,
     },
     {
-      description: "The regex managers that read an image pin (the chart's values, the backup tool's and measure_volume.py's constants, Renovate's own image) move with the images: one repository is one tag and one digest everywhere (scripts/validate_image_pins.py), so they are in the `images` group's pull request with the compose files and Dockerfiles. The Java runtime pinned in the version catalog moves with `java major`.",
+      description: "The regex managers that read an image pin (the chart's values, the backup tool's and measure_volume.py's constants, Renovate's own image) move with the images: one repository is one tag and one digest everywhere (scripts/validate_image_pins.py), so they are in the `images` group's pull request with the compose files and Dockerfiles. The Java runtime pinned in the version catalog moves with `java major`. pnpm's global installs (`npm install -g pnpm@…` in the workflows and Dockerfiles) move with `packageManager`, in the `pnpm` group.",
       matchManagers: ["custom.regex"],
-      matchDatasources: ["docker", "java-version"],
+      matchDatasources: ["docker", "java-version", "npm"],
       enabled: true,
     },
     {
-      description: "Images held to a later step, each because something must move with it that this step does not write. Lane L1's Playwright image moves with @playwright/test (npm, 5c). The WebP encoder's Emscripten image writes new encoder bytes (build.py --write, 5e; Dependabot keeps it until then). The API fuzzer's Python image carries the wheels tests/fuzz/lock.py hashes for its Python (5e, with Schemathesis).",
-      matchPackageNames: ["mcr.microsoft.com/playwright", "emscripten/emsdk", "python"],
+      description: "Images held to a later step, each because something must move with it that this step does not write. The WebP encoder's Emscripten image writes new encoder bytes (build.py --write, 5e; Dependabot keeps it until then). The API fuzzer's Python image carries the wheels tests/fuzz/lock.py hashes for its Python (5e, with Schemathesis).",
+      matchPackageNames: ["emscripten/emsdk", "python"],
       enabled: false,
     },
   ],

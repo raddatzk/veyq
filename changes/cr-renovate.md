@@ -247,14 +247,25 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
     it; the owner set it). The next dispatch (run 45198639207) opened #65, `chore(deps): update actions`: cosign v3.1.4
     at its four sites and Renovate 44.258.1 with its digest. `Checks`, `Trust chain` and `CodeQL` started on their own,
     the release-note check passed on the `UPDATERS` exemption, and all 31 checks went green; merged.
-  - [ ] **5b docker and compose**, with the chart's values and the image constants (their regex managers), and the
+  - [x] **5b docker and compose**, with the chart's values and the image constants (their regex managers), and the
     runtimes (`node`, `java-jdk`: the images', setup-node's, setup-java's and the version catalog's). Dependabot keeps
     only the Emscripten image; the images follow leaves `dependabot_follow.py` (with its `--config`). Held to later
     steps, each by name: the Playwright image (5c, with `@playwright/test`), Emscripten (5e, `build.py --write`), the
     fuzzer's Python image (5e, `lock.py`; it had no updater before this CR either). Measured on the branch's tree: a
     lookup proposes `renovate/images` (eclipse-temurin's digest), and holds exactly those three images; the `pins`
-    extract is still 304 pins, every one reached. Open: the first real `renovate/images` pull request.
-  - [ ] **5c npm**, with pnpm and the Playwright image; the Playwright follow leaves.
+    extract is still 304 pins, every one reached. On GitHub, after #66: the dispatch (run 45212583696) opened #67,
+    eclipse-temurin's new digest (`docker buildx imagetools inspect`: an OCI index carrying linux/amd64 and
+    linux/arm64/v8), and `Checks`, `Trust chain`, `CodeQL` and the release-note check started on their own; all 32
+    went green (merged).
+  - [ ] **5c npm**, both workspaces, with pnpm (`packageManager` and the global installs' regex manager) and the
+    Playwright image, one `playwright` group with `@playwright/test`; `dependabot.yml` loses both npm entries, and
+    `dependabot_follow.py` its Playwright follow with the image-site helpers and the registry client, leaving the Gradle
+    follow alone. Renovate updates `pnpm-lock.yaml` itself: phase 2's dry run on GitHub (run 45169620214) ran `pnpm
+    update … --lockfile-only --recursive --ignore-scripts --ignore-pnpmfile` with pnpm 12.16.1 for
+    `renovate/npm-minor-and-patch`, which passed pnpm's supply-chain policies and wrote one lockfile. Measured on the
+    branch's tree: a lookup proposes `renovate/npm-minor-and-patch`, `renovate/pnpm` (12.22.0 at all eight sites) and
+    `renovate/postcss-nested-9.x` (the site's override), and holds only Emscripten and the fuzzer's Python image among
+    the images; the `pins` extract is still 304 pins. Open: the first real npm pull request.
   - [ ] **5d gradle**: the gradleWrapper measurement, the metadata follow, then the follow workflows go.
   - [ ] **5e the rest**: Helm, PyYAML, the OpenAPI generator, Schemathesis with `lock.py`, libwebp and Emscripten with
     `build.py --write` and the fuzzer's Python image; `webp-encoder-update.yml` goes; security updates move.

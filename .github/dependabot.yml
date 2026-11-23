@@ -7,7 +7,8 @@ version: 2
 #
 # BEING REPLACED by the self-hosted Renovate (ADR 0158; changes/cr-renovate.md phase 5), one ecosystem at a time: an
 # ecosystem's entry leaves this file in the same change that lets Renovate propose for it (renovate.json5's last rules
-# hold off the rest). Moved so far: github-actions; docker and docker-compose, but for the Emscripten image below. The security updates Dependabot's alerts open stay until the end.
+# hold off the rest). Moved so far: github-actions; docker and docker-compose, but for the Emscripten image below;
+# npm, both workspaces. The security updates Dependabot's alerts open stay until the end.
 #
 # A major update never shares a pull request with minor and patch ones (owner, 2026-11-07): its first run grouped
 # typescript 6→7, @types/node 22→26, vitest 4→5 and Stryker 9→10 with forty minor bumps into one red PR (#4), so none
@@ -21,108 +22,26 @@ version: 2
 # dependencies reads `chore(deps-dev): …`, every other `chore(deps): …`. A colon is added after a prefix ending in a
 # letter.
 #
-# THE FOLLOW. Two kinds of pull request from this file are red until something Dependabot does not write follows the
-# bump (every one of 2026-11-12's needed it: PR #15, #16, #19/#22, #20/#23; the third kind, images, moved to Renovate,
-# which writes every image site in one pull request). Two workflows do it on the pull request
-# itself, deterministically — scripts/dependabot_follow.py, no language model: Dependabot copies upstream release notes
-# into each pull request's body, third-party text, and an agent that read it while holding a write token would be a
-# prompt-injection path into this repository's supply chain. Nothing reads that body or any changelog.
-#   1. playwright: a `playwright` group bump moves lane L1's `mcr.microsoft.com/playwright` image to the same version,
-#      at the multi-arch index digest MCR serves (checked: the body hashes to it, it is an index, amd64 and arm64).
-#   2. gradle: a `gradle` bump regenerates src/backend/gradle/verification-metadata.xml by the cold-home recipe of
-#      src/backend/CLAUDE.md and prunes only the versions the bump replaced that the cold Gradle home no longer fetches.
+# THE FOLLOW. A `gradle` pull request from this file is red until src/backend/gradle/verification-metadata.xml follows
+# the bump (PR #16, 2026-11-12); the other two kinds, images and Playwright, moved to Renovate with their ecosystems,
+# which writes them in the bump's own pull request. Two workflows do it on the pull request itself, deterministically —
+# scripts/dependabot_follow.py, no language model: Dependabot copies upstream release notes into each pull request's
+# body, third-party text, and an agent that read it while holding a write token would be a prompt-injection path into
+# this repository's supply chain. Nothing reads that body or any changelog. The bump regenerates the metadata by the
+# cold-home recipe of src/backend/CLAUDE.md and prunes only the versions it replaced that the cold Gradle home no
+# longer fetches.
 # How: `dependabot-follow-derive.yml` runs on Dependabot's pull requests with a read-only token and executes what must
 # be executed (the bumped Gradle build), uploading what it wrote as an artifact. `dependabot-follow.yml` starts on its
 # completion via `workflow_run` — so its file, actions and script are always the default branch's, never the pull
-# request's — checks that the pull request is Dependabot's and that no person pushed to it, re-derives the Playwright
-# follow itself, accepts the metadata only as an append (no committed checksum changed, no trust rule
-# changed), and pushes one commit, fast-forward, to the `dependabot/…` branch and nowhere else. It never merges. Its push
-# creates Checks runs that wait for a person's approval (GitHub's rule for GITHUB_TOKEN pushes), which is the review
-# step anyway. What it refuses — a registry body that is not its digest, a metadata "write" that changes a committed
-# checksum — is red there and stays a person's job, as is everything the script's docstring lists under its limits (a Quarkus bump's `quarkusDev` pass among them).
-# Its forgery cases are scripts/dependabot_follow_selftest.py, which checks.yml's `guards` job runs.
+# request's — checks that the pull request is Dependabot's and that no person pushed to it, accepts the metadata only as
+# an append (no committed checksum changed, no trust rule changed), and pushes one commit, fast-forward, to the
+# `dependabot/…` branch and nowhere else. It never merges. Its push creates Checks runs that wait for a person's approval
+# (GitHub's rule for GITHUB_TOKEN pushes), which is the review step anyway. What it refuses — a metadata "write" that
+# changes a committed checksum — is red there and stays a person's job, as is everything the script's docstring lists
+# under its limits (a Quarkus bump's `quarkusDev` pass among them). Its forgery cases are
+# scripts/dependabot_follow_selftest.py, which checks.yml's `guards` job runs.
 
 updates:
-  # The pnpm workspace's one lockfile is at the root (src/web/, src/admin-web/, src/packages/crypto/ and tests/e2e/ are its
-  # members, listed in pnpm-workspace.yaml), so this is the directory that reaches all four. Dependabot's "npm" ecosystem
-  # is also its pnpm one (remembered, NOT read from dependabot-core: it reads pnpm-lock.yaml; whether it reads pnpm 12's
-  # lockfile, which carries pnpm's own pin as a first YAML document, is unproven like the rest of this file). It bumps the openapi-generator-cli WRAPPER only: the generator
-  # JAR it runs is chosen by `generator-cli.version` in src/web/ and src/admin-web/openapitools.json and pinned in
-  # scripts/openapi_generator_jar.sha256, which no ecosystem here reads — that bump is by hand, at a release.
-  # Weekly, Saturday 06:00 Europe/Berlin (owner 2026-11-07), and so is every entry here: the pull requests and their
-  # Checks runs are ready on Saturday, so what is merged over the weekend is in the snapshot `publish.yml` cuts on Monday at
-  # 03:17 UTC. Security updates follow Dependabot's alerts, not this schedule. The limit is 5 (the documented default,
-  # spelled out): the minor/patch group is one PR, and each major beside it is one more — a limit of 1 would let a
-  # single stuck major block the group.
-  # `@playwright/test` has a group of its own: its bump is red until lane L1's browser image follows — THE FOLLOW
-  # above writes it (scripts/validate_image_pins.py; no updater proposes the image alone: renovate.json5 holds it until
-# the npm step of cr-renovate moves the two together), and inside the
-  # minor/patch group it held every other bump back (PR #19, 2026-11-12). Listed first and excluded from the group below,
-  # so it lands in this one whichever rule Dependabot applies to a dependency two groups match.
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "saturday"
-      time: "06:00"
-      timezone: "Europe/Berlin"
-    groups:
-      playwright:
-        patterns:
-          - "@playwright/test"
-      npm-minor-patch:
-        patterns:
-          - "*"
-        exclude-patterns:
-          - "@playwright/test"
-        update-types:
-          - "minor"
-          - "patch"
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: "chore"
-      include: "scope"
-    ignore:
-      # typescript-eslint does not support TS 7 (PR #4's CI: "Error: typescript-eslint does not support TS 7.0").
-      # Lifted when a typescript-eslint release declares typescript 7 in its peer range.
-      - dependency-name: "typescript"
-        update-types:
-          - "version-update:semver-major"
-      # CI runs Node 26 (`node-version: "26"` in checks.yml); the types follow the runtime, not the newest Node. Lifted
-      # together with that runtime bump, by hand in the same commit.
-      - dependency-name: "@types/node"
-        update-types:
-          - "version-update:semver-major"
-
-  # The docs site is its own package with its own lockfile, deliberately outside the root workspace (site/package.json
-  # says why), so the entry above never reads it (remembered, NOT read from dependabot-core: the file fetcher follows
-  # the root's pnpm-workspace.yaml `packages`, and site/ is none of them). Without this entry its tree aged unseen — undici sat at an advisory version until an ORT run found it
-  # (2026-10-30). Weekly in the root entry's slot. Its limit is 5 for the same reason as the root entry's.
-  - package-ecosystem: "npm"
-    directory: "/site"
-    schedule:
-      interval: "weekly"
-      day: "saturday"
-      time: "06:00"
-      timezone: "Europe/Berlin"
-    groups:
-      site:
-        patterns:
-          - "*"
-        update-types:
-          - "minor"
-          - "patch"
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: "chore"
-      include: "scope"
-    ignore:
-      # Kept on the root's TypeScript major (PR #2 proposed 7 here too), so one TS major is checked repository-wide.
-      # Lifted with the root entry's rule.
-      - dependency-name: "typescript"
-        update-types:
-          - "version-update:semver-major"
-
   # Remembered, NOT read from dependabot-core like the rest of this file: Dependabot does not regenerate
   # src/backend/gradle/verification-metadata.xml, so a version bump from this entry fails verification until the
   # metadata is regenerated (src/backend/CLAUDE.md) — THE FOLLOW above does that on the pull request, and a Quarkus
@@ -134,7 +53,11 @@ updates:
   # src/backend/settings.gradle.kts's `include(":core")`-style calls (SettingsFileParser#subproject_paths, Kotlin DSL
   # parentheses matched, `:apps:memories` → apps/memories) and fetches each subproject's build file; it adds buildSrc
   # when the directory exists, and gradle/libs.versions.toml at this entry's root. So no `directories:` list.
-  # Weekly in the root npm entry's slot, with a limit of 5 for the same reason.
+  # Weekly, Saturday 06:00 Europe/Berlin (owner 2026-11-07), as every entry here: the pull requests and their Checks runs
+  # are ready on Saturday, so what is merged over the weekend is in the snapshot `publish.yml` cuts on Monday at 03:17
+  # UTC. Security updates follow Dependabot's alerts, not this schedule. The limit is 5 (the documented default, spelled
+  # out): the minor/patch group is one PR, and each major beside it is one more — a limit of 1 would let a single stuck
+  # major block the group.
   - package-ecosystem: "gradle"
     directory: "/src/backend"
     schedule:
