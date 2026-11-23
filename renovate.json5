@@ -1,0 +1,150 @@
+// The version policy of the self-hosted Renovate (ADR 0158 decision 5; changes/cr-renovate.md). The repository's
+// config, read by `.github/workflows/renovate.yml`, whose environment sets only the operator's part (which repository,
+// no onboarding, the dry run). Nothing here is specific to GitHub, so the same file runs on another forge.
+//
+// Every rule is ported from .github/dependabot.yml, whose comments hold the measured reason; each rule here says it
+// again in its `description`. Rules are applied in order and a later match wins, so the general groups come first and
+// the exceptions after them.
+//
+// Phase 2 of the CR: a dry run beside Dependabot. Only the managers Dependabot has an ecosystem for are enabled, so the
+// dry run can be compared with Dependabot's proposals; phase 3 enables the rest and adds a manager for every pin no
+// ecosystem reaches.
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+
+  // Nothing remote: a preset fetched at run time would be configuration this repository does not pin.
+  extends: [],
+
+  // `gradle-wrapper` belongs to Dependabot's `gradle` ecosystem, which bumped src/backend's wrapper (PR #48).
+  enabledManagers: ["npm", "gradle", "gradle-wrapper", "dockerfile", "docker-compose", "github-actions"],
+
+  // `chore(deps): …`, as Dependabot's `commit-message.prefix: "chore"` with `include: "scope"` wrote it.
+  semanticCommits: "enabled",
+  semanticCommitType: "chore",
+  semanticCommitScope: "deps",
+
+  // A release must be this old before it is proposed: a cool-down against a hijacked release (ADR 0158 decision 5).
+  // Renovate reports the wait as the commit status `renovate/stability-days`, which is why the App may write commit
+  // statuses. `strict` opens no branch while the age is not reached. Security fixes are not held (decision 6).
+  // The length is a tuning value for the dry run (ADR 0158 § Consequences); phase 6 records the settled one here.
+  minimumReleaseAge: "3 days",
+  internalChecksFilter: "strict",
+
+  // Dependabot opened at most 5 pull requests per ecosystem and no hourly limit. Renovate's default hourly limit of 2
+  // would spread one Saturday's proposals over hours.
+  prHourlyLimit: 0,
+  prConcurrentLimit: 10,
+
+  dependencyDashboard: { enabled: true },
+
+  packageRules: [
+    // ---- groups ------------------------------------------------------------------------------------------------------
+    {
+      description: "A major never shares a pull request with minor and patch updates (owner 2026-11-07): Dependabot's first run grouped four majors with forty minors into one red PR (#4), so none of the minors could land. Majors fall through this group into one pull request each.",
+      matchManagers: ["npm"],
+      matchUpdateTypes: ["minor", "patch"],
+      groupName: "npm minor and patch",
+    },
+    {
+      description: "The docs site is its own package with its own lockfile (site/package.json says why), and has its own group, as it had its own Dependabot entry.",
+      matchManagers: ["npm"],
+      matchFileNames: ["site/**"],
+      matchUpdateTypes: ["minor", "patch"],
+      groupName: "site minor and patch",
+    },
+    {
+      description: "The backend's Gradle build, minor and patch together; a major arrives on its own.",
+      matchManagers: ["gradle", "gradle-wrapper"],
+      matchUpdateTypes: ["minor", "patch"],
+      groupName: "gradle minor and patch",
+    },
+    {
+      description: "Every image is pinned repo:tag@sha256 (ADR 0057 § 6), and one repo:tag carries one digest everywhere (scripts/validate_image_pins.py). A bump that reaches only some sites is red, so all images move in ONE pull request, majors included.",
+      matchManagers: ["dockerfile", "docker-compose"],
+      groupName: "images",
+      // Renovate would move a group's majors into a `major-` branch of their own; here they stay in the group.
+      separateMajorMinor: false,
+    },
+    {
+      description: "A digest move of an image (a re-pushed tag) carries no release time, and Docker Hub's tag pages past the tenth answer 403 (measured 2026-11-23 in the local dry run), so with the timestamp required no digest update would ever leave the cool-down. Without one, an image update is proposed at once; with one, the cool-down holds it.",
+      matchDatasources: ["docker"],
+      minimumReleaseAgeBehaviour: "timestamp-optional",
+    },
+    {
+      description: "Every action is pinned by commit SHA with its full version as a comment (scripts/validate_action_pins.py); all of them move in one pull request.",
+      matchManagers: ["github-actions"],
+      groupName: "actions",
+      separateMajorMinor: false,
+    },
+    {
+      description: "Lane L1's browser image carries the browser @playwright/test drives, so the library and the image move as one version (scripts/validate_image_pins.py). Dependabot could not group across ecosystems, so a follow wrote the image; here both are one pull request, kept out of the npm and images groups, whose other updates it would otherwise hold back (PR #19, 2026-11-12).",
+      matchPackageNames: ["@playwright/test", "mcr.microsoft.com/playwright"],
+      groupName: "playwright",
+    },
+    {
+      description: "A Node major moves everywhere at once, when the owner decides: the build images' `node` base, `node-version` in the workflows and @types/node, whose types follow the runtime CI runs. Dependabot held @types/node's major back and left the rest to a hand-made commit; here they are one pull request of their own, so a runtime move never holds back the images or actions groups. Node's LTS needs no version rule (owner 2026-11-07: only LTS). Measured 2026-11-23 from nodejs/Release schedule.json: 23 and 25 never became LTS but are older than 26, the newest LTS, so nothing proposes them; from 27 on every major becomes LTS (27 on 2027-10-20), which Dependabot's rule, holding 27 back as odd, did not know. A new major's image is tagged months before its LTS date, so it can arrive here early; setup-node's `node` versioning waits for LTS. Removing the old rule changed no proposal in the dry run.",
+      // By dependency name: setup-node's `node-version` is looked up as the package `actions/node-versions`.
+      matchDepNames: ["node", "@types/node"],
+      matchUpdateTypes: ["major"],
+      groupName: "node major",
+      // One branch for all three: without a slug, an npm major's branch is prefixed `major-` and the others' are not.
+      groupSlug: "node-major",
+    },
+    {
+      description: "Renovate prefixes a major's group branch with `major-` whenever majors are kept apart, which would split @types/node from the rest of the node major. Kept together, @types/node is proposed only at its newest allowed version: while a Node major waits for the owner, the types' minor updates on the old line wait with it.",
+      matchDepNames: ["@types/node"],
+      separateMajorMinor: false,
+    },
+    {
+      description: "A Java major moves everywhere at once, like Node's: the backend's build image and `java-version` in the workflows.",
+      matchDepNames: ["eclipse-temurin", "java-jdk"],
+      matchUpdateTypes: ["major"],
+      groupName: "java major",
+      groupSlug: "java-major",
+    },
+
+    // ---- held back ---------------------------------------------------------------------------------------------------
+    {
+      description: "typescript-eslint does not support TypeScript 7 (PR #4's CI: 'typescript-eslint does not support TS 7.0'). The site keeps the root's TypeScript major, so one major is checked repository-wide. Lifted when a typescript-eslint release declares typescript 7 in its peer range.",
+      matchPackageNames: ["typescript"],
+      // A range, not `enabled: false` on the major: Renovate's report still lists an update that a rule disabled, and
+      // phase 3's check reads that report. A range removes the version at lookup.
+      allowedVersions: "<7",
+    },
+    {
+      description: "The backend's openapi-generator is held to the web clients' generator version (scripts/validate_build_input_pins.py); alone it is red. It moves with openapitools.json and scripts/openapi_generator_jar.sha256 (cr-renovate phase 3 groups them).",
+      matchManagers: ["gradle"],
+      matchPackageNames: ["org.openapitools:openapi-generator"],
+      enabled: false,
+    },
+    {
+      description: "MariaDB on its LTS line only (owner 2026-11-07): 12.3 is the LTS, the releases after it are rolling ones. 12.3's own digest moves still arrive. The next LTS is a migration step of its own, moved by hand. Applies to the compose files and to src/tools/Dockerfile, which copies the client from the server image.",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["mariadb"],
+      allowedVersions: "/^12\\.[0-3](\\.|$)/",
+    },
+    {
+      description: "Java on its LTS releases only, as every base here (owner 2026-11-07: only LTS). Oracle names every fourth release LTS since 21, so the regex lists 25, 29, 33 and 37; a release off that cadence is held, never proposed by mistake. 26, 27 and 28 are not LTS.",
+      matchPackageNames: ["eclipse-temurin", "java-jdk"],
+      allowedVersions: "/^(25|29|33|37)(\\.|-|\\+|$)/",
+    },
+    {
+      description: "The admin image on nginx's STABLE branch, the even minor (src/admin-web/Dockerfile says why). Measured 2026-11-07: nginx-unprivileged's 1.31-alpine is mainline-alpine's index, 1.30-alpine is stable-alpine's.",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["nginxinc/nginx-unprivileged"],
+      allowedVersions: "/^\\d+\\.\\d*[02468](\\.|-|$)/",
+    },
+    {
+      description: "The tools image's base follows the MariaDB image's base by hand: src/tools/Dockerfile copies the mariadb client out of mariadb:12.3, which is Ubuntu 24.04, and the C library must match. 24.04's own digest moves still arrive. Lifted with the MariaDB pin whose base moves.",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["ubuntu"],
+      allowedVersions: "/^24\\.04(\\.|$)/",
+    },
+    {
+      description: "Garage held on v2.0 until the move is done by hand (owner 2026-11-07): from v2.1 a fresh node answers the admin API 500 'Layout not ready', from v2.5 its cold /health answers 503, and v2.5 cannot be downgraded. Measured on throwaway containers 2026-11-07.",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["dxflrs/garage"],
+      allowedVersions: "/^v2\\.0\\./",
+    },
+  ],
+}

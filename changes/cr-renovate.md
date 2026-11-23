@@ -53,9 +53,10 @@ The following are gone at the end:
     recipe's busybox;
   - libwebp.
 - **To measure, not assume:**
-  - Renovate's Node.js versioning readme says that from Node.js 27 on every major becomes LTS. dependabot.yml ignores
-    27 as odd. Read nodejs.org's release schedule before porting the rule.
-  - Whether Renovate reads `packageManager` for pnpm. Its npm readme names Corepack only for Yarn.
+  - ~~Node.js 27 and LTS.~~ Measured 2026-11-23 from nodejs/Release `schedule.json`: 23 and 25 never became LTS, 27
+    becomes LTS on 2027-10-20. dependabot.yml's rule held 27 back as odd, which was wrong.
+  - ~~Whether Renovate reads `packageManager` for pnpm.~~ It does: the dry run proposed `pnpm` 12.16.1 → 12.21.0 in
+    `package.json` and `site/package.json` (depType `packageManager`). The other pnpm sites still need phase 3.
   - Whether `helm-values` takes a `repo:tag@sha256` value. If it does not, a regex manager with `currentDigest` does.
 - **Owner-only steps:**
   - creating the App and storing its key (phase 1);
@@ -67,9 +68,12 @@ The following are gone at the end:
 .github/workflows/renovate.yml      schedule (Saturday 05:00 UTC, Dependabot's slot) + workflow_dispatch (input: dry run)
   job renovate                      environment: renovate (main only); permissions: {} (the App token does the writing)
     actions/create-github-app-token@<sha>   client-id: vars.RENOVATE_APP_CLIENT_ID, private-key: secrets.RENOVATE_APP_PRIVATE_KEY
-    renovatebot/github-action@<sha>         renovate-version: <image digest>, configurationFile: renovate.json5
-                                            env: RENOVATE_ALLOWED_COMMANDS (exact regexes), RENOVATE_IGNORE_SCRIPTS
-renovate.json5                      extends nothing remote; one packageRule per policy with its reason in `description`
+    renovatebot/github-action@<sha>         renovate-version: <tag>@<image digest>
+                                            env: the operator's part only (repository, no onboarding, dry run,
+                                            RENOVATE_ALLOWED_COMMANDS as exact regexes); install scripts stay off
+renovate.json5                      the repository's config, read from the default branch: the version policy, no
+                                    forge in it; extends nothing remote; one packageRule per policy with its reason
+                                    in `description`
                                     customManagers: regex with currentValue/currentDigest for every unreached pin
                                     postUpgradeTasks: scripts/pin_follow.py <kind> (Helm SHA-256, lock.py, build.py --write)
                                     vulnerabilityAlerts on; minimumReleaseAge; Dependency Dashboard issue
@@ -136,6 +140,13 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
   first. Dependabot stays untouched.
   · Done when: a dispatched run's log lists every update Dependabot proposed on its last run, and none it held back.
   Each ported rule is bitten: deleting it makes the dry run propose the held-back version.
+  Built 2026-11-23 (PR pending dispatch): `renovate.json5` ports every group and `ignore` rule, and `renovate.yml`
+  runs Renovate 44.257.9 with `RENOVATE_DRY_RUN=full`, weekly in Dependabot's slot and on dispatch. Measured in a local
+  lookup-only run of the pinned image against `main` (`--platform=local`, report file): it proposes everything
+  Dependabot's last run proposed that `main` does not hold yet (#46 mailpit, traefik, distroless, node 26; #47 astro;
+  #48 the Gradle wrapper and awssdk; #49 @lucide/vue; #49's vitest and vue-i18n were already on `main`), and nothing a
+  rule holds back. Bitten in one run with every hold-back rule removed: TypeScript 7, openapi-generator 7.27, MariaDB
+  13, Garage 2.5, nginx 1.31, Ubuntu 26.04 and Java 26/27 each came back. What is left: the dispatched run on `main`.
 - [ ] **3 every pin reached.**
   - Custom managers for each unreached pin.
   - `pin_follow.py` with its self-test: the Helm SHA-256, checked three ways as the Helm pin's comment does (the
@@ -178,6 +189,31 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
     comments where `renovate.json5` sets them.
 
   · Done when: the trust chain and the site's check are green.
+
+## Decision log
+
+- **2026-11-23, phase 2.** Renovate's own config is the repository's `renovate.json5`, and the workflow sets only the
+  operator's part, so the policy runs unchanged on another forge (ADR 0158 § Consequences).
+- **2026-11-23, phase 2.** Image updates take `minimumReleaseAgeBehaviour: timestamp-optional`: a digest move has no
+  release time, and Docker Hub's tag pages past the tenth answer 403, so with the timestamp required no digest update
+  would ever leave the cool-down (measured in the local run). An image with a release time still waits.
+- **2026-11-23, phase 2.** The `images` and `actions` groups keep their majors (`separateMajorMinor: false`), as
+  Dependabot's groups did.
+- **2026-11-23, phase 2.** A runtime major is one pull request of its own across managers: `node major` (the images'
+  `node`, setup-node's `node-version`, `@types/node`) and `java major` (`eclipse-temurin`, setup-java's
+  `java-version`). It never holds back the images or actions groups. `@types/node` then proposes only its newest
+  allowed version, so its minor updates wait with a pending Node major; that replaces Dependabot's held-back
+  `@types/node` major.
+- **2026-11-23, phase 2.** Java on its LTS releases by a positive regex (25, 29, 33, 37): a release off Oracle's
+  cadence is held, never proposed by mistake. New, not ported: the github-actions manager reaches `java-version`,
+  which no Dependabot ecosystem did, and proposed Java 27.
+- **2026-11-23, phase 2.** Dependabot's Node rule (no 23, 25, 27) is not ported: removing it changed no proposal,
+  because 26 is newer than 23 and 25, and 27 is LTS.
+- **2026-11-23, phase 2.** TypeScript's major is held by `allowedVersions: "<7"`, not by `enabled: false` on the
+  major: Renovate's report still lists an update a rule disabled, and phase 3's check reads that report.
+- **2026-11-23, phase 2.** Found reached in the dry run, so phase 3 has less to do: the root Gradle wrapper
+  (`gradle-wrapper`), `tests/fuzz/Dockerfile` (`dockerfile`), setup-node's and setup-java's versions and
+  `cosign-release` (`github-actions`, depType `uses-with`), and `pnpm` in `packageManager`.
 
 ## Definition of done
 
