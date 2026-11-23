@@ -8,8 +8,9 @@ import me.raddatz.veyq.mobile.crypto.V1
  * frame's decrypted BYTES (`Sniff`); the sealed type and the name are claims that only narrow (text must be claimed). A
  * raster image, a PDF and a text are shown in the app, an audio or video container played there, and everything else is
  * only downloaded — a peer's bytes are never handed to another app or rendered as markup. An SVG whose markup and claim agree
- * is an image only on a platform that draws it with nothing in it run or fetched ([svgAsImage], inbox #1059: Linux, through
- * glycin's sandboxed librsvg); everywhere else it is shown as its text (`docs/apps/depot.md` § The viewer).
+ * is an image only on a platform that draws it with nothing in it run or fetched ([svgAsImage], inbox #1059: every app's
+ * start turns it on, each with its renderer's hostile-file proof), and one holding a `foreignObject` is refused whole
+ * ([SvgView.refused], the web's taint gate); elsewhere (a test, a platform not proven) it is shown as its text.
  * Nothing decrypted is written to show it (ADR 0047): an image, a text and a PDF are held in memory (each capped), a medium
  * is read in ranges through core's `RangeReader` ([FileModel]).
  */
@@ -24,6 +25,8 @@ object FileView {
     const val IMAGE_EDGE = 4096
     /** Most pages of a PDF a viewer draws (the web's pdf.js cap, `docs/apps/depot.md` § The viewer); past it, it says so. */
     const val PDF_PAGES = 1000
+    /** An SVG's type: its picture is drawn from its markup ([SvgView]), never decoded as a raster. */
+    const val SVG = "image/svg+xml"
 
     /** The pages of a PDF of [total] a viewer draws: at most [PDF_PAGES]. */
     fun pagesShown(total: Int): Int = total.coerceIn(0, PDF_PAGES)
@@ -37,9 +40,10 @@ object FileView {
     /**
      * Whether this platform draws an SVG as an image (inbox #1059): only where its renderer runs nothing an SVG holds (no
      * script, no `foreignObject` document), fetches nothing it names (`<image href>`, `<use>`, CSS `url()`/`@import`, an
-     * external entity) and expands no external entity — proven on that platform by a hostile file's test. Linux's start
-     * turns it on (the bridge: GTK decodes through glycin's sandboxed librsvg, `file_page.rs`' test); every other app shows an
-     * SVG as its text. Off by default, and nothing turns it off again.
+     * external entity) and expands no external entity — proven on that platform by a hostile file's test. Each app's start
+     * turns it on: Linux's bridge (GTK decodes through glycin's sandboxed librsvg, `file_page.rs`' test), Windows' bridge
+     * (WebView2's image mode, `SvgWebTest`), Android's and Apple's own start (their web view's image mode, [SvgView]). Off
+     * by default, and nothing turns it off again.
      */
     var svgAsImage: Boolean = false
         private set
@@ -74,7 +78,7 @@ object FileView {
         // the web's order (`view.ts`): an SVG only where the claim agrees with the markup, and only where this platform draws one
         if (svg && Sniff.claimsSvg(claimedType, claimedName) && Sniff.svg(head)) {
             if (total > IMAGE_CAP) return Decision(Kind.TOO_LARGE)
-            return Decision(Kind.IMAGE, "image/svg+xml", "svg", chunkCount)
+            return Decision(Kind.IMAGE, SVG, "svg", chunkCount)
         }
         Sniff.stream(head)?.let { media ->
             return Decision(Kind.MEDIA, media.mime, EXTENSIONS[media.mime], chunkCount)
@@ -103,11 +107,11 @@ object FileView {
         open(file, nodeName) { first, until, sink -> DepotFiles.read(tenant, file, first, until, sink) }
 
     /** [file]'s view over [read], which hands its frames `first until until` in order (a test plays it). */
-    suspend fun open(file: DepotFiles.File, nodeName: String, read: suspend (first: Int, until: Int, sink: suspend (ByteArray) -> Unit) -> Unit): Opened {
+    suspend fun open(file: DepotFiles.File, nodeName: String, svg: Boolean = svgAsImage, read: suspend (first: Int, until: Int, sink: suspend (ByteArray) -> Unit) -> Unit): Opened {
         var head = ByteArray(0)
         read(0, 1) { head = it }
         val named = if (Sniff.extensionOf(nodeName).isNotEmpty()) nodeName else file.uploadedName
-        val d = decide(head, file.chunkCount, file.size ?: 0, file.type, named)
+        val d = decide(head, file.chunkCount, file.size ?: 0, file.type, named, svg)
         suspend fun frames(until: Int): ByteArray {
             val parts = ArrayList<ByteArray>()
             read(0, until) { parts += it }
@@ -120,7 +124,10 @@ object FileView {
             return all
         }
         return when (d.kind) {
-            Kind.IMAGE, Kind.PDF -> Opened(d, frames(file.chunkCount), null)
+            // an SVG with a `foreignObject` is refused whole, before a renderer sees it (`SvgView.refused`, the web's taint gate)
+            Kind.IMAGE, Kind.PDF -> frames(file.chunkCount).let { bytes ->
+                if (d.mime == SVG && SvgView.refused(bytes)) Opened(Decision(Kind.UNSUPPORTED), null, null) else Opened(d, bytes, null)
+            }
             Kind.TEXT -> frames(d.frames).let { Opened(d, null, Sniff.decodeText(it.copyOf(minOf(it.size, TEXT_CAP)))) }
             else -> Opened(d, null, null)
         }

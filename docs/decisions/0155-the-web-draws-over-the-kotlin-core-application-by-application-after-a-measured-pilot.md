@@ -638,7 +638,7 @@ Measured before the decision (2026-11-20):
     one taints the canvas and is "cannot be shown" with the download. `FileViewer.test.ts` holds it (bitten: the SVG's blob
     shown again → two red). *Cost:* an SVG is a raster at a fixed resolution (zoom shows pixels — lifted by D14); one with a
     `foreignObject` no longer shows.
-  - **D12 — Left:** a renderer and its hostile-file proof for Windows, Android and Apple (#1059's next step); the installed
+  - **D12 — Left:** a renderer and its hostile-file proof for Windows, Android and Apple (#1059's next step — built, D15); the installed
     Flatpak's glycin sandbox was not exercised (the test runs in the Fedora container, where glycin's loaders run as in
     `run.py run`; the GNOME 51 runtime carries the same loaders, remembered from the manifest); the browser pass ran against
     Vite's dev build and headless Chrome only (Firefox and Safari not run; the PNG holds there by construction).
@@ -696,6 +696,52 @@ Measured before the decision (2026-11-20):
     image as" (its pixels, a PNG) where it offered the `<img>`. Left: a pinch zoom and a browser zoom repaint through
     `visualViewport` and a `resolution` media query — not exercised by the pass (headless Chrome changes neither live);
     Firefox and Safari not run (their image mode and canvas taint are remembered, not measured here).
+  - **D15 — The apps draw an SVG as the web does: a web view's image mode (Android, Apple, Windows), glycin redrawn per
+    zoom (Linux), a `foreignObject` refused by the core** (branch `claude/svg-apps`, D12's follow-up). *Q:* which renderer
+    per app gives D9's must-nots, D14's refusal, a pixel cap and a sharp zoom? *Options and choices, per platform:*
+    **Android** — no platform API decodes an SVG (`ImageDecoder` and `VectorDrawable` take none); AndroidSVG's last release
+    is 1.4 of 2019-05-28 (Maven Central's metadata, read 2026-11-22), so the no-abandoned-dependency rule excludes it and
+    Coil's SVG module, which wraps it. Chosen: the system `WebView` (the platform's Chromium, updated by Play) in image mode:
+    script off, `blockNetworkLoads`, file and content access off, Safe Browsing off, the metrics opt-out in the manifest,
+    the page and the picture served from memory by `shouldInterceptRequest` and every other request answered 403, no
+    navigation, no long-press; its zoom is its own (pinch, `zoomBy` from the buttons). **Apple** — macOS's `NSImage(data:)`
+    draws an SVG through CoreSVG (measured: twelve hostile files, no listener hit) but iOS has no public decoder of arbitrary
+    SVG data, so one path for both: `WKWebView` in image mode — `allowsContentJavaScript` off, a non-persistent store, a
+    content rule list blocking every load but its own scheme, a scheme handler serving the page and the picture from
+    memory, no navigation but its page, no window, no link preview. Measured on macOS 26.7.3 (a probe over the same page and
+    handler): ten hostile files naming a loopback listener, no connection, only `view.html` and `picture.svg` asked; the
+    app's zoom script ran with the page's script off and laid the 200 px picture out at 1600 px at ×8. **Windows** —
+    Direct2D's SVG (WinUI's `SvgImageSource`, Win2D) draws no `<text>` and rasterizes only the whole picture; chosen:
+    WebView2 on the PDF viewer's measured browser (`PdfWeb`: no resolver, no proxy, nothing of Edge's own on the wire,
+    InPrivate, a folder deleted after it), plus the page's script off, no context menu, no browser zoom (it would refit the
+    picture), every request but the page and the picture refused (`SvgWeb.cs`); `SvgWebTest` (in the logged-on session,
+    as `PdfWebTest`) shows nine hostile files in the core's own page and asserts no listener hit, no request but those two,
+    the title unchanged, and the benign one at 200 px and 1600 px at ×8; its bite is `VEYQ_SVG_BARE=1` (the SVG inline,
+    script on). Measured: `run.py build` green on the VM (the app, the bridge's 6 tests, `Veyq.Tests` outside the session);
+    `SvgWebTest` itself not yet run — the session's scheduled task for the run's suffix is the owner's to register
+    (`run.py register`), so its result is owed (inbox #1110). **Linux** — glycin's sandboxed librsvg kept (D9); zoom added: each step drawn again by the loader at the
+    laid-out size × the screen's scale (`PixbufLoader::set_size`, librsvg renders the vectors at it), within the core's cap
+    (`File.SvgRaster` → `SvgView.plan`, the web's `planRaster`); `file_page.rs`' `a_zoomed_svg_is_drawn_at_its_size_not_enlarged`
+    holds the sharpness (a ×10 edge between two pixels, none partly covered) — written, not yet run: `run.py build` stopped
+    at the Flatpak's poppler module, the Docker VM's disk full (inbox #1110). **The refusal** — the apps have no canvas taint:
+    the core refuses an SVG holding a `foreignObject` by its markup, the whole file, before any renderer sees it
+    (`SvgView.refused` in `FileView.open`): any case or prefix; character references undone to a fixed point, since an
+    internal entity's value `&#60;foreign&#79;bject` becomes markup where it is used and `&#38;#…;` one round later; refused
+    too what the scan cannot read (invalid UTF-8, a declared encoding other than UTF-8/ASCII — UTF-7 would hide the tag —,
+    references nested past eight rounds). Internal entities alone are drawn (Illustrator declares them). Linux, whose
+    librsvg never drew one, now refuses it too, as the web. **The zoom and the cap** — the web's nine steps
+    (`SvgView.ZOOM_STEPS`); in a web view the step is the app's own script (`SvgView.zoomScript`: CSS `zoom` on the
+    `<img>`, centre kept), which WebKit and WebView2 run beside the page's script turned off; the engine lays the picture out
+    again and paints its vectors at that size into the tiles in view only, so no bitmap of the picture exists past the view —
+    the engine's tiling is the cap there, `SvgView.plan`'s 4096² where an app rasterizes itself (Linux). *Evidence:*
+    `SvgViewTest` (the refusal's spellings, entities and encodings; `FileView.open` handing a refused SVG's bytes to
+    nothing; the steps; the cap; the page holding no script and the SVG only as an `<img>`), bitten (the unescape removed
+    and the open's refusal dropped: three red, restored with `/bin/cp -f`). *Cost:* a web view per SVG on three apps (a
+    browser process; on Windows a user-data folder, InPrivate, deleted after); Android steps by the WebView's zoom, pinch
+    included, not exactly the web's steps; Linux draws one raster, so a large SVG far zoomed is coarser than the web's tile.
+    *Left:* Android's hostile-file proof on a device and a committed Apple one (the macOS probe is the session's, no Apple
+    test target exists; inbox #1110); iOS's first run (CoreSimulator is out of date here) and every app's click pass
+    (#1111); Linux's region rendering for a far zoom (#1112).
 
 - **Expenses' move is parked, not merged** ([cr-web-expenses-on-the-core](../../changes/cr-web-expenses-on-the-core.md)),
   on branch `claude/p2-impl`: the vectors (`c76d3212f`), the JSON seam and Expenses' pure homes (`c5793db14`), the

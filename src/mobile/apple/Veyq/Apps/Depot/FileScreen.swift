@@ -26,6 +26,8 @@ struct FileScreen: View {
             }
             Group {
                 switch state?.shown {
+                case let s as FileModel.ShownImage where s.mediaType == FileView.shared.SVG:
+                    SvgPicture(shown: s, name: ref.name).id(ObjectIdentifier(s))
                 case let s as FileModel.ShownImage: FileImage(shown: s)
                 case let s as FileModel.ShownText: FileText(shown: s)
                 case let s as FileModel.ShownPdf: FilePdf(shown: s, name: ref.name)

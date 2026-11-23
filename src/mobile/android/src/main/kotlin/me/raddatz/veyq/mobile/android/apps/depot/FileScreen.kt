@@ -103,7 +103,7 @@ internal fun FilePage(file: FileModel, name: String) {
                 FileModel.Shown.Failed -> Note(stringResource(R.string.file_open_failed))
                 FileModel.Shown.NotUploaded -> Note(stringResource(R.string.depot_not_uploaded))
                 is FileModel.Shown.Message -> Note(say(s.words))
-                is FileModel.Shown.Image -> ShownImage(s, name)
+                is FileModel.Shown.Image -> if (s.mediaType == FileView.SVG) ShownSvg(s, name) else ShownImage(s, name)
                 is FileModel.Shown.Text -> ShownText(s)
                 is FileModel.Shown.Pdf -> ShownPdf(s, name)
                 is FileModel.Shown.Media -> ReaderPlayer(s.reader, s, 16f / 9f, Modifier.fillMaxWidth().heightIn(min = 240.dp)) {

@@ -581,17 +581,20 @@ def build() -> int:
 
 
 # Veyq.Tests' tests that need the logged-on session: WebView2 takes no window of ssh's session 0 ("Invalid window
-# handle", 0x80070578, measured 2026-11-18), so PdfWebTest runs through the scheduled task there (in_session).
-IN_SESSION = "FullyQualifiedName~PdfWebTest"
-NOT_IN_SESSION = "FullyQualifiedName!~PdfWebTest"
+# handle", 0x80070578, measured 2026-11-18), so PdfWebTest and SvgWebTest run through the scheduled task there (in_session).
+IN_SESSION = "FullyQualifiedName~PdfWebTest|FullyQualifiedName~SvgWebTest"
+NOT_IN_SESSION = "FullyQualifiedName!~PdfWebTest&FullyQualifiedName!~SvgWebTest"
 
 
 def web_pdf_test() -> int:
     """PdfWebTest in the logged-on session (inbox #955): WebView2's PDF viewer served a PDF of canaries from memory, its
     text copied, then no canary on disk and no request to another host. VEYQ_PDF_NETLOG=<path on the host> has each
-    browser write Chromium's net log beside it (<path>.1.json, <path>.2.json), the measurement's witness."""
+    browser write Chromium's net log beside it (<path>.1.json, <path>.2.json), the measurement's witness. SvgWebTest
+    beside it (inbox #1059): hostile SVGs in the core's page, nothing run or fetched; VEYQ_SVG_BARE=1 is its bite."""
     windows = REMOTE_MOBILE / "windows"
-    passed = {k: os.environ[k] for k in ("VEYQ_PDF_NETLOG", "VEYQ_PDF_BARE") if os.environ.get(k)}
+    passed = {k: os.environ[k] for k in ("VEYQ_PDF_NETLOG", "VEYQ_PDF_BARE", "VEYQ_SVG_BARE") if os.environ.get(k)}
+    # the core's own SVG page, which WireTest writes beside the samples (generate())
+    passed["VEYQ_SVG_PAGE"] = str(REMOTE_MOBILE / "build" / "generated" / "bridge" / "svg-page.json")
     return in_session("pdf-web-test", "\n".join([
         *(f"$env:{k} = {ps_quote(v)}" for k, v in (DOTNET_ENV | passed).items()),
         f"Set-Location {ps_quote(str(windows))}",

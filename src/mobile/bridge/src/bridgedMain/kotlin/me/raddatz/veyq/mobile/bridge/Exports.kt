@@ -57,8 +57,8 @@ internal expect fun platformGuestSessions(): me.raddatz.veyq.mobile.sharing.Gues
 
 /**
  * Whether this platform's app draws an SVG as an image (inbox #1059, `FileView.svgAsImage`): Linux's GTK decodes it through
- * glycin's sandboxed librsvg, which runs no script and fetches nothing (`file_page.rs`' hostile-file test); Windows shows
- * it as its text.
+ * glycin's sandboxed librsvg, which runs no script and fetches nothing (`file_page.rs`' hostile-file test); Windows draws
+ * it in WebView2's image mode, closed around it (`SvgWeb.cs`, `SvgWebTest`).
  */
 internal expect fun platformDrawsSvgAsImage(): Boolean
 
