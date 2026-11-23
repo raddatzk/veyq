@@ -1,7 +1,5 @@
 package me.raddatz.veyq.mobile.session
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.api.apis.ScopesApi
 import me.raddatz.veyq.mobile.api.apis.TenantsApi
@@ -47,7 +45,7 @@ class DevSecondTenantTest {
             .toMap()
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), liveRun.device(),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         if (account.tenants.any { it.domain == domain }) {
             println("seed: $domain already exists")
             return@runTest
@@ -79,7 +77,7 @@ class DevSecondTenantTest {
 
         val again = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), liveRun.device(),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         val opened = again.open(again.tenants.first { it.domain == domain })
         assertTrue(opened.spaces().map { it.kind }.containsAll(listOf("TENANT", "PERSONAL")), "the new tenant's grants did not open")
         account.signOut()

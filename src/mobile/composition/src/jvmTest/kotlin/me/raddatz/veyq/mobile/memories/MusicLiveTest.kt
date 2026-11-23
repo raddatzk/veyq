@@ -1,7 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -40,6 +39,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * A Memory's music against a running dev instance (ADR 0142 decisions 7 and 10–12; `VEYQ_LIVE`, skipped without one).
@@ -64,7 +64,7 @@ class MusicLiveTest {
     @AfterTest
     fun takeOffTheDevices() = liveRun.removeAll()
 
-    private val client: (io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> HttpClient(OkHttp, block) }
+    private val client: (io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> LiveHttp.client(block) }
 
     private val wav = AudioFiles.wavBytes(AudioFiles.Spec(16, 1, 8000, listOf(2.0 to 0.0, 3.0 to 0.5, 2.0 to 0.0)))
     private val mp3Frames = 400

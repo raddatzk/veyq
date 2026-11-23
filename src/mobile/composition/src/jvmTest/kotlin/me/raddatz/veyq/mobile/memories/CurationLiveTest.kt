@@ -2,7 +2,6 @@ package me.raddatz.veyq.mobile.memories
 
 import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import me.raddatz.veyq.mobile.media.ByteSource
@@ -22,6 +21,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * A Memory's participants and a medium's capture time against a running dev instance (ADR 0144 decisions 1–3;
@@ -43,7 +43,7 @@ class CurationLiveTest {
     @AfterTest
     fun takeOffTheDevices() = liveRun.removeAll()
 
-    private val client: (io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> HttpClient(OkHttp, block) }
+    private val client: (io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> LiveHttp.client(block) }
 
     private val root = File(System.getProperty("veyq.repoRoot"))
     private fun fixture(name: String) = File(root, "src/web/src/features/memories/__fixtures__/$name").readBytes()

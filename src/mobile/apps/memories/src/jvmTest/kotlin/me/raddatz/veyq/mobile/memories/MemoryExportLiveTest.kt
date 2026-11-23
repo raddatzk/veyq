@@ -1,8 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
 import me.raddatz.veyq.mobile.media.Derivation
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -31,6 +29,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * A Memory downloaded and copied by the app (ADR 0149 decision 3), on a running dev instance as a throwaway (`VEYQ_LIVE`,
@@ -59,7 +58,7 @@ class MemoryExportLiveTest {
         val root = File(System.getProperty("veyq.repoRoot"))
         runTest(timeout = 6.minutes) {
             suspend fun session(): TenantSession {
-                val a = VeyqAccount.signIn(BouncyCastlePrimitives, origin, t.email(), t.env.getValue("VEYQ_PASSWORD"), t.env.getValue("VEYQ_SECRET_KEY"), runs.getOrPut("VEYQ") { LiveRun("VEYQ", t.file) }.device()) { block -> HttpClient(OkHttp, block) }
+                val a = VeyqAccount.signIn(BouncyCastlePrimitives, origin, t.email(), t.env.getValue("VEYQ_PASSWORD"), t.env.getValue("VEYQ_SECRET_KEY"), runs.getOrPut("VEYQ") { LiveRun("VEYQ", t.file) }.device()) { block -> LiveHttp.client(block) }
                 return a.open(a.tenants.first { it.domain == domain }).also { it.rekeyRules = AppKinds.rules }
             }
             val tenant = session()

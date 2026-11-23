@@ -1,7 +1,5 @@
 package me.raddatz.veyq.mobile.depot
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.session.VeyqAccount
@@ -14,6 +12,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlin.test.AfterTest
 import me.raddatz.veyq.mobile.session.LiveRun
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * A drop box the web made and its guests filled, read by a member on a running dev instance (`VEYQ_LIVE`), with
@@ -38,7 +37,7 @@ class DropBoxLiveTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             liveRun.device(),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         return account.open(account.defaultTenant!!)
     }
 
@@ -159,7 +158,7 @@ class DropBoxLiveTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             liveRun.device(),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         val tenant = account.open(account.defaultTenant!!)
         val parent = tenant.nodes().first { it.kind == "FOLDER" && it.parentId == null && it.name == rootName }
         val name = "App drop ${System.currentTimeMillis() % 100_000}"
@@ -191,7 +190,7 @@ class DropBoxLiveTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             liveRun.device(),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         val tenant = account.open(account.defaultTenant!!)
         val (rootName, boxName) = spec.split('/', limit = 2)
         val nodes = tenant.nodes()

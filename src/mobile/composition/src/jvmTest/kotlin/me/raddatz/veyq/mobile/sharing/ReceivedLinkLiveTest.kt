@@ -1,8 +1,6 @@
 package me.raddatz.veyq.mobile.sharing
 
 import me.raddatz.veyq.mobile.media.Derivation
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.http.content.TextContent
 import kotlinx.coroutines.test.runTest
@@ -33,6 +31,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 import kotlin.time.Duration.Companion.minutes
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * A received link opened by the core as its guest on a running dev instance, as a throwaway (ADR 0150; `VEYQ_LIVE`,
@@ -58,7 +57,7 @@ class ReceivedLinkLiveTest {
         runTest(timeout = 5.minutes) {
             suspend fun session(who: String): TenantSession {
                 val run = runs.getOrPut(who) { LiveRun(who, t.file) }
-                val a = VeyqAccount.signIn(BouncyCastlePrimitives, origin, t.email(who), t.env.getValue("${who}_PASSWORD"), t.env.getValue("${who}_SECRET_KEY"), run.device()) { block -> HttpClient(OkHttp, block) }
+                val a = VeyqAccount.signIn(BouncyCastlePrimitives, origin, t.email(who), t.env.getValue("${who}_PASSWORD"), t.env.getValue("${who}_SECRET_KEY"), run.device()) { block -> LiveHttp.client(block) }
                 return a.open(a.tenants.first { it.domain == domain }).also { it.rekeyRules = AppKinds.rules }
             }
             val owner = session("VEYQ")
@@ -76,7 +75,7 @@ class ReceivedLinkLiveTest {
                 onRequest { request, body -> sent += "${request.url.buildString()}\n${request.headers.entries()}\n${(body as? TextContent)?.text ?: ""}" }
             }
             val link = (ReceivedLink.open(url) as ReceivedLink.Parsed.Ok).link
-            val view = GuestView.open(BouncyCastlePrimitives, link, { block -> HttpClient(OkHttp) { block(); install(recorder) } }, MemoryDeviceStore(), MemoryGuestSessions(), { "en" })
+            val view = GuestView.open(BouncyCastlePrimitives, link, { block -> LiveHttp.client { block(); install(recorder) } }, MemoryDeviceStore(), MemoryGuestSessions(), { "en" })
             view.load()
             assertEquals(ShareGates.State.Locked(false), view.gates.state.value)
             view.gates.submitPassword("live password 1")

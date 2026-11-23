@@ -2,7 +2,6 @@ package me.raddatz.veyq.mobile.memories
 
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
-import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.api.createClientPlugin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -29,6 +28,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * A person's profile against a running dev instance (ADR 0144 decisions 11–14; `VEYQ_LIVE`, skipped without one). The dev
@@ -57,7 +57,7 @@ class PersonProfileLiveTest {
         onRequest { _, _ -> if (!reachable) throw java.io.IOException("the network is cut") }
     }
 
-    private val client: (HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> HttpClient(OkHttp) { block(); install(cut) } }
+    private val client: (HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> LiveHttp.client { block(); install(cut) } }
 
     private fun shellOf(tenant: TenantSession) = ShellModel(tenant, Hidden({}, emptySet()), RecentUses({}, emptyList())) { System.currentTimeMillis() }
 

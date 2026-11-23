@@ -1,7 +1,5 @@
 package me.raddatz.veyq.mobile.session
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.words.Msg
@@ -30,7 +28,7 @@ import kotlin.time.Duration.Companion.minutes
  */
 class LiveAccountSettingsTest {
     private val p = BouncyCastlePrimitives
-    private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> HttpClient(OkHttp, block) }
+    private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> LiveHttp.client(block) }
 
     /** Every device a case signs in with, per account, taken off that account again after it, whatever it came to. */
     private val runs = mutableListOf<LiveRun>()

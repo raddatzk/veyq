@@ -1,7 +1,5 @@
 package me.raddatz.veyq.mobile.session
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.runBlocking
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.navigation.Hidden
@@ -30,7 +28,7 @@ import kotlin.test.assertTrue
  */
 class LiveRunTest {
     private val p = BouncyCastlePrimitives
-    private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> HttpClient(OkHttp, block) }
+    private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> LiveHttp.client(block) }
 
     private data class Counts(val families: Int, val devices: Set<String>, val wraps: Int) {
         override fun toString() = "Counts(families=$families, devices=${devices.size}, wraps=$wraps)"

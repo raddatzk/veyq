@@ -1,7 +1,5 @@
 package me.raddatz.veyq.mobile.session
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import java.io.File
@@ -34,7 +32,7 @@ class MemberLiveSignInTest {
         repeat(2) { round ->
             val account = VeyqAccount.signIn(
                 BouncyCastlePrimitives, origin, env.getValue("VEYQ_USER2_EMAIL"), env.getValue("VEYQ_USER2_PASSWORD"), env.getValue("VEYQ_USER2_SECRET_KEY"), device,
-            ) { block -> HttpClient(OkHttp, block) }
+            ) { block -> LiveHttp.client(block) }
             for (tenant in account.tenants) {
                 val t = account.open(tenant)
                 println("[$round ${tenant.name}] spaces: " + t.spaces().joinToString { "${it.kind}:${it.name}" } + "; closed: " + t.closed)

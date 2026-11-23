@@ -3,8 +3,6 @@ package me.raddatz.veyq.mobile.sharing
 import me.raddatz.veyq.mobile.media.Derivation
 import me.raddatz.veyq.mobile.memories.MemoriesGuest
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -38,6 +36,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * The three gaps the Android pass found (#1032–#1034), live on a running dev instance as a throwaway (`VEYQ_LIVE`,
@@ -58,7 +57,7 @@ class GuestGapsLiveTest {
 
     private fun guest(url: String, queue: UploadQueue? = null, password: String? = null): GuestView =
         GuestView.open(
-            BouncyCastlePrimitives, (ReceivedLink.open(url) as ReceivedLink.Parsed.Ok).link, { block -> HttpClient(OkHttp, block) },
+            BouncyCastlePrimitives, (ReceivedLink.open(url) as ReceivedLink.Parsed.Ok).link, { block -> LiveHttp.client(block) },
             MemoryDeviceStore(), MemoryGuestSessions(), { "en" }, handedPassword = password, queue = queue, now = System::currentTimeMillis,
         )
 
@@ -88,7 +87,7 @@ class GuestGapsLiveTest {
         runTest(timeout = 6.minutes) {
             suspend fun session(who: String): TenantSession {
                 val run = runs.getOrPut(who) { LiveRun(who, t.file) }
-                val a = VeyqAccount.signIn(BouncyCastlePrimitives, origin, t.email(who), t.env.getValue("${who}_PASSWORD"), t.env.getValue("${who}_SECRET_KEY"), run.device()) { block -> HttpClient(OkHttp, block) }
+                val a = VeyqAccount.signIn(BouncyCastlePrimitives, origin, t.email(who), t.env.getValue("${who}_PASSWORD"), t.env.getValue("${who}_SECRET_KEY"), run.device()) { block -> LiveHttp.client(block) }
                 return a.open(a.tenants.first { it.domain == domain }).also { it.rekeyRules = AppKinds.rules }
             }
             val owner = session("VEYQ")

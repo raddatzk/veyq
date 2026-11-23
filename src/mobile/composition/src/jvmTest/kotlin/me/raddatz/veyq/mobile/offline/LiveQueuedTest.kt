@@ -3,7 +3,6 @@ package me.raddatz.veyq.mobile.offline
 import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
-import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.api.createClientPlugin
 import kotlinx.coroutines.runBlocking
 import me.raddatz.veyq.mobile.blob.UploadSource
@@ -35,6 +34,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * Writes made offline and sent at the reconnect against a running dev instance (`VEYQ_LIVE`), as a throwaway account
@@ -63,7 +63,7 @@ class LiveQueuedTest {
         onRequest { _, _ -> if (!reachable) throw java.io.IOException("the network is cut") }
     }
 
-    private val client: (HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> HttpClient(OkHttp) { block(); install(cut) } }
+    private val client: (HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> LiveHttp.client { block(); install(cut) } }
 
     private fun picked(name: String, bytes: ByteArray) = UploadSource.of(name, bytes.size.toLong(), "image/jpeg", 1_700_000_000_000L) { from, length ->
         bytes.copyOfRange(from.toInt(), minOf(bytes.size.toLong(), from + length).toInt())

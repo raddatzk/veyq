@@ -3,7 +3,6 @@ package me.raddatz.veyq.mobile.offline
 import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
-import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.api.createClientPlugin
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -41,6 +40,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * A pinned Memory kept and synced against a running dev instance (ADR 0140 decision 9; `VEYQ_LIVE`, skipped without one).
@@ -77,7 +77,7 @@ class LivePinsTest {
         }
     }
 
-    private val client: (HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> HttpClient(OkHttp) { block(); install(cut) } }
+    private val client: (HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> LiveHttp.client { block(); install(cut) } }
 
     private suspend fun waitKept(pins: OfflinePins, node: String) = withContext(Dispatchers.Default) {
         withTimeout(3.minutes) { pins.pins.first { p -> p.any { it.node == node && it.state == Pin.State.KEPT } } }

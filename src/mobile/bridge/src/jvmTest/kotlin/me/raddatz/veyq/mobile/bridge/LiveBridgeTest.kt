@@ -3,7 +3,6 @@ package me.raddatz.veyq.mobile.bridge
 import me.raddatz.veyq.mobile.expenses.receiptsSkipped
 import me.raddatz.veyq.mobile.depot.replaceOffered
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.runBlocking
 import me.raddatz.veyq.mobile.expenses.EditorChange as E
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
@@ -38,6 +37,7 @@ import kotlinx.serialization.json.long
 import kotlinx.serialization.json.jsonObject
 import me.raddatz.veyq.mobile.session.LiveRun
 import kotlin.test.AfterTest
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * The dispatch over the real core (ADR 0123's Consequences, the bridge), as a host drives it, on the JVM's suite and
@@ -77,7 +77,7 @@ class LiveBridgeTest {
                 host.reply(token, wire.encodeToString(HostReply.serializer(), reply))
             }
         }
-        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge test"), HostStore(host), { NoDeviceKeys }, JvmFiles)
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> LiveHttp.client(block) }, Config("bridge test"), HostStore(host), { NoDeviceKeys }, JvmFiles)
         val gate = b.watching(Watched.Session)
         val shell = b.watching(Watched.Shell)
 
@@ -219,7 +219,7 @@ class LiveBridgeTest {
         val password = env.getValue("VEYQ_PASSWORD")
         val kept = ConcurrentHashMap<String, String>()
         val keys = SoftwareDeviceKeys(BouncyCastlePrimitives)
-        fun started() = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge trust test"), hostStore(kept), { keys }, JvmFiles)
+        fun started() = Bridge.live(BouncyCastlePrimitives, { block -> LiveHttp.client(block) }, Config("bridge trust test"), hostStore(kept), { keys }, JvmFiles)
         val signIn = Call.SessionSignIn(origin, env.getValue("VEYQ_EMAIL"), password, env.getValue("VEYQ_SECRET_KEY"))
         val both = listOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN)
 
@@ -325,7 +325,7 @@ class LiveBridgeTest {
         val env = envFile.readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge header test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> LiveHttp.client(block) }, Config("bridge header test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
         val gate = b.watching(Watched.Session)
         assertEquals(Answer.Done, b.ask(Call.SessionStart))
         gate.until { (it as Update.Session).gate as? Gate.SignIn }
@@ -450,7 +450,7 @@ class LiveBridgeTest {
         val env = envFile.readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge move test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> LiveHttp.client(block) }, Config("bridge move test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
         val gate = b.watching(Watched.Session)
         assertEquals(Answer.Done, b.ask(Call.SessionStart))
         gate.until { (it as Update.Session).gate as? Gate.SignIn }
@@ -599,7 +599,7 @@ class LiveBridgeTest {
         val env = envFile.readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge share test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> LiveHttp.client(block) }, Config("bridge share test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
         val gate = b.watching(Watched.Session)
         assertEquals(Answer.Done, b.ask(Call.SessionStart))
         gate.until { (it as Update.Session).gate as? Gate.SignIn }
@@ -770,7 +770,7 @@ class LiveBridgeTest {
             val account = VeyqAccount.signIn(
                 BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
                 ThisDevice(store, NoDeviceKeys, "bridge live poll test, the other device", BouncyCastlePrimitives),
-            ) { block -> HttpClient(OkHttp, block) }
+            ) { block -> LiveHttp.client(block) }
             val tenant = account.open(account.tenants.first { it.tenantId == first.shown!!.tenant.tenantId })
             val other = assertNotNull(me.raddatz.veyq.mobile.expenses.PotSession.open(tenant, ref.scopeId, ref.nodeId), "the other device did not open $name")
             val payer = other.ledger!!.participants.first { it.active && !it.erased }
@@ -979,7 +979,7 @@ class LiveBridgeTest {
             val account = VeyqAccount.signIn(
                 BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
                 ThisDevice(store, NoDeviceKeys, "bridge live editor test, the other device", BouncyCastlePrimitives),
-            ) { block -> HttpClient(OkHttp, block) }
+            ) { block -> LiveHttp.client(block) }
             val tenant = account.open(account.tenants.first { it.tenantId == first.shown!!.tenant.tenantId })
             val other = assertNotNull(me.raddatz.veyq.mobile.expenses.PotSession.open(tenant, ref.scopeId, ref.nodeId), "the other device did not open $name")
             val expenseId = assertNotNull(idOf(reopened(), "Live expense"))
@@ -1254,7 +1254,7 @@ class LiveBridgeTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, "bridge live receipt test, the Server Owner", BouncyCastlePrimitives),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         val http = VeyqAccount::class.java.methods.single { it.name.startsWith("getHttp$") }.invoke(account) as HttpClient
         val api = me.raddatz.veyq.mobile.api.apis.TenantsApi(System.getenv("VEYQ_ADMIN_BASE") ?: "http://127.0.0.1:8090", http)
         val prior = api.getTenantStorage(tenantId).also { assertTrue(it.success, "the quota did not read: ${it.status}") }.body().quotaBytes?.takeIf { it != 1L }
@@ -1291,14 +1291,14 @@ class LiveBridgeTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, "bridge live file test, the uploader", BouncyCastlePrimitives),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         val tenant = account.open(account.tenants.first { origin.contains(it.domain) })
         val personalScope = tenant.spaces().first { it.kind == "PERSONAL" }.scopeId
         val folderName = "App depot ${System.currentTimeMillis() % 100_000}"
         val made = me.raddatz.veyq.mobile.session.FolderCreate.create(tenant, personalScope, null, folderName)
         val folderId = assertIs<me.raddatz.veyq.mobile.session.NodeCreate.Result.Done>(made, "$made").created.nodeId
         println("made $folderName")
-        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge file test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> LiveHttp.client(block) }, Config("bridge file test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
         suspend fun fresh(): Update.Shell {
             assertEquals(Answer.Done, b.ask(Call.ShellRefresh, timeout = 1.minutes))
             return b.watching(Watched.Shell).next() as Update.Shell
@@ -1654,7 +1654,7 @@ class LiveBridgeTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, device, BouncyCastlePrimitives),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         return account.open(account.tenants.first { origin.contains(it.domain) })
     }
 
@@ -1680,14 +1680,14 @@ class LiveBridgeTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, "bridge live medium test, the uploader", BouncyCastlePrimitives),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         val tenant = account.open(account.tenants.first { origin.contains(it.domain) })
         val personalScope = tenant.spaces().first { it.kind == "PERSONAL" }.scopeId
         val folderName = "App depot ${System.currentTimeMillis() % 100_000}"
         val made = me.raddatz.veyq.mobile.session.FolderCreate.create(tenant, personalScope, null, folderName)
         val folderId = assertIs<me.raddatz.veyq.mobile.session.NodeCreate.Result.Done>(made, "$made").created.nodeId
         println("made $folderName")
-        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge medium test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> LiveHttp.client(block) }, Config("bridge medium test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
         suspend fun fresh(): Update.Shell {
             assertEquals(Answer.Done, b.ask(Call.ShellRefresh, timeout = 1.minutes))
             return b.watching(Watched.Shell).next() as Update.Shell
@@ -1759,7 +1759,7 @@ class LiveBridgeTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, "bridge live desktop pass, the uploader", BouncyCastlePrimitives),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         val tenant = account.open(account.tenants.first { origin.contains(it.domain) })
         val scope = tenant.spaces().first { it.kind == "PERSONAL" }.scopeId
         if (System.getenv("VEYQ_LIVE_DEPOT_PASS_PURGE") == "1") {
@@ -1899,7 +1899,7 @@ class LiveBridgeTest {
         val env = envFile.readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config(device), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> LiveHttp.client(block) }, Config(device), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
         val gate = b.watching(Watched.Session)
         assertEquals(Answer.Done, b.ask(Call.SessionStart))
         gate.until { (it as Update.Session).gate as? Gate.SignIn }
@@ -2174,7 +2174,7 @@ class LiveBridgeTest {
         val env = envFile.readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge share list"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> LiveHttp.client(block) }, Config("bridge share list"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
         val gate = b.watching(Watched.Session)
         assertEquals(Answer.Done, b.ask(Call.SessionStart))
         gate.until { (it as Update.Session).gate as? Gate.SignIn }
@@ -2204,7 +2204,7 @@ class LiveBridgeTest {
         val env = envFile.readLines()
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
-        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge no-room test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> LiveHttp.client(block) }, Config("bridge no-room test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
         val gate = b.watching(Watched.Session)
         assertEquals(Answer.Done, b.ask(Call.SessionStart))
         gate.until { (it as Update.Session).gate as? Gate.SignIn }
@@ -2273,7 +2273,7 @@ class LiveBridgeTest {
         val token = "veyqkit:" + kotlin.io.encoding.Base64.UrlSafe.withPadding(kotlin.io.encoding.Base64.PaddingOption.ABSENT).encode(json.encodeToByteArray())
         val dir = File(System.getProperty("user.dir"), "build/live-kit").apply { mkdirs() }
         val kit = File(dir, "kit-${System.nanoTime()}.pdf")
-        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge kit test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> LiveHttp.client(block) }, Config("bridge kit test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
         try {
             kit.writeBytes("%PDF-1.4\n1 0 obj\n<< /Keywords ($token) >>\nendobj\ntrailer\n<< /Info 1 0 R >>\n%%EOF\n".encodeToByteArray())
             val gate = b.watching(Watched.Session)
@@ -2307,7 +2307,7 @@ class LiveBridgeTest {
             val env = envFile.readLines()
                 .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
                 .toMap()
-            val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge settings test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
+            val b = Bridge.live(BouncyCastlePrimitives, { block -> LiveHttp.client(block) }, Config("bridge settings test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles)
             try {
                 val gate = b.watching(Watched.Session)
                 val shell = b.watching(Watched.Shell)
@@ -2373,7 +2373,7 @@ class LiveBridgeTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, "bridge live memory test, the purge", BouncyCastlePrimitives),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         val tenant = account.open(account.tenants.first { origin.contains(it.domain) })
         val personalScope = tenant.spaces().first { it.kind == "PERSONAL" }.scopeId
 
@@ -2413,7 +2413,7 @@ class LiveBridgeTest {
             }
         }
         val b = Bridge.live(
-            BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge memory test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles,
+            BouncyCastlePrimitives, { block -> LiveHttp.client(block) }, Config("bridge memory test"), hostStore(ConcurrentHashMap()), { NoDeviceKeys }, JvmFiles,
             tiers = HostTiers(tiersHost),
         )
         val dir = java.nio.file.Files.createTempDirectory("veyq-live-memory").toFile()
@@ -2532,7 +2532,7 @@ class LiveBridgeTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             ThisDevice(store, NoDeviceKeys, "bridge test, the core's own read", BouncyCastlePrimitives),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         val tenant = account.open(account.tenants.first { it.tenantId == tenantId })
         tenant.avatars.sync(tenant.people.values)
         return assertNotNull(tenant.avatars.pictureOf(userId), "the core's own read has no picture of $userId")
