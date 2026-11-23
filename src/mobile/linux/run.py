@@ -462,7 +462,9 @@ SANDBOX_SKIPS = ("core_ui::avatars::tests::a_picture_as_the_web_writes_it_decode
                  "core_ui::media_tiers::tests::a_file_that_does_not_decode_has_no_tiers",
                  "core_ui::media_tiers::tests::the_reply_packs_the_preview_then_the_thumbnail",
                  # an SVG through glycin's sandboxed librsvg, held to inbox #1059's threat model (file_page.rs)
-                 "apps::depot::file_page::tests::an_svg_draws_with_nothing_in_it_run_or_fetched")
+                 "apps::depot::file_page::tests::an_svg_draws_with_nothing_in_it_run_or_fetched",
+                 # and drawn again at a zoom's size, its vectors at that size (file_page.rs)
+                 "apps::depot::file_page::tests::a_zoomed_svg_is_drawn_at_its_size_not_enlarged")
 
 
 def runtime_pins(flatpak_arch: str) -> dict[str, str]:

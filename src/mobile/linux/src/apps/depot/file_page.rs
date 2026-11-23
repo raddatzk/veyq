@@ -243,6 +243,10 @@ impl Inner {
         match s.view {
             FileViewKind::Loading => self.replace(&spinner(&s.words.as_deref().map(said::key).unwrap_or_default())),
             FileViewKind::Text => self.replace(&text_view(s.text.as_deref().unwrap_or_default(), s.truncated.as_ref().map(said::notice))),
+            FileViewKind::Image if s.media_type.as_deref() == Some(SVG) => {
+                self.replace(&spinner(&words::file_opening()));
+                self.load(|inner, bytes, scale| SvgZoom::show(inner, bytes, scale));
+            }
             FileViewKind::Image => {
                 self.replace(&spinner(&words::file_opening()));
                 let edge = s.edge.unwrap_or(4096);
@@ -527,6 +531,170 @@ fn picture(bytes: Vec<u8>, edge: i32) -> gtk::Widget {
     picture.upcast()
 }
 
+/// An SVG's type (core's `FileView.SVG`).
+const SVG: &str = "image/svg+xml";
+
+/// [bytes] (an SVG) drawn by GTK's loaders — gdk-pixbuf over glycin's sandboxed librsvg, as [decoded] — at [width] ×
+/// [height] pixels: the loader is asked for that size before it draws, so librsvg renders the vectors at it (never an
+/// enlarged bitmap).
+fn rendered(bytes: &[u8], width: i32, height: i32) -> Result<gdk::Texture, glib::Error> {
+    let loader = gtk::gdk_pixbuf::PixbufLoader::new();
+    loader.connect_size_prepared(move |l, _, _| l.set_size(width, height));
+    loader.write(bytes)?;
+    loader.close()?;
+    let pixbuf = loader.pixbuf().ok_or_else(|| glib::Error::new(glib::FileError::Failed, "no picture"))?;
+    let format = if pixbuf.has_alpha() { gdk::MemoryFormat::R8g8b8a8 } else { gdk::MemoryFormat::R8g8b8 };
+    Ok(gdk::MemoryTexture::new(pixbuf.width(), pixbuf.height(), format, &pixbuf.read_pixel_bytes(), pixbuf.rowstride() as usize).upcast())
+}
+
+/// An SVG on a file's page (inbox #1059; ADR 0155 § The file facts' slice D15), zoomable and sharp at every zoom as the
+/// web's is: at ×1 the picture fitted into the view (never past its own size), each zoom step (the core's, `File.SvgPage`)
+/// drawn again by the loader at the zoom's size × the screen's scale, within the core's cap (`File.SvgRaster`: at most
+/// 4096 × 4096 pixels — the cap wins over sharpness, so a large picture zoomed far is drawn coarser). A `foreignObject` never
+/// gets here (`SvgView.refused`, in the core's open).
+struct SvgZoom {
+    bytes: Vec<u8>,
+    natural: (f64, f64),
+    steps: Vec<f64>,
+    step: Cell<usize>,
+    scale: i32,
+    scroll: gtk::ScrolledWindow,
+    picture: gtk::Picture,
+    level: gtk::Label,
+    buttons: [gtk::Button; 3],
+}
+
+impl SvgZoom {
+    /// The SVG in [bytes] shown on [inner]'s page; one the loader cannot draw is said as not shown here.
+    fn show(inner: &Rc<Inner>, bytes: Vec<u8>, scale: i32) {
+        let first = match decoded(bytes.clone()) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("veyq: the file's SVG did not decode: {e}");
+                return inner.replace(&message(&words::file_unsupported()));
+            }
+        };
+        let weak = Rc::downgrade(inner);
+        let asked = *inner.drawn.borrow();
+        glib::spawn_future_local(async move {
+            let steps = match bridge::call(&Call::FileSvgPage).await {
+                Ok((Answer::SvgPage { steps, .. }, _)) => steps,
+                other => {
+                    eprintln!("veyq: File.SvgPage answered {:?}", other.map(|(a, _)| a));
+                    vec![1.0]
+                }
+            };
+            let Some(inner) = weak.upgrade().filter(|inner| *inner.drawn.borrow() == asked) else { return };
+            let zoom = Rc::new(SvgZoom::new(bytes, &first, steps, scale));
+            inner.replace(&zoom.widget(&first));
+        });
+    }
+
+    fn new(bytes: Vec<u8>, first: &gdk::Texture, steps: Vec<f64>, scale: i32) -> Self {
+        let button = |icon: &str, label: String| {
+            let b = gtk::Button::builder().icon_name(icon).tooltip_text(&label).build();
+            b.update_property(&[gtk::accessible::Property::Label(&label)]);
+            b.add_css_class("flat");
+            b
+        };
+        SvgZoom {
+            bytes,
+            natural: (first.width() as f64, first.height() as f64),
+            steps,
+            step: Cell::new(0),
+            scale,
+            scroll: gtk::ScrolledWindow::builder().vexpand(true).hexpand(true).build(),
+            picture: gtk::Picture::new(),
+            level: gtk::Label::new(Some("100 %")),
+            buttons: [
+                button("zoom-out-symbolic", words::file_zoom_out()),
+                button("zoom-in-symbolic", words::file_zoom_in()),
+                button("zoom-fit-best-symbolic", words::file_zoom_fit()),
+            ],
+        }
+    }
+
+    fn widget(self: &Rc<Self>, first: &gdk::Texture) -> gtk::Widget {
+        let bar = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+        bar.set_halign(gtk::Align::End);
+        let [out, zoom_in, fit] = &self.buttons;
+        bar.append(out);
+        bar.append(&self.level);
+        bar.append(zoom_in);
+        bar.append(fit);
+        for (b, to) in [(out, -1i32), (zoom_in, 1), (fit, i32::MIN)] {
+            let weak = Rc::downgrade(self);
+            b.connect_clicked(move |_| {
+                if let Some(z) = weak.upgrade() {
+                    let next = if to == i32::MIN { 0 } else { (z.step.get() as i32 + to).clamp(0, z.steps.len() as i32 - 1) as usize };
+                    z.zoom(next);
+                }
+            });
+        }
+        // ×1: the picture at its own size, fitted into the view by GTK (never enlarged)
+        self.picture.set_paintable(Some(first));
+        self.fitted();
+        self.picture.update_property(&[gtk::accessible::Property::Label(&format!("{}×{}", self.natural.0, self.natural.1))]);
+        self.scroll.set_child(Some(&self.picture));
+        self.steps_shown();
+        let column = gtk::Box::new(gtk::Orientation::Vertical, 8);
+        column.set_vexpand(true);
+        column.append(&bar);
+        column.append(&self.scroll);
+        column.upcast()
+    }
+
+    fn fitted(&self) {
+        self.picture.set_size_request(-1, -1);
+        self.picture.set_can_shrink(true);
+        self.picture.set_content_fit(gtk::ContentFit::ScaleDown);
+    }
+
+    fn steps_shown(&self) {
+        let i = self.step.get();
+        self.level.set_text(&format!("{} %", (self.steps[i] * 100.0).round()));
+        self.buttons[0].set_sensitive(i > 0);
+        self.buttons[1].set_sensitive(i + 1 < self.steps.len());
+        self.buttons[2].set_sensitive(i > 0);
+    }
+
+    /// Zoomed to step [next]: the picture laid out at the fitted size × the step, drawn again at that size × the screen's
+    /// scale within the core's cap.
+    fn zoom(self: &Rc<Self>, next: usize) {
+        self.step.set(next);
+        self.steps_shown();
+        if next == 0 {
+            if let Ok(t) = decoded(self.bytes.clone()) {
+                self.picture.set_paintable(Some(&t));
+            }
+            return self.fitted();
+        }
+        let (w, h) = self.natural;
+        let room = (self.scroll.width().max(1) as f64, self.scroll.height().max(1) as f64);
+        let fit = (room.0 / w).min(room.1 / h).min(1.0);
+        let (lw, lh) = (w * fit * self.steps[next], h * fit * self.steps[next]);
+        let weak = Rc::downgrade(self);
+        let scale = self.scale as f64;
+        glib::spawn_future_local(async move {
+            let raster = bridge::call(&Call::FileSvgRaster { width: lw, height: lh, ratio: scale }).await;
+            let Some(z) = weak.upgrade().filter(|z| z.step.get() == next) else { return };
+            let Ok((Answer::SvgRaster { width, height, ratio }, _)) = raster else {
+                return eprintln!("veyq: File.SvgRaster answered {:?}", raster.map(|(a, _)| a));
+            };
+            match rendered(&z.bytes, width, height) {
+                Ok(t) => {
+                    eprintln!("veyq: file SVG at ×{}: {width}×{height} px for {lw:.0}×{lh:.0} ({ratio:.2} px each)", z.steps[next]);
+                    z.picture.set_paintable(Some(&t));
+                    z.picture.set_can_shrink(false);
+                    z.picture.set_content_fit(gtk::ContentFit::Fill);
+                    z.picture.set_size_request(lw.round() as i32, lh.round() as i32);
+                }
+                Err(e) => eprintln!("veyq: the file's SVG did not draw at ×{}: {e}", z.steps[next]),
+            }
+        });
+    }
+}
+
 /// A PDF's pages in a scroll, each a frame of its page's size at first; a page is rendered (poppler, from memory) when it
 /// comes near the view and let go again when it is far from it, so a long PDF holds a few pages' pixels, not all.
 struct PdfPages {
@@ -744,5 +912,21 @@ mod tests {
         stop.store(true, Ordering::SeqCst);
         watcher.join().unwrap();
         assert_eq!(hits.load(Ordering::SeqCst), 0, "an SVG drawn as a picture reached the network");
+    }
+
+    /// A zoom stays sharp (inbox #1059, owner 2026-11-22): the loader draws the SVG's vectors at the size asked, so a 10-unit
+    /// square's edge at ×10 falls between two pixels, one opaque and one clear — an enlarged 10-pixel bitmap would smear it
+    /// across several partly covered pixels. Runs where glycin runs (SANDBOX_SKIPS).
+    #[test]
+    fn a_zoomed_svg_is_drawn_at_its_size_not_enlarged() {
+        let svg = br##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect x="0" y="0" width="10" height="20" fill="#000"/></svg>"##;
+        let natural = decoded(svg.to_vec()).expect("an SVG decodes");
+        assert_eq!((natural.width(), natural.height()), (20, 20));
+        let zoomed = rendered(svg, 200, 200).expect("the SVG draws at a size asked");
+        assert_eq!((zoomed.width(), zoomed.height()), (200, 200));
+        assert_eq!(alpha(&zoomed, 99, 100), 255, "inside the square's edge");
+        assert_eq!(alpha(&zoomed, 100, 100), 0, "outside the square's edge");
+        let partly = (90..110).filter(|x| !matches!(alpha(&zoomed, *x, 100), 0 | 255)).count();
+        assert_eq!(partly, 0, "the edge is smeared: an enlarged bitmap");
     }
 }
