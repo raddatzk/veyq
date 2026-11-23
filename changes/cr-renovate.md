@@ -136,23 +136,33 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
   · Done when: the variable and the secret exist in `renovate`, and a dispatch of `renovate.yml` on `main` is green.
   Measured 2026-11-23: run 45140008011 on `main` `8869a0322` was green and logged `App veyq-renovate reaches:
   raddatzk/veyq`.
-- [ ] **2 dry run beside Dependabot.** Add `renovate.yml` and `renovate.json5` with `dryRun: "full"`. Port the version
+- [x] **2 dry run beside Dependabot.** Add `renovate.yml` and `renovate.json5` with `dryRun: "full"`. Port the version
   policy: every Dependabot group and `ignore` rule as a `packageRule` with its reason. Measure the Node.js LTS question
   first. Dependabot stays untouched.
   · Done when: a dispatched run's log lists every update Dependabot proposed on its last run, and none it held back.
   Each ported rule is bitten: deleting it makes the dry run propose the held-back version.
-  Built 2026-11-23 (PR pending dispatch): `renovate.json5` ports every group and `ignore` rule, and `renovate.yml`
+  Built 2026-11-23 (PR #54): `renovate.json5` ports every group and `ignore` rule, and `renovate.yml`
   runs Renovate 44.257.9 with `RENOVATE_DRY_RUN=full`, weekly in Dependabot's slot and on dispatch. Measured in a local
   lookup-only run of the pinned image against `main` (`--platform=local`, report file): it proposes everything
   Dependabot's last run proposed that `main` does not hold yet (#46 mailpit, traefik, distroless, node 26; #47 astro;
   #48 the Gradle wrapper and awssdk; #49 @lucide/vue; #49's vitest and vue-i18n were already on `main`), and nothing a
   rule holds back. Bitten in one run with every hold-back rule removed: TypeScript 7, openapi-generator 7.27, MariaDB
-  13, Garage 2.5, nginx 1.31, Ubuntu 26.04 and Java 26/27 each came back. What is left: the dispatched run on `main`.
+  13, Garage 2.5, nginx 1.31, Ubuntu 26.04 and Java 26/27 each came back. Measured on GitHub 2026-11-23: dispatch
+  run 45149606386 on `main` `3bf0aef2f` was green and logged `DRY-RUN: Would commit files to branch` for the same
+  seven branches as the local run (actions, gradle minor and patch, images, node-major, npm minor and patch, the site
+  group, postcss-nested 9), then `Repository finished`. `gh run view --log` cuts this log short; the run's log archive
+  (`gh api repos/raddatzk/veyq/actions/runs/<id>/logs`) holds all of it. Two warnings, both for later phases: the
+  Gradle wrapper's files are not regenerated, because `gradleWrapper` is not in `allowedUnsafeExecutions` (phase 3);
+  and branch protection cannot be read without administration, which Renovate handles as foreseen in phase 1.
 - [x] **3 every pin reached.**
   - Custom managers for each unreached pin.
   - `pin_follow.py` with its self-test: the Helm SHA-256, checked three ways as the Helm pin's comment does (the
     `.sha256sum` file, the tarball's hash, the release notes); `lock.py`; `build.py --write`.
   - Pin the three bare `pip install pyyaml`.
+  - Decide `allowedUnsafeExecutions: ["gradleWrapper"]` (phase 2's run warned that the wrapper update leaves its
+    files stale). It runs the repository's Gradle, with the build's plugins, in the job that holds the App's token:
+    a malicious plugin version could read the token from Renovate's process. The alternative is a `postUpgradeTask`
+    or a `Checks` job that regenerates the wrapper files, and a guard that refuses a wrapper bump without them.
   - `pin_inventory.py` and the `pins` job in `Checks`.
 
   · Done when: the dry run extracts every pin `pin_inventory.py` finds. A pin added without a manager turns `pins` red,

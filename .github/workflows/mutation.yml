@@ -207,6 +207,13 @@ jobs:
           restore-keys: |
             stryker-incremental-
 
+      # The OpenAPI generator JAR, cached and verified as checks.yml's `frontend` says.
+      - name: Restore the OpenAPI generator JAR
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.openapi-generator
+          key: openapi-generator-jar-${{ hashFiles('scripts/openapi_generator_jar.sha256', 'src/web/openapitools.json', 'src/admin-web/openapitools.json') }}
+
       - name: Install dependencies
         # From the workspace root: one `pnpm install` links `@veyq/crypto` into src/web/ and runs each workspace's
         # `prepare` -> `generate:api`, so the generated API client the full dry-run suite imports exists

@@ -64,19 +64,53 @@ async function sha256Of(stream) {
   return hash.digest("hex");
 }
 
+// Maven Central rate-limits: CI starts several installing jobs at once, and on 2026-11-22 it answered HTTP 429 to both
+// packages' download in one job. CI restores the JAR from a cache first (checks.yml's `frontend` says how), so this runs
+// only on a cold key; there an answer that says "later" (429, 5xx) or a dropped connection is asked again, at most
+// RETRY_DELAYS_MS.length more times, waiting the server's Retry-After when it names one (capped) or the next delay.
+// Bounded on purpose: a timeout is not retried (it already waited five minutes), and the bytes of whichever attempt
+// answers are hashed below exactly as a first answer's are — a retry never weakens the check, it only re-asks.
+const RETRY_DELAYS_MS = [10_000, 30_000];
+const RETRY_AFTER_CAP_MS = 60_000;
+
+function retryable(status) {
+  return status === 429 || (status >= 500 && status <= 599);
+}
+
+function delayFor(response, attempt) {
+  const header = response?.headers.get("retry-after");
+  const seconds = header && /^\d+$/.test(header.trim()) ? Number(header.trim()) : NaN;
+  return Number.isFinite(seconds) ? Math.min(seconds * 1000, RETRY_AFTER_CAP_MS) : RETRY_DELAYS_MS[attempt];
+}
+
+async function fetchWithRetry(url) {
+  for (let attempt = 0; ; attempt++) {
+    const last = attempt >= RETRY_DELAYS_MS.length;
+    let response;
+    try {
+      response = await fetch(url, { signal: AbortSignal.timeout(300_000) });
+    } catch (e) {
+      if (last || e.name === "TimeoutError" || e.name === "AbortError") fail(`download of ${url} failed: ${e.message}`);
+      console.warn(`[verify-openapi-generator-jar] download of ${url} failed (${e.message}); asking again`);
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+      continue;
+    }
+    if (response.ok && response.body) return response;
+    if (last || !retryable(response.status)) fail(`download of ${url} answered HTTP ${response.status}`);
+    const wait = delayFor(response, attempt);
+    await response.body?.cancel();
+    console.warn(`[verify-openapi-generator-jar] ${url} answered HTTP ${response.status}; asking again in ${wait / 1000}s`);
+    await new Promise((resolve) => setTimeout(resolve, wait));
+  }
+}
+
 if (!existsSync(jar)) {
   const url = `${CENTRAL}/${version}/openapi-generator-cli-${version}.jar`;
   mkdirSync(storage, { recursive: true });
   // A per-process partial file renamed into place only after it matched: src/web/ and src/admin-web/ can run this at the
   // same time during one `pnpm install`, and neither may ever see a half-written or unverified <version>.jar.
   const partial = path.join(storage, `.${version}.jar.${process.pid}.partial`);
-  let response;
-  try {
-    response = await fetch(url, { signal: AbortSignal.timeout(300_000) });
-  } catch (e) {
-    fail(`download of ${url} failed: ${e.message}`);
-  }
-  if (!response.ok || !response.body) fail(`download of ${url} answered HTTP ${response.status}`);
+  const response = await fetchWithRetry(url);
   const hash = createHash("sha256");
   const body = Readable.fromWeb(response.body);
   body.on("data", (chunk) => hash.update(chunk));
