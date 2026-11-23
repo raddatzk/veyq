@@ -1,10 +1,14 @@
 package me.raddatz.veyq.mobile.audio
 
-// The core's music player (ADR 0142 decision 1; ADR 0135 decision 6), the web's `core/audio/order.ts` ported: the order a
-// queue plays in. Always shuffled and endless, no toggle: each round is a fresh permutation (Fisher–Yates over the suite's
+import kotlin.math.floor
+
+// The core's music player (ADR 0142 decision 1; ADR 0135 decision 6): the order a queue plays in — every client's rule,
+// the web's through `@veyq/core-js/audio` (ADR 0155 decision 7.2), held by `contracts/platform/audio/v1-vectors.json`.
+// Always shuffled and endless, no toggle: each round is a fresh permutation (Fisher–Yates over the suite's
 // `randomBytes`), and with two or more tracks a round never starts with the track that ended the one before. Next goes
 // forward; previous restarts the current track when it is more than 3 s in, and otherwise goes back through the tracks
-// played. A start track plays first, the rest of its round shuffled. Pure: the randomness is handed in.
+// played. A start track plays first, the rest of its round shuffled. Pure: the randomness is handed in, and the vectors
+// script every draw and the `n` it is asked with, so the order of the calls is part of the rule.
 
 /** A uniformly random integer in `[0, n)`. */
 typealias RandomInt = (n: Int) -> Int
@@ -12,21 +16,27 @@ typealias RandomInt = (n: Int) -> Int
 /** How far into a track "previous" restarts it instead of going back. */
 const val PREVIOUS_RESTARTS_AFTER_MS = 3000L
 
-/** [randomBytes] (the suite's, `Primitives.randomBytes`) as a [RandomInt], unbiased by rejection — the web's `cryptoRandomInt`. */
+private const val WORDS = 4294967296.0 // 2^32
+private const val RESTARTS_AFTER = 3000.0 // PREVIOUS_RESTARTS_AFTER_MS
+
+/**
+ * [randomBytes] (the suite's, `Primitives.randomBytes`) as a [RandomInt], unbiased by rejection: a 32-bit word — its four
+ * bytes little-endian, as the web's `crypto.getRandomValues` fills a `Uint32Array` — at or past the largest multiple of
+ * `n` below 2^32 is drawn again. On `Double`s, exact below 2^53, so no `Long` runs where the web draws.
+ */
 fun randomIntOf(randomBytes: (Int) -> ByteArray): RandomInt = { n ->
     if (n <= 1) {
         0
     } else {
-        val range = 0x1_0000_0000L
-        val limit = (range / n) * n
-        var picked = -1L
+        val limit = floor(WORDS / n) * n
+        var picked = -1
         while (picked < 0) {
             val b = randomBytes(4)
-            val word = ((b[0].toLong() and 0xff) shl 24) or ((b[1].toLong() and 0xff) shl 16) or
-                ((b[2].toLong() and 0xff) shl 8) or (b[3].toLong() and 0xff)
-            if (word < limit) picked = word % n
+            val word = (b[0].toInt() and 0xff) + (b[1].toInt() and 0xff) * 256.0 + (b[2].toInt() and 0xff) * 65536.0 +
+                (b[3].toInt() and 0xff) * 16777216.0
+            if (word < limit) picked = (word % n).toInt()
         }
-        picked.toInt()
+        picked
     }
 }
 
@@ -66,7 +76,10 @@ class PlayOrder(ids: List<String>, private val random: RandomInt, startId: Strin
     private var ids: List<String> = ids.distinct()
     private val played = mutableListOf<String>()
     private var at = -1
-    private var pending: MutableList<String> = nextRound(this.ids, null, random, startId).toMutableList()
+    // The rest of the round from [head] on: read forward, never shifted — a list's `removeAt(0)` moves the whole round on
+    // every step (measured on JavaScript: a 10,000-track queue 4.2× the web's `shift()`, whose engine trims in place).
+    private var pending: List<String> = nextRound(this.ids, null, random, startId)
+    private var head = 0
 
     init {
         next()
@@ -79,8 +92,7 @@ class PlayOrder(ids: List<String>, private val random: RandomInt, startId: Strin
     fun next(): String? {
         if (at < played.size - 1) return played[++at]
         if (ids.isEmpty()) return null
-        if (pending.isEmpty()) pending = nextRound(ids, current(), random).toMutableList()
-        val id = pending.removeAt(0)
+        val id = take()
         played += id
         at = played.size - 1
         return id
@@ -90,22 +102,34 @@ class PlayOrder(ids: List<String>, private val random: RandomInt, startId: Strin
     fun peek(): String? {
         if (at < played.size - 1) return played[at + 1]
         if (ids.isEmpty()) return null
-        if (pending.isEmpty()) pending = nextRound(ids, current(), random).toMutableList()
-        val id = pending.removeAt(0)
+        val id = take()
         played += id
         return id
     }
 
-    /** Go back — or restart, where the track is more than 3 s in or nothing was played before it. */
-    fun previous(positionMs: Long): PreviousStep {
-        if (positionMs > PREVIOUS_RESTARTS_AFTER_MS || at <= 0) return PreviousStep.Restart
+    /** The round's next track, a fresh round first where this one is through. */
+    private fun take(): String {
+        if (head >= pending.size) {
+            pending = nextRound(ids, current(), random)
+            head = 0
+        }
+        return pending[head++]
+    }
+
+    /** Go back — or restart, where the track is more than 3 s in or nothing was played before it. [positionMs] as the
+     *  player reads it, fractional on the web: 3000.5 is more than 3 s. */
+    fun previous(positionMs: Double): PreviousStep {
+        if (positionMs > RESTARTS_AFTER || at <= 0) return PreviousStep.Restart
         return PreviousStep.Back(played[--at])
     }
 
     /** Drop a track that does not play here: it leaves every round, and the history. */
     fun drop(id: String) {
         ids = ids.filter { it != id }
-        pending = pending.filter { it != id }.toMutableList()
+        val rest = ArrayList<String>(pending.size - head)
+        for (i in head until pending.size) if (pending[i] != id) rest += pending[i]
+        pending = rest
+        head = 0
         for (i in played.size - 1 downTo 0) {
             if (played[i] != id) continue
             played.removeAt(i)

@@ -4,7 +4,8 @@
 - **Type:** **Enabler** — structural foundation, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
 - **Status:** **built** — decided in [ADR 0135](../../../decisions/0135-background-music-is-a-nodes-own-audio-media-played-by-cores-player.md)
-  decisions 6–8: `src/web/src/core/audio/` (`order.ts`, `fades.ts`, `player.ts`, `AudioBar.vue`), mounted by
+  decisions 6–8: `src/web/src/core/audio/` (`player.ts`, `AudioBar.vue`; the order and the fades are the platform core's
+  `audio/`, drawn through `@veyq/core-js/audio` since ADR 0155's seventh slice), mounted by
   `AppShell.vue` and `ShareView.vue`; a lightbox video's interruption (`interrupt()`) is built by
   [ADR 0142](../../../decisions/0142-the-apps-play-a-nodes-music-through-the-cores-player-each-platform-plays-bytes-and-lends-its-system-controls.md)
   decision 13. The apps' port is built by the same ADR ([§ In the apps](#in-the-apps)): the Kotlin core's `audio/`,

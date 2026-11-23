@@ -1,4 +1,4 @@
-// One entry per façade (ADR 0155 decision 5): the platform's search, tree, share links, node plans, file facts, media headers and export archive share one module file, and a name of one
+// One entry per façade (ADR 0155 decision 5): the platform's search, tree, share links, node plans, file facts, media headers, export archive and music order share one module file, and a name of one
 // façade does not resolve through the other's entry, so the web's direction guard, which reads an import's entry, judges
 // every name by its owner. Checked by `pnpm run typecheck`: each `@ts-expect-error` below is itself an error the day the
 // name resolves. The controls import through the owner.
@@ -26,6 +26,11 @@ import { sniffImage as notTheMedias } from '@veyq/core-js/media'
 import { zipWriter as notTheMedias2 } from '@veyq/core-js/media'
 // @ts-expect-error -- the media headers' image size is no name of the export archive's entry
 import { imageSize as notTheExports } from '@veyq/core-js/export'
+// @ts-expect-error -- the music order is no name of the export archive's entry
+import { playOrder as notTheExports2 } from '@veyq/core-js/export'
+// @ts-expect-error -- the export archive's writer is no name of the music order's entry
+import { zipWriter as notTheAudios } from '@veyq/core-js/audio'
+import { playOrder } from '@veyq/core-js/audio'
 import { zipWriter } from '@veyq/core-js/export'
 import { sniffImage } from '@veyq/core-js/files'
 import { imageSize } from '@veyq/core-js/media'
@@ -34,4 +39,4 @@ import { headerPlan } from '@veyq/core-js/navigation'
 import { fold } from '@veyq/core-js/search'
 import { parseShareLink } from '@veyq/core-js/sharing'
 
-export const crossEntryNames = [notTheSearchs, notTheTrees, notTheTrees2, notTheTrees3, notTheSharings, notTheNavigations, orderLevel, fold, parseShareLink, headerPlan, notTheTrees4, notTheFiles, sniffImage, notTheFiles2, notTheMedias, imageSize, notTheMedias2, notTheExports, zipWriter]
+export const crossEntryNames = [notTheSearchs, notTheTrees, notTheTrees2, notTheTrees3, notTheSharings, notTheNavigations, orderLevel, fold, parseShareLink, headerPlan, notTheTrees4, notTheFiles, sniffImage, notTheFiles2, notTheMedias, imageSize, notTheMedias2, notTheExports, zipWriter, notTheExports2, notTheAudios, playOrder]
