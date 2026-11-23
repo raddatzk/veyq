@@ -271,7 +271,7 @@ public sealed class PdfWebTest
     }
 
     /// <summary>A plain top-level window of the predefined STATIC class: the controller's parent.</summary>
-    private sealed class Window : IDisposable
+    internal sealed class Window : IDisposable
     {
         public Window()
         {
@@ -337,7 +337,7 @@ public sealed class PdfWebTest
 
     /// <summary>An STA thread with a Win32 message loop and a synchronization context posting into it: what WebView2's
     /// controller and its events need, without a UI framework.</summary>
-    private sealed class Sta : SynchronizationContext
+    internal sealed class Sta : SynchronizationContext
     {
         private const uint WmApp = 0x8000;
         private readonly ConcurrentQueue<(SendOrPostCallback, object?)> _queue = new();

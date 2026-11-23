@@ -16,5 +16,5 @@ internal actual fun platformDeviceKeys(config: Config, store: DeviceStore): Devi
 /** The Credential Locker (WinRT's PasswordVault): a credential per guest session under its hashed name. */
 internal actual fun platformGuestSessions(): me.raddatz.veyq.mobile.sharing.GuestSessions = me.raddatz.veyq.mobile.sharing.WindowsGuestSessions()
 
-/** Whether an SVG is drawn as an image: not proven on Windows, so an SVG is shown as its text (inbox #1059). */
-internal actual fun platformDrawsSvgAsImage(): Boolean = false
+/** Whether an SVG is drawn as an image: WebView2's image mode, closed around it (inbox #1059, SvgWeb.cs, SvgWebTest). */
+internal actual fun platformDrawsSvgAsImage(): Boolean = true

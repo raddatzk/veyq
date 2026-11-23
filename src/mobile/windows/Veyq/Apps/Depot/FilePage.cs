@@ -159,6 +159,10 @@ internal sealed class FilePage : IDisposable
             case FileViewKind.Text:
                 _content.Content = Text(s.text ?? "", s.truncated is { } cut ? Said.Notice(cut) : null);
                 break;
+            case FileViewKind.Image when s.mediaType == "image/svg+xml":
+                _content.Content = Loading(Words.FileOpening());
+                Load(now, (bytes, _) => ShowSvg(now, bytes));
+                break;
             case FileViewKind.Image:
                 _content.Content = Loading(Words.FileOpening());
                 Load(now, async (bytes, _) => _content.Content = await Picture(bytes, s.edge ?? 4096));
@@ -501,6 +505,160 @@ internal sealed class FilePage : IDisposable
     {
         _web?.Close();
         _web = null;
+        _svg?.Close();
+        _svg = null;
+    }
+
+    /// <summary>The SVG in WebView2's image mode (SvgWeb), with the zoom's buttons; closed when the content changes.</summary>
+    private SvgWebView? _svg;
+
+    /// <summary>An SVG shown in the core's page (File.SvgPage) by WebView2's image mode; where WebView2 is missing or does
+    /// not start, it is said as not shown here (Save a copy stays among the header's commands).</summary>
+    private async Task ShowSvg((FileViewKind, int) asked, byte[] bytes)
+    {
+        var (answer, _) = await Core.CallAsync(new Call.FileSvgPage());
+        if (_closed || _drawn != asked) return;
+        if (answer is not Answer.SvgPage page || !PdfWeb.Available())
+        {
+            _content.Content = Message(Words.FileUnsupported());
+            return;
+        }
+        var web = new SvgWebView(SvgWeb.From(page), bytes);
+        _svg = web;
+        _content.Content = web.Element;
+        if (await web.Start())
+        {
+            Log.Write($"file SVG: in WebView2's image mode, {bytes.Length} B");
+            return;
+        }
+        if (_closed || _drawn != asked) return;
+        StopWeb();
+        _content.Content = Message(Words.FileUnsupported());
+    }
+
+    /// <summary>An SVG in WebView2's image mode (SvgWeb) under the zoom's buttons: a browser of its own, InPrivate, in a
+    /// user-data folder made for it and deleted once the browser has exited, the bytes served from memory. A zoom step runs
+    /// the core's script for it (the app's own; the page's script is off), which lays the picture out again at that scale.</summary>
+    private sealed class SvgWebView
+    {
+        private readonly SvgPage _page;
+        private readonly byte[] _bytes;
+        private readonly WebView2 _control = new() { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
+        private readonly Grid _root = new();
+        private readonly Button _out = new() { Content = new SymbolIcon(Symbol.ZoomOut) };
+        private readonly Button _in = new() { Content = new SymbolIcon(Symbol.ZoomIn) };
+        private readonly Button _fit = new() { Content = new FontIcon { Glyph = "" } };
+        private readonly TextBlock _level = new() { VerticalAlignment = VerticalAlignment.Center, MinWidth = 48, TextAlignment = TextAlignment.Center };
+        private string? _folder;
+        private CoreWebView2Environment? _environment;
+        private int _step;
+        private bool _closed;
+
+        public SvgWebView(SvgPage page, byte[] bytes)
+        {
+            _page = page;
+            _bytes = bytes;
+            AutomationProperties.SetAutomationId(_control, "file-svg-web");
+            foreach (var (button, name, id) in new[] { (_out, Words.FileZoomOut(), "file-svg-zoom-out"), (_in, Words.FileZoomIn(), "file-svg-zoom-in"), (_fit, Words.FileZoomFit(), "file-svg-zoom-fit") })
+            {
+                AutomationProperties.SetName(button, name);
+                AutomationProperties.SetAutomationId(button, id);
+                ToolTipService.SetToolTip(button, name);
+            }
+            _out.Click += (_, _) => Zoom(_step - 1);
+            _in.Click += (_, _) => Zoom(_step + 1);
+            _fit.Click += (_, _) => Zoom(0);
+            var bar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 0, 0, 8) };
+            bar.Children.Add(_out);
+            bar.Children.Add(_level);
+            bar.Children.Add(_in);
+            bar.Children.Add(_fit);
+            _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            _root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            Grid.SetRow(_control, 1);
+            _root.Children.Add(bar);
+            _root.Children.Add(_control);
+            Steps();
+        }
+
+        public UIElement Element => _root;
+
+        private void Steps()
+        {
+            _level.Text = $"{Math.Round(_page.Steps[_step] * 100)} %";
+            _out.IsEnabled = _step > 0;
+            _in.IsEnabled = _step < _page.Steps.Length - 1;
+            _fit.IsEnabled = _step > 0;
+        }
+
+        private async void Zoom(int step)
+        {
+            _step = Math.Clamp(step, 0, _page.Steps.Length - 1);
+            Steps();
+            try
+            {
+                if (_control.CoreWebView2 is { } core) await core.ExecuteScriptAsync(_page.Script(_step));
+            }
+            catch (Exception e)
+            {
+                Log.Write($"svg view: the zoom did not apply ({e.GetType().Name})");
+            }
+        }
+
+        /// <summary>The view started on the SVG; false where WebView2 did not start.</summary>
+        public async Task<bool> Start()
+        {
+            try
+            {
+                _folder = PdfWeb.NewFolder();
+                _environment = await PdfWeb.EnvironmentAsync(_folder);
+                if (_closed)
+                {
+                    Close();
+                    return true;
+                }
+                await _control.EnsureCoreWebView2Async(_environment, PdfWeb.ControllerOptions(_environment));
+                if (_closed)
+                {
+                    Close();
+                    return true;
+                }
+                SvgWeb.Show(_environment, _control.CoreWebView2, _page, _bytes);
+                return true;
+            }
+            catch (Exception e)
+            {
+                Log.Write($"WebView2's SVG view did not start ({e.GetType().Name}: {e.Message})");
+                Close();
+                return false;
+            }
+        }
+
+        /// <summary>The view closed; its folder deleted once its browser has exited.</summary>
+        public void Close()
+        {
+            _closed = true;
+            var folder = _folder;
+            var environment = _environment;
+            _folder = null;
+            _environment = null;
+            if (folder is null) return;
+            if (environment is null)
+            {
+                _ = PdfWeb.DeleteAsync(folder);
+                return;
+            }
+            var queue = _control.DispatcherQueue;
+            environment.BrowserProcessExited += (_, _) => queue.TryEnqueue(() => _ = PdfWeb.DeleteAsync(folder));
+            try
+            {
+                _control.Close();
+            }
+            catch (Exception e)
+            {
+                Log.Write($"WebView2's SVG view did not close ({e.GetType().Name})");
+            }
+        }
     }
 
     /// <summary>A PDF in WebView2's own viewer (PdfWeb): a browser of its own, InPrivate, in a user-data folder made for this

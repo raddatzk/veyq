@@ -316,6 +316,8 @@ PLATFORM_FORMAT_EXCEPTIONS: dict[tuple[str, str, str], str] = {
     ("windows", "windows/Veyq.Tests/MediaTiersTest.cs", 'TimeSpan.FromSeconds(1'): "a test video's frame moment, no notice's",
     ("windows", "windows/Veyq.Tests/PdfWebTest.cs", 'Task.Delay(3'): "a test's wait for WebView2, no notice's",
     ("windows", "windows/Veyq.Tests/PdfWebTest.cs", 'Task.Delay(1'): "a test's wait for WebView2, no notice's",
+    ("windows", "windows/Veyq.Tests/SvgWebTest.cs", 'Task.Delay(2'): "a test's wait for WebView2, no notice's",
+    ("windows", "windows/Veyq.Tests/SvgWebTest.cs", 'Task.Delay(3'): "a test's wait for WebView2, no notice's",
     ("linux", "linux/src/core_ui/said.rs", "adw::Toast::new"):
         "the one toast every notice is made by, its timeout the core's kind and lifetimes (`said::toast`)",
     ("linux", "linux/src/core_ui/said.rs", "localeconv"):
