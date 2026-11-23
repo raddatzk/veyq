@@ -156,7 +156,7 @@ object NodeExport {
     /**
      * Writes the ZIP of the tree [root] into [sink]: every directory, then each payload in walk order — streamed through and
      * hashed as it passes ([Sha256]), never held whole —, then the manifest. A payload that streams another size than it
-     * declared fails the archive (`ZipWriter.ZipFailure`).
+     * declared fails the archive (`ZipReader.ZipError` `SIZE_MISMATCH`).
      */
     suspend fun write(root: Entry, appVersion: String, nowMs: Long, sink: (ByteArray) -> Unit): Written {
         class Placed(val entry: Entry, val id: String, val path: String, val payloadPaths: List<String>, val children: List<Placed>)
@@ -175,7 +175,7 @@ object NodeExport {
         fun all(p: Placed): List<Placed> = listOf(p) + p.children.flatMap { all(it) }
         val walk = all(tree)
 
-        val zip = ZipWriter(sink, nowMs)
+        val zip = ZipWriter({ sink(it) }, nowMs)
         for (p in walk) if (p.entry.content?.asFile != true) zip.addDirectory(p.path)
         var bytes = 0L
         var count = 0

@@ -1,8 +1,8 @@
 package me.raddatz.veyq.mobile.export
 
 /**
- * A store-only ZIP read without being held (ADR 0152 decision 2), a port of the web's `core/export/zip.ts` reader, refusal
- * for refusal: the archive is untrusted input (ADR 0082 decision 10), so [open] checks the STRUCTURE before anything is read
+ * A store-only ZIP read without being held (ADR 0152 decision 2), every client's, the web's through `@veyq/core-js/export`
+ * (ADR 0155 decision 7.2): the archive is untrusted input (ADR 0082 decision 10), so [open] checks the STRUCTURE before anything is read
  * from an entry — the end records and every ZIP64 field in range, the directory inside the file and before its end record,
  * and for every entry its local header (signature, the same name), its bytes inside the file and before the directory, the
  * sizes and CRC its header or data descriptor declares equal to the directory's, and no two entries' spans overlapping. What
@@ -17,9 +17,10 @@ class ZipReader private constructor(private val read: Reader, val size: Long, pr
         suspend fun read(from: Long, length: Int): ByteArray
     }
 
-    /** Anything wrong with an archive being read; [code] is stable for callers, the message is for developers. */
+    /** Anything wrong with an archive being read or written ([ZipWriter]); [code] is stable for callers, the message is for
+     *  developers. */
     class ZipError(val code: Code, message: String) : Exception(message) {
-        enum class Code { NOT_ZIP, TRUNCATED, CORRUPT, UNSUPPORTED, CRC_MISMATCH, DUPLICATE, MISSING }
+        enum class Code { NOT_ZIP, TRUNCATED, CORRUPT, UNSUPPORTED, CRC_MISMATCH, SIZE_MISMATCH, DUPLICATE, MISSING }
     }
 
     /** One file of the archive: its name, its size, the CRC-32 its directory records, and where its bytes start. */
@@ -39,17 +40,37 @@ class ZipReader private constructor(private val read: Reader, val size: Long, pr
      * from this entry is bad": an import checks a payload whole before a hook takes it.
      */
     suspend fun stream(name: String, sink: suspend (ByteArray) -> Unit) {
-        val e = need(name)
-        var crc = Crc32.START
-        var at = e.dataAt
-        val end = e.dataAt + e.size
-        while (at < end) {
-            val chunk = readAt(read, size, at, minOf(at + READ_CHUNK, end))
-            crc = Crc32.update(crc, chunk)
-            sink(chunk)
-            at += chunk.size
+        val chunks = reading(name)
+        while (true) sink(chunks.next() ?: return)
+    }
+
+    /** Entry [name]'s bytes pulled a chunk at a time ([Chunks.next]); throws [ZipError.Code.MISSING] for no such entry. */
+    fun reading(name: String): Chunks = Chunks(need(name))
+
+    /**
+     * An entry's bytes, [READ_CHUNK] at a time: [next] hands out the next chunk, and after the last checks the CRC-32
+     * against the directory — `null` where it matches, [ZipError.Code.CRC_MISMATCH] where not, so a caller treats a
+     * mismatch as "everything taken from this entry is bad".
+     */
+    inner class Chunks internal constructor(private val e: Entry) {
+        private var at = e.dataAt
+        private val end = e.dataAt + e.size
+        private var crc = Crc32.START_INT
+        private var checked = false
+
+        suspend fun next(): ByteArray? {
+            if (at < end) {
+                val chunk = readAt(read, size, at, minOf(at + READ_CHUNK, end))
+                crc = Crc32.update(crc, chunk)
+                at += chunk.size
+                return chunk
+            }
+            if (!checked) {
+                checked = true
+                if ((Crc32.finish(crc).toLong() and 0xffffffffL) != e.crc32) throw ZipError(ZipError.Code.CRC_MISMATCH, "${e.name} does not match its checksum")
+            }
+            return null
         }
-        if (Crc32.finish(crc) != e.crc32) throw ZipError(ZipError.Code.CRC_MISMATCH, "$name does not match its checksum")
     }
 
     /** [length] bytes of entry [name] from [from] within it (fewer only at its end): seekable, its checksum NOT checked. */
