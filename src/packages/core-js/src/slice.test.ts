@@ -29,6 +29,7 @@ const ENTRIES: Record<string, { control: string }> = {
   files: { control: 'blob/Sniff.kt' },
   media: { control: 'media/ExifReader.kt' },
   export: { control: 'export/ManifestRules.kt' },
+  audio: { control: 'audio/Order.kt' },
 }
 
 /**
@@ -64,6 +65,10 @@ const SLICES: { slice: string; deletedGz: number; allowed?: { ratio: number; own
   // manifest.ts' check, payload walk and facts - 14,939 B min / 5,608 B gz, measured on sources (crc32.ts, 265 B gz, stays:
   // the digest worker's own primitive; the adapters that replace the two files are 1,292 B gz, so 4,316 B gz net).
   { slice: 'the export archive', deletedGz: 5_608 },
+  // the music order and fades (ADR 0155 decision 7.2.7, § The music order and fades' slice): order.ts' PlayOrder, nextRound,
+  // shuffled, cryptoRandomInt and PREVIOUS_RESTARTS_AFTER_MS, fades.ts' autoFadeMs, pressFadeMs, fadeOutAtMs, fadeLengthAt,
+  // FADE_MS and PRESS_FADE_MS - 1,905 B min / 864 B gz, measured on sources. The last of decision 7.2's list.
+  { slice: 'the music order and fades', deletedGz: 864 },
 ]
 const BUDGET_GZ = Math.floor(SEARCH_ALONE_GZ + SLICES.reduce((n, s) => n + (s.allowed?.ratio ?? R) * s.deletedGz, 0))
 
