@@ -31,12 +31,12 @@ describe('the slug token by route group (ADR 0080 decision 16)', () => {
 
 describe('nameTakenMessage', () => {
   it('names the sibling and its kind\'s noun', () => {
-    expect(nameTakenMessage(t, node('x1', 'FILE', 'Foto.JPG'))).toBe(t('node.nameTakenBy', { kind: t('depot.aFile'), name: 'Foto.JPG' }))
-    expect(nameTakenMessage(t, node('f1', 'FOLDER', 'Trips'))).toBe(t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'Trips' }))
-    expect(nameTakenMessage(t, node('m1', 'MEMORY', 'Rom'))).toBe(t('node.nameTakenBy', { kind: t('memory.aMemory'), name: 'Rom' }))
+    expect(nameTakenMessage(t, node('x1', 'FILE', 'Foto.JPG'))).toBe(t('words.node_name_taken_by', [t('depot.aFile'), 'Foto.JPG']))
+    expect(nameTakenMessage(t, node('f1', 'FOLDER', 'Trips'))).toBe(t('words.node_name_taken_by', [t('node.aFolder'), 'Trips']))
+    expect(nameTakenMessage(t, node('m1', 'MEMORY', 'Rom'))).toBe(t('words.node_name_taken_by', [t('memory.aMemory'), 'Rom']))
   })
 
   it('a kind nobody registered is the neutral item', () => {
-    expect(nameTakenMessage(t, node('u', 'SOMETHING_NEW', 'Rom'))).toBe(t('node.nameTakenBy', { kind: t('node.anItem'), name: 'Rom' }))
+    expect(nameTakenMessage(t, node('u', 'SOMETHING_NEW', 'Rom'))).toBe(t('words.node_name_taken_by', [t('words.node_an_item'), 'Rom']))
   })
 })

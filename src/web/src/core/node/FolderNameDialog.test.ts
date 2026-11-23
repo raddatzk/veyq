@@ -139,7 +139,7 @@ describe('FolderNameDialog', () => {
     await settle()
 
     expect(toastError).toHaveBeenCalledWith(t('share.nameResealFailed'))
-    expect(wrapper.text()).not.toContain(t('node.saveFailed'))
+    expect(wrapper.text()).not.toContain(t('words.node_save_failed'))
     expect(wrapper.emitted('done')).toBeTruthy()
   })
 
@@ -162,13 +162,13 @@ describe('FolderNameDialog', () => {
     await settle()
 
     expect(resealShareNames).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain(t('node.slugTaken'))
+    expect(wrapper.text()).toContain(t('words.node_slug_taken'))
   })
 
   it.each([
-    [409, 'node.slugTaken'],
-    [422, 'node.illegalStructure'],
-    [500, 'node.saveFailed'],
+    [409, 'words.node_slug_taken'],
+    [422, 'words.node_illegal_structure'],
+    [500, 'words.node_save_failed'],
   ])('maps a %i on create to %s and stays open', async (status, key) => {
     vi.mocked(createFolder).mockRejectedValueOnce(httpError(status))
     const wrapper = mountDialog({ mode: 'create', parentId: null })

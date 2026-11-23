@@ -1,4 +1,7 @@
 import { createI18n } from 'vue-i18n'
+// The words the web says as the apps do (ADR 0136 § The web's words): `generate_words.py --web` writes them from
+// `src/mobile/words/words.json`, the keys `web.json`'s `read` names, held fresh by `scripts/validate_web_words.py`.
+import words from './words.generated.json'
 
 // Focused message catalog for the setup slice (EN + DE). The full legacy catalog arrives as later UI
 // increments land; keys here mirror the legacy keys 1:1 so the reused views need no string changes.
@@ -23,7 +26,7 @@ const en = {
     preparing: 'Collecting what is in it…',
     summary: '{nodes} items, {files} files, {size}',
     skipped: 'Left out, because this version cannot download them:',
-    reason: { unsupported_kind: 'not supported', nothing_to_export: 'nothing in it' },
+    reason: { unsupported_kind: 'not supported' },
     save: 'Save as ZIP…',
     writing: 'Writing the file…',
     done: 'Download saved',
@@ -51,7 +54,6 @@ const en = {
     },
     importNothing: 'This version of veyq cannot import anything in it.',
     importRest: 'Import the rest',
-    importedLeftOut: 'Imported “{name}”. Left out: {names}',
     uploadAsFile: 'Upload as a file',
     importSummary: '{nodes} items, {size}, will be added to “{target}”.',
     importNotice: 'You become the owner of everything imported. Shares, members and the trash are not part of a download.',
@@ -149,7 +151,6 @@ const en = {
     },
     compromiseRotationMark: 'Needs a new lock',
     compromiseRotationRequeue: 'Start again',
-    compromiseRotationRequeueFailed: 'That didn’t work. Please try again.',
     pendingTitle: 'Pending invites',
     pendingSub: 'People you invited who have not joined yet. Send their invitation again or cancel it.',
     statusInvited: 'Invited',
@@ -660,7 +661,6 @@ const en = {
     consentGroupAddHint: 'When on, being added to a group becomes an invitation you accept or decline — nothing reaches you until you say yes. Applies in every space you belong to.',
     consentRequiredHere: 'This space asks everyone before adding them to a group, whatever this setting says.',
     save: 'Save profile',
-    saved: 'Profile updated.',
     saveFailed: 'Could not save your profile. Please try again.',
   },
   profilePicture: {
@@ -1344,11 +1344,6 @@ const en = {
     sent: 'Your report was received.',
     receipt: 'Reference {reference}, received {time}. Keep it if you want to refer to this report.',
     close: 'Close',
-    failed: 'The report could not be sent. Try again.',
-    tooManyOpen: 'You have too many reports that are still open. Wait until some of them are decided.',
-    rateLimited: 'Too many reports in a short time. Try again later.',
-    unavailable: 'Some of what you selected cannot be read here any more, so it cannot be reported. Reload the page.',
-    notFound: 'Some of what you selected is not here any more. Reload the page.',
   },
   // who runs this instance (core/operator/OperatorIdentification.vue; ADR 0035 decision 7), on the login and share pages
   operatorDetails: {
@@ -1828,12 +1823,9 @@ const en = {
     favoriteFailed: 'The favorite could not be saved. Try again.',
     rename: 'Rename',
     delete: 'Delete',
-    slugTaken: 'Something with a similar name already exists here.',
     // A member's create or rename refused before it is sent (inbox #389): `{kind}` is the colliding sibling's noun with
-    // its indefinite article, from its kind's `nounWithArticle` (else `node.anItem`); `{name}` is its decrypted name.
-    nameTakenBy: 'There is already {kind} named “{name}” here. Choose another name.',
+    // its indefinite article, from its kind's `nounWithArticle` (else `words.node_an_item`); `{name}` is its decrypted name.
     aFolder: 'a folder',
-    anItem: 'an item',
     aBookmark: 'a bookmark',
     // A bookmark of a link someone sent (ADR 0120): it opens and reports where the share lives.
     bookmark: {
@@ -1894,8 +1886,6 @@ const en = {
     // The level's two groups (`core/node/LevelView.vue`): their headings, shown only where both have something.
     groupFolders: 'Folders',
     groupContents: 'Contents',
-    illegalStructure: 'That isn’t allowed here.',
-    saveFailed: 'That didn’t work. Please try again.',
     // The delete question of one node (core's `DeleteNodesDialog`): a folder's own title and copy; any other node's title is its kind's
     // `deleteTitle` from the registry (Memories: `memory.deleteMemoryTitle`), else the neutral `node.delete`.
     deleteFolderTitle: 'Delete folder',
@@ -1907,16 +1897,10 @@ const en = {
     deleteMany: {
       title: 'Delete {count} item | Delete {count} items',
       copy: '{count} selected item moves to the trash, with everything inside it. The selection includes {kinds}. You can restore it from there until it is removed for good. | {count} selected items move to the trash, with everything inside them. The selection includes {kinds}. You can restore them from there until they are removed for good.',
-      moved: '{count} item moved to the trash. | {count} items moved to the trash.',
       noneDeleted: 'Nothing was deleted.',
       notDeleted: 'Not deleted:',
       reason: '“{name}”: {reason}',
       quoted: '“{name}”',
-      refused: {
-        gone: 'It is no longer there.',
-        scope_deleting: 'This space is being deleted.',
-        failed: 'Deleting didn’t work. Please try again.',
-      },
       undoFailed: 'Could not be restored: {names}. You can restore them from the trash.',
     },
     // The level's Select mode (`core/node/LevelView.vue`, inbox #421): the toolbar button, the bar's All / None, its count
@@ -1947,16 +1931,13 @@ const en = {
       submit: 'Copy here',
       preparing: 'Collecting what is in it…',
       summary: '{nodes} item, {size}, will be copied to “{target}”. | {nodes} items, {size}, will be copied to “{target}”.',
-      nothing: 'Nothing here can be copied by this version of veyq.',
       walkFailed: 'What is in it could not be read. Nothing was copied.',
       leftOut: 'Left out, because this version cannot copy them:',
       leftOutLine: '“{name}”: {reason}',
       reason: {
         unsupported_kind: 'not supported',
-        nothing_to_export: 'nothing in it',
         unknown_application: 'not supported',
         newer_content: 'not supported',
-        not_copyable: 'cannot be copied yet',
       },
       losses: 'What does not come along:',
       lossAlways: 'Shares, favourites, the trash and the original upload times. You become the owner of the copy.',
@@ -1978,7 +1959,6 @@ const en = {
       many: {
         title: 'Copy {count} item | Copy {count} items',
         hint: 'Open the place the copies should go to and choose “Copy here”. Everything inside them is copied along.',
-        copied: '{count} copied to “{to}”.',
         here: {
           self: '“{name}” can’t be copied into itself.',
           inside: '“{name}” can’t be copied into something inside it.',
@@ -2009,7 +1989,6 @@ const en = {
         identityFolder: 'Nothing can be moved into a guest’s folder.',
         kind: 'This place can’t hold it.',
       },
-      moved: '“{name}” moved to “{to}”.',
       undoFailed: '“{name}” could not be moved back. Please move it yourself.',
       // Refused before sending: a sibling at the destination already takes the name (`{kind}` its noun with article).
       nameTakenThere: 'There is already {kind} named “{name}” there. Rename one of them first, or choose another place.',
@@ -2027,7 +2006,6 @@ const en = {
           identityFolder: 'Nothing can be moved into a guest’s folder.',
           kind: 'This place can’t hold “{name}”.',
         },
-        moved: '{count} moved to “{to}”.',
         noneMoved: 'Nothing was moved.',
         notMoved: 'Not moved:',
         reason: '“{name}”: {reason}',
@@ -2040,17 +2018,10 @@ const en = {
       identityConfirm: '“{name}” becomes an ordinary folder: the guest who sent it can no longer add anything to it, and it cannot be moved back into the drop box. Everything in it stays readable for you.',
       identityAccept: 'Move out',
       refused: {
-        slug_taken: 'Something with this name already exists there. Rename it first, or choose another place.',
-        illegal_structure: 'It can’t be placed there: that place doesn’t take this kind of item.',
         illegal_scope: 'This link doesn’t allow moving it there.',
-        stale_placement: 'Someone else moved or renamed it at the same time. The view has been reloaded — please try again.',
         stale_epoch: 'The space’s keys were renewed in the meantime. Reload the page and try again.',
-        node_rekey_pending: 'The space’s new lock is still going in. Try again in a moment.',
         share_not_contributable: 'This link no longer lets you change anything.',
-        gone: 'It, or the place you chose, is no longer there.',
         rate_limited: 'Too many changes at once. Please wait a moment and try again.',
-        scope_deleting: 'This space is being deleted; nothing can be moved.',
-        failed: 'Moving didn’t work. Please try again.',
       },
     },
     // The space's node trash (core's `SpaceTrashDialog`): it holds every application's nodes, so it names none.
@@ -2063,9 +2034,6 @@ const en = {
       loadFailed: 'Could not open the trash. Please try again.',
       restore: 'Restore',
       restoreFailed: 'Could not restore this. Please try again.',
-      // The undo toast after a member's delete (core's `trashUndo.ts`, inbox #385 (c)) and its failed restore.
-      moved: '“{name}” moved to the trash.',
-      undoFailed: '“{name}” could not be restored. You can restore it from the trash.',
       deletedOn: 'Deleted {day}',
       purgeOn: 'removed for good on {day}',
       retryName: 'New name',
@@ -2081,13 +2049,10 @@ const en = {
   // read; `noSpace` is the neutral wording (P4d).
   upload: {
     title: 'Uploads',
-    active: '{count} active',
     none: 'No uploads',
     cancelAll: 'Cancel all',
     cancel: 'Cancel',
     retry: 'Retry',
-    status: { queued: 'Queued', preparing: 'Preparing…', uploading: 'Uploading…', done: 'Done', failed: 'Failed', cancelled: 'Cancelled' },
-    noSpace: 'No space left. Items in a trash still take up space until they are removed for good.',
     close: 'Close',
   },
   share: {
@@ -2125,7 +2090,6 @@ const en = {
     passwordSectionHint: 'Open the share only with a password ({min}+ characters).',
     passwordRequiredByRule: 'This space requires a password on every link.',
     expiryRequiredByRule: 'This space requires every link to end within {days} days of the day it is made.',
-    requirementRefused: 'This space now requires a password or an end date on every link. Add what is missing and try again.',
     expirySection: 'Expiry date',
     expirySectionHint: 'The link stops working after this date.',
     expiryLabel: 'Expires on',
@@ -2164,7 +2128,6 @@ const en = {
     reissueSubmit: 'Renew link',
     reissuing: 'Renewing…',
     reissueFailed: 'The link could not be renewed.',
-    reissueAlreadyReplaced: 'This link was already renewed or deleted — the list now shows the current links.',
     // ADR 0075: the server's verdict — made before someone left or replaced their keys, or switched off with every link
     reissueRequiredBadge: 'Needs renewing',
     reissueRequiredHint: 'Made before someone left this space or secured their account, or switched off with every link here — it may be in the wrong hands. Renew it to cut that off.',
@@ -2197,9 +2160,6 @@ const en = {
     },
     roleNeedsReissue: 'This link was made before guests had to prove they hold the whole link, so with photos added it would take no guests at all. Renew it first — the new link can then be switched to “View + add photos”.',
     disabled: 'Switched off',
-    // ADR 0114 decision 9 (the owner's words): a closed link's subtree gets new keys — on the link's row while this
-    // device re-keys it, and as the space's re-keying hint when only closed links re-key there
-    closedRekeying: 'The link is switched off. What is below it gets a new lock, so the old link opens nothing that comes later either.',
     byMember: 'By another member',
     loadFailed: 'Your links could not be loaded.',
     pendingDeletion: 'This space is being deleted: its links can be seen and copied, and your own can still be revoked — nothing else is made or changed.',
@@ -2212,7 +2172,6 @@ const en = {
     linkReady: 'Your link is ready — copy it:',
     hasNote: 'Note',
     edit: 'Edit',
-    actionFailed: 'That didn’t work — please try again.',
     // the anonymous /s/ page (views/ShareView.vue, core/sharing/ShareTreePage.vue)
     loading: 'Opening this link…',
     unavailable: 'This link isn’t available',
@@ -2327,7 +2286,7 @@ const de: typeof en = {
     preparing: 'Sammle, was darin ist…',
     summary: '{nodes} Einträge, {files} Dateien, {size}',
     skipped: 'Weggelassen, weil diese Version sie nicht herunterladen kann:',
-    reason: { unsupported_kind: 'nicht unterstützt', nothing_to_export: 'nichts darin' },
+    reason: { unsupported_kind: 'nicht unterstützt' },
     save: 'Als ZIP speichern…',
     writing: 'Schreibe die Datei…',
     done: 'Download gespeichert',
@@ -2355,7 +2314,6 @@ const de: typeof en = {
     },
     importNothing: 'Diese Version von veyq kann nichts davon importieren.',
     importRest: 'Den Rest importieren',
-    importedLeftOut: '„{name}“ importiert. Weggelassen: {names}',
     uploadAsFile: 'Als Datei hochladen',
     importSummary: '{nodes} Einträge, {size}, werden zu „{target}“ hinzugefügt.',
     importNotice: 'Alles Importierte gehört dann dir. Freigaben, Mitglieder und der Papierkorb sind nicht Teil eines Downloads.',
@@ -2449,7 +2407,6 @@ const de: typeof en = {
     },
     compromiseRotationMark: 'Braucht ein neues Schloss',
     compromiseRotationRequeue: 'Neu anstoßen',
-    compromiseRotationRequeueFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
     pendingTitle: 'Ausstehende Einladungen',
     pendingSub: 'Eingeladene Personen, die noch nicht beigetreten sind. Schicke die Einladung erneut oder zieh sie zurück.',
     statusInvited: 'Eingeladen',
@@ -2923,7 +2880,6 @@ const de: typeof en = {
     consentGroupAddHint: 'Ist das an, wird das Hinzufügen zu einer Gruppe zu einer Einladung, die du annimmst oder ablehnst — nichts erreicht dich, bevor du zustimmst. Gilt in jedem Bereich, zu dem du gehörst.',
     consentRequiredHere: 'Dieser Bereich fragt alle, bevor sie zu einer Gruppe hinzugefügt werden, egal was diese Einstellung sagt.',
     save: 'Profil speichern',
-    saved: 'Profil aktualisiert.',
     saveFailed: 'Profil konnte nicht gespeichert werden. Bitte erneut versuchen.',
   },
   profilePicture: {
@@ -3604,11 +3560,6 @@ const de: typeof en = {
     sent: 'Deine Meldung ist eingegangen.',
     receipt: 'Aktenzeichen {reference}, eingegangen am {time}. Bewahre es auf, wenn du dich auf diese Meldung beziehen willst.',
     close: 'Schließen',
-    failed: 'Die Meldung konnte nicht gesendet werden. Versuch es noch einmal.',
-    tooManyOpen: 'Du hast zu viele Meldungen, über die noch nicht entschieden ist. Warte, bis einige entschieden sind.',
-    rateLimited: 'Zu viele Meldungen in kurzer Zeit. Versuch es später noch einmal.',
-    unavailable: 'Etwas von dem, was du ausgewählt hast, lässt sich hier nicht mehr lesen und darum nicht melden. Lade die Seite neu.',
-    notFound: 'Etwas von dem, was du ausgewählt hast, ist nicht mehr da. Lade die Seite neu.',
   },
   // who runs this instance (core/operator/OperatorIdentification.vue; ADR 0035 decision 7), on the login and share pages
   operatorDetails: {
@@ -4047,10 +3998,7 @@ const de: typeof en = {
     favoriteFailed: 'Der Favorit konnte nicht gespeichert werden. Versuche es noch einmal.',
     rename: 'Umbenennen',
     delete: 'Löschen',
-    slugTaken: 'Hier gibt es bereits etwas mit ähnlichem Namen.',
-    nameTakenBy: 'Hier gibt es schon {kind} namens „{name}“. Wähle einen anderen Namen.',
     aFolder: 'einen Ordner',
-    anItem: 'einen Eintrag',
     aBookmark: 'ein Lesezeichen',
     // Ein Lesezeichen eines Links, den jemand geschickt hat (ADR 0120): es öffnet und meldet dort, wo die Freigabe liegt.
     bookmark: {
@@ -4105,24 +4053,16 @@ const de: typeof en = {
     tabAll: 'Alle',
     groupFolders: 'Ordner',
     groupContents: 'Inhalte',
-    illegalStructure: 'Das ist hier nicht erlaubt.',
-    saveFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
     deleteFolderTitle: 'Ordner löschen',
     deleteFolderCopy: '„{name}“ und alles darin kommen in den Papierkorb. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird.',
     deleteCopy: '„{name}“ kommt in den Papierkorb. Dort lässt es sich wiederherstellen, bis es endgültig entfernt wird.',
     deleteMany: {
       title: '{count} Eintrag löschen | {count} Einträge löschen',
       copy: '{count} ausgewählter Eintrag kommt mit allem, was darin liegt, in den Papierkorb. Die Auswahl umfasst {kinds}. Dort lässt sich der Eintrag wiederherstellen, bis er endgültig entfernt wird. | {count} ausgewählte Einträge kommen mit allem, was darin liegt, in den Papierkorb. Die Auswahl umfasst {kinds}. Dort lässt sich alles wiederherstellen, bis es endgültig entfernt wird.',
-      moved: '{count} Eintrag liegt jetzt im Papierkorb. | {count} Einträge liegen jetzt im Papierkorb.',
       noneDeleted: 'Nichts wurde gelöscht.',
       notDeleted: 'Nicht gelöscht:',
       reason: '„{name}“: {reason}',
       quoted: '„{name}“',
-      refused: {
-        gone: 'Es ist nicht mehr da.',
-        scope_deleting: 'Dieser Bereich wird gelöscht.',
-        failed: 'Das Löschen hat nicht geklappt. Bitte versuche es erneut.',
-      },
       undoFailed: 'Konnte nicht wiederhergestellt werden: {names}. Du kannst sie aus dem Papierkorb wiederherstellen.',
     },
     select: {
@@ -4146,16 +4086,13 @@ const de: typeof en = {
       submit: 'Hierher kopieren',
       preparing: 'Sammle, was darin ist …',
       summary: '{nodes} Eintrag, {size}, wird nach „{target}“ kopiert. | {nodes} Einträge, {size}, werden nach „{target}“ kopiert.',
-      nothing: 'Hier kann diese Version von veyq nichts kopieren.',
       walkFailed: 'Was darin ist, ließ sich nicht lesen. Nichts wurde kopiert.',
       leftOut: 'Ausgelassen, weil diese Version sie nicht kopieren kann:',
       leftOutLine: '„{name}“: {reason}',
       reason: {
         unsupported_kind: 'nicht unterstützt',
-        nothing_to_export: 'nichts darin',
         unknown_application: 'nicht unterstützt',
         newer_content: 'nicht unterstützt',
-        not_copyable: 'lässt sich noch nicht kopieren',
       },
       losses: 'Was nicht mitkommt:',
       lossAlways: 'Freigaben, Favoriten, der Papierkorb und die ursprünglichen Hochladezeiten. Die Kopie gehört dir.',
@@ -4177,7 +4114,6 @@ const de: typeof en = {
       many: {
         title: '{count} Eintrag kopieren | {count} Einträge kopieren',
         hint: 'Öffne den Ort, an den die Kopien sollen, und wähle „Hierher kopieren“. Alles darin wird mitkopiert.',
-        copied: '{count} nach „{to}“ kopiert.',
         here: {
           self: '„{name}“ kann nicht in sich selbst kopiert werden.',
           inside: '„{name}“ kann nicht in etwas kopiert werden, das darin liegt.',
@@ -4205,7 +4141,6 @@ const de: typeof en = {
         identityFolder: 'In den Ordner einer Person lässt sich nichts verschieben.',
         kind: 'Dieser Ort kann es nicht aufnehmen.',
       },
-      moved: '„{name}“ nach „{to}“ verschoben.',
       undoFailed: '„{name}“ konnte nicht zurückverschoben werden. Bitte verschiebe es selbst.',
       nameTakenThere: 'Dort gibt es schon {kind} namens „{name}“. Benenne zuerst eines davon um oder wähle einen anderen Ort.',
       many: {
@@ -4219,7 +4154,6 @@ const de: typeof en = {
           identityFolder: 'In den Ordner einer Person lässt sich nichts verschieben.',
           kind: 'Dieser Ort kann „{name}“ nicht aufnehmen.',
         },
-        moved: '{count} nach „{to}“ verschoben.',
         noneMoved: 'Nichts wurde verschoben.',
         notMoved: 'Nicht verschoben:',
         reason: '„{name}“: {reason}',
@@ -4231,17 +4165,10 @@ const de: typeof en = {
       identityConfirm: '„{name}“ wird ein gewöhnlicher Ordner: Die Person, die ihn eingeworfen hat, kann nichts mehr hinzufügen, und er lässt sich nicht zurück in den Briefkasten verschieben. Alles darin bleibt für dich lesbar.',
       identityAccept: 'Herausverschieben',
       refused: {
-        slug_taken: 'Dort gibt es bereits etwas mit diesem Namen. Benenne es zuerst um oder wähle einen anderen Ort.',
-        illegal_structure: 'Dort kann es nicht hin: Dieser Ort nimmt so etwas nicht auf.',
         illegal_scope: 'Dieser Link erlaubt es nicht, es dorthin zu verschieben.',
-        stale_placement: 'Jemand anderes hat es gleichzeitig verschoben oder umbenannt. Die Ansicht wurde neu geladen – bitte versuche es erneut.',
         stale_epoch: 'Die Schlüssel des Bereichs wurden inzwischen erneuert. Lade die Seite neu und versuche es erneut.',
-        node_rekey_pending: 'Das neue Schloss des Bereichs wird noch eingebaut. Versuch es gleich noch einmal.',
         share_not_contributable: 'Mit diesem Link lässt sich nichts mehr ändern.',
-        gone: 'Es oder der gewählte Ort ist nicht mehr da.',
         rate_limited: 'Zu viele Änderungen auf einmal. Bitte warte kurz und versuche es erneut.',
-        scope_deleting: 'Dieser Bereich wird gelöscht; nichts kann verschoben werden.',
-        failed: 'Das Verschieben hat nicht geklappt. Bitte versuche es erneut.',
       },
     },
     trash: {
@@ -4252,8 +4179,6 @@ const de: typeof en = {
       loadFailed: 'Der Papierkorb konnte nicht geöffnet werden. Bitte erneut versuchen.',
       restore: 'Wiederherstellen',
       restoreFailed: 'Konnte nicht wiederhergestellt werden. Bitte erneut versuchen.',
-      moved: '„{name}“ liegt jetzt im Papierkorb.',
-      undoFailed: '„{name}“ konnte nicht wiederhergestellt werden. Du kannst es aus dem Papierkorb wiederherstellen.',
       deletedOn: 'Gelöscht am {day}',
       purgeOn: 'endgültig entfernt am {day}',
       retryName: 'Neuer Name',
@@ -4265,13 +4190,10 @@ const de: typeof en = {
   },
   upload: {
     title: 'Uploads',
-    active: '{count} aktiv',
     none: 'Keine Uploads',
     cancelAll: 'Alle abbrechen',
     cancel: 'Abbrechen',
     retry: 'Erneut versuchen',
-    status: { queued: 'In Warteschlange', preparing: 'Wird vorbereitet …', uploading: 'Lädt hoch …', done: 'Fertig', failed: 'Fehlgeschlagen', cancelled: 'Abgebrochen' },
-    noSpace: 'Kein Speicherplatz mehr frei. Einträge im Papierkorb belegen weiter Platz, bis sie endgültig entfernt sind.',
     close: 'Schließen',
   },
   share: {
@@ -4307,7 +4229,6 @@ const de: typeof en = {
     passwordSectionHint: 'Freigabe nur mit Passwort ab {min} Zeichen öffnen.',
     passwordRequiredByRule: 'Dieser Bereich verlangt für jeden Link ein Passwort.',
     expiryRequiredByRule: 'Dieser Bereich verlangt, dass jeder Link spätestens {days} Tage nach dem Tag endet, an dem er angelegt wird.',
-    requirementRefused: 'Dieser Bereich verlangt jetzt für jeden Link ein Passwort oder ein Enddatum. Ergänze, was fehlt, und versuche es erneut.',
     expirySection: 'Ablaufdatum',
     expirySectionHint: 'Der Link funktioniert nach diesem Datum nicht mehr.',
     expiryLabel: 'Läuft ab am',
@@ -4344,7 +4265,6 @@ const de: typeof en = {
     reissueSubmit: 'Link erneuern',
     reissuing: 'Wird erneuert…',
     reissueFailed: 'Der Link konnte nicht erneuert werden.',
-    reissueAlreadyReplaced: 'Dieser Link wurde bereits erneuert oder gelöscht — die Liste zeigt jetzt die aktuellen Links.',
     reissueRequiredBadge: 'Muss erneuert werden',
     reissueRequiredHint: 'Erstellt, bevor jemand diesen Bereich verlassen oder sein Konto abgesichert hat, oder mit allen Links hier abgeschaltet — er könnte in falschen Händen sein. Erneuere ihn, um diesen Zugang zu beenden.',
     newGuestsRefusedBadge: 'Nimmt keine neuen Gäste auf',
@@ -4374,7 +4294,6 @@ const de: typeof en = {
     },
     roleNeedsReissue: 'Dieser Link wurde erstellt, bevor Gäste nachweisen mussten, dass sie den ganzen Link haben — mit Fotos hinzufügen nähme er deshalb gar keine Gäste auf. Erneuere ihn zuerst; den neuen Link kannst du dann auf „Ansehen + Fotos hinzufügen“ umstellen.',
     disabled: 'Abgeschaltet',
-    closedRekeying: 'Der Link ist abgeschaltet. Was darunter liegt, bekommt ein neues Schloss, damit der alte Link auch künftig nichts mehr öffnet.',
     byMember: 'Von einem anderen Mitglied',
     loadFailed: 'Deine Links konnten nicht geladen werden.',
     pendingDeletion: 'Dieser Bereich wird gelöscht: Seine Links lassen sich ansehen und kopieren, und deine eigenen kannst du noch widerrufen — sonst wird nichts neu erstellt oder geändert.',
@@ -4387,7 +4306,6 @@ const de: typeof en = {
     linkReady: 'Dein Link ist bereit — kopiere ihn:',
     hasNote: 'Hinweis',
     edit: 'Bearbeiten',
-    actionFailed: 'Das hat nicht geklappt — bitte erneut versuchen.',
     // the anonymous /s/ viewer
     loading: 'Link wird geöffnet …',
     unavailable: 'Dieser Link ist nicht verfügbar',
@@ -4508,7 +4426,9 @@ export const i18n = createI18n({
   legacy: false,
   locale: effectiveLocale(localePref.value),
   fallbackLocale: 'en',
-  messages: { en, de },
+  // `words` is core's namespace like any other here: an application's catalog cannot take it (addApplicationMessages).
+  // Its arguments are positional — `t('words.move_moved', [name, place])` — as the apps' `{1}`, `{2}` are.
+  messages: { en: { ...en, words: words.en }, de: { ...de, words: words.de } },
 })
 
 /** An application's message catalog: its own top-level namespaces, in every supported locale. */

@@ -15,10 +15,10 @@ export function useTrashUndo(): (name: string, restore: () => Promise<void>) => 
   const { t } = useI18n()
   return (name, restore) =>
     toast.showUndo({
-      summary: t('node.trash.moved', { name }),
+      summary: t('words.trash_moved', [name]),
       life: TRASH_UNDO_MS,
       onUndo: () => {
-        restore().catch(() => toast.error(t('node.trash.undoFailed', { name })))
+        restore().catch(() => toast.error(t('words.trash_undo_failed', [name])))
       },
     })
 }

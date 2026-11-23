@@ -76,7 +76,7 @@ const { run: runSaveOwn, pending: savingOwn } = useAsyncAction(async () => {
   await identity.savePicture()
   await refreshPeopleDirectory()
   editing.value = false
-  toast.success(t('profile.saved'))
+  toast.success(t('words.profile_saved'))
   await load()
 }, { onError: () => { editError.value = t('profilePicture.saveFailed') } })
 function startEdit() {

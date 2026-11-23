@@ -19,7 +19,7 @@ import { resealShareNames } from '../sharing/manageShares'
 import { httpStatus, HttpStatus } from '../../shared/httpError'
 import type { ScopeKey } from '../../features/spaces/epochs'
 
-type Translate = (key: string, named?: Record<string, unknown>) => string
+type Translate = (key: string, args?: Record<string, unknown> | unknown[]) => string
 
 /** A name refused before anything was sent: a loaded sibling already has it (the same route group, the same slug). */
 export class NodeNameTaken extends Error {
@@ -41,7 +41,7 @@ export function refuseTakenName(nodes: readonly TreeNode[], parentId: string | n
 export function nodeNameErrorText(t: Translate, e: unknown): string {
   if (e instanceof NodeNameTaken) return nameTakenMessage(t, e.sibling)
   const status = httpStatus(e)
-  return status === HttpStatus.conflict ? t('node.slugTaken') : status === HttpStatus.unprocessable ? t('node.illegalStructure') : t('node.saveFailed')
+  return status === HttpStatus.conflict ? t('words.node_slug_taken') : status === HttpStatus.unprocessable ? t('words.node_illegal_structure') : t('words.node_save_failed')
 }
 
 /** How much of `name` a rename pre-selects: what the node's kind says a rename usually changes (`KindDescriptor

@@ -200,7 +200,7 @@ export interface KindDescriptor {
   deleteCopy?: string
   /** The i18n key of the kind's noun with its indefinite article, as the object of a sentence (en "a file", de "eine
    *  Datei"): core's create and rename dialogs name a colliding sibling with it — "There is already a file named …"
-   *  (`node.nameTakenBy`, inbox #389). Omitted: the neutral `node.anItem`. */
+   *  (`words.node_name_taken_by`, inbox #389). Omitted: the neutral `words.node_an_item`. */
   nounWithArticle?: string
   /** The i18n key of the note core's trash shows on a trashed node of this kind that holds no attachment (the trash
    *  listing's `attached`): for a kind whose content IS its attachment, such a node is empty — Depot's `FILE` whose

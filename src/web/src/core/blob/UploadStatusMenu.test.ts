@@ -72,7 +72,7 @@ describe('UploadStatusMenu', () => {
     expect(w.find('.uploads-badge').text()).toBe('1')
     await w.find('.uploads-trigger').trigger('click')
     expect(w.text()).toContain('photo.png')
-    expect(w.text()).toContain(t('upload.status.uploading'))
+    expect(w.text()).toContain(t('words.upload_status_uploading'))
   })
 
   it('says whether its panel is open (aria-expanded) and which panel it opens (inbox #385)', async () => {
@@ -97,7 +97,7 @@ describe('UploadStatusMenu', () => {
     await w.find('.uploads-file-action').trigger('click') // the cancel control
     await flushPromises()
 
-    expect(w.text()).toContain(t('upload.status.cancelled'))
+    expect(w.text()).toContain(t('words.upload_status_cancelled'))
     expect(w.find('.uploads-badge').exists()).toBe(false) // no longer active
   })
 
@@ -108,8 +108,8 @@ describe('UploadStatusMenu', () => {
     await flushPromises()
     await w.find('.uploads-trigger').trigger('click')
 
-    expect(w.text()).toContain(t('upload.status.failed'))
-    expect(w.find('.uploads-file-reason').text()).toBe(t('upload.noSpace'))
+    expect(w.text()).toContain(t('words.upload_status_failed'))
+    expect(w.find('.uploads-file-reason').text()).toBe(t('words.upload_no_space'))
     expect(w.find('.uploads-file-action').exists()).toBe(false)
   })
 
@@ -119,7 +119,7 @@ describe('UploadStatusMenu', () => {
     await flushPromises()
     await w.find('.uploads-trigger').trigger('click')
 
-    expect(w.text()).toContain(t('upload.status.failed'))
+    expect(w.text()).toContain(t('words.upload_status_failed'))
     expect(w.find('.uploads-file-reason').exists()).toBe(false)
     expect(w.find('.uploads-file-action').attributes('aria-label')).toBe(t('upload.retry'))
   })
@@ -134,7 +134,7 @@ describe('UploadStatusMenu', () => {
     await flushPromises()
     await w.find('.uploads-trigger').trigger('click')
 
-    expect(w.text()).toContain(t('upload.status.failed'))
+    expect(w.text()).toContain(t('words.upload_status_failed'))
     expect(w.find('.uploads-file-action').exists()).toBe(false)
     expect(run).toHaveBeenCalledTimes(1)
   })
@@ -165,10 +165,10 @@ describe('UploadStatusMenu', () => {
     expect(batches.map((b) => b.find('.uploads-list-head strong').text())).toEqual(['1 photo', '2 files'])
     expect(batches[1].findAll('.uploads-file-name').map((n) => n.text())).toEqual(['report.pdf', 'notes.txt'])
     // one job at a time across batches: the first batch's file is in flight, the second batch waits behind it
-    expect(batches[0].find('.uploads-file-status').text()).toBe(t('upload.status.uploading'))
+    expect(batches[0].find('.uploads-file-status').text()).toBe(t('words.upload_status_uploading'))
     expect(batches[1].findAll('.uploads-file-status').map((n) => n.text())).toEqual([
-      t('upload.status.queued'),
-      t('upload.status.queued'),
+      t('words.upload_status_queued'),
+      t('words.upload_status_queued'),
     ])
   })
 
@@ -222,7 +222,7 @@ describe('UploadStatusMenu', () => {
         ['Paris', ['b.jpg']],
       ])
       expect(w.find('.uploads-badge').text()).toBe('3')
-      expect(w.find('.uploads-header p').text()).toBe(t('upload.active', { count: 3 }))
+      expect(w.find('.uploads-header p').text()).toBe(t('words.upload_active', [3]))
     })
 
     it('a batch without a key is a list of its own, beside one with the same label', async () => {

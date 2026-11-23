@@ -168,7 +168,7 @@ describe('FolderShareDialog — a new link', () => {
     await byText(w, t('share.createNew')).trigger('click')
     await byText(w, t('share.create')).trigger('click')
     await flushPromises()
-    expect(w.text()).toContain(t('share.requirementRefused'))
+    expect(w.text()).toContain(t('words.share_requirement_refused'))
   })
 
   it('says so when the mint fails, and stays on the form', async () => {
@@ -312,7 +312,7 @@ describe('FolderShareDialog — the folder\'s links', () => {
     expect(rows).toHaveLength(2)
     const said = (r: (typeof rows)[number]) => r.find('.folder-share-rekeying').exists()
     expect(rows.map(said)).toEqual([true, false])
-    expect(rows[0].text()).toContain(t('share.closedRekeying'))
+    expect(rows[0].text()).toContain(t('words.share_closed_rekeying'))
 
     manage.rekeyingClosedLinks.delete('mine') // the re-key ended
     await flushPromises()

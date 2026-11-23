@@ -5,11 +5,18 @@ import { decodeHttpError } from '../../shared/httpError'
 import type { MediaItem } from './media'
 import { openedBlobMeta } from './openedListing'
 
-/** Why the server refused a medium's trash or restore, as the reason the message names
- *  (`memory.buckets.deleteRefusedReason.*`): `deleteMedia`'s and `restoreMedia`'s refusals — `404 media_not_found`
+/** Why the server refused a medium's trash or restore, as the reason the message names ({@link MEDIA_REFUSAL_TEXT}): `deleteMedia`'s and `restoreMedia`'s refusals — `404 media_not_found`
  *  (purged, or the caller holds no grant any more) and `409 scope_deleting` — and `failed` for anything else (a
  *  network failure, an unexpected code). */
 export type MediaRefusal = 'gone' | 'scope_deleting' | 'blocked_by_operator' | 'failed'
+
+/** What each reason says: the apps' notices' words where they say it too (ADR 0136 § The web's words), else Memories'. */
+export const MEDIA_REFUSAL_TEXT: Record<MediaRefusal, string> = {
+  gone: 'memory.buckets.deleteRefusedReason.gone',
+  scope_deleting: 'words.delete_refused_scope_deleting',
+  blocked_by_operator: 'memory.buckets.deleteRefusedReason.blocked_by_operator',
+  failed: 'memory.buckets.deleteRefusedReason.failed',
+}
 
 export async function mediaRefusalOf(e: unknown): Promise<MediaRefusal> {
   const { code } = await decodeHttpError(e)

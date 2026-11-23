@@ -23,7 +23,7 @@ function flatten(o: Record<string, unknown>, prefix = ''): string[] {
  *  Deliberately ANY quoted literal and not only `t('…')`'s argument: keys travel through variables and
  *  lookup tables before they reach `t()`. A key this cannot see is one it calls unused, so a new spelling is
  *  taught here, never allowlisted. Its limit: a template head counts every key under it as used — web builds
- *  `tenant.join.*`, `media.uploadStatus.*`, `media.marks.filter.*`, `rotation.status.*`,
+ *  `tenant.join.*`, `media.marks.filter.*`, `rotation.status.*`,
  *  `rotation.statusHint.*` and `shell.theme*` dynamically, so a dead key inside those is invisible. */
 async function quotedKeysInSources(dir: string, isCatalog: (path: string) => boolean): Promise<{ literals: Set<string>; heads: Set<string> }> {
   const literals = new Set<string>()
@@ -62,6 +62,25 @@ describe('web message catalog', () => {
     const headList = [...heads]
     const unused = flatten(messages).filter((k) => !literals.has(k) && !headList.some((h) => k.startsWith(h)))
     expect(unused, 'catalog keys no source uses').toEqual([])
+  })
+})
+
+// The notices' move (ADR 0136 § The web's words): the words the web says as the apps do are registered under `words`, from
+// `words.generated.json`, the keys `web.json`'s `read` names. A source naming a word that is not there renders the raw key
+// only when a test happens to render it — so every `words.<key>` a source quotes is held to the registered words here
+// (and the test above holds every registered word to a source that names it: nothing unread rides the eager set).
+describe('web message catalog — the shared words', () => {
+  it('names only words it registered', async () => {
+    const src = new URL('..', import.meta.url).pathname
+    const isCatalog = (path: string) => path === join(src, 'i18n', 'index.ts') || /\/features\/[^/]+\/i18n\.ts$/.test(path)
+    const { literals, heads } = await quotedKeysInSources(src, isCatalog)
+    const words = (i18n.global as unknown as { getLocaleMessage(l: string): Record<string, Record<string, unknown>> })
+      .getLocaleMessage(SUPPORTED_LOCALES[0]).words
+    expect(Object.keys(words).length).toBeGreaterThan(50) // the namespace is registered at all
+    const named = [...literals].filter((k) => k.startsWith('words.'))
+    expect(named.length).toBeGreaterThan(50)
+    expect(named.filter((k) => !(k.slice('words.'.length) in words)), 'words.* keys no registered word answers').toEqual([])
+    expect([...heads].filter((h) => h.startsWith('words.')), 'a words.* key built at run time is one this cannot check').toEqual([])
   })
 })
 

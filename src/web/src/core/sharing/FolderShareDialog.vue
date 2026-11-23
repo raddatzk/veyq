@@ -491,7 +491,7 @@ const { run: runUpload, pending: uploadMinting } = useAsyncAction(
   {
     onError: async (e) => {
       if (httpStatus(e) === HttpStatus.conflict) {
-        nameTaken.value = t('node.slugTaken')
+        nameTaken.value = t('words.node_slug_taken')
         return
       }
       await noteRequirementRefusal(e)
@@ -670,7 +670,7 @@ function onDialogVisible(visible: boolean) {
         </template>
       </div>
 
-      <p v-if="(createError || editError) && requirementRefused" class="veyq-form-error">{{ t('share.requirementRefused') }}</p>
+      <p v-if="(createError || editError) && requirementRefused" class="veyq-form-error">{{ t('words.share_requirement_refused') }}</p>
       <p v-else-if="view === 'create' && createError" class="veyq-form-error">{{ t('share.createFailed') }}</p>
       <p v-else-if="view === 'edit' && editError" class="veyq-form-error">{{ t('share.editFailed') }}</p>
       <div class="veyq-dialog-action-row">
@@ -735,7 +735,7 @@ function onDialogVisible(visible: boolean) {
                 </span>
                 <!-- ADR 0114 decision 9: what lies below a closed link is re-keyed on this device while this shows. -->
                 <span v-if="!share.enabled && rekeyingClosedLinks.has(share.shareId)" class="veyq-row-subtitle folder-share-rekeying">
-                  {{ t('share.closedRekeying') }}
+                  {{ t('words.share_closed_rekeying') }}
                 </span>
                 <div class="veyq-row-meta">
                   <!-- An unnamed link's title is already its role (`titleFor`): the badge would say it twice (inbox #385). -->
@@ -831,8 +831,8 @@ function onDialogVisible(visible: boolean) {
           </template>
         </template>
       </ul>
-      <p v-if="alreadyReplaced" class="veyq-form-error">{{ t('share.reissueAlreadyReplaced') }}</p>
-      <p v-else-if="actionError" class="veyq-form-error">{{ t('share.actionFailed') }}</p>
+      <p v-if="alreadyReplaced" class="veyq-form-error">{{ t('words.share_gone') }}</p>
+      <p v-else-if="actionError" class="veyq-form-error">{{ t('words.share_failed') }}</p>
     </div>
   </VeyqDialog>
 </template>

@@ -424,7 +424,7 @@ describe('ShareDialog — a switched-off link while what lies below it is re-key
     const rows = w.findAll('.share-list-item')
     expect(rows).toHaveLength(2)
     expect(rows.map((r) => r.find('.share-list-rekeying').exists())).toEqual([true, false])
-    expect(rows[0]!.text()).toContain(t('share.closedRekeying'))
+    expect(rows[0]!.text()).toContain(t('words.share_closed_rekeying'))
 
     shareModule.rekeyingClosedLinks.delete('mine') // the re-key ended
     await flushPromises()

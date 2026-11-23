@@ -9,18 +9,16 @@ const en = {
   depot: {
     title: 'Depot',
     upload: 'Upload files',
-    // "Upload folder…" (inbox #424): a picked directory uploaded as its tree. Said above the list when the tree is not sent.
+    // "Upload folder…" (inbox #424): a picked directory uploaded as its tree. What is said when the tree is not sent is the
+    // apps' notices' words (`words.depot_folder_*`, ADR 0136 § The web's words).
     uploadFolder: 'Upload folder…',
-    uploadFolderNoRoom: '“{name}” was not uploaded: there is not enough storage space for it ({size}). Free some space, or ask whoever runs your space.',
-    uploadFolderFailed: '“{name}” could not be created, so nothing of it was uploaded.',
-    uploadFolderPartFailed: 'The folder “{name}” could not be created, so nothing in it was uploaded.',
     empty: 'No files yet — choose New to upload the first one.',
     // Where nothing can be uploaded (a pending deletion): no pointer to the "New" menu, which is not there.
     emptyReadOnly: 'No files yet.',
     notUploaded: 'Not uploaded yet',
     // The noun that leads a row's meta line in the unified level list (inbox #407): "File · 157 B · Modified …".
     kindFile: 'File',
-    // A file's noun with its article, for core's `node.nameTakenBy` (the registry's `nounWithArticle`).
+    // A file's noun with its article, for core's `words.node_name_taken_by` (the registry's `nounWithArticle`).
     aFile: 'a file',
     modified: 'Modified {date}',
     download: 'Download {name}',
@@ -29,10 +27,8 @@ const en = {
     replace: 'Replace the content of {name} — the name stays',
     // A file that holds no content (an upload that never finished, inbox #384): its page's header uploads into it.
     uploadInto: 'Upload {name} again',
-    replaceTitle: 'Replace file',
     // Every replace of content asks (inbox #383): a same-name upload (a member's and a contributor's), and an opened file's
     // replace with the picked file named.
-    replaceConfirm: 'Replace “{name}”? A file with this name is already here: its content is replaced by the file you picked. The old content cannot be restored: there is no version history.',
     replaceRowConfirm: 'Replace the content of “{name}” with “{file}”? The name stays. The old content cannot be restored: there is no version history.',
     replaceAccept: 'Replace',
     deleteTitle: 'Delete file',
@@ -118,15 +114,13 @@ const en = {
     trashEmpty: 'No content — its upload did not finish. Restoring brings back an empty file you can upload into.',
     downloadFailed: 'The file could not be downloaded. Please try again.',
     downloadTooLarge: 'This file is too large to download in this browser.',
-    replaceAnyway: 'Replace anyway',
     dismiss: 'Dismiss',
     // A picked file whose name a sibling of another kind holds (inbox #400): not sent; `{reason}` is core's
-    // `node.nameTakenBy`, naming that sibling by its kind.
+    // `words.node_name_taken_by`, naming that sibling by its kind.
     nameTakenBy: '“{name}” was not uploaded. {reason}',
     errors: {
       slug_taken: '“{name}” was not uploaded: a folder, Memory or file with a similar name already exists here.',
       illegal_structure: '“{name}” was not uploaded: a file cannot be stored here.',
-      stale_file: '“{name}” was not uploaded: someone else replaced this file in the meantime. Replace it anyway, or look at theirs first.',
       quota_exceeded: '“{name}” was not uploaded: there is no space left. Deleted files only free space once the trash is emptied.',
       capability_disabled: '“{name}” was not uploaded: Depot is switched off here.',
       failed: '“{name}” could not be uploaded.',
@@ -175,7 +169,6 @@ const en = {
       shareReactivate: 'Switch on again',
       shareReissueHint: 'This link cannot be switched back on: someone who has left this space may still hold it. Create a new link instead.',
       shareOff: 'Off',
-      shareFailed: 'That didn’t work. Please try again.',
       close: 'Close',
       guestTitle: 'Send files',
       guestHint: 'Your files go to {name}. You cannot see what others sent, and you cannot see your files again here after you leave.',
@@ -207,9 +200,6 @@ const de: typeof en = {
     title: 'Depot',
     upload: 'Dateien hochladen',
     uploadFolder: 'Ordner hochladen…',
-    uploadFolderNoRoom: '„{name}“ wurde nicht hochgeladen: Dafür ist nicht genug Speicherplatz vorhanden ({size}). Gib Platz frei oder frage die Person, die deinen Bereich betreibt.',
-    uploadFolderFailed: '„{name}“ konnte nicht angelegt werden, deshalb wurde nichts davon hochgeladen.',
-    uploadFolderPartFailed: 'Der Ordner „{name}“ konnte nicht angelegt werden, deshalb wurde nichts darin hochgeladen.',
     empty: 'Noch keine Dateien — mit „Neu“ lädst du die erste hoch.',
     emptyReadOnly: 'Noch keine Dateien.',
     aFile: 'eine Datei',
@@ -219,8 +209,6 @@ const de: typeof en = {
     download: '{name} herunterladen',
     replace: 'Inhalt von {name} ersetzen — der Name bleibt',
     uploadInto: '{name} erneut hochladen',
-    replaceTitle: 'Datei ersetzen',
-    replaceConfirm: '„{name}“ ersetzen? Eine Datei mit diesem Namen liegt schon hier: Ihr Inhalt wird durch die gewählte Datei ersetzt. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
     replaceRowConfirm: 'Den Inhalt von „{name}“ durch „{file}“ ersetzen? Der Name bleibt. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.',
     replaceAccept: 'Ersetzen',
     deleteTitle: 'Datei löschen',
@@ -297,13 +285,11 @@ const de: typeof en = {
     trashEmpty: 'Ohne Inhalt — das Hochladen wurde nicht abgeschlossen. Wiederherstellen bringt eine leere Datei zurück, in die du hochladen kannst.',
     downloadFailed: 'Die Datei konnte nicht heruntergeladen werden. Bitte versuche es erneut.',
     downloadTooLarge: 'Diese Datei ist zu groß, um sie in diesem Browser herunterzuladen.',
-    replaceAnyway: 'Trotzdem ersetzen',
     dismiss: 'Ausblenden',
     nameTakenBy: '„{name}“ wurde nicht hochgeladen. {reason}',
     errors: {
       slug_taken: '„{name}“ wurde nicht hochgeladen: Hier gibt es schon einen Ordner, eine Erinnerung oder eine Datei mit ähnlichem Namen.',
       illegal_structure: '„{name}“ wurde nicht hochgeladen: Hier kann keine Datei liegen.',
-      stale_file: '„{name}“ wurde nicht hochgeladen: Jemand anderes hat diese Datei inzwischen ersetzt. Ersetze sie trotzdem oder sieh dir zuerst die andere an.',
       quota_exceeded: '„{name}“ wurde nicht hochgeladen: Es ist kein Speicherplatz mehr frei. Gelöschte Dateien geben erst Platz frei, wenn der Papierkorb geleert ist.',
       capability_disabled: '„{name}“ wurde nicht hochgeladen: Depot ist hier abgeschaltet.',
       failed: '„{name}“ konnte nicht hochgeladen werden.',
@@ -342,7 +328,6 @@ const de: typeof en = {
       shareReactivate: 'Wieder einschalten',
       shareReissueHint: 'Dieser Link lässt sich nicht wieder einschalten: Jemand, der diesen Bereich verlassen hat, könnte ihn noch haben. Erstelle stattdessen einen neuen Link.',
       shareOff: 'Aus',
-      shareFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
       close: 'Schließen',
       guestTitle: 'Dateien senden',
       guestHint: 'Deine Dateien gehen an {name}. Was andere gesendet haben, siehst du nicht, und deine eigenen Dateien siehst du hier nach dem Verlassen nicht mehr.',

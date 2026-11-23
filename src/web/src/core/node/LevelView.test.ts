@@ -197,7 +197,7 @@ describe('LevelView: the folders, then the contents', () => {
     const allow = () => true
     testKind(reg(), { rekeyContent: nothingOfItsOwnToRekey, kind: 'ALPHA', icon: 'images', list: { rows: stubRows('a').factory, tabLabel: 'memory.memories' } })
     testKind(reg(), { rekeyContent: nothingOfItsOwnToRekey,
-      kind: 'BETA', icon: 'file', createDialog: Dialog, createEntry: { label: 'node.anItem', icon: 'file', order: 20, allowed: allow },
+      kind: 'BETA', icon: 'file', createDialog: Dialog, createEntry: { label: 'words.node_an_item', icon: 'file', order: 20, allowed: allow },
       list: { rows: stubRows('b').factory, tabLabel: 'depot.title' },
     })
     const w = mountLevel([TRIPS, node('Rome', FOLDER_KIND, 'Trips'), node('a1', 'ALPHA', 'Trips')], { folder: TRIPS })
@@ -855,13 +855,13 @@ describe('LevelView: the empty level', () => {
     const a = stubRows('a')
     testKind(reg(), { rekeyContent: nothingOfItsOwnToRekey,
       kind: 'ALPHA', icon: 'images', createDialog: Dialog, list: { rows: a.factory, tabLabel: 'memory.memories', emptyText: () => 'memory.memoryEmpty' },
-      createEntry: { label: 'node.anItem', icon: 'images', order: 10, allowed: allowAll },
+      createEntry: { label: 'words.node_an_item', icon: 'images', order: 10, allowed: allowAll },
     })
   })
 
   it('a member who may create is told what "New" offers - folder and the application\'s entries - once, in plain text', () => {
     const w = mountLevel([])
-    expect(blocks(w)).toEqual([`empty:${t('node.levelEmptyNew', { entries: `${t('node.folderCreate')}, ${t('node.anItem')}` })}`])
+    expect(blocks(w)).toEqual([`empty:${t('node.levelEmptyNew', { entries: `${t('node.folderCreate')}, ${t('words.node_an_item')}` })}`])
     expect(w.find('.veyq-create-card').exists()).toBe(false)
   })
 
@@ -905,7 +905,7 @@ describe('LevelView: the "New" menu', () => {
     })
     testKind(reg(), { rekeyContent: nothingOfItsOwnToRekey,
       kind: 'ALPHA', icon: 'images', createDialog: Dialog, list: { rows: rows.factory },
-      createEntry: { label: 'node.anItem', icon: 'images', order: 10, allowed },
+      createEntry: { label: 'words.node_an_item', icon: 'images', order: 10, allowed },
       levelActions: [{ id: 'x.upload', label: 'node.rename', icon: 'upload', order: 30, allowed, acceptsDrop: true }],
     })
   })
@@ -913,8 +913,8 @@ describe('LevelView: the "New" menu', () => {
   it('lists core\'s folder entry and the registry\'s entries by order, and each choice acts: create by kind, an action by its handler', async () => {
     const w = mountLevel([TRIPS], { folder: TRIPS })
     // no import entry (ADR 0082 decision 7): an upload recognises a download itself
-    expect(await newMenuLabels(w)).toEqual([t('node.folderCreate'), t('node.anItem'), t('node.rename')])
-    await chooseNew(w, t('node.anItem'))
+    expect(await newMenuLabels(w)).toEqual([t('node.folderCreate'), t('words.node_an_item'), t('node.rename')])
+    await chooseNew(w, t('words.node_an_item'))
     await chooseNew(w, t('node.rename'))
     await chooseNew(w, t('node.folderCreate'))
     expect(w.calls.createChild).toEqual([['ALPHA', TRIPS], [FOLDER_KIND, TRIPS]])
@@ -945,7 +945,7 @@ describe('LevelView: the "New" menu', () => {
     const items = await openNewMenu(w)
     const upload = items.find((i) => i.textContent?.trim() === t('node.rename'))!
     expect(isDisabled(upload)).toBe(true)
-    expect(isDisabled(items.find((i) => i.textContent?.trim() === t('node.anItem'))!)).toBe(false)
+    expect(isDisabled(items.find((i) => i.textContent?.trim() === t('words.node_an_item'))!)).toBe(false)
   })
 
   it('a READ guest gets no menu; a READ_WRITE guest gets the entries its rights grant', () => {

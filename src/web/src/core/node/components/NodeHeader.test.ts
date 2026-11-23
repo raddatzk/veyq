@@ -573,7 +573,7 @@ describe('NodeHeader: what is editable at its place has no action (ADR 0110 deci
     await flushPromises()
     expect(input(w).exists()).toBe(true)
     const error = w.find('.veyq-node-header-rename-error')
-    expect(error.text()).toBe(t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'Reisen' }))
+    expect(error.text()).toBe(t('words.node_name_taken_by', [t('node.aFolder'), 'Reisen']))
     expect(error.attributes('role')).toBe('alert')
     expect(input(w).attributes('aria-describedby')).toBe(error.attributes('id'))
     // Esc still leaves, the error with it.

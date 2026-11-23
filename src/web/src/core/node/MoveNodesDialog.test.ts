@@ -116,7 +116,7 @@ describe('MoveNodesDialog: the write', () => {
     expect(sent(all)).toEqual(['rom>archiv', 'neapel>archiv'])
     expect(v.emitted('moved')).toEqual([[{ nodes: ids('rom', 'neapel'), to: 'archiv' }]])
     expect(v.emitted('close')).toHaveLength(1)
-    expect(toast.showUndo).toHaveBeenLastCalledWith(expect.objectContaining({ summary: t('node.move.many.moved', { count: 2, to: 'Archiv' }) }))
+    expect(toast.showUndo).toHaveBeenLastCalledWith(expect.objectContaining({ summary: t('words.move_many_moved', [2, 'Archiv']) }))
     toast.showUndo.mock.lastCall![0].onUndo()
     await flushPromises()
     expect(sent(all, 1)).toEqual(['rom>reisen', 'neapel>reisen'])
@@ -129,11 +129,11 @@ describe('MoveNodesDialog: the write', () => {
     await flushPromises()
     await moveHere('Familie', 'Archiv')
     expect(sent(mover)).toEqual(['rom>archiv'])
-    expect(summaryMoved()).toBe(t('node.move.many.moved', { count: 1, to: 'Archiv' }))
+    expect(summaryMoved()).toBe(t('words.move_many_moved', [1, 'Archiv']))
     expect(summaryLines()).toEqual([
       t('node.move.many.reason', { name: 'bericht.pdf', reason: t('node.move.nameTakenThere', { kind: t('depot.aFile'), name: 'Bericht.PDF' }) }),
     ])
-    expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('node.move.many.moved', { count: 1, to: 'Archiv' }) }))
+    expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('words.move_many_moved', [1, 'Archiv']) }))
   })
 
   it('where nothing would go, it says why and sends nothing; the browser stays', async () => {
@@ -153,7 +153,7 @@ describe('MoveNodesDialog: the write', () => {
     await flushPromises()
     await moveHere('Familie', 'Archiv')
     expect(sent(mover)).toEqual(['rom>archiv', 'neapel>archiv'])
-    expect(summaryLines()).toEqual([t('node.move.many.reason', { name: 'Neapel', reason: t('node.move.refused.slug_taken') })])
+    expect(summaryLines()).toEqual([t('node.move.many.reason', { name: 'Neapel', reason: t('words.move_refused_slug_taken') })])
     expect(w.emitted('moved')).toEqual([[{ nodes: ids('rom'), to: 'archiv' }]])
     expect(w.emitted('close'), 'the summary stays until closed').toBeUndefined()
     toast.showUndo.mock.lastCall![0].onUndo()
@@ -171,7 +171,7 @@ describe('MoveNodesDialog: the write', () => {
     expect(summaryMoved()).toBe(t('node.move.many.noneMoved'))
     expect(summaryLines()).toEqual([
       t('node.move.many.reason', { name: 'Rom', reason: t('node.move.refused.rate_limited') }),
-      t('node.move.many.reason', { name: 'Neapel', reason: t('node.move.refused.failed') }),
+      t('node.move.many.reason', { name: 'Neapel', reason: t('words.move_refused_failed') }),
     ])
     expect(toast.showUndo).not.toHaveBeenCalled()
     expect(toast.success).not.toHaveBeenCalled()
@@ -216,7 +216,7 @@ describe('MoveNodesDialog: guests\' folders out of a drop box', () => {
     confirm.click(t('node.move.identityAccept'))
     await flushPromises()
     expect(sent(mover)).toEqual(['anna>archiv', 'ben>archiv'])
-    expect(toast.success).toHaveBeenCalledWith(t('node.move.many.moved', { count: 2, to: 'Archiv' }))
+    expect(toast.success).toHaveBeenCalledWith(t('words.move_many_moved', [2, 'Archiv']))
     expect(toast.showUndo).not.toHaveBeenCalled()
   })
 })

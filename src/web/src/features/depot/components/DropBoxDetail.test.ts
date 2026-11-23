@@ -187,7 +187,7 @@ describe('DropBoxDetail', () => {
     expect(loadTree).toHaveBeenCalled()
     // inbox #385 (c): said, with an undo that restores the folder through core's trash restore
     expect(showUndo).toHaveBeenCalledOnce()
-    expect(showUndo.mock.calls[0][0].summary).toBe(t('node.trash.moved', { name: 'Ben' }))
+    expect(showUndo.mock.calls[0][0].summary).toBe(t('words.trash_moved', ['Ben']))
     showUndo.mock.calls[0][0].onUndo()
     await flushPromises()
     expect(vi.mocked(restoreNode).mock.calls.map((c) => [c[0], (c[3] as TreeNode).id])).toEqual([[SCOPE, BEN.id]])

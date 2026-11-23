@@ -228,7 +228,7 @@ describe('PotDetail for a member', () => {
     title.dispatchEvent(new Event('input'))
     await buttonIn(dialog()!, t('common.save'))!.click()
     await flushPromises()
-    expect(dialog()!.textContent).toContain(t('expenses.entry.stale'))
+    expect(dialog()!.textContent).toContain(t('words.ed_stale'))
     expect((dialog()!.querySelector('input') as HTMLInputElement).value).toBe('Dinner (Ben)')
     expect(server.appends).toHaveLength(0)
     const again = dialog()!.querySelector('input') as HTMLInputElement
@@ -258,7 +258,7 @@ describe('PotDetail for a member', () => {
     title.dispatchEvent(new Event('input'))
     await buttonIn(dialog()!, t('common.save'))!.click()
     await flushPromises()
-    expect(dialog()!.textContent).toContain(t('expenses.entry.stale'))
+    expect(dialog()!.textContent).toContain(t('words.ed_stale'))
     expect((dialog()!.querySelector('input') as HTMLInputElement).value).toBe('Dinner (Ben)')
     expect(server.appends).toHaveLength(0)
     // Control: saved again on the version it now shows, it goes on top.

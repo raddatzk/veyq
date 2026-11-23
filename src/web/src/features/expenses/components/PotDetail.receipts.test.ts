@@ -234,7 +234,7 @@ describe('receipts in the entry dialog', () => {
     const after = mountPot()
     await flushPromises()
     await openEntry(after, DINNER)
-    expect(dialog()!.textContent).toContain(t('expenses.entry.notRestorable'))
+    expect(dialog()!.textContent).toContain(t('words.entry_not_restorable'))
     expect(buttonIn(dialog()!, t('expenses.entry.restore'))).toBeUndefined()
   })
 

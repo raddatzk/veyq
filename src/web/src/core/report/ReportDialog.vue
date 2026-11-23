@@ -79,10 +79,10 @@ function close(): void {
 }
 
 const REFUSALS: Record<string, string> = {
-  too_many_open_reports: 'report.tooManyOpen',
-  rate_limited: 'report.rateLimited',
-  report_keys_unavailable: 'report.unavailable',
-  report_item_not_found: 'report.notFound',
+  too_many_open_reports: 'words.report_too_many_open',
+  rate_limited: 'words.report_rate_limited',
+  report_keys_unavailable: 'words.report_unavailable',
+  report_item_not_found: 'words.report_not_found',
 }
 
 async function send(): Promise<void> {
@@ -94,7 +94,7 @@ async function send(): Promise<void> {
     receipt.value = await submitReport(request, sent.value, { category: category.value, reason: reason.value, contact: contact.value })
   } catch (e) {
     const code = e instanceof ReportRefused ? e.code : null
-    error.value = t(REFUSALS[code ?? ''] ?? 'report.failed')
+    error.value = t(REFUSALS[code ?? ''] ?? 'words.report_failed')
   } finally {
     loading.value = false
   }

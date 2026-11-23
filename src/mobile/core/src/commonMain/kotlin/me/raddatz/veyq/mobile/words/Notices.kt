@@ -259,7 +259,7 @@ object Notices {
     /** The undo of a trash did not bring [name] back. */
     fun trashUndoFailed(name: String) = Notice(Msg.TRASH_UNDO_FAILED, name)
 
-    /** Why a move did not go through (`node.move.refused.*`). */
+    /** Why a move did not go through (the web says these words too: its `MOVE_REFUSAL_TEXT`, ADR 0136 § The web's words). */
     fun moveRefused(outcome: NodeMove.Outcome): Notice? = when (outcome) {
         NodeMove.Outcome.MOVED -> null
         NodeMove.Outcome.NAME_TAKEN -> Notice(Msg.MOVE_REFUSED_SLUG_TAKEN)

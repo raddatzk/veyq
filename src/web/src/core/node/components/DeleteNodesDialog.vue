@@ -18,7 +18,7 @@ import type { TreeNode } from '../tree'
 import { registry } from '../../applications/registry'
 import { deleteQuestion } from '../deleteQuestion'
 import { joinList, type SelectedForDelete } from '../selection'
-import { deleteRefusalOf, deleteSelection, restoreSelection } from '../deleteSelection'
+import { DELETE_REFUSAL_TEXT, deleteRefusalOf, deleteSelection, restoreSelection } from '../deleteSelection'
 import { loadTree, treeStore } from '../treeStore'
 import { TRASH_UNDO_MS } from '../trashUndo'
 import type { ScopeKey } from '../../../features/spaces/epochs'
@@ -48,7 +48,7 @@ const kinds = computed(() => {
   const nouns: string[] = []
   for (const { node } of props.items) {
     const info = registry.kind(node.kind)
-    const noun = t((info.supported && info.nounWithArticle) || 'node.anItem')
+    const noun = t((info.supported && info.nounWithArticle) || 'words.node_an_item')
     if (!nouns.includes(noun)) nouns.push(noun)
   }
   return joinList(locale.value, nouns)
@@ -72,9 +72,9 @@ async function confirm() {
   const gone = outcomes.filter((o) => o.error === null).map((o) => o.node)
   const lines: string[] = []
   for (const o of outcomes) {
-    if (o.error !== null) lines.push(t('node.deleteMany.reason', { name: named(o.node), reason: t(`node.deleteMany.refused.${await deleteRefusalOf(o.error)}`) }))
+    if (o.error !== null) lines.push(t('node.deleteMany.reason', { name: named(o.node), reason: t(DELETE_REFUSAL_TEXT[await deleteRefusalOf(o.error)]) }))
   }
-  const deletedText = gone.length > 0 ? t('node.deleteMany.moved', { count: gone.length }, gone.length) : t('node.deleteMany.noneDeleted')
+  const deletedText = gone.length > 0 ? t('words.delete_many_moved', [gone.length], gone.length) : t('node.deleteMany.noneDeleted')
   if (gone.length > 0) {
     const { scopeId, epochs, afterUndo } = props
     toast.showUndo({

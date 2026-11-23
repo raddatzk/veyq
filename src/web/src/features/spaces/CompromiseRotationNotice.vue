@@ -32,7 +32,7 @@ async function requeue() {
   try {
     emit('requeued', await requeueScopeRotation(props.scopeId))
   } catch {
-    error.value = t('members.compromiseRotationRequeueFailed')
+    error.value = t('words.node_save_failed')
   } finally {
     busy.value = false
   }

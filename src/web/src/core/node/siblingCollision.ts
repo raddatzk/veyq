@@ -6,9 +6,9 @@ import { registry } from '../applications/registry'
 import type { TreeNode } from './tree'
 
 /** "There is already a file named “x” here." — the sibling's noun from ITS kind (`KindDescriptor.nounWithArticle`), the
- *  neutral `node.anItem` for a kind that registers none: core names no application kind in its own strings. */
-export function nameTakenMessage(t: (key: string, named?: Record<string, unknown>) => string, sibling: TreeNode): string {
+ *  neutral `words.node_an_item` for a kind that registers none: core names no application kind in its own strings. */
+export function nameTakenMessage(t: (key: string, args?: Record<string, unknown> | unknown[]) => string, sibling: TreeNode): string {
   const info = registry.kind(sibling.kind)
-  const noun = (info.supported && info.nounWithArticle) || 'node.anItem'
-  return t('node.nameTakenBy', { kind: t(noun), name: sibling.name })
+  const noun = (info.supported && info.nounWithArticle) || 'words.node_an_item'
+  return t('words.node_name_taken_by', [t(noun), sibling.name])
 }

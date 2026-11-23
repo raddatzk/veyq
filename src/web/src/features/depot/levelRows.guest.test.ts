@@ -419,8 +419,8 @@ describe('a contributor uploads into the shared folder', () => {
     const h = mountSection({ role: ShareRole.ReadWrite, requestGuest })
     await flushPromises()
     await pickNew(h, ['report.PDF'])
-    expect(dialog.text()).toContain(t('depot.replaceTitle'))
-    expect(dialog.text()).toContain(t('depot.replaceConfirm', { name: 'Report.pdf' }))
+    expect(dialog.text()).toContain(t('words.depot_replace_title'))
+    expect(dialog.text()).toContain(t('words.depot_replace_confirm', ['Report.pdf']))
     expect(guestFileUploadJob, 'nothing before the answer').not.toHaveBeenCalled()
     expect(requestGuest).not.toHaveBeenCalled()
     dialog.click(t('depot.replaceAccept'))
@@ -478,7 +478,7 @@ describe('a contributor uploads into the shared folder', () => {
     await flushPromises()
     expect(h.w.text()).toContain(t('depot.errors.slug_taken', { name: 'report.PDF' }))
     // the race backstop (inbox #400): a sibling of another kind that holds the name now is named by its kind
-    expect(h.w.text()).toContain(t('depot.nameTakenBy', { name: 'Sub', reason: t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'Sub' }) }))
+    expect(h.w.text()).toContain(t('depot.nameTakenBy', { name: 'Sub', reason: t('words.node_name_taken_by', [t('node.aFolder'), 'Sub']) }))
     expect(h.w.text()).toContain(t('depot.errors.slug_taken', { name: 'elsewhere.txt' }))
   })
 
@@ -491,7 +491,7 @@ describe('a contributor uploads into the shared folder', () => {
     await pickNew(h, ['sub'])
     expect(requestGuest).not.toHaveBeenCalled()
     expect(guestFileUploadJob).not.toHaveBeenCalled()
-    const text = t('depot.nameTakenBy', { name: 'sub', reason: t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'Sub' }) })
+    const text = t('depot.nameTakenBy', { name: 'sub', reason: t('words.node_name_taken_by', [t('node.aFolder'), 'Sub']) })
     expect(noticeTexts(h)).toEqual([text])
     const refusal = h.w.findAll('.veyq-level-notice').find((n) => n.text().includes(text))!
     await refusal.findAll('button').find((b) => b.text() === t('node.dismiss'))!.trigger('click')

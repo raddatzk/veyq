@@ -356,14 +356,14 @@ describe('an opened file: its page for a member', () => {
     await pick(w, 'new.pdf')
     settleConfirm(true)
     await flushPromises()
-    await vi.waitFor(() => expect(w.text()).toContain(t('depot.errors.stale_file', { name: 'new.pdf' })))
+    await vi.waitFor(() => expect(w.text()).toContain(t('words.depot_error_stale_file', ['new.pdf'])))
     const queue = useUploadQueue().batches.value
     expect(queue[0].files[0].attempts, 'a final refusal is not retried').toBe(1)
     expect(w.text()).not.toContain(t('upload.retry'))
     // the next read of the folder names the peer's blob; "replace anyway" re-reads first, then goes without asking
     listFiles = stubApi(filesApi, { listFiles: { items: [{ nodeId: R, fileBlob: { ...BLOB, blobId: 'blob-now' } }] } satisfies FileListPage }).listFiles
     vi.mocked(fileUploadJob).mockClear()
-    await w.findAll('button').find((b) => b.text() === t('depot.replaceAnyway'))!.trigger('click')
+    await w.findAll('button').find((b) => b.text() === t('words.depot_replace_anyway'))!.trigger('click')
     await flushPromises()
     expect(confirmRequest.value, 'the explicit answer asks nothing').toBeNull()
     expect(targets()[0].target.replace?.expectedBlobId).toBe('blob-now')

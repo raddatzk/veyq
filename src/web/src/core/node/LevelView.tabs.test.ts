@@ -242,11 +242,11 @@ describe('LevelView application tabs: an empty tab', () => {
     const allow = () => true
     const Dialog = { name: 'D', render: () => null }
     testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey,
-      kind: 'ALPHA', icon: 'images', createDialog: Dialog, createEntry: { label: 'node.anItem', icon: 'images', order: 10, allowed: allow },
+      kind: 'ALPHA', icon: 'images', createDialog: Dialog, createEntry: { label: 'words.node_an_item', icon: 'images', order: 10, allowed: allow },
       list: { rows: stubRows('a').factory, tabLabel: LABEL_A, emptyText: () => 'memory.memoryEmpty' },
     })
     testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey,
-      kind: 'BETA', icon: 'file', createDialog: Dialog, createEntry: { label: 'node.anItem', icon: 'file', order: 20, allowed: allow },
+      kind: 'BETA', icon: 'file', createDialog: Dialog, createEntry: { label: 'words.node_an_item', icon: 'file', order: 20, allowed: allow },
       list: { rows: stubRows('b').factory, tabLabel: LABEL_B },
     })
     const w = mountLevel([TRIPS, SUB])
@@ -286,7 +286,7 @@ describe('LevelView application tabs: the "New" menu and a drop follow the tab',
       },
     })
     testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey,
-      kind: 'ALPHA', icon: 'images', createDialog: Dialog, createEntry: { label: 'node.anItem', icon: 'images', order: 10, allowed: allow },
+      kind: 'ALPHA', icon: 'images', createDialog: Dialog, createEntry: { label: 'words.node_an_item', icon: 'images', order: 10, allowed: allow },
       list: { rows: stubRows('a').factory, tabLabel: LABEL_A },
     })
     testKind(holder.reg, { rekeyContent: nothingOfItsOwnToRekey,
@@ -325,11 +325,11 @@ describe('LevelView application tabs: the "New" menu and a drop follow the tab',
   it('offers core\'s folder entry in every tab and only the shown application\'s own entries beside it', async () => {
     const w = mountMember()
     expect(tabButtons(w).map((x) => x.text()), 'both tabs offered: the viewer may add to both').toEqual([t('node.tabAll'), t(LABEL_A), t(LABEL_B)])
-    expect(await newMenuLabels(w)).toEqual([t('node.folderCreate'), t('node.anItem'), t('node.rename'), t('node.bookmark.newEntry')])
+    expect(await newMenuLabels(w)).toEqual([t('node.folderCreate'), t('words.node_an_item'), t('node.rename'), t('node.bookmark.newEntry')])
     closeMenu()
     await pick(w, t(LABEL_A))
     expect(selected(w)).toEqual([t(LABEL_A)])
-    expect(await newMenuLabels(w)).toEqual([t('node.folderCreate'), t('node.anItem')])
+    expect(await newMenuLabels(w)).toEqual([t('node.folderCreate'), t('words.node_an_item')])
     closeMenu()
     await pick(w, t(LABEL_B))
     expect(await newMenuLabels(w)).toEqual([t('node.folderCreate'), t('node.rename')])

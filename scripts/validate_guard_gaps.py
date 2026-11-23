@@ -322,12 +322,14 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   123 Windows' Depot UI naming `Call.GalleryOpen` — rejected: Windows' (b), another application's part of the wire
   124 a wire prefix `Ledger.` classified nowhere — rejected: the desktops' (c) reads the prefix table whole
   125 Apple's core UI naming `GalleryModel` in a comment only — passes: the Swift mask blanks it
-  126 a twinned web message reworded alone (Expenses' `expenses.entry.blocked` saying "pot") — rejected:
+  126 a twinned web message reworded alone (Expenses' `expenses.people.removeConfirm` saying "pot") — rejected:
      `validate_web_words` twin-equal (inbox #1060)
   127 a twin's German naming its two placeholders the other way round (`expenses.balances.pays`) — rejected:
      twin-equal matches placeholders by their first use in the English, not by name
   128 a new app sentence the web already says, paired nowhere — rejected: `validate_web_words` unpaired
-  129 a notices table raising a word `web.json`'s `read` lacks — rejected: read-is-notices
+  129 `web.json`'s `read` naming a word no notices table raises any more — rejected: read-is-notices
+  132 the web's catalog regaining a one-word copy of a word it reads from words.json (`Queued`, the notices' move
+     deleted its `upload.status.queued`) — rejected: `validate_web_words` read-has-no-twin, of any length
   130 a notice's word changed in words.json without `generate_words.py --web` — rejected: generated-fresh
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
@@ -1358,8 +1360,8 @@ def _edit(root: pathlib.Path, rel: str, old: str, new: str) -> None:
 
 
 def forge_web_twin_reworded(root: pathlib.Path) -> str:
-    _edit(root, "src/web/src/features/expenses/i18n.ts", "this Pot or entry takes no changes", "this pot or entry takes no changes")
-    return "the web's expenses.entry.blocked reworded alone (must be REJECTED — twin-equal)"
+    _edit(root, "src/web/src/features/expenses/i18n.ts", "so they disappear from the Pot", "so they disappear from the pot")
+    return "the web's expenses.people.removeConfirm reworded alone (must be REJECTED — twin-equal)"
 
 
 def forge_web_twin_placeholders_swapped(root: pathlib.Path) -> str:
@@ -1376,13 +1378,19 @@ def forge_app_sentence_unpaired(root: pathlib.Path) -> str:
 def forge_notice_word_unread(root: pathlib.Path) -> str:
     _edit(root, "src/mobile/apps/expenses/src/commonMain/kotlin/me/raddatz/veyq/mobile/expenses/ExpensesNotices.kt",
           '"title" -> Msg.PROBLEM_TITLE', '"title" -> Msg.APP_NAME')
-    return "a notices table raising a word web.json's read lacks (must be REJECTED — read-is-notices)"
+    return "web.json's read naming problem_title, which no notices table raises now (must be REJECTED — read-is-notices)"
 
 
 def forge_notice_word_not_regenerated(root: pathlib.Path) -> str:
     _edit(root, "src/mobile/words/words.json", '"Nothing here can be copied by this version of veyq."',
           '"Nothing here can be copied by this veyq."')
     return "a notice's word changed without generate_words.py --web (must be REJECTED — generated-fresh)"
+
+
+def forge_web_copy_of_read_word(root: pathlib.Path) -> str:
+    _edit(root, "src/web/src/i18n/index.ts", "    cancelAll: 'Cancel all',\n", "    cancelAll: 'Cancel all',\n    queuedAgain: 'Queued',\n")
+    _edit(root, "src/web/src/i18n/index.ts", "    cancelAll: 'Alle abbrechen',\n", "    cancelAll: 'Alle abbrechen',\n    queuedAgain: 'In Warteschlange',\n")
+    return "the web's catalog regaining a copy of words.upload_status_queued (must be REJECTED — read-has-no-twin)"
 
 
 def forge_short_app_word_unpaired(root: pathlib.Path) -> str:
@@ -2091,6 +2099,7 @@ CASES = [
     ("129", WEB_WORDS, forge_notice_word_unread, False),
     ("130", WEB_WORDS, forge_notice_word_not_regenerated, False),
     ("131", WEB_WORDS, forge_short_app_word_unpaired, True),
+    ("132", WEB_WORDS, forge_web_copy_of_read_word, False),
     ("100", LINK_CLOSE_ARITY, forge_link_closed_outside_the_body, False),
     ("101", LINK_CLOSE_ARITY, forge_link_closed_by_a_bulk_update, False),
     ("85", WEB_GUARD, forge_web_core_catalog_carries_application_namespace, False),

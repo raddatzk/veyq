@@ -13,7 +13,7 @@ import { isTrackMeta } from './track/gpx'
 import { isAudioMeta } from './music/audio'
 import { isGalleryMedium } from './galleryMedium'
 import type { MemorySource } from './source'
-import { mediaRefusalOf, sealedMediaName } from './mediaRefusal'
+import { MEDIA_REFUSAL_TEXT, mediaRefusalOf, sealedMediaName } from './mediaRefusal'
 import { startMediaRevisionPolling, stopMediaRevisionPolling } from './mediaRevisionPolling'
 import { itemsPollTick, reconcileItems } from '../../core/items/itemsLive'
 import { noteScopeGone } from '../../core/node/treeStore'
@@ -167,7 +167,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     const name = mediaNameOf(payload.mediaId) // before the removal: the Undo names a refused restore by it (inbox #429)
     removeFromGrid(payload.mediaId)
     undo.arm({ mediaId: payload.mediaId, name })
-    toast.showUndo({ summary: t('memory.trash.movedToTrash'), onUndo: onUndoDelete, life: 6000 })
+    toast.showUndo({ summary: t('words.memory_moved_to_trash'), onUndo: onUndoDelete, life: 6000 })
     try {
       await del.trash(payload.mediaId)
     } catch {
@@ -205,7 +205,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     try {
       await del.restore(u.mediaId)
     } catch (e) {
-      const reason = t(`memory.buckets.deleteRefusedReason.${await mediaRefusalOf(e)}`)
+      const reason = t(MEDIA_REFUSAL_TEXT[await mediaRefusalOf(e)])
       toast.error(t('memory.buckets.restoreRefused', { names: u.name, reason }))
     } finally {
       void load()

@@ -261,7 +261,7 @@ async function startReplace(file: File, confirmed = false): Promise<void> {
   if (!batch) return
   if (!confirmed && !empty.value) {
     const accepted = await ask({
-      header: t('depot.replaceTitle'),
+      header: t('words.depot_replace_title'),
       message: t(guest ? 'depot.guest.replaceFileConfirm' : 'depot.replaceRowConfirm', { name: props.node.name, file: file.name }),
       acceptLabel: t('depot.replaceAccept'),
       acceptIcon: 'upload',
@@ -290,6 +290,8 @@ type Notice = { key: string; item: UploadItem<FileUploadResult, FileJobExtra>; t
 const KNOWN_ERRORS = new Set<string>([...Object.values(FileUploadError), QUOTA_EXCEEDED, APPLICATION_OFF])
 function noticeText(code: string, name: string): string {
   if (guest && code === QUOTA_EXCEEDED) return t('depot.guest.linkFull', { name })
+  // a peer's replace is said in the apps' notices' words (ADR 0136 § The web's words)
+  if (code === FileUploadError.staleFile) return t('words.depot_error_stale_file', [name])
   return t(`depot.errors.${code}`, { name })
 }
 const notices = computed<Notice[]>(() => {
@@ -325,7 +327,7 @@ contributeNodeHeader(() => ({ actions: headerActions.value, rename: headerRename
           <span class="veyq-action-group">
             <VeyqButton
               v-if="n.replaceAnyway && rights.replace"
-              :label="t('depot.replaceAnyway')"
+              :label="t('words.depot_replace_anyway')"
               size="small"
               variant="secondary"
               appearance="outlined"

@@ -369,7 +369,7 @@ describe('Depot rows', () => {
       await pick(FOLDER_PICKER, picked('Big/a.bin'))
       expect(createContentNode).not.toHaveBeenCalled()
       expect(fileUploadJob).not.toHaveBeenCalled()
-      expect(noticeTexts(h)).toEqual([t('depot.uploadFolderNoRoom', { name: 'Big', size: formatBytes('Big/a.bin'.length, 'en') })])
+      expect(noticeTexts(h)).toEqual([t('words.depot_folder_no_room', ['Big', formatBytes('Big/a.bin'.length, 'en')])])
       vi.mocked(tenantStorageFits).mockResolvedValue(null)
       await pick(FOLDER_PICKER, picked('Big/a.bin'))
       expect(made.map((m) => m.name)).toEqual(['Big'])
@@ -403,7 +403,7 @@ describe('Depot rows', () => {
       await pick(FOLDER_PICKER, picked('T/a.txt', 'T/broken/b.txt', 'T/ok/c.txt'))
       expect(made.map((m) => m.name)).toEqual(['T', 'ok'])
       expect(targets().map((x) => x.name)).toEqual(['a.txt', 'c.txt'])
-      expect(noticeTexts(h)).toEqual([t('depot.uploadFolderPartFailed', { name: 'T/broken' })])
+      expect(noticeTexts(h)).toEqual([t('words.depot_folder_part_failed', ['T/broken'])])
     })
 
     it('takes a dropped directory (core has screened it): uploaded as its tree, not screened again', async () => {
@@ -464,9 +464,9 @@ describe('Depot rows', () => {
     await flushPromises()
     const picking = pick(MULTI, [new File(['new'], 'report.PDF', { type: 'application/pdf' })])
     await flushPromises()
-    expect(confirmRequest.value).toMatchObject({ header: t('depot.replaceTitle'), message: t('depot.replaceConfirm', { name: 'Report.pdf' }) })
+    expect(confirmRequest.value).toMatchObject({ header: t('words.depot_replace_title'), message: t('words.depot_replace_confirm', ['Report.pdf']) })
     // the question says what is lost (inbox #383): no version history
-    expect(t('depot.replaceConfirm', { name: 'x' })).toContain('cannot be restored')
+    expect(t('words.depot_replace_confirm', ['x'])).toContain('cannot be restored')
     expect(fileUploadJob).not.toHaveBeenCalled() // nothing before the answer
     settleConfirm(true)
     await picking
@@ -491,7 +491,7 @@ describe('Depot rows', () => {
     // the Memory `A Memory` is `memories/a-memory` as a token input, so neither `a-memory` nor `a memory` meets it
     expect(targets().map((x) => x.name)).toEqual(['a.b', 'a-memory', 'a memory'])
     expect(noticeTexts(h)).toEqual([
-      t('depot.nameTakenBy', { name: 'a-b', reason: t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'a.b' }) }),
+      t('depot.nameTakenBy', { name: 'a-b', reason: t('words.node_name_taken_by', [t('node.aFolder'), 'a.b']) }),
     ])
     // dismissed by its own button
     await dismiss(h, 0)
@@ -499,7 +499,7 @@ describe('Depot rows', () => {
     // a FILE sibling is still the replace question, not a refusal (the replace semantics are unchanged)
     const picking = pick(MULTI, [new File(['n'], 'report.pdf')])
     await flushPromises()
-    expect(confirmRequest.value).toMatchObject({ message: t('depot.replaceConfirm', { name: 'Report.pdf' }) })
+    expect(confirmRequest.value).toMatchObject({ message: t('words.depot_replace_confirm', ['Report.pdf']) })
     settleConfirm(false)
     await picking
   })
@@ -511,7 +511,7 @@ describe('Depot rows', () => {
     enqueue([{ name: 'later', sizeBytes: 1, run: async () => { throw new Error('slug_taken') }, extra: { file: new File([''], 'later') } }], { label: 'Docs', key: `files:${SCOPE}:${D}` })
     await vi.waitFor(() => expect(useUploadQueue().batches.value[0]?.files[0]?.status).toBe('failed'))
     await flushPromises()
-    expect(h.w.text()).toContain(t('depot.nameTakenBy', { name: 'later', reason: t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'Later' }) }))
+    expect(h.w.text()).toContain(t('depot.nameTakenBy', { name: 'later', reason: t('words.node_name_taken_by', [t('node.aFolder'), 'Later']) }))
   })
 
   it('a declined replace uploads nothing for that file', async () => {
@@ -543,8 +543,8 @@ describe('Depot rows', () => {
     mountSection({ nodes: [REPORT, NOTES] })
     await flushPromises()
     await pick(MULTI, [new File(['x'], 'Notes.TXT')])
-    expect(dialog.text()).toContain(t('depot.replaceTitle'))
-    expect(dialog.text()).toContain(t('depot.replaceConfirm', { name: 'notes.txt' }))
+    expect(dialog.text()).toContain(t('words.depot_replace_title'))
+    expect(dialog.text()).toContain(t('words.depot_replace_confirm', ['notes.txt']))
     expect(fileUploadJob, 'nothing before the answer').not.toHaveBeenCalled()
     dialog.click(t('depot.replaceAccept'))
     await flushPromises()
@@ -582,7 +582,7 @@ describe('Depot rows', () => {
     await flushPromises()
     const picking = pick(MULTI, [new File(['y'], 'pending.bin')])
     await flushPromises()
-    expect(confirmRequest.value).toMatchObject({ message: t('depot.replaceConfirm', { name: 'pending.bin' }) })
+    expect(confirmRequest.value).toMatchObject({ message: t('words.depot_replace_confirm', ['pending.bin']) })
     settleConfirm(false)
     await picking
   })
@@ -656,14 +656,14 @@ describe('Depot rows', () => {
     enqueue([{ name: 'x', sizeBytes: 1, run: async () => { throw new Error('slug_taken') }, extra: { file } }], { label: 'Other', key: `files:${SCOPE}:other` })
     await vi.waitFor(() => expect(useUploadQueue().batches.value.every((b) => b.finishedAt !== null)).toBe(true))
     await flushPromises()
-    expect(noticeTexts(h)).toEqual([t('depot.errors.stale_file', { name: 'Report.pdf' })])
+    expect(noticeTexts(h)).toEqual([t('words.depot_error_stale_file', ['Report.pdf'])])
 
     listFiles.mockResolvedValue({ items: [{ nodeId: R, fileBlob: { ...sealedBlob(R, 10), blobId: 'blob-peer' } }] })
-    await h.w.find('.veyq-level-notice').findAll('button').find((b) => b.text() === t('depot.replaceAnyway'))!.trigger('click')
+    await h.w.find('.veyq-level-notice').findAll('button').find((b) => b.text() === t('words.depot_replace_anyway'))!.trigger('click')
     await flushPromises()
     expect(confirmRequest.value).toBeNull()
     expect(targets()).toEqual([{ name: 'Report.pdf', target: expect.objectContaining({ replace: expect.objectContaining({ nodeId: R, expectedBlobId: 'blob-peer' }) }) }])
-    expect(noticeTexts(h).join()).not.toContain(t('depot.errors.stale_file', { name: 'Report.pdf' }))
+    expect(noticeTexts(h).join()).not.toContain(t('words.depot_error_stale_file', ['Report.pdf']))
   })
 
   // Inbox #395 (F9): a failure the member made good - the same file uploaded since - is no longer explained; another

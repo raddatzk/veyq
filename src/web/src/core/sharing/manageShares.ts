@@ -590,7 +590,7 @@ export async function resealShareNames(nodeId: string, newName: string, epochs: 
 export type ClosedLink = ShareAddress & { role: ShareRole }
 
 /** The links whose root's subtree this device is re-keying after closing them, by share id (ADR 0114 decision 9) —
- *  what the share dialog says on such a link's row while it runs (`share.closedRekeying`). */
+ *  what the share dialog says on such a link's row while it runs (`words.share_closed_rekeying`). */
 export const rekeyingClosedLinks = shallowReactive(new Set<string>())
 
 /**

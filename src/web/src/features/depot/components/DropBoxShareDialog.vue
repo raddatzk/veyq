@@ -317,7 +317,7 @@ async function copy(text: string, id: string) {
         <small class="veyq-form-copy">{{ t('share.expiryRequiredByRule', { days: rules.maxDays }) }}</small>
       </template>
       <VeyqMessage v-if="reissueRefused" tone="warn">{{ t('depot.dropBox.shareReissueHint') }}</VeyqMessage>
-      <VeyqMessage v-else-if="failed" tone="error">{{ t('depot.dropBox.shareFailed') }}</VeyqMessage>
+      <VeyqMessage v-else-if="failed" tone="error">{{ t('words.node_save_failed') }}</VeyqMessage>
       <div class="veyq-dialog-action-row">
         <VeyqButton :label="t('depot.dropBox.close')" variant="secondary" appearance="outlined" @click="emit('close')" />
         <VeyqButton v-if="changes" :label="t('depot.dropBox.shareCreate')" icon="plus" :loading="busy" :disabled="missing" @click="create" />

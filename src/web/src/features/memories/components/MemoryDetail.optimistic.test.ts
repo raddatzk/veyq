@@ -212,9 +212,9 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
     await flushPromises()
 
     const tile = wrapper.find('.gallery-tile-optimistic')
-    expect(tile.attributes('aria-label')).not.toContain(t('media.uploadStatus.uploading'))
-    expect(tile.find('.upload-tile-progress').attributes('aria-label')).not.toContain(t('media.uploadStatus.uploading'))
-    expect(tile.text()).toContain(t('media.uploadStatus.queued')) // and it says what it IS, visibly
+    expect(tile.attributes('aria-label')).not.toContain(t('words.upload_status_uploading'))
+    expect(tile.find('.upload-tile-progress').attributes('aria-label')).not.toContain(t('words.upload_status_uploading'))
+    expect(tile.text()).toContain(t('words.upload_status_queued')) // and it says what it IS, visibly
   })
 
   it('a preparing tile says preparing — the stage where the device is busy and the wire is not', async () => {
@@ -229,8 +229,8 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
     await flushPromises()
 
     const tile = wrapper.find('.gallery-tile-optimistic')
-    expect(tile.text()).toContain(t('media.uploadStatus.preparing'))
-    expect(tile.attributes('aria-label')).not.toContain(t('media.uploadStatus.uploading'))
+    expect(tile.text()).toContain(t('words.upload_status_preparing'))
+    expect(tile.attributes('aria-label')).not.toContain(t('words.upload_status_uploading'))
   })
 
   it('a failed upload shows an inline retry that re-runs it', async () => {
@@ -340,8 +340,8 @@ describe('MemoryDetail — an upload\'s progress does not lay the gallery out ag
     expect(layout.mock.calls.length - before, 'a progress tick or a stage change laid the grid out').toBe(0)
     // …while the tile itself follows every tick and names its stage
     expect(tileOf(wrapper, 'u1.jpg').find('.upload-ring-fill').attributes('stroke-dasharray')).toBe(`${2 * Math.PI * 16} ${2 * Math.PI * 16}`)
-    expect(tileOf(wrapper, 'u1.jpg').text()).toContain(t('media.uploadStatus.uploading'))
-    expect(tileOf(wrapper, 'u2.jpg').text()).toContain(t('media.uploadStatus.queued')) // its neighbour did not move
+    expect(tileOf(wrapper, 'u1.jpg').text()).toContain(t('words.upload_status_uploading'))
+    expect(tileOf(wrapper, 'u2.jpg').text()).toContain(t('words.upload_status_queued')) // its neighbour did not move
     expect(gridOrder(wrapper)).toEqual([store.media[0].mediaId, 'u2.jpg', 'u1.jpg'])
 
     // the control: a tile that appears, and one that settles onto a listed media, still lay the grid out

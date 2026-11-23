@@ -9,7 +9,7 @@
 //   (`nodeKeyForWrite`) or the guest's from its opened link, and a guest names itself first (core's one naming flow,
 //   `requestGuest`). An epoch refusal re-reads and rebuilds once (`writeAtNodeEpoch`, ADR 0109 point 6); a
 //   `409 stale_revision` re-reads the Pot and is re-thrown, so the editor can show the other writer's version
-//   (`expenses.entry.stale`) and the writer can save on top.
+//   (`words.ed_stale`) and the writer can save on top.
 // - **Settings** (the Pot's `pot` meta) are a member's, written whole with the revision read (`writeNodeMeta`, ADR 0077).
 // - **Receipts** (ADR 0108 decision 7) are read beside the revisions: every receipt change moves the Pot's
 //   `ledgerRevision`, so the receipt listing is re-read (conditionally, by its own tag) whenever the revision read changed.

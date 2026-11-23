@@ -25,7 +25,7 @@ import { formatBytes } from '../../shared/formatBytes'
 import { useToast } from '../../shared/state/useToast'
 import { activeSpace } from '../../app/activeSpace'
 import { tenantStorageFits } from '../../features/tenant/tenantStorage'
-import { prepareCopy, type PreparedCopy } from './copySubtree'
+import { prepareCopy, type CopyLeftOut, type PreparedCopy } from './copySubtree'
 import { ImportFailed } from './importSubtree'
 import { ExportError, MANIFEST_APP_VERSION } from './manifest'
 
@@ -72,8 +72,16 @@ watch(place, () => (error.value = ''))
 const size = computed(() => formatBytes(prepared.value?.bytes ?? 0, locale.value))
 const canCopy = computed(() => (prepared.value?.nodes ?? 0) > 0)
 const running = computed(() => step.value === 'running')
+/** Why a node stays behind: the apps' notices' words where they say it too (ADR 0136 § The web's words), else the web's. */
+const LEFT_OUT_TEXT: Record<CopyLeftOut['reason'], string> = {
+  unsupported_kind: 'node.copy.reason.unsupported_kind',
+  nothing_to_export: 'words.left_out_nothing',
+  unknown_application: 'node.copy.reason.unknown_application',
+  newer_content: 'node.copy.reason.newer_content',
+  not_copyable: 'words.left_out_not_copyable',
+}
 const leftOutLines = computed(() =>
-  (prepared.value?.leftOut ?? []).map((x) => t('node.copy.leftOutLine', { name: x.name, reason: t(`node.copy.reason.${x.reason}`) })),
+  (prepared.value?.leftOut ?? []).map((x) => t('node.copy.leftOutLine', { name: x.name, reason: t(LEFT_OUT_TEXT[x.reason]) })),
 )
 /** What does not come along: core's own, then each copied kind's (from the use case's list, only what applies). */
 const losses = computed(() => {
@@ -116,7 +124,7 @@ function failureText(e: unknown, to: string | null): string {
       : t('node.copy.failedLeft', { done: e.done, total: e.total, to: destinationName(to) })
     return c === 'quota_exceeded' ? `${t('node.copy.quota')} ${stopped}` : stopped
   }
-  if (e instanceof ExportError && e.code === 'nothing_to_import') return t('node.copy.nothing')
+  if (e instanceof ExportError && e.code === 'nothing_to_import') return t('words.copy_nothing')
   return t('node.copy.failed', { done: 0, total: prepared.value?.nodes ?? 0 })
 }
 
@@ -145,7 +153,7 @@ async function submit() {
     const copied = result.nodeIds.map((id) => treeStore.nodes.find((n) => n.id === id)?.name).filter((n): n is string => !!n)
     const done = copied.length === 1
       ? t('node.copy.copied', { name: copied[0], to: destinationName(to) })
-      : t('node.copy.many.copied', { count: result.nodeIds.length, to: destinationName(to) })
+      : t('words.copy_many_copied', [result.nodeIds.length, destinationName(to)])
     const left = ready.leftOut.map((x) => x.name)
     toast.success(left.length > 0 ? `${done} ${t('node.copy.copiedLeftOut', { names: joinList(locale.value, left) })}` : done)
     emit('copied', { nodeIds: result.nodeIds, to })
@@ -174,7 +182,7 @@ function close() {
       <template v-else-if="prepared">
         <p class="veyq-form-copy" data-testid="copy-summary">
           <template v-if="canCopy">{{ t('node.copy.summary', { nodes: prepared.nodes, size, target: destinationName(place) }, prepared.nodes) }}</template>
-          <template v-else>{{ t('node.copy.nothing') }}</template>
+          <template v-else>{{ t('words.copy_nothing') }}</template>
         </p>
         <div v-if="leftOutLines.length" data-testid="copy-left-out">
           <p class="veyq-form-copy">{{ t('node.copy.leftOut') }}</p>

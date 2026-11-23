@@ -222,8 +222,8 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
       const existing = replaceNode ?? (rights.value.replace ? siblingFile(file.name) : undefined)
       if (existing && !confirmed && !isEmpty(existing)) {
         const accepted = await ask({
-          header: t('depot.replaceTitle'),
-          message: t('depot.replaceConfirm', { name: existing.name }),
+          header: t('words.depot_replace_title'),
+          message: t('words.depot_replace_confirm', [existing.name]),
           acceptLabel: t('depot.replaceAccept'),
           acceptIcon: 'upload',
         })
@@ -288,7 +288,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
     if (!guest && plan.bytes > 0) {
       const tenantId = activeSpace.tenantId
       if (tenantId && (await tenantStorageFits(tenantId, plan.bytes)) === false) {
-        refuse(t('depot.uploadFolderNoRoom', { name: plan.root.name, size: formatBytes(plan.bytes, locale.value) }))
+        refuse(t('words.depot_folder_no_room', [plan.root.name, formatBytes(plan.bytes, locale.value)]))
         return
       }
     }
@@ -298,12 +298,12 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
     try {
       made = await createFolders(plan, tree)
     } catch {
-      refuse(t('depot.uploadFolderFailed', { name: plan.root.name }))
+      refuse(t('words.depot_folder_failed', [plan.root.name]))
       return
     } finally {
       refresh()
     }
-    for (const path of made.failed) refuse(t('depot.uploadFolderPartFailed', { name: path }))
+    for (const path of made.failed) refuse(t('words.depot_folder_part_failed', [path]))
     // Once nothing more can land, a guest takes back the folders that hold nothing (a full link refused every file).
     const takeBack = (items: Parameters<typeof takeBackEmptyFolders>[2]) => void takeBackEmptyFolders(made, tree, items).then(refresh)
     if (made.jobs.length === 0) {
@@ -348,6 +348,8 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
       const other = sibling(name)
       if (other && other.kind !== FILE_KIND) return takenBy(name, other)
     }
+    // a peer's replace is said in the apps' notices' words (ADR 0136 § The web's words)
+    if (code === FileUploadError.staleFile) return t('words.depot_error_stale_file', [name])
     return t(`depot.errors.${code}`, { name })
   }
 
@@ -377,7 +379,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
         return [{
           key: item.id, severity: 'error', text: noticeText(code, item.name),
           actions: code === FileUploadError.staleFile && rights.value.replace
-            ? [{ id: 'replace-anyway', label: t('depot.replaceAnyway'), onClick: () => void replaceAnyway(item) }]
+            ? [{ id: 'replace-anyway', label: t('words.depot_replace_anyway'), onClick: () => void replaceAnyway(item) }]
             : [],
           dismiss: () => removeFile(item.id),
         }]

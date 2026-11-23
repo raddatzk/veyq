@@ -3,7 +3,7 @@
 each application's `src/web/src/features/<owner>/i18n.ts`) and the apps' catalog (`src/mobile/words/words.json`, ADR 0136
 decision 3) are held together by `src/mobile/words/web.json` (inbox #1060, ADR 0136 § The web's words).
 
-**What it asserts.** Six rules:
+**What it asserts.** Seven rules:
 - **resolves**: every key `web.json` names is in its catalog — an app key in `words.json`, a web key (dotted, as `t()`
   takes it) a string leaf of a web catalog; a pair is not both twins and apart.
 - **twin-equal**: each pair under `twins` says the same in English and in German. Compared exactly, after the two
@@ -18,9 +18,14 @@ decision 3) are held together by `src/mobile/words/web.json` (inbox #1060, ADR 0
   twinned (then equal), apart (a different meaning, or a platform's convention, with why) or open (the owner's copy
   question, with what is asked).
 - **open-differs**: a pair under `open` still differs; once it is equal it belongs under `twins`.
-- **read-is-notices**: `web.json`'s `read` is exactly the keys the core's notices tables name — every `Msg.<KEY>` in a
-  `*Notices.kt` of the core's or an application's `commonMain` — so each word a notice can raise is the web's to read
-  (ADR 0155 decision 7.2).
+- **read-is-notices**: every key of `web.json`'s `read` is one the core's notices tables name — a `Msg.<KEY>` in a
+  `*Notices.kt` of the core's or an application's `commonMain` (ADR 0155 decision 7.2). Not every such word is read: the
+  web registers `read` eagerly, so it names only the words the web says (ADR 0136 § The web's words, the notices' move;
+  `src/web/src/i18n/i18n.test.ts` reddens a registered word no source names, and one a source names that is not there).
+- **read-has-no-twin**: a word the web reads from the catalog has no copy of its own on the web — a `read` key stands in
+  no pair of `twins` or `open`, and no web message says what a `read` word says (the same in English and German, read as
+  twin-equal reads them, of any length) unless the pair is `apart`. So the twin the notices' move deleted cannot come
+  back as a key of the web's own, not even a one-word one ("Queued").
 - **generated-fresh**: `src/web/src/i18n/words.generated.json` is byte for byte what `generate_words.py --web` writes
   from the catalog: the web reads those words from the apps' catalog, never a copy of its own.
 
@@ -39,7 +44,9 @@ are held equal, and a meaning the two catalogs word apart in English entirely (n
 `web.json` names them — homographs ("Open" the state, "Open" the verb) would otherwise be forced together. A pair's
 placeholders are matched by order of first use; a sentence that names two placeholders in the opposite order in each
 catalog's English reads as a mismatch, not a pass. The notices' words are found by name (`Msg.<KEY>` in a file called
-`*Notices.kt`): a notice raised elsewhere (a screen model building `Notice(Msg.…)` itself) is not in `read`.
+`*Notices.kt`): a notice raised elsewhere (a screen model building `Notice(Msg.…)` itself) cannot be in `read`.
+A web copy of a `read` word is found by its text: one worded otherwise (a different case or punctuation, the same
+meaning) passes read-has-no-twin — and, from three words on, is red under unpaired.
 
 Exit 0 green, 1 red (every violation printed), 2 when the tree is not where it should be or a catalog cannot be read.
 """
@@ -326,11 +333,21 @@ def check(root: Path) -> list:
     notices = notice_keys(root)
     if not notices:
         raise Unreadable("found no Msg in any *Notices.kt — the notices tables moved?")
-    for k in sorted(notices - set(read)):
-        errors.append(f"read-is-notices: `{k}` is a notice's word the web cannot read — add it to web.json's `read` "
-                      f"and run generate_words.py --web")
     for k in sorted(set(read) - notices):
         errors.append(f"read-is-notices: web.json's `read` names `{k}`, which no notices table raises")
+
+    for section in ("twins", "open"):
+        for a, w in pairs[section]:
+            if a in read:
+                errors.append(f"read-has-no-twin: `{a}` is read from words.json, yet {section} pairs it with the web's "
+                              f"`{w}` — call t('words.{a}') and delete the web's key")
+    apart = set(pairs["apart"])
+    for a in sorted(set(read) & set(words)):
+        said = loose_of_app(words[a]["en"])
+        for w, m in sorted(web.items()):
+            if (a, w) not in apart and loose_of_web(m["en"]) == said and not compare(words[a], m):
+                errors.append(f"read-has-no-twin: the web's `{w}` says what `words.{a}` says, which the web reads from "
+                              f"words.json — call t('words.{a}') and delete `{w}`, or pair them `apart` with why")
     unknown = [k for k in read if k not in words]
     if unknown:
         errors.append(f"read-is-notices: `read` names keys words.json has not: {unknown}")

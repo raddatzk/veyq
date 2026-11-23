@@ -134,7 +134,23 @@ export type MoveRefusalCode =
   | 'slug_taken' | 'illegal_structure' | 'illegal_scope' | 'stale_placement' | 'stale_epoch' | 'node_rekey_pending'
   | 'share_not_contributable' | 'gone' | 'rate_limited' | 'scope_deleting' | 'failed'
 
-/** A failed move as the code the dialog explains (`node.move.refused.<code>`). A placement that kept losing races
+/** What a refusal says: the words the apps' notices say too (`words.*`, ADR 0136 § The web's words) and the web's own
+ *  for the refusals no app notice raises. */
+export const MOVE_REFUSAL_TEXT: Record<MoveRefusalCode, string> = {
+  slug_taken: 'words.move_refused_slug_taken',
+  illegal_structure: 'words.move_refused_illegal_structure',
+  illegal_scope: 'node.move.refused.illegal_scope',
+  stale_placement: 'words.move_refused_stale_placement',
+  stale_epoch: 'node.move.refused.stale_epoch',
+  node_rekey_pending: 'words.move_refused_rekey_pending',
+  share_not_contributable: 'node.move.refused.share_not_contributable',
+  gone: 'words.move_refused_gone',
+  rate_limited: 'node.move.refused.rate_limited',
+  scope_deleting: 'words.move_refused_scope_deleting',
+  failed: 'words.move_refused_failed',
+}
+
+/** A failed move as the code the dialog explains ({@link MOVE_REFUSAL_TEXT}). A placement that kept losing races
  *  ({@link PlacementConflictError}, after the bounded re-read) is `stale_placement`. A node still not re-keyed after the
  *  waits (`node_rekey_pending`, or the device floor's own refusal) is `node_rekey_pending` — the space's new lock is
  *  still going in (ADR 0109 point 6). */

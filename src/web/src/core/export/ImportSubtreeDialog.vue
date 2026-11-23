@@ -89,7 +89,7 @@ async function run() {
     await loadTree()
     toast.success(
       result.skipped.length > 0
-        ? t('export.importedLeftOut', { name: rootName.value, names: result.skipped.map((s) => s.name).join(', ') })
+        ? t('words.import_imported_left_out', [rootName.value, result.skipped.map((s) => s.name).join(', ')])
         : t('export.imported', { name: rootName.value }),
     )
     emit('done', result.nodeId)

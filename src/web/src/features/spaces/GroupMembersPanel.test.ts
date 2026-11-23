@@ -483,14 +483,14 @@ describe('GroupMembersPanel — read-only for a member who does not own the grou
     expect(w.find('[data-testid="group-readonly"]').exists()).toBe(false)
     expect(w.text()).toContain(t('members.compromiseRotation.failed'))
     expect(w.text()).toContain(t('rotation.statusHint.rekeying'))
-    expect(w.text()).not.toContain(t('share.closedRekeying'))
+    expect(w.text()).not.toContain(t('words.share_closed_rekeying'))
   })
 
   it("a re-key only closed links started says so, not that the whole group gets a new lock (ADR 0114 decision 9)", async () => {
     vi.mocked(rekeyingCause).mockResolvedValue('close')
     const w = await mountAs('owner')
     expect(rekeyingCause).toHaveBeenCalledWith('g-1')
-    expect(w.text()).toContain(t('share.closedRekeying'))
+    expect(w.text()).toContain(t('words.share_closed_rekeying'))
     expect(w.text()).not.toContain(t('rotation.statusHint.rekeying'))
   })
 

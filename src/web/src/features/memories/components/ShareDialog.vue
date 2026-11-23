@@ -247,7 +247,7 @@ function fmtDate(d: Date): string {
               <span class="share-list-when">{{ t('share.created', { date: fmtDate(share.createdAt) }) }}</span>
               <span v-if="share.expiresAt" class="share-list-when share-list-expires">{{ t('share.expires', { date: fmtDate(share.expiresAt) }) }}</span>
               <!-- ADR 0114 decision 9: what lies below a closed link is re-keyed on this device while this shows. -->
-              <span v-if="!share.enabled && rekeyingClosedLinks.has(share.shareId)" class="share-list-when share-list-rekeying">{{ t('share.closedRekeying') }}</span>
+              <span v-if="!share.enabled && rekeyingClosedLinks.has(share.shareId)" class="share-list-when share-list-rekeying">{{ t('words.share_closed_rekeying') }}</span>
               <div class="share-list-badges">
                 <span class="share-list-role">{{ roleLabel(share.role) }}</span>
                 <span v-if="decoded.get(share.shareId)?.hasNote" class="veyq-badge">{{ t('share.hasNote') }}</span>
@@ -338,7 +338,7 @@ function fmtDate(d: Date): string {
         </template>
       </template>
     </ul>
-    <p v-if="actionError" class="share-error">{{ t('share.actionFailed') }}</p>
+    <p v-if="actionError" class="share-error">{{ t('words.share_failed') }}</p>
 
 
     <!-- Keyed by mode + share: an edit that hands over to the renew (#303) mounts afresh, so the form pre-fills again. -->
