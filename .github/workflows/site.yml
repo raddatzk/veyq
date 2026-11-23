@@ -48,7 +48,7 @@ jobs:
       # switches itself to the pinned version.
       - name: Install pnpm
         if: runner.environment == 'github-hosted'
-        run: npm install -g pnpm@12.16.1
+        run: npm install -g pnpm@12.22.0
 
       # site/ is outside the root workspace with a lockfile of its own; this is its only install, so it asks the
       # registry (no --skip-registry-check).
