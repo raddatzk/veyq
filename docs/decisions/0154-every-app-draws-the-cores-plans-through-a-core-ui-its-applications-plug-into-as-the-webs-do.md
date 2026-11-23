@@ -133,9 +133,8 @@ held for the screens' models but not around them:
   `received.rs` `write()` and its `GuestPage.add_names_first`, Windows' `ReceivedView.Write` and `KindBody.GuestCreate`'s
   writer, and the phones' `canAdd`: a guest's gallery offers *Add photos* by its rights alone, named or not. Decided on the
   way: `GuestNaming.offered` stays READ_WRITE-only — it means "the screen shows the guest line", and a WRITE_ONLY page says
-  who sent in its own body, so widening it would draw *Not you?* twice; the phones' WRITE_ONLY pages keep the web's drop
-  form (name, then pick), its save now `naming.name`, so the identity is still the core's — whether they should ask at the
-  write as the desktops' do is the owner's (#1090); `GalleryModel.uploadAsking` closes the picked sources on a decline,
+  who sent in its own body, so widening it would draw *Not you?* twice; the phones' WRITE_ONLY pages kept the web's drop
+  form (name, then pick) until the owner decided it the other way (#1090, below); `GalleryModel.uploadAsking` closes the picked sources on a decline,
   since no queue holds them and its callers never closed on a zero; a declined naming on the desktops toasted "failed"
   (`Received.Upload` answered `NOT_TAKEN`, as a level's upload did before) until #1091 typed the answer (below), rather
   than the bridge reading the session to tell the two apart. Tests: `GuestDoorsTest` (an unnamed guest's gallery offers Add and asks at the upload,
@@ -144,6 +143,32 @@ held for the screens' models but not around them:
   named over the bridge; an unnamed guest gallery's `Memory.Upload` asked and declined). **Owed passes:** a guest's
   *Add photos* and a drop box's and a Memory uploader's upload asked at the write on Linux and Windows, the phones' guest
   gallery's *Add photos* unnamed on Android and Apple — none clicked in this change.
+- **As built, a WRITE_ONLY page asks at the write everywhere** (2026-11-23, #1090; owner 2026-11-23: "Überall beim
+  Schreiben"). No client names a WRITE_ONLY guest in the page's body any more: the drop box's page and a Memory's uploader
+  offer the pick at once and ask the name at the first upload, as the desktops already did. The phones go through
+  `GuestDropBox.uploadAsking` / `GuestUploader.uploadAsking` (Android's `NamingAsked`, Apple's `AskedNaming` draw the dialog,
+  the record's notice in it); their `InlineNaming`, `GuestDropBox.name`, `GuestUploader.name` and `AppleSharing.nameDrop` /
+  `nameUploader` are gone. The web asks in the shell's one naming dialog (`GuestNaming`'s `dialog` shape, the one a
+  READ_WRITE guest's write asks in): `GuestAccess.requestGuest(make?)` takes what the name makes where a WRITE_ONLY page
+  makes its own identity (Depot's `nameDropGuest`, Memories' `createContributorIdentity` — an uploader's own `K_up`), so
+  there is no second flow; `GuestNaming`'s inline form shape is gone. Decision log: (1) **the web's `make` parameter**,
+  not a role branch in the shell — the web's two uploader identities are each application's own (the core's one
+  `nameUploader` has no web twin yet), and the shell must not learn an application's key; with `make` the dialog asks
+  whatever session the device holds (the page asks only when it has none it can seal with, e.g. a session saved without
+  its `K_up`), and a `make` that answers null (the drop link gone at the name) closes the dialog and leaves the page to say
+  why. (2) **Not you?** as on a READ_WRITE page: the line ("You are here as …", *Not you?* asking first) shows only once
+  named, nothing before; after it, nothing asks until the next write — no name screen comes back. The drop box's *Start
+  over* after a gone link keeps its no-question path. (3) **The record's notice** before a guest's first write is the
+  dialog's (ADR 0093 § 10 holds: it is shown before the write); the page body says it only beside a session. (4) **A drop
+  box's folder belongs to its identity**: the core's `GuestDropBox` kept its folder across *Not you?*, so the next guest's
+  file would go into the forgotten guest's folder; it is now keyed by the identity (the web's page already forgot it).
+  (5) **Words**: `share_dropbox_name_hint` / `depot.dropBox.guestNameHint` and the web's `share.nameVisibility` are gone
+  (the dialog's hint says who reads the name); the uploader's intro lost "First, tell us your name." in both catalogs; the
+  web's dialog shows the phones' placeholder (`share.yourNamePlaceholder`). Tests: web `DropBoxShareBody.test.ts`,
+  `MemoryShareBody.test.ts`, `shareGates.naming.test.ts`, `ShareView.test.ts`, `ShareView.memory.test.ts` (no form before,
+  the prompt at the pick, a decline sends and says nothing); core `GuestDoorsTest` (named through the asked flow; a drop
+  box's next guest after *Not you?* gets a folder of its own). **Owed passes:** the web's drop box and uploader pages in a
+  browser (pick → dialog → upload; cancel; *Not you?*), and the same on Android and iPhone/Mac — none clicked in this change.
 - **As built, a declined naming says nothing** (2026-11-23, #1091). Every upload that asks a guest's name first answers
   `AskedUpload` (core `sharing`): the files queued, or none — `declined` where the guest declined (or its name was not
   taken, which the naming said itself), else refused. `GuestLevel`, `GuestDropBox`, `GuestUploader` and

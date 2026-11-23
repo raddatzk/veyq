@@ -40,7 +40,8 @@ path and the gates as built are the model, [en.sharing.public-link](../features/
    the right authorization for a destructive operation, not gallery filtering, so it stays safe for a role that sees
    others' ids: a `READ_WRITE` guest deletes its own the same way. For an uploader it is reachable only in-session.
 
-5. **Prominent ephemerality warning (a hard requirement).** Four places: the name pre-screen before the first upload;
+5. **Prominent ephemerality warning (a hard requirement).** Four places: the page before the first upload (once the
+   name pre-screen; since inbox #1090 the name is asked at the first pick, see Consequences);
    a persistent "visible only in this session" badge; a dedicated empty state after a reload ("your earlier uploads
    aren't shown here, for privacy; they arrived safely"); and a note that delete works only in this session. The docs
    site's Use page ([Ask people to add photos](../../site/src/content/docs/sharing/request-uploads.mdx)) states it too.
@@ -80,6 +81,12 @@ path and the gates as built are the model, [en.sharing.public-link](../features/
   on the device to allow a post-reload delete, without re-showing thumbnails, stays possible.
 - **Attribution self-asserted; direct-append; a rotation does not revoke the link** — as for
   [ADR 0030](0030-contributor-public-share.md) and [ADR 0029](0029-public-viewer-share.md).
+- **The name is asked at the first pick, not on a pre-screen** (inbox #1090, owner 2026-11-23; [ADR 0154](0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md)
+  § As built, a WRITE_ONLY page asks at the write everywhere). The uploader's page (`MemoryShareBody.vue`) and Depot's
+  drop page (`DropBoxGuestForm.vue`) open on the drop itself; the first pick asks the name in the share page's one naming
+  dialog (`GuestAccess.requestGuest` with the page's own identity as what the name makes), and a cancel sends and says
+  nothing. The mandatory name (point 6) still holds — nothing is sent unnamed — and the warning stands where the
+  pre-screen was: on the page, before the first upload. The guest-write record's notice comes with the name, in the dialog.
 
 ## Alternatives considered
 
