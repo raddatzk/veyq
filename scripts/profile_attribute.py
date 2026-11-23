@@ -119,7 +119,11 @@ PICK_PROBE = re.compile(r"^src/features/memories/useOptimisticTiles\.ts$")
 # on-device stage's page side (derivation and digest clients), plus the page's own crypto and Vue's reactive writes.
 RULES: list[tuple[str, re.Pattern[str]]] = [
     ("pump", re.compile(r"^src/core/blob/(transport|frameWorker|frameOps|stream|readScheduler|queue)\.ts$")),
-    ("exif", re.compile(r"node_modules/exifreader/|^src/shared/image/exifTags\.ts$")),
+    # the EXIF read: the core's reader since ADR 0155's media headers' slice, named by the Kotlin module's own source map
+    # (a path that walks out of `dist/`, whatever its prefix), and its web seam; the ExifReader library it replaced still
+    # names a profile of a build before the slice
+    ("exif", re.compile(r"(^|/)me/raddatz/veyq/mobile/media/(ExifReader|Xmp)\.kt$|node_modules/exifreader/"
+                        r"|^src/shared/image/exifTags\.ts$")),
     ("reconcile", re.compile(
         r"^src/(features/memories/(useMediaGalleryLive|mediaRevisionPolling|listingOpener|listingOpenerCore|openedListing"
         r"|useMemoryDate|memoryDate|memoryDateRange|useMemoryLocation|memoryLocation|useThumbnailPipeline|mediaOpen)\.ts"
@@ -712,7 +716,10 @@ def selftest() -> int:
     sources = ["/home/someone/veyq/src/web/src/core/blob/transport.ts", "../../../../node_modules/exifreader/src/exif-reader.js",
                "../../src/features/memories/useMediaGalleryLive.ts", "../../src/features/memories/useOptimisticTiles.ts",
                "../../../../" + SCHEDULER_SOURCE, "../../src/features/memories/components/MediaGrid.vue",
-               "../../src/app/somethingElse.ts", "../../src/shared/image/exifTags.ts"]
+               "../../src/app/somethingElse.ts", "../../src/shared/image/exifTags.ts",
+               "../../../../../../../core/src/commonMain/kotlin/me/raddatz/veyq/mobile/media/ExifReader.kt",
+               "/home/someone/veyq/src/mobile/core/src/commonMain/kotlin/me/raddatz/veyq/mobile/media/Xmp.kt",
+               "../../../../../../../core/src/commonMain/kotlin/me/raddatz/veyq/mobile/media/ImageHeader.kt"]
     scheduler = "let x\nfunction flushJobs(seen) {\n  run()\n}\nfunction other() {}\n"
     # One generated line; column 10*i maps to source i, original line 0 — except source 4 (the scheduler), mapped to
     # its line 2 (inside flushJobs).
@@ -723,7 +730,7 @@ def selftest() -> int:
         segs.append(enc(col - prev[0]) + enc(src - prev[1]) + enc(orig - prev[2]) + enc(0))
         prev = (col, src, orig)
     doc = {"version": 3, "sources": sources, "mappings": ",".join(segs),
-           "sourcesContent": [""] * 4 + [scheduler] + [""] * 3, "names": []}
+           "sourcesContent": [""] * 4 + [scheduler] + [""] * (len(sources) - 5), "names": []}
     url = "https://veyq.test/assets/index-AbCdEf12.js"
     frame = lambda i, name="f": {"url": url, "lineNumber": 0, "columnNumber": 10 * i + 1, "functionName": name}  # noqa: E731
     native = {"url": "", "lineNumber": -1, "columnNumber": -1, "functionName": "fetch"}
@@ -731,6 +738,9 @@ def selftest() -> int:
         ([frame(6), frame(0), native], "pump"),                 # a native leaf under the pump is the pump's
         ([frame(6), frame(1)], "exif"),                         # the EXIF reader at the leaf
         ([frame(6), frame(7)], "exif"),                         # its one seam, ours
+        ([frame(6), frame(8)], "exif"),                         # the core's reader, through the module's own map
+        ([frame(6), frame(9)], "exif"),                         # its XMP scan, an absolute path
+        ([frame(6), frame(10)], "other"),                       # the core's image header beside it is no EXIF read
         ([frame(0), frame(2)], "reconcile"),                    # leaf-first: the reconcile, not the pump above it
         ([frame(4), frame(5), frame(0)], "reactivity"),         # under the scheduler's flush, whatever runs below
         ([frame(3), frame(1)], "pick-time probe"),              # the probe's context outranks the reader at the leaf
