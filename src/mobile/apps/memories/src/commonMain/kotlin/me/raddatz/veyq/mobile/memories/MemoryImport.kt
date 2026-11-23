@@ -24,6 +24,7 @@ import me.raddatz.veyq.mobile.memories.tracks.Gpx
 import me.raddatz.veyq.mobile.session.NodeCover
 import me.raddatz.veyq.mobile.session.NodeCreate
 import me.raddatz.veyq.mobile.session.NodeMetaWrite
+import me.raddatz.veyq.mobile.session.NodeTrash
 
 /**
  * Memories' part in an import (ADR 0152 decision 3), a port of the web's `features/memories/exportImport.ts`
@@ -171,46 +172,53 @@ object MemoryImport {
                 return@Hook if (r.reason == NodeCreate.Reason.NAME_TAKEN) NodeImport.Made(null, nameTaken = true) else NodeImport.Made(null, failure = r.reason.name.lowercase())
         }
         tenant.forgetTree()
-        val media = (content["media"] as? JsonArray).orEmpty().map { it as JsonObject }
-        val total = media.sumOf { Manifest.number((it["file"] as JsonObject)["size"]) ?: 0.0 }.coerceAtLeast(1.0)
-        var done = 0.0
-        for (m in media) {
-            val ref = Manifest.payloadOf(m["file"] as JsonObject)
-            val name = str(m["name"]) ?: "file"
-            val checked = ctx.payload(ref)
-            val source = UploadSource.of(name, ref.size, ref.mediaType, ref.modifiedAt) { from, length -> checked.read(from, length) }
-            val original = MediaUpload.Original(source.bytes(), ref.mediaType, name, ref.modifiedAt)
-            val prepared = MediaUpload.prepare(original, now()) { type ->
-                if (deriver == null) Derivation.Derived(null, null, null, null)
-                else suspendCancellableCoroutine { c -> deriver.derive(source, type) { d -> c.resume(d) { _, _, _ -> } } }
+        // A Memory that fails after its create holds part of what it imports: trashed here, as a Pot's is - core learns no
+        // id from a hook that throws, so it would stay with its first photos only (inbox #1150, found on the web).
+        try {
+            val media = (content["media"] as? JsonArray).orEmpty().map { it as JsonObject }
+            val total = media.sumOf { Manifest.number((it["file"] as JsonObject)["size"]) ?: 0.0 }.coerceAtLeast(1.0)
+            var done = 0.0
+            for (m in media) {
+                val ref = Manifest.payloadOf(m["file"] as JsonObject)
+                val name = str(m["name"]) ?: "file"
+                val checked = ctx.payload(ref)
+                val source = UploadSource.of(name, ref.size, ref.mediaType, ref.modifiedAt) { from, length -> checked.read(from, length) }
+                val original = MediaUpload.Original(source.bytes(), ref.mediaType, name, ref.modifiedAt)
+                val prepared = MediaUpload.prepare(original, now()) { type ->
+                    if (deriver == null) Derivation.Derived(null, null, null, null)
+                    else suspendCancellableCoroutine { c -> deriver.derive(source, type) { d -> c.resume(d) { _, _, _ -> } } }
+                }
+                val withFacts = MediaUpload.Prepared(prepared.type, prepared.sha256, prepared.derived, restored(prepared.metaTier, m, prepared.type, name), prepared.exif)
+                val before = done
+                val r = MediaUpload.once(tenant, ctx.scopeId, nodeId, original, withFacts) { f -> ctx.progress((before + f * ref.size) / total) }
+                source.close()
+                if (r.outcome != MediaUpload.Outcome.DONE) throw NodeImport.Failed(r.code ?: r.outcome.name.lowercase())
+                done += ref.size
             }
-            val withFacts = MediaUpload.Prepared(prepared.type, prepared.sha256, prepared.derived, restored(prepared.metaTier, m, prepared.type, name), prepared.exif)
-            val before = done
-            val r = MediaUpload.once(tenant, ctx.scopeId, nodeId, original, withFacts) { f -> ctx.progress((before + f * ref.size) / total) }
-            source.close()
-            if (r.outcome != MediaUpload.Outcome.DONE) throw NodeImport.Failed(r.code ?: r.outcome.name.lowercase())
-            done += ref.size
-        }
-        (content["cover"] as? JsonObject)?.let { cover ->
-            val file = cover["file"] as? JsonObject ?: return@let
-            val ref = Manifest.payloadOf(file)
-            if (ref.size > COVER_MAX) return@let
-            val jpeg = ctx.payload(ref).read(0, ref.size.toInt())
-            when (NodeCover.set(tenant, ctx.scopeId, nodeId, jpeg, NodeCover.crop(cover["crop"]))) {
-                NodeCover.Outcome.DONE -> {}
-                else -> throw NodeImport.Failed("cover_not_restored")
+            (content["cover"] as? JsonObject)?.let { cover ->
+                val file = cover["file"] as? JsonObject ?: return@let
+                val ref = Manifest.payloadOf(file)
+                if (ref.size > COVER_MAX) return@let
+                val jpeg = ctx.payload(ref).read(0, ref.size.toInt())
+                when (NodeCover.set(tenant, ctx.scopeId, nodeId, jpeg, NodeCover.crop(cover["crop"]))) {
+                    NodeCover.Outcome.DONE -> {}
+                    else -> throw NodeImport.Failed("cover_not_restored")
+                }
             }
-        }
-        (content["banner"] as? JsonObject)?.let { banner ->
-            try {
-                restoreBanner(ctx, nodeId, banner)
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: ImportRefused) {
-                throw e // a banner file that is not what the manifest says refuses the import, as any payload
-            } catch (e: Exception) {
-                // a banner that does not come back is a loss, never a failed import: the Memory and its media stand
+            (content["banner"] as? JsonObject)?.let { banner ->
+                try {
+                    restoreBanner(ctx, nodeId, banner)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: ImportRefused) {
+                    throw e // a banner file that is not what the manifest says refuses the import, as any payload
+                } catch (e: Exception) {
+                    // a banner that does not come back is a loss, never a failed import: the Memory and its media stand
+                }
             }
+        } catch (e: Throwable) {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { runCatching { NodeTrash.delete(tenant, ctx.scopeId, nodeId) } }
+            throw e
         }
         NodeImport.Made(nodeId)
     }

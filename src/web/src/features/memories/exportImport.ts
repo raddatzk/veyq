@@ -45,7 +45,7 @@ import { framesOfBytes } from '../../core/export/copySource'
 import { CHUNK_SIZE } from '../../core/blob/transport'
 import type { ManifestContent, ManifestPayload } from '../../core/export/manifest'
 import { loadTenantPeople } from '../../core/people/directory'
-import { createContentNode, fetchTreeRows } from '../../core/node/tree'
+import { createContentNode, deleteNode, fetchTreeRows } from '../../core/node/tree'
 import { nodeMetaState, sealNodeMeta, unsealNodeMeta, type NodeMetaState } from '../../core/node/nodeMeta'
 import { memberNodeWriter, type MemberNodeWriter, type NodeKeyAt } from '../../core/node/rereadNode'
 import { NodeKeyBelowFloorError } from '../../core/node/rekey/floor'
@@ -333,51 +333,58 @@ export function importMemoryContent(kind: NodeKind): ImportContentHook {
     const created = await createContentNode(ctx.scopeId, ctx.epochs, ctx.parent, kind, ctx.name, sealer, ctx.createOptions)
     const nodeId = created.nodeId
     const node = memberNodeWriter(ctx.scopeId, nodeId, { key: created.contentKey, epoch: created.epoch })
-
-    const copying = ctx.purpose === 'copy'
-    const bytesOf = (m: ExportedMedium) => m.file.size + (copying ? (m.copy?.tiers ?? []).reduce((s, t) => s + t.file.size, 0) : 0)
-    const total = media.reduce((s, m) => s + bytesOf(m), 0) || 1
-    const deriver = createBrowserDeriver()
-    // A download's next original is asked for and prepared while this one is on the wire (`readyOriginal`, inbox #784).
-    let ahead: Promise<ReadyOriginal> | null = null
-    let done = 0
-    for (const [i, medium] of media.entries()) {
-      if (ctx.signal?.aborted) throw ctx.signal.reason ?? new DOMException('Import cancelled', 'AbortError')
-      const before = done
-      const size = bytesOf(medium)
-      const ready = copying ? null : (ahead ?? held(readyOriginal(ctx, medium, deriver)))
-      ahead = null
-      const next = copying ? undefined : media[i + 1]
-      const prepareNext = () => {
-        if (next && !ahead && !ctx.signal?.aborted) ahead = held(readyOriginal(ctx, next, deriver))
-      }
-      await node.write(async (at) => {
-        const opts = {
-          signal: ctx.signal, nodeEpoch: at.epoch,
-          onProgress: (f: number) => {
-            prepareNext() // its first progress: this original's own on-device stage is over, it is on the wire
-            ctx.onProgress?.((before + f * size) / total)
-          },
+    // The hook's half of the contract (`ImportContentHook`): a Memory that fails after its create holds part of what it
+    // imports and is trashed here - core never learns its id, so it would stay in the level with the first photos only
+    // while the dialog said everything went to the trash (found by the export archive's browser pass, inbox #1150).
+    try {
+      const copying = ctx.purpose === 'copy'
+      const bytesOf = (m: ExportedMedium) => m.file.size + (copying ? (m.copy?.tiers ?? []).reduce((s, t) => s + t.file.size, 0) : 0)
+      const total = media.reduce((s, m) => s + bytesOf(m), 0) || 1
+      const deriver = createBrowserDeriver()
+      // A download's next original is asked for and prepared while this one is on the wire (`readyOriginal`, inbox #784).
+      let ahead: Promise<ReadyOriginal> | null = null
+      let done = 0
+      for (const [i, medium] of media.entries()) {
+        if (ctx.signal?.aborted) throw ctx.signal.reason ?? new DOMException('Import cancelled', 'AbortError')
+        const before = done
+        const size = bytesOf(medium)
+        const ready = copying ? null : (ahead ?? held(readyOriginal(ctx, medium, deriver)))
+        ahead = null
+        const next = copying ? undefined : media[i + 1]
+        const prepareNext = () => {
+          if (next && !ahead && !ctx.signal?.aborted) ahead = held(readyOriginal(ctx, next, deriver))
         }
-        return copying
-          ? addCopiedMedia(ctx.scopeId, nodeId, at.key, await copiedSource(ctx, medium), opts)
-          : addOriginal(ctx, nodeId, at.key, medium, await ready!, opts)
-      })
-      done += size
-    }
-
-    const cover = content.cover as ExportedCover | undefined
-    if (cover?.file) await restoreCover(ctx, node, cover)
-    const banner = content.banner as ExportedBanner | undefined
-    if (banner) {
-      try {
-        await restoreBanner(ctx, node, banner)
-      } catch (e) {
-        if (ctx.signal?.aborted) throw e
-        // A banner that does not come back is a loss, never a failed import: the Memory and its media stand.
+        await node.write(async (at) => {
+          const opts = {
+            signal: ctx.signal, nodeEpoch: at.epoch,
+            onProgress: (f: number) => {
+              prepareNext() // its first progress: this original's own on-device stage is over, it is on the wire
+              ctx.onProgress?.((before + f * size) / total)
+            },
+          }
+          return copying
+            ? addCopiedMedia(ctx.scopeId, nodeId, at.key, await copiedSource(ctx, medium), opts)
+            : addOriginal(ctx, nodeId, at.key, medium, await ready!, opts)
+        })
+        done += size
       }
+
+      const cover = content.cover as ExportedCover | undefined
+      if (cover?.file) await restoreCover(ctx, node, cover)
+      const banner = content.banner as ExportedBanner | undefined
+      if (banner) {
+        try {
+          await restoreBanner(ctx, node, banner)
+        } catch (e) {
+          if (ctx.signal?.aborted) throw e
+          // A banner that does not come back is a loss, never a failed import: the Memory and its media stand.
+        }
+      }
+      return { nodeId, nodeKey: node.at.key, epoch: node.at.epoch }
+    } catch (e) {
+      await deleteNode(ctx.scopeId, nodeId).catch(() => {})
+      throw e
     }
-    return { nodeId, nodeKey: node.at.key, epoch: node.at.epoch }
   }
 }
 

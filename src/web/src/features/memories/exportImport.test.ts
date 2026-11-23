@@ -8,7 +8,7 @@ vi.mock('./media', async (orig) => ({
 }))
 vi.mock('./share', async (orig) => ({ ...(await orig<typeof import('./share')>()), readShareMedia: vi.fn(), openSharedMemory: vi.fn(), shareChunkProvider: vi.fn() }))
 vi.mock('../../core/people/directory', () => ({ loadTenantPeople: vi.fn() }))
-vi.mock('../../core/node/tree', async (orig) => ({ ...(await orig<typeof import('../../core/node/tree')>()), createContentNode: vi.fn(), fetchTreeRows: vi.fn() }))
+vi.mock('../../core/node/tree', async (orig) => ({ ...(await orig<typeof import('../../core/node/tree')>()), createContentNode: vi.fn(), deleteNode: vi.fn(), fetchTreeRows: vi.fn() }))
 vi.mock('../../core/node/cover/coverWrite', async (orig) => ({ ...(await orig<object>()), uploadCoverBlob: vi.fn(), uploadCoverImage: vi.fn(), writeNodeCover: vi.fn() }))
 vi.mock('./banner/bannerWrite', async (orig) => ({ ...(await orig<object>()), uploadBanner: vi.fn(), writeMemoryBanner: vi.fn() }))
 vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), makeChunkProvider: vi.fn() }))
@@ -26,7 +26,7 @@ import { guestAccessOf, memberAccessOf } from '../../test/models'
 import type { Access } from '../../core/access'
 import type { PublicShareHead } from '../../core/sharing/resolvePublicShare'
 import { loadTenantPeople, type Person } from '../../core/people/directory'
-import { createContentNode, fetchTreeRows, type TreeNode } from '../../core/node/tree'
+import { createContentNode, deleteNode, fetchTreeRows, type TreeNode } from '../../core/node/tree'
 import { writeNodeCover, uploadCoverBlob, uploadCoverImage } from '../../core/node/cover/coverWrite'
 import { sealNodeMeta, unsealNodeMeta } from '../../core/node/nodeMeta'
 import type { ExportNodeContext, ImportNodeContext } from '../../core/export/hooks'
@@ -258,6 +258,7 @@ describe('importMemoryContent', () => {
   beforeEach(() => {
     const nodeKey = v1.randomBytes(32)
     vi.mocked(createContentNode).mockResolvedValue({ nodeId: NEW, contentKey: nodeKey, epoch: 0, scopeEpoch: 0 })
+    vi.mocked(deleteNode).mockResolvedValue()
     let n = 0
     vi.mocked(addMedia).mockImplementation(async () => ({ blobId: 'b', mediaId: `m${++n}` }))
     vi.mocked(prepareMedia).mockImplementation(async (source) => ({ source, sha256: 'd', tiers: [], meta: { dims: null } }) as unknown as PreparedMedia)
@@ -278,6 +279,21 @@ describe('importMemoryContent', () => {
     const src = vi.mocked(addMedia).mock.calls[0][3]
     expect(src).toMatchObject({ mediaType: 'image/jpeg', lastModified: 1_700_000_000_000, name: 'a.jpg' })
     expect(vi.mocked(writeNodeCover), 'a cover is set only by an upload: a photo reference is left out').not.toHaveBeenCalled()
+  })
+
+  it('trashes the Memory it created when a medium fails after the create, and rethrows (inbox #1150)', async () => {
+    let n = 0
+    vi.mocked(addMedia).mockImplementation(async () => {
+      if (++n === 2) throw new Error('checksum_mismatch')
+      return { blobId: 'b', mediaId: `m${n}` }
+    })
+    await expect(importMemoryContent(MEMORY_KIND)(ctx(node()))).rejects.toThrow('checksum_mismatch')
+    expect(vi.mocked(deleteNode), 'the half-made Memory goes to the trash').toHaveBeenCalledWith(SCOPE, NEW)
+  })
+
+  it('leaves a Memory it imported whole alone', async () => {
+    await importMemoryContent(MEMORY_KIND)(ctx(node()))
+    expect(vi.mocked(deleteNode), 'control: nothing trashed on success').not.toHaveBeenCalled()
   })
 
   it('imports an archive written while background music existed, and seals no playlist into the meta (ADR 0135 decision 1)', async () => {

@@ -22,7 +22,15 @@ import me.raddatz.veyq.mobile.session.VeyqAccount
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.MessageDigest
+import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlin.test.assertFailsWith
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -41,6 +49,8 @@ import kotlin.time.Duration.Companion.minutes
  * the throwaway, erased with it.
  */
 class ImportLiveTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val liveRun = LiveRun()
 
     @AfterTest
@@ -127,5 +137,69 @@ class ImportLiveTest {
                 reader.close()
             }
         }
+    }
+
+    /**
+     * A Memory at an import's top that fails after its create (its photo's on-device stage throws) is trashed whole: core
+     * learns no id from a hook that throws, so the hook trashes it itself (inbox #1150 — on the web it stayed in the level
+     * with the photos before the failure while the dialog said everything went to the trash). The download is the web's,
+     * its manifest re-rooted at its Memory, as a Memory's own download is.
+     */
+    @Test
+    fun aMemoryThatFailsAfterItsCreateIsTrashed() {
+        val origin = Throwaway.origin()
+        val t = Throwaway.accounts()
+        val domain = t.env.getValue("VEYQ_TENANT_DOMAIN")
+        val root = File(System.getProperty("veyq.repoRoot"))
+        val zip = memoryRooted(File(root, "contracts/export/import-cases/web-download.zip"), "Lisbon")
+        runTest(timeout = 6.minutes) {
+            val a = VeyqAccount.signIn(BouncyCastlePrimitives, origin, t.email(), t.env.getValue("VEYQ_PASSWORD"), t.env.getValue("VEYQ_SECRET_KEY"), liveRun.device()) { block -> HttpClient(OkHttp, block) }
+            val tenant = a.open(a.tenants.first { it.domain == domain }).also { it.rekeyRules = AppKinds.rules }
+            val scopeId = tenant.spaces().first { it.kind == "TENANT" }.scopeId
+            val folder = (FolderCreate.create(tenant, scopeId, null, "App import fail ${System.currentTimeMillis() % 100_000}") as NodeCreate.Result.Done).created.nodeId
+            val failing = object : Derivation.Deriver {
+                override fun derive(source: UploadSource, type: String, done: (Derivation.Derived) -> Unit) = throw IllegalStateException("decode_failed")
+            }
+            val kinds = AppKinds.imports("Deleted people", { NodeCreate.uuid(tenant.account) }, failing) { System.currentTimeMillis() }
+            val input = ImportInput.Zip(UploadSource.of("Lisbon.zip", zip.size.toLong(), "application/zip", null) { from, length ->
+                zip.copyOfRange(from.toInt(), minOf(zip.size.toLong(), from + length).toInt())
+            })
+            val e = assertFailsWith<SubtreeImport.Failed> {
+                SubtreeImport.run(SubtreeImport.open(input), scopeId, folder, SubtreeImport.Server(tenant, scopeId), kinds, AppKinds::tokenInput)
+            }
+            assertTrue(e.rolledBack)
+            tenant.forgetTree()
+            val left = tenant.trees()[scopeId].orEmpty().filter { it.parentId == folder }
+            assertEquals(emptyList(), left.map { it.name }, "nothing of the Memory stays in the level")
+        }
+    }
+
+    /** [zip], its entries stored, with its manifest's root replaced by the node named [name] and the paths one level up, as that node's own download. */
+    private fun memoryRooted(zip: File, name: String): ByteArray {
+        val out = ByteArrayOutputStream()
+        ZipFile(zip).use { z ->
+            ZipOutputStream(out).use { w ->
+                for (entry in z.entries()) {
+                    if (entry.name == "Trip/") continue
+                    val bytes = z.getInputStream(entry).readBytes()
+                    val written = if (entry.name != ".veyq/manifest.json") bytes else {
+                        val m = Json.parseToJsonElement(bytes.decodeToString()).jsonObject
+                        fun find(n: JsonObject): JsonObject? =
+                            if ((n["name"] as JsonPrimitive).content == name) n
+                            else (n["children"] as? JsonArray).orEmpty().firstNotNullOfOrNull { find(it.jsonObject) }
+                        JsonObject(m + ("root" to find(m.getValue("root").jsonObject)!!)).toString().replace("\"Trip/", "\"").encodeToByteArray()
+                    }
+                    // stored, as a download is: the import reads no deflated entry
+                    w.putNextEntry(ZipEntry(entry.name.removePrefix("Trip/")).apply {
+                        method = ZipEntry.STORED
+                        size = written.size.toLong()
+                        crc = java.util.zip.CRC32().apply { update(written) }.value
+                    })
+                    w.write(written)
+                    w.closeEntry()
+                }
+            }
+        }
+        return out.toByteArray()
     }
 }
