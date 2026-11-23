@@ -250,7 +250,12 @@ ZIP or the unpacked directory again, or copies a subtree within the space
 All of it is client-side, in `src/web/src/core/export/`: the walk (`exportSubtree.ts`, `importSubtree.ts`,
 `copySubtree.ts`), the streaming ZIP writer and reader (`zip.ts`, ZIP64 and data descriptors; `zipLength` the
 archive's exact length before its first byte, which the save target `shared/saveStream.ts` `openSaveTarget` is opened
-with), the safe names (`archiveName.ts`) and the manifest (`manifest.ts`, format version 2 written, 1 and 2 read). A
+with), the safe names (`archiveName.ts`) and the manifest (`manifest.ts`, format version 2 written, 1 and 2 read). The
+writer, the reader, the length and the manifest's check are the platform core's (`export/ZipWriter`, `ZipReader`,
+`ManifestRules`), which the web draws through `@veyq/core-js/export` behind those two files and the apps call directly,
+held byte for byte by `contracts/platform/export/v1-vectors.json`
+([ADR 0155](../../../decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md)
+§ The export archive's slice). A
 kind brings its content through its registration (`exportContent`, `importContent`, `contentSchema`,
 `downloadsAsFile`, `importsAsFolder`). The manifest's schema is
 [`contracts/export/veyq-subtree.schema.json`](../../../../contracts/export/veyq-subtree.schema.json), core's envelope, with

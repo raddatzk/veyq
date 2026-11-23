@@ -1,5 +1,10 @@
-// CRC-32 (IEEE 802.3, the polynomial every ZIP tool uses), incremental: the export writer and reader feed it chunk by
-// chunk while the bytes stream past, so a multi-GB payload is never held to be summed. The table is built once.
+// CRC-32 (IEEE 802.3, the polynomial every ZIP tool uses), incremental — the digest worker's own primitive, beside its
+// SHA-256: an import's payload check sums a ZIP entry's CRC-32 in the same pass as its hash, off the page (inbox #557,
+// `blob/digest.ts`). The archive's own CRC — the one the writer records and the reader checks — is the platform's Kotlin
+// `export/Crc32`, drawn through `@veyq/core-js/export` with the rest of the ZIP (ADR 0155 decision 7.2, the export archive's
+// slice); a worker importing that entry would carry the whole platform module (~50 KB gz) for these lines (that slice's D2).
+// The two answer to one set of cases: `archive.vectors.test.ts` runs contracts/platform/export/v1-vectors.json's `crc32`
+// cases over this file and over the core. The table is built once.
 const TABLE = (() => {
   const t = new Uint32Array(256)
   for (let n = 0; n < 256; n++) {

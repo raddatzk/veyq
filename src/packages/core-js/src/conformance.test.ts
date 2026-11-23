@@ -37,7 +37,7 @@ describe('the shipped module', () => {
 
   it('names no conformance symbol in its definitions', () => {
     // the composition's one declaration file, and each entry's own (`files`, `media`, `navigation`, `search`, `sharing`, `tree`), which re-exports from it
-    expect(shipped).toEqual(['files.d.mts', 'media.d.mts', 'navigation.d.mts', 'search.d.mts', 'sharing.d.mts', 'tree.d.mts', 'veyq-mobile-composition.d.mts'])
+    expect(shipped).toEqual(['export.d.mts', 'files.d.mts', 'media.d.mts', 'navigation.d.mts', 'search.d.mts', 'sharing.d.mts', 'tree.d.mts', 'veyq-mobile-composition.d.mts'])
     for (const f of shipped) expect(readFileSync(resolve(dist, f), 'utf8')).not.toMatch(/conformance/i)
   })
 

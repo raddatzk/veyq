@@ -28,6 +28,7 @@ const ENTRIES: Record<string, { control: string }> = {
   navigation: { control: 'navigation/NodeHeader.kt' },
   files: { control: 'blob/Sniff.kt' },
   media: { control: 'media/ExifReader.kt' },
+  export: { control: 'export/ManifestRules.kt' },
 }
 
 /**
@@ -59,6 +60,10 @@ const SLICES: { slice: string; deletedGz: number; allowed?: { ratio: number; own
   // and TIFF_PREFIX - 12,097 B min / 4,809 B gz, measured on sources (the ExifReader library it called, 45,226 B gz of a lazy
   // chunk, left with it and is not counted).
   { slice: 'the media headers', deletedGz: 4_809 },
+  // the export archive (ADR 0155 decision 7.2.6, § The export archive's slice): zip.ts' writer, reader and zipLength,
+  // manifest.ts' check, payload walk and facts - 14,939 B min / 5,608 B gz, measured on sources (crc32.ts, 265 B gz, stays:
+  // the digest worker's own primitive; the adapters that replace the two files are 1,292 B gz, so 4,316 B gz net).
+  { slice: 'the export archive', deletedGz: 5_608 },
 ]
 const BUDGET_GZ = Math.floor(SEARCH_ALONE_GZ + SLICES.reduce((n, s) => n + (s.allowed?.ratio ?? R) * s.deletedGz, 0))
 

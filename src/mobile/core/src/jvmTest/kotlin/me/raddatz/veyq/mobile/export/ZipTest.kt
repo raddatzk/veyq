@@ -48,19 +48,19 @@ class ZipTest {
     @Test
     fun aSourceOfAnotherSizeFailsTheArchive() = runTest {
         val zip = ZipWriter({}, 0)
-        assertFailsWith<ZipWriter.ZipFailure> { zip.addFile("x", 5) { it(ByteArray(4)) } }
-        assertFailsWith<ZipWriter.ZipFailure> { zip.addFile("y", 3) { it(ByteArray(4)) } }
+        assertEquals(ZipReader.ZipError.Code.SIZE_MISMATCH, assertFailsWith<ZipReader.ZipError> { zip.addFile("x", 5) { it(ByteArray(4)) } }.code)
+        assertEquals(ZipReader.ZipError.Code.SIZE_MISMATCH, assertFailsWith<ZipReader.ZipError> { zip.addFile("y", 3) { it(ByteArray(4)) } }.code)
     }
 
     @Test
-    fun anUnsafePathIsRefused() {
+    fun anUnsafePathIsRefused() = runTest {
         val zip = ZipWriter({}, 0)
-        for (bad in listOf("", "/abs", "a/../b", "a//b", "a\\b")) assertFailsWith<ZipWriter.ZipFailure>(bad) { zip.addDirectory(bad) }
+        for (bad in listOf("", "/abs", "a/../b", "a//b", "a\\b")) assertFailsWith<ZipReader.ZipError>(bad) { zip.addDirectory(bad) }
     }
 
     @Test
     fun theDosStampIsUtc() {
         // 2025-11-09T09:30:12Z: date ((45 shl 9) or (11 shl 5) or 9), time ((9 shl 11) or (30 shl 5) or 6)
-        assertEquals(((45 shl 9) or (11 shl 5) or 9) to ((9 shl 11) or (30 shl 5) or 6), ZipWriter.dosStamp(1_762_680_612_000L))
+        assertEquals((((45 shl 9) or (11 shl 5) or 9) shl 16) or ((9 shl 11) or (30 shl 5) or 6), ZipWriter.dosStamp(1_762_680_612_000L))
     }
 }
