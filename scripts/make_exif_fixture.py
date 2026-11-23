@@ -18,16 +18,20 @@ need none. Two more JPEGs carry each second-choice source the client falls back 
 lens make, XMP software and rating, the southern and western hemispheres, below sea level) and `-iptc` (the digitised
 date, an IPTC object name). One PNG carries its capture date in XMP only, as Lightroom exports one (inbox #808):
 `-xmpdate`, with no `eXIf`, the three XMP capture dates each a different moment, and a later `xmp:ModifyDate`.
+Three carry the XMP in the forms read since inbox #1141: `-xmp.heic` (the Exif item and an XMP item, as macOS writes a
+HEIC), `-compressed.png` (the TIFF as a `zTXt` raw profile, the XMP as a compressed `iTXt`) and `-extended.jpg` (the
+XMP split into a standard and an extended packet, the extended one in chunks).
 
 Re-run after changing which tags the client reads:
 
     python3 scripts/make_exif_fixture.py
 
-Output: src/web/src/features/memories/__fixtures__/exif-sample{,-fallbacks,-iptc}.jpg, exif-sample{,-le}.tif,
-exif-sample{,-xmpdate}.png, exif-sample.{webp,avif,heic}, exif-sample-ftyp52.heic
+Output: src/web/src/features/memories/__fixtures__/exif-sample{,-fallbacks,-iptc,-extended}.jpg, exif-sample{,-le}.tif,
+exif-sample{,-xmpdate,-compressed}.png, exif-sample.{webp,avif,heic}, exif-sample-ftyp52.heic, exif-sample-xmp.heic
 """
 from __future__ import annotations
 
+import hashlib
 import struct
 import zlib
 
@@ -292,6 +296,77 @@ def build_png(tiff: bytes | None, xmp: str = XMP_PACKET) -> bytes:
             + png_chunk(b"IDAT", idat) + png_chunk(b"IEND", b""))
 
 
+def raw_profile(name: str, data: bytes) -> bytes:
+    """ImageMagick's text form of a profile in a PNG text chunk: newline, name, newline, the length right-aligned in
+    eight, newline, then the bytes in hex, 72 digits a line."""
+    digits = data.hex()
+    lines = "\n".join(digits[i:i + 72] for i in range(0, len(digits), 72))
+    return f"\n{name}\n{len(data):8d}\n{lines}\n".encode("ascii")
+
+
+def build_png_compressed(tiff: bytes, xmp: str = XMP_PACKET) -> bytes:
+    """A 1x1 greyscale PNG whose metadata is all compressed, as ImageMagick and exiv2 write it: the TIFF block as a
+    `zTXt` raw profile (`Raw profile type exif`, its bytes "Exif\\0\\0" and the TIFF as hex), and the XMP as a
+    compressed `iTXt` (flag 1, method 0: zlib) — what `exiftool -z` writes."""
+    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 0)
+    ztxt = b"Raw profile type exif\x00" + b"\x00" + zlib.compress(raw_profile("exif", EXIF_HEADER + tiff))
+    itxt = b"XML:com.adobe.xmp\x00" + b"\x01\x00" + b"\x00" + b"\x00" + zlib.compress(xmp.encode("utf-8"))
+    idat = zlib.compress(b"\x00\x80")
+    return (b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", ihdr) + png_chunk(b"zTXt", ztxt) + png_chunk(b"iTXt", itxt)
+            + png_chunk(b"IDAT", idat) + png_chunk(b"IEND", b""))
+
+
+XMP_EXTENSION = b"http://ns.adobe.com/xmp/extension/\x00"
+
+
+def extended_xmp(standard: str, extended: str, chunk: int) -> tuple[str, list[bytes]]:
+    """A JPEG's XMP split as Adobe's XMP specification (part 3, 1.1.3.1) splits a packet too large for one segment: the
+    standard packet names the extended one's GUID (its MD5, upper-case hex) in `xmpNote:HasExtendedXMP`; the extended
+    one, a document without a packet wrapper, rides in `APP1` chunks of `chunk` bytes, each with the GUID, the full
+    length and its own offset. `standard` holds `{guid}` where the GUID goes."""
+    data = extended.encode("utf-8")
+    guid = hashlib.md5(data).hexdigest().upper()
+    chunks = [XMP_EXTENSION + guid.encode("ascii") + struct.pack(">II", len(data), at) + data[at:at + chunk]
+              for at in range(0, len(data), chunk)]
+    return standard.replace("{guid}", guid), chunks
+
+
+# The standard packet of a JPEG whose XMP is extended: the creator tool, a rating and the GUID; the title, the
+# description and another rating are in the extended packet — the later part of one document, so its rating (5) is the
+# one read, not the standard packet's (2).
+XMP_STANDARD = """<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+    xmlns:xmpNote="http://ns.adobe.com/xmp/note/"
+   xmp:CreatorTool="veyq fixture 1.0"
+   xmp:Rating="2"
+   xmpNote:HasExtendedXMP="{guid}"/>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>"""
+
+XMP_EXTENDED = """<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+    xmlns:xmp="http://ns.adobe.com/xap/1.0/">
+   <xmp:Rating>5</xmp:Rating>
+   <dc:title><rdf:Alt><rdf:li xml:lang="x-default">Marienplatz</rdf:li></rdf:Alt></dc:title>
+   <dc:description><rdf:Alt><rdf:li xml:lang="x-default">Marienplatz at golden hour</rdf:li></rdf:Alt></dc:description>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>"""
+
+
+def build_jpeg_extended(tiff: bytes) -> bytes:
+    """The sample's Exif, its standard XMP, then its extended XMP in chunks of 256 bytes (a writer's are ~65,400; the
+    size is the writer's to choose)."""
+    standard, chunks = extended_xmp(XMP_STANDARD, XMP_EXTENDED, 256)
+    return build_jpeg(tiff, standard, b"".join(app1(c) for c in chunks))
+
+
 # The VP8L bitstream of a 1x1 lossless WebP — the image every WebP feature probe decodes
 # (`UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==`): signature 0x2f, then 14-bit width-1 and height-1 = 0.
 VP8L_1X1 = bytes.fromhex("2f00000010071011118888fe07")
@@ -321,28 +396,45 @@ def full_box(kind: bytes, version: int, payload: bytes) -> bytes:
     return box(kind, struct.pack(">I", version << 24) + payload)
 
 
-def build_heif(major: bytes, compatible: list[bytes], tiff: bytes) -> bytes:
-    """ftyp, then a `meta` whose one item is an `Exif` item located (by `iloc`) in the trailing `mdat`.
+XMP_MIME = b"application/rdf+xml"
 
-    The item's data is HEIF's Exif block (ISO/IEC 23008-12 Annex A.2.1): a 32-bit offset from its end to the TIFF
-    header, here 6 — past the "Exif\\0\\0" Apple writes there too.
+
+def build_heif(major: bytes, compatible: list[bytes], tiff: bytes, xmp: str | None = None) -> bytes:
+    """ftyp, then a `meta` whose items are an `Exif` item and, with `xmp`, an XMP item, each located (by `iloc`) in
+    the trailing `mdat`.
+
+    The Exif item's data is HEIF's Exif block (ISO/IEC 23008-12 Annex A.2.1): a 32-bit offset from its end to the TIFF
+    header, here 6 — past the "Exif\\0\\0" Apple writes there too. The XMP item is what macOS's ImageIO writes (seen in
+    a `sips` HEIC, 2026-11-23): an `infe` of type `mime`, no name, content type `application/rdf+xml`, its data the
+    packet as it is (Annex A.3 of the same standard).
     """
     ftyp = box(b"ftyp", major + struct.pack(">I", 0) + b"".join(compatible))
     exif_item = struct.pack(">I", len(EXIF_HEADER)) + EXIF_HEADER + tiff
+    xmp_item = xmp.encode("utf-8") if xmp is not None else b""
     hdlr = full_box(b"hdlr", 0, struct.pack(">I", 0) + b"pict" + b"\x00" * 12 + b"\x00")
-    infe = full_box(b"infe", 2, struct.pack(">HH", 1, 0) + b"Exif" + b"\x00")  # item 1, unprotected, type Exif, no name
-    iinf = full_box(b"iinf", 0, struct.pack(">H", 1) + infe)
+    infes = full_box(b"infe", 2, struct.pack(">HH", 1, 0) + b"Exif" + b"\x00")  # item 1, unprotected, type Exif, no name
+    items = [(1, exif_item)]
+    if xmp is not None:
+        # item 2, unprotected, type mime, no name, then its content type
+        infes += full_box(b"infe", 2, struct.pack(">HH", 2, 0) + b"mime" + b"\x00" + XMP_MIME + b"\x00")
+        items.append((2, xmp_item))
+    iinf = full_box(b"iinf", 0, struct.pack(">H", len(items)) + infes)
 
     def iloc(extent_offset: int) -> bytes:
-        # version 0: offset_size 4 | length_size 4, base_offset_size 0 | reserved 0, one item with one extent
-        return full_box(b"iloc", 0, bytes([0x44, 0x00]) + struct.pack(">HHHHII", 1, 1, 0, 1, extent_offset, len(exif_item)))
+        # version 0: offset_size 4 | length_size 4, base_offset_size 0 | reserved 0; each item with one extent, the
+        # items' data back to back from `extent_offset`
+        entries, at = b"", extent_offset
+        for item_id, data in items:
+            entries += struct.pack(">HHHII", item_id, 0, 1, at, len(data))
+            at += len(data)
+        return full_box(b"iloc", 0, bytes([0x44, 0x00]) + struct.pack(">H", len(items)) + entries)
 
     def meta(extent_offset: int) -> bytes:
         return full_box(b"meta", 0, hdlr + iinf + iloc(extent_offset))
 
     # The extent offset is absolute in the file and the `iloc` that holds it has a fixed size, so measure first.
     mdat_payload_offset = len(ftyp) + len(meta(0)) + 8
-    return ftyp + meta(mdat_payload_offset) + box(b"mdat", exif_item)
+    return ftyp + meta(mdat_payload_offset) + box(b"mdat", b"".join(data for _, data in items))
 
 
 # The compatible brands: an ordinary iPhone-like set (6 brands → a 40-byte ftyp, which exifr read), and the same set
@@ -366,6 +458,10 @@ def main() -> None:
         "exif-sample.avif": build_heif(b"avif", [b"avif", b"mif1", b"miaf"], tiff),
         "exif-sample.heic": build_heif(b"heic", HEIC_BRANDS, tiff),
         "exif-sample-ftyp52.heic": build_heif(b"heic", HEIC_BRANDS_52, tiff),
+        # the forms the ExifReader library's successor read only from inbox #1141 on (ADR 0155, the media headers' slice)
+        "exif-sample-xmp.heic": build_heif(b"heic", HEIC_BRANDS, tiff, XMP_PACKET),
+        "exif-sample-compressed.png": build_png_compressed(tiff),
+        "exif-sample-extended.jpg": build_jpeg_extended(tiff),
     }
     assert struct.unpack(">I", outputs["exif-sample-ftyp52.heic"][:4])[0] == 52, "the iOS 18 case needs a 52-byte ftyp"
     assert struct.unpack(">I", outputs["exif-sample.heic"][:4])[0] == 40

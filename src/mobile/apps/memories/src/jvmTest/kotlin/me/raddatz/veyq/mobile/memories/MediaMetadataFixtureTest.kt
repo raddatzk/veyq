@@ -50,6 +50,10 @@ class MediaMetadataFixtureTest {
             Triple("exif-sample.heic", "image/heic", bundleWithoutXmp),
             Triple("exif-sample.webp", "image/webp", json(bundle)),
             Triple("exif-sample-ftyp52.heic", "image/heic", bundleWithoutXmp),
+            // the XMP forms read since inbox #1141: a HEIC's XMP item, a PNG's compressed chunks, a JPEG's extended XMP
+            Triple("exif-sample-xmp.heic", "image/heic", json(bundle)),
+            Triple("exif-sample-compressed.png", "image/png", json(bundle)),
+            Triple("exif-sample-extended.jpg", "image/jpeg", json(bundle)),
         )) {
             val read = MediaMetadata.read(photo(name), type, NOW)
             assertEquals(taken, read.capturedAt, name)

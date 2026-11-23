@@ -847,6 +847,61 @@ Measured before the decision (2026-11-20):
     TypeScript's XMP tags left out of the comparison since Node has no `DOMParser`); delivery by
     `scratchpad/mh/repro.py` (three `--no-daemon --rerun-tasks :composition:jsPackage` builds from a removed `dist/`).
 
+  D8's residual, inbox #1141 (built 2026-11-23, branch `claude/media-xmp-1141`; the trigger: the slice's browser pass saw a
+  `sips` HEIC's title and rating missing). The core's `ExifReader` now also reads a HEIC's or an AVIF's **XMP item**, a
+  PNG's **compressed XMP `iTXt`** and its **raw EXIF and XMP profiles** (`tEXt`, `zTXt`, `iTXt`), and a JPEG's **extended
+  XMP**; three fixtures (`exif-sample-xmp.heic`, `-compressed.png`, `-extended.jpg`, `scripts/make_exif_fixture.py`) and
+  37 tag cases (`… (#1141)` in `v1-vectors.json`, 141 in all) hold it, and `ExifReaderDamageTest` cuts each fixture at
+  every length and flips bytes in it a thousand times — the reader answers every time. Its gate, against `855f0aa72`:
+
+  | Criterion | Measured | Bound |
+  |---|---|---|
+  | size: the platform module, every entry | 67,178 → 68,783 B gz (+1,605) | the running budget, 80,094 |
+  | size: the eager set | +1,508 B gz (659,325 → 660,833: the Kotlin in the `review` chunk +1,347, `main` +169 for the inflater); the slice's +9,694 with it +11,202 | 14,427 at R (the slice's) |
+  | size: any lazy chunk | +10 B gz at most (`media`) | ≤ 1,024 |
+  | time (Node 22, the slice's bench, its old reader now over happy-dom's `DOMParser` so its XMP is compared; median of 15 after 3 warm-ups, three runs) | `all` over 50 HEICs with an XMP item 0.33–0.40× (≤ 2.6 ms), `xmpDate` over them 0.42–0.49×; `all` over 50 PNGs with a compressed raw EXIF profile and XMP 0.40–0.42× (≤ 11.4 ms); `all` over 50 JPEGs with extended XMP 0.28–0.29×; the slice's rules unchanged (`imageSizeFromHeader` 1.36–1.41×, `date` over JPEGs 0.94–1.04×, the videos 0.83–1.24×) | ≤ 2.5× and ≤ 100 ms |
+  | answers | the HEIC: identical to the library's; the PNG: the library read the raw EXIF profile, not the compressed XMP; the JPEG: the library lost the standard packet's `CreatorTool` beside the extended one (D11); each new fixture's XMP as `exiftool` 13.44 reads it, and a `sips` HEIC's (`exif-sample.jpg` converted) and an `exiftool`-split extended JPEG's through the built package | — |
+  | tests | bitten (D14) | — |
+
+  - **D11 — What the library read that the core did not, measured rather than remembered.** *Q:* D8 listed four forms from
+    the library's documentation. *Evidence:* the bench's old reader (ExifReader 4.54.0, the deleted `exifTags.ts`) over the
+    three fixtures under happy-dom's `DOMParser`: it read a HEIC's XMP item (its answer equals the core's now); a PNG's raw
+    EXIF profile in a `zTXt` (its EXIF tags present), but **not** its compressed XMP `iTXt` (its finder skips the
+    compression flag and parses the deflated bytes as XML: no XMP tag); a JPEG's extended XMP, its chunks concatenated in
+    file order under any GUID, and on the fixture without the standard packet's `CreatorTool` (`exiftool` reads it). The
+    IPTC character set: the web asked the library for `iptc: ['Object Name']` alone, so the `1:90` record that names the
+    set was never parsed — the library's answers were the core's (UTF-8, else Latin-1); nothing was lost. *Choice:* the
+    HEIC's item, the raw EXIF profile and the extended XMP restore what the library read; the compressed XMP `iTXt` and the
+    raw XMP profile are read too though the library did not — the PNG specification's own form, and the inflate is there.
+    The extended XMP is read as Adobe's XMP specification (part 3, 1.1.3.1) writes it, not as the library did: only the
+    chunks under the GUID the standard packet's `xmpNote:HasExtendedXMP` names, placed by their offsets, all of the full
+    length they state or none; the standard packet must scan, and the extended one's values win where it has one (the
+    later part of one document). A HEIF item in the `meta`'s `idat` (construction 1) is read, the Exif item's too. *Left*
+    (inbox #1185): an XMP packet in a TIFF's tag 700 (the library read it, remembered from its source, `exif-reader.js`'s
+    application notes — no fixture); a PNG's raw IPTC profile; an IPTC character set other than UTF-8/Latin-1 (nothing a
+    user had); a HEIF item with a `content_encoding`. *Cost:* a JPEG whose extended chunks the library joined under a
+    wrong GUID or out of order now reads its standard packet alone.
+  - **D12 — The web's inflate is the browser's, handed in.** *Q:* the core inflates by `blob/inflate`, an `expect` whose
+    JavaScript `actual` is `NotOnTheWeb`'s refusal, which no façade may reach (the slice check). *Options:* (a) an inflate in
+    common Kotlin (RFC 1951 by hand, every platform's); (b) the platforms' zlib, the web's being `DecompressionStream`,
+    handed to the reader. *Choice:* (b): `ExifReader.read(file, inflater)`, the apps' and the tests' overload passing
+    `blob/inflate`, the façade's `exifTags(file, scope, inflater)` the web's `MediaInflater` (`shared/image/mediaFile.ts`'s
+    `mediaInflater`: the stream read a chunk at a time, given up past the cap); decision 1 keeps a browser's primitive the
+    web's, and no inflate of our own is to be held to RFC 1951. *Evidence:* the slice check's forbidden list stays empty for
+    `@veyq/core-js/media`; the vectors' bad, truncated and 6 MiB streams answer alike on the JVM, natively, under Node's
+    zlib (the package) and under `DecompressionStream` (the web). *Cost:* a third parameter; a zlib stream followed by junk
+    is refused by `DecompressionStream` and accepted by zlib — no vector case carries one.
+  - **D13 — What a read may inflate and join.** A compressed text is inflated only where its keyword is one read
+    (`XML:com.adobe.xmp`, `Raw profile type exif`/`xmp`, any case); one read inflates at most `SLICED_MAX` (4 MiB) in all,
+    the rest of the cap handed to each inflate; a JPEG's walk keeps at most 1,024 extended chunks, their packet at most
+    4 MiB; a HEIF item's extents at most 4 MiB, read by their extents alone (the vectors' item 4 MB into a file: ≤ 256 KiB
+    read). A raw profile's stated length is not trusted (its digits are counted, as the library did), an odd count none.
+  - **D14 — The bites** (five mutations at once, one per rule, restored with `/bin/cp -f`): the XMP item's type not
+    matched, a compressed `iTXt` refused, the raw EXIF profile's keyword misspelt, the GUID not checked, the standard
+    packet's value winning the merge — the same 14 cases red in the core's `MediaVectorsTest`, the package's
+    `media.test.ts` and the web's `media.vectors.test.ts` (6, 2, 2, 1 and 3 of them), and the web's
+    `readExif.fixture.test.ts` red for the HEIC and the PNG fixture.
+
 - **The export archive's slice** (decision 7.2's sixth, built 2026-11-23, branch `claude/export-archive-slice`). A download's
   store-only ZIP — written (`export/ZipWriter`), its exact length before the first byte (`ZipWriter.length`), read and
   distrusted (`export/ZipReader`), the CRC-32 both run (`export/Crc32`) — and the manifest's check and payload walk

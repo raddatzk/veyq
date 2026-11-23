@@ -5,10 +5,11 @@
 // their standard names, already undone (a rational is a number, an ASCII tag a string, a date epoch-ms — the camera's wall
 // clock read in the device's zone —, the GPS position signed decimal degrees), so what a caller maps from them is its own
 // and a test can hand it a record. Formats: JPEG, TIFF, PNG, WebP, HEIC, AVIF; XMP is scanned by hand in the core, never
-// handed to the browser's XML parser. Never the whole file: a JPEG's and a HEIF's head in windows, a PNG's or a WebP's first
+// handed to the browser's XML parser; a PNG's compressed chunk is inflated by the browser's own zlib (`mediaInflater`),
+// the platform module carrying none on JavaScript. Never the whole file: a JPEG's and a HEIF's head in windows, a PNG's or a WebP's first
 // [CHUNKED_PREFIX], a bare TIFF's first [TIFF_PREFIX]. It fetches nothing. This file holds no rule.
 import { exifChunkedPrefix, exifTags, exifTiffPrefix, type ExifShape } from '@veyq/core-js/media'
-import { mediaFileOf } from './mediaFile'
+import { mediaFileOf, mediaInflater } from './mediaFile'
 
 /** The tags a caller can read, each optional: a tag the file does not carry, or carries unreadably, is absent. The core's
  *  `ExifShape` names them; see `media/web/Shapes.kt` for each one's meaning. */
@@ -29,5 +30,5 @@ export const TIFF_PREFIX = exifTiffPrefix()
  */
 export async function readExifTags(image: Blob, scope: ExifScope): Promise<ExifTags | undefined> {
   // The core sets only the tags present (`media/web/MediaWeb.kt`), so its object is an ExifTags as it stands.
-  return ((await exifTags(mediaFileOf(image), scope)) as ExifTags | null) ?? undefined
+  return ((await exifTags(mediaFileOf(image), scope, mediaInflater)) as ExifTags | null) ?? undefined
 }

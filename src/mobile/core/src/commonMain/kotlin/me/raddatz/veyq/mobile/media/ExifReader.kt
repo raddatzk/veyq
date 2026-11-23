@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.media
 
+import me.raddatz.veyq.mobile.blob.inflate
 import me.raddatz.veyq.mobile.search.JsText
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.min
@@ -78,13 +79,17 @@ class ExifTags internal constructor() {
 /**
  * Reads [ExifTags] from a photo's container, as the web read them through the ExifReader library until ADR 0155's media
  * headers' slice (`contracts/platform/media/v1-vectors.json` holds every client to the same answers): a JPEG's last `APP1`
- * Exif, its `APP1` XMP and its `APP13` IPTC object name; a bare TIFF (its first [TIFF_PREFIX]); a PNG's `eXIf` and
- * uncompressed XMP `iTXt` and a WebP's `EXIF` and `XMP ` (each within its first [CHUNKED_PREFIX]: a PNG's metadata usually
- * precedes its pixels, a WebP's follows them, so a larger WebP answers nothing); a HEIC's or an AVIF's `Exif` item through
- * its `meta` box. Only the tags [ExifTags] names are read; what is not parsed cannot be mis-parsed. Never the whole file: a
- * JPEG's segments and a HEIF's boxes are read by their headers in windows of [WINDOW], at most [SLICED_MAX] in all. A
- * container this does not know answers null, and so does a damaged one past what it read. No `Regex`, `HashMap` or `Long`
- * on the way (the web's path): the XMP is scanned by hand ([Xmp]), the dates parsed by hand.
+ * Exif, its last `APP1` XMP with its extended XMP (the `APP1` chunks whose GUID the packet's `HasExtendedXMP` names, joined
+ * by their offsets) and its `APP13` IPTC object name; a bare TIFF (its first [TIFF_PREFIX]); a PNG's `eXIf`, its XMP `iTXt`
+ * (compressed or not) and its `Raw profile type exif` and `xmp` text chunks (`tEXt`, `zTXt`, `iTXt`, as ImageMagick and
+ * exiv2 write them), and a WebP's `EXIF` and `XMP ` (each within its first [CHUNKED_PREFIX]: a PNG's metadata usually
+ * precedes its pixels, a WebP's follows them, so a larger WebP answers nothing); a HEIC's or an AVIF's `Exif` item and XMP
+ * item (`mime`, `application/rdf+xml`) through its `meta` box, in the file or in its `idat`. Only the tags [ExifTags] names
+ * are read; what is not parsed cannot be mis-parsed. Never the whole file: a JPEG's segments and a HEIF's boxes are read by
+ * their headers in windows of [WINDOW], at most [SLICED_MAX] in all; a compressed chunk is inflated only where its keyword
+ * is one read, at most [SLICED_MAX] in all. A container this does not know answers null, and so does a damaged one past
+ * what it read. No `Regex`, `HashMap` or `Long` on the way (the web's path): the XMP is scanned by hand ([Xmp]), the dates
+ * parsed by hand.
  */
 object ExifReader {
     const val CHUNKED_PREFIX = 512 * 1024
@@ -96,11 +101,16 @@ object ExifReader {
     /** [source]'s tags, or null where it carries none this reads. */
     suspend fun read(source: ByteSource): ExifTags? = read(source.media())
 
+    /** [file]'s tags, a compressed chunk inflated by the platform's zlib ([inflate]). */
+    suspend fun read(file: MediaBytes): ExifTags? = read(file) { bytes, cap -> inflate(bytes, cap) }
+
     /**
      * [file]'s tags, or null where it carries none this reads. A read the file refuses fails the whole read, as any read of
-     * the file would; a block damaged past what was read leaves what was read standing.
+     * the file would; a block damaged past what was read leaves what was read standing. [inflater] undoes a zlib stream of
+     * at most `cap` bytes, null where it is broken or longer — the web hands the browser's: the platform module has no
+     * zlib of its own on JavaScript.
      */
-    suspend fun read(file: MediaBytes): ExifTags? {
+    suspend fun read(file: MediaBytes, inflater: suspend (bytes: ByteArray, cap: Int) -> ByteArray?): ExifTags? {
         var refused: Throwable? = null
         val reads = MediaBytes(file.size) { from, length ->
             try {
@@ -117,7 +127,7 @@ object ExifReader {
         try {
             when {
                 isTiff(head, 0) -> tiff(reads.read(0.0, min(reads.size, TIFF_PREFIX.toDouble()).toInt()), 0, tags)
-                u8(head, 0) == 0x89 && Bytes.ascii(head, 1, "PNG") -> png(reads.read(0.0, min(reads.size, CHUNKED_PREFIX.toDouble()).toInt()), tags)
+                u8(head, 0) == 0x89 && Bytes.ascii(head, 1, "PNG") -> png(reads.read(0.0, min(reads.size, CHUNKED_PREFIX.toDouble()).toInt()), tags, Unpack(inflater))
                 Bytes.ascii(head, 0, "RIFF") && Bytes.ascii(head, 8, "WEBP") -> webp(reads.read(0.0, min(reads.size, CHUNKED_PREFIX.toDouble()).toInt()), tags)
                 u8(head, 0) == 0xFF && u8(head, 1) == 0xD8 -> jpeg(HeaderReader(reads, WINDOW, SLICED_MAX.toDouble(), Int.MAX_VALUE), tags)
                 Bytes.ascii(head, 4, "ftyp") -> heif(HeaderReader(reads, WINDOW, SLICED_MAX.toDouble(), Int.MAX_VALUE), tags)
@@ -135,11 +145,18 @@ object ExifReader {
     // --- containers ------------------------------------------------------------------------------------------------
 
     private const val XMP_JPEG = "http://ns.adobe.com/xap/1.0/\u0000"
+    private const val XMP_EXTENSION = "http://ns.adobe.com/xmp/extension/\u0000"
+    /** An extended XMP chunk's head after its name: the GUID (32 hex digits), the packet's full length, this chunk's offset. */
+    private const val EXTENSION_HEAD = XMP_EXTENSION.length + 40
+    /** The most extended XMP chunks a JPEG's walk keeps (each at most 65,455 bytes, all within [SLICED_MAX]). */
+    private const val EXTENSION_CHUNKS = 1024
 
     private suspend fun jpeg(r: HeaderReader, tags: ExifTags) {
         if (r.hold(0.0, 4) < 4) return
         var at = 2.0
         var exif: ByteArray? = null // the last Exif segment is the one read (the web's)
+        var xmp: Array<String?>? = null // the last XMP segment that reads
+        val extension = ArrayList<ByteArray>()
         while (at + 4 <= r.size) {
             if (r.hold(at, 4) < 4 || r.u8(at) != 0xFF) break
             val marker = r.u8(at + 1)
@@ -160,16 +177,43 @@ object ExifReader {
                 val body = r.copy(at + 4, n)
                 when {
                     marker == 0xE1 && Bytes.ascii(body, 0, "Exif\u0000\u0000") -> exif = body
-                    marker == 0xE1 && Bytes.ascii(body, 0, XMP_JPEG) -> Xmp.read(body.decodeToString(XMP_JPEG.length, body.size), tags)
+                    marker == 0xE1 && Bytes.ascii(body, 0, XMP_JPEG) -> Xmp.scan(body.decodeToString(XMP_JPEG.length, body.size))?.let { xmp = it }
+                    marker == 0xE1 && Bytes.ascii(body, 0, XMP_EXTENSION) && body.size > EXTENSION_HEAD && extension.size < EXTENSION_CHUNKS -> extension += body
                     marker == 0xED && Bytes.ascii(body, 0, "Photoshop 3.0\u0000") -> photoshop(body, 14, tags)
                 }
             }
             at += 2 + length
         }
         exif?.let { tiff(it, 6, tags) }
+        xmp?.let { values ->
+            val extended = extendedXmp(extension, values[Xmp.EXTENDED])?.let(Xmp::scan)
+            Xmp.apply(if (extended == null) values else Xmp.merge(values, extended), tags)
+        }
     }
 
-    private fun png(b: ByteArray, tags: ExifTags) {
+    /**
+     * The extended XMP packet [chunks] carry under [guid] (the standard packet's `xmpNote:HasExtendedXMP`), its chunks
+     * placed by their offsets; null where none carries it, or they do not join into exactly the length they name.
+     */
+    private fun extendedXmp(chunks: List<ByteArray>, guid: String?): String? {
+        if (guid == null || guid.length != 32 || chunks.isEmpty()) return null
+        val g = XMP_EXTENSION.length
+        val own = chunks.filter { Bytes.ascii(it, g, guid) }.sortedBy { u32be(it, g + 36) }
+        if (own.isEmpty()) return null
+        val total = u32be(own[0], g + 32)
+        if (total <= 0 || total > SLICED_MAX) return null
+        val packet = ByteArray(total.toInt())
+        var filled = 0
+        for (c in own) {
+            val n = c.size - EXTENSION_HEAD
+            if (u32be(c, g + 32) != total || u32be(c, g + 36) != filled.toDouble() || filled + n > packet.size) return null
+            c.copyInto(packet, filled, EXTENSION_HEAD, c.size)
+            filled += n
+        }
+        return if (filled == packet.size) packet.decodeToString() else null
+    }
+
+    private suspend fun png(b: ByteArray, tags: ExifTags, unpack: Unpack) {
         var at = 8
         while (at + 8 <= b.size) {
             val length = u32be(b, at)
@@ -178,18 +222,106 @@ object ExifReader {
             val end = body + length.toInt()
             when {
                 Bytes.ascii(b, at + 4, "eXIf") -> tiff(b.copyOfRange(body, end), 0, tags)
-                Bytes.ascii(b, at + 4, "iTXt") -> {
-                    val keyEnd = indexOf(b, 0, body, end)
-                    // keyword, NUL, compression flag (0: none), method, language tag NUL, translated keyword NUL, text
-                    if (keyEnd > 0 && Bytes.ascii(b, body, "XML:com.adobe.xmp") && keyEnd == body + 17 && keyEnd + 2 < end && b[keyEnd + 1].toInt() == 0) {
-                        val lang = indexOf(b, 0, keyEnd + 3, end)
-                        val translated = if (lang < 0) -1 else indexOf(b, 0, lang + 1, end)
-                        if (translated >= 0) Xmp.read(b.decodeToString(translated + 1, end), tags)
-                    }
-                }
+                Bytes.ascii(b, at + 4, "iTXt") || Bytes.ascii(b, at + 4, "tEXt") || Bytes.ascii(b, at + 4, "zTXt") ->
+                    pngText(b, at + 4, body, end, tags, unpack)
                 Bytes.ascii(b, at + 4, "IEND") -> return
             }
             at = end + 4
+        }
+    }
+
+    private const val PNG_XMP = "XML:com.adobe.xmp"
+    private const val RAW_EXIF = "raw profile type exif"
+    private const val RAW_XMP = "raw profile type xmp"
+
+    /**
+     * The PNG text chunk whose type is at [type] of [b] and whose data is `[body, end)`: an `iTXt` named [PNG_XMP] is an XMP
+     * packet; one named a raw profile (`exif`, `xmp`; in any case, as the library matched it) holds its bytes as hex. Its
+     * keyword, NUL, then for a `zTXt` the method (0: zlib) and the compressed text; for an `iTXt` the compression flag (0, 1)
+     * and method (0), the language tag NUL, the translated keyword NUL and the text; for a `tEXt` the text. A chunk of
+     * another keyword is not inflated.
+     */
+    private suspend fun pngText(b: ByteArray, type: Int, body: Int, end: Int, tags: ExifTags, unpack: Unpack) {
+        val keyEnd = indexOf(b, 0, body, end)
+        if (keyEnd <= body) return
+        val keyword = text(b, body, keyEnd).lowercase()
+        val itxt = Bytes.ascii(b, type, "iTXt")
+        val xmp = itxt && keyEnd == body + PNG_XMP.length && Bytes.ascii(b, body, PNG_XMP)
+        if (!xmp && keyword != RAW_EXIF && keyword != RAW_XMP) return
+        var from = keyEnd + 1
+        var compressed = false
+        if (itxt) {
+            if (from + 2 > end) return
+            compressed = b[from].toInt() == 1
+            if (!compressed && b[from].toInt() != 0) return
+            if (compressed && b[from + 1].toInt() != 0) return
+            val lang = indexOf(b, 0, from + 2, end)
+            val translated = if (lang < 0) -1 else indexOf(b, 0, lang + 1, end)
+            if (translated < 0) return
+            from = translated + 1
+        } else if (Bytes.ascii(b, type, "zTXt")) {
+            if (from >= end || b[from].toInt() != 0) return
+            compressed = true
+            from++
+        }
+        val value = if (compressed) unpack(b.copyOfRange(from, end)) ?: return else b.copyOfRange(from, end)
+        when {
+            xmp -> Xmp.read(value.decodeToString(), tags)
+            keyword == RAW_EXIF -> rawProfile(value, "exif")?.let { tiff(it, if (Bytes.ascii(it, 0, "Exif\u0000\u0000")) 6 else 0, tags) }
+            else -> rawProfile(value, "xmp")?.let { Xmp.read(it.decodeToString(), tags) }
+        }
+    }
+
+    /**
+     * A raw profile's bytes (ImageMagick's text form): a newline, its [name], a newline, its length in decimal (blanks
+     * before it) and a newline, then the bytes as hex digits, a line break or any other character that is no hex digit
+     * skipped (as the library, ImageMagick and exiv2 read it); null where the head is not that or the digits are odd. The
+     * stated length is not trusted.
+     */
+    private fun rawProfile(v: ByteArray, name: String): ByteArray? {
+        if (!Bytes.ascii(v, 0, "\n$name\n")) return null
+        var at = name.length + 2
+        while (at < v.size && (v[at].toInt() == ' '.code || v[at].toInt() == '\t'.code || v[at].toInt() == '\n'.code)) at++
+        val digits = at
+        while (at < v.size && v[at].toInt() in '0'.code..'9'.code) at++
+        if (at == digits || at >= v.size || v[at].toInt() != '\n'.code) return null
+        val out = ByteArray((v.size - at) / 2)
+        var n = 0
+        var high = -1
+        for (i in at + 1 until v.size) {
+            val c = v[i].toInt()
+            val nibble = when (c) {
+                in '0'.code..'9'.code -> c - '0'.code
+                in 'a'.code..'f'.code -> c - 'a'.code + 10
+                in 'A'.code..'F'.code -> c - 'A'.code + 10
+                else -> continue
+            }
+            if (high < 0) {
+                high = nibble
+            } else {
+                out[n++] = ((high shl 4) or nibble).toByte()
+                high = -1
+            }
+        }
+        return if (high >= 0) null else out.copyOf(n)
+    }
+
+    /** One read's inflater: at most [SLICED_MAX] inflated in all; a broken stream, or an inflater that fails, none. */
+    private class Unpack(private val inflater: suspend (ByteArray, Int) -> ByteArray?) {
+        private var left = SLICED_MAX
+
+        suspend operator fun invoke(bytes: ByteArray): ByteArray? {
+            if (left <= 0 || bytes.isEmpty()) return null
+            val out = try {
+                inflater(bytes, left)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Throwable) {
+                null
+            } ?: return null
+            if (out.size > left) return null
+            left -= out.size
+            return out
         }
     }
 
@@ -238,24 +370,36 @@ object ExifReader {
         val length = (metaEnd - metaAt).toInt()
         if (r.hold(metaAt, length) < length) return
         val m = r.copy(metaAt, length)
-        // a full box: version and flags, then its children; the `iinf` names the Exif item, the `iloc` places it
-        val exifId = boxIn(m, 4, m.size, "iinf")?.let { exifItem(m, it, boxEnd(m, it)) } ?: return
-        if (exifId < 0) return
+        // a full box: version and flags, then its children; the `iinf` names the items, the `iloc` places them — in the
+        // file (construction 0) or in the `meta`'s own `idat` (construction 1)
+        val iinf = boxIn(m, 4, m.size, "iinf") ?: return
         val iloc = boxIn(m, 4, m.size, "iloc") ?: return
-        val extents = itemExtents(m, iloc, boxEnd(m, iloc), exifId) ?: return
+        val idat = boxIn(m, 4, m.size, "idat")?.let { metaAt + it } ?: -1.0
+        val exifId = item(m, iinf, boxEnd(m, iinf), xmp = false)
+        val xmpId = item(m, iinf, boxEnd(m, iinf), xmp = true)
+        val exif = if (exifId < 0) null else itemExtents(m, iloc, boxEnd(m, iloc), exifId, idat)?.let { itemData(r, it) }
+        if (exif != null && exif.size > 4) {
+            val tiffAt = 4 + u32be(exif, 0)
+            if (tiffAt >= 4 && tiffAt < exif.size) tiff(exif, tiffAt.toInt(), tags)
+        }
+        val xmp = if (xmpId < 0) null else itemExtents(m, iloc, boxEnd(m, iloc), xmpId, idat)?.let { itemData(r, it) }
+        if (xmp != null) Xmp.read(xmp.decodeToString(), tags)
+    }
+
+    /** An item's bytes, its [extents] (offset, length, …) joined; null where one is not there or they pass [SLICED_MAX]. */
+    private suspend fun itemData(r: HeaderReader, extents: DoubleArray): ByteArray? {
         var total = 0.0
         for (i in 1 until extents.size step 2) total += extents[i]
-        if (total <= 4 || total > SLICED_MAX) return
+        if (total <= 0 || total > SLICED_MAX) return null
         val data = ByteArray(total.toInt())
         var o = 0
         for (i in 0 until extents.size step 2) {
             val len = extents[i + 1].toInt()
-            if (r.hold(extents[i], len) < len) return
+            if (r.hold(extents[i], len) < len) return null
             r.copy(extents[i], len).copyInto(data, o)
             o += len
         }
-        val tiffAt = 4 + u32be(data, 0)
-        if (tiffAt >= 4 && tiffAt < data.size) tiff(data, tiffAt.toInt(), tags)
+        return data
     }
 
     /** The body of the first child box of [type] in `[from, end)` of [b] (a box's size, then its type), or null. */
@@ -274,8 +418,11 @@ object ExifReader {
     /** Where the box whose body starts at [body] ends. */
     private fun boxEnd(b: ByteArray, body: Int): Int = body - 8 + u32be(b, body - 8).toInt()
 
-    /** The id of the `Exif` item an `iinf` lists, or -1. */
-    private fun exifItem(b: ByteArray, body: Int, end: Int): Double {
+    /**
+     * The id of the item an `iinf` lists: the `Exif` item, or with [xmp] the XMP item — of type `mime`, its content type
+     * `application/rdf+xml` after its name —; -1 where none is listed.
+     */
+    private fun item(b: ByteArray, body: Int, end: Int, xmp: Boolean): Double {
         val version = u8(b, body)
         var at = body + 4 + (if (version == 0) 2 else 4)
         var visits = 0
@@ -288,7 +435,11 @@ object ExifReader {
                 if (v >= 2) {
                     val id = if (v == 2) u16be(b, e + 4).toDouble() else u32be(b, e + 4)
                     val typeAt = e + 4 + (if (v == 2) 2 else 4) + 2
-                    if (Bytes.ascii(b, typeAt, "Exif")) return id
+                    if (!xmp && Bytes.ascii(b, typeAt, "Exif")) return id
+                    if (xmp && Bytes.ascii(b, typeAt, "mime")) {
+                        val name = indexOf(b, 0, typeAt + 4, at + size.toInt())
+                        if (name >= 0 && name + 2 + XMP_MIME.length <= at + size && Bytes.ascii(b, name + 1, "$XMP_MIME\u0000")) return id
+                    }
                 }
             }
             at += size.toInt()
@@ -296,8 +447,14 @@ object ExifReader {
         return -1.0
     }
 
-    /** The extents (offset, length, offset, length, …) an `iloc` gives item [id] in the file itself (construction 0), or null. */
-    private fun itemExtents(b: ByteArray, body: Int, end: Int, id: Double): DoubleArray? {
+    private const val XMP_MIME = "application/rdf+xml"
+
+    /**
+     * The extents (offset, length, offset, length, …) an `iloc` gives item [id], each an offset in the file: in the file
+     * itself (construction 0) or in the `idat` whose data starts at [idat] (construction 1; -1 where there is none); null
+     * for another construction or no such item.
+     */
+    private fun itemExtents(b: ByteArray, body: Int, end: Int, id: Double, idat: Double): DoubleArray? {
         val version = u8(b, body)
         var at = body + 4
         val offsetSize = u8(b, at) shr 4
@@ -332,7 +489,10 @@ object ExifReader {
                 extents[2 * k] = base + sized(offsetSize)
                 extents[2 * k + 1] = sized(lengthSize)
             }
-            if (item == id && construction == 0) return extents
+            if (item == id) {
+                if (construction == 1 && idat >= 0) for (k in 0 until n) extents[2 * k] += idat
+                return if (construction == 0 || (construction == 1 && idat >= 0)) extents else null
+            }
             i++
         }
         return null
