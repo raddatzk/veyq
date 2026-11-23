@@ -1,13 +1,13 @@
 name: Renovate
 
 # The self-hosted Renovate of ADR 0158, as a GitHub App of its own (decision 3), so that its pull requests start
-# `Checks` like a person's. Built in stages by changes/cr-renovate.md. This is phase 2: Renovate runs as a DRY RUN beside
-# Dependabot. It looks everything up and logs the branches and pull requests it would create, and it writes nothing:
-# no branch, no pull request, no Dependency Dashboard issue. Phase 5 turns the dry run off, one ecosystem at a time.
+# `Checks` like a person's. Built in stages by changes/cr-renovate.md. Since phase 5 Renovate writes: its branches, its
+# pull requests and the Dependency Dashboard issue. It proposes only for the ecosystems already moved from Dependabot;
+# renovate.json5 holds the others off by one rule, which shrinks with each move (the CR's phase 5 has the order).
 #
 # Two configurations, kept apart. renovate.json5 at the repository root is the version policy: which updates, grouped
 # how, held back why. It names no forge, so it runs unchanged on another. The `env:` of the Renovate step below is the
-# operator's part: which repository, no onboarding, the dry run.
+# operator's part: which repository, no onboarding, which commands a postUpgradeTask may run.
 #
 # Where the key is (ADR 0158 decision 3, the CR's second invariant). The App's Client ID (a variable) and its private
 # key (a secret) live in the environment `renovate`, whose deployment-branch rule admits `main` alone. So a job on any
@@ -20,7 +20,7 @@ name: Renovate
 on:
   schedule:
     # Saturday 05:00 UTC: Dependabot's 06:00 Europe/Berlin in winter, one hour before it in summer (cron reads UTC), so
-    # the dry run and Dependabot read the same registries on the same morning.
+    # Renovate and Dependabot, while both still run, read the same registries on the same morning.
     - cron: "0 5 * * 6"
   workflow_dispatch:
 
@@ -32,7 +32,7 @@ concurrency:
 
 jobs:
   renovate:
-    name: Renovate (dry run)
+    name: Renovate
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -69,7 +69,6 @@ jobs:
           RENOVATE_REPOSITORIES: ${{ github.repository }}
           RENOVATE_ONBOARDING: "false"
           RENOVATE_REQUIRE_CONFIG: required
-          RENOVATE_DRY_RUN: full
           LOG_LEVEL: debug
           # The only commands a postUpgradeTask may run (renovate.json5): pin_follow.py's three follow-ups, exactly. A
           # repository script from the default branch, run in Renovate's container; dependencies' install scripts stay

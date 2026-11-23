@@ -1,6 +1,6 @@
 // The version policy of the self-hosted Renovate (ADR 0158 decision 5; changes/cr-renovate.md). The repository's
 // config, read by `.github/workflows/renovate.yml`, whose environment sets only the operator's part (which repository,
-// no onboarding, the dry run). Nothing here is specific to GitHub, so the same file runs on another forge.
+// no onboarding, the commands a task may run). Nothing here is specific to GitHub, so the same file runs on another forge.
 //
 // Every rule is ported from .github/dependabot.yml, whose comments hold the measured reason; each rule here says it
 // again in its `description`. Rules are applied in order and a later match wins, so the general groups come first and
@@ -296,6 +296,26 @@
       matchDatasources: ["docker"],
       matchPackageNames: ["dxflrs/garage"],
       allowedVersions: "/^v2\\.0\\./",
+    },
+
+    // ---- not moved from Dependabot yet ---------------------------------------------------------------------------------
+    // The last rules, so nothing above turns them back on. Each phase-5 step of cr-renovate takes one ecosystem out of
+    // them and its entry out of .github/dependabot.yml in the same change, so no pin has two updaters and none has none.
+    // A disabled dependency is still extracted, so `pins` in checks.yml still sees it reached.
+    {
+      description: "Still Dependabot's (cr-renovate phase 5 moves them in this order: docker and compose with the chart and the image constants, npm with pnpm, gradle, the rest). Moved so far: github-actions.",
+      matchManagers: ["npm", "gradle", "gradle-wrapper", "dockerfile", "docker-compose", "pip_requirements", "custom.regex"],
+      enabled: false,
+    },
+    {
+      description: "The runtimes setup-node and setup-java pin are read by the github-actions manager, but their majors move with the images (`node major`, `java major` above), so they wait for the docker step.",
+      matchDepNames: ["node", "java-jdk"],
+      enabled: false,
+    },
+    {
+      description: "Renovate's own version is a regex manager's, grouped with the actions; it moves with them.",
+      matchDepNames: ["ghcr.io/renovatebot/renovate"],
+      enabled: true,
     },
   ],
 }

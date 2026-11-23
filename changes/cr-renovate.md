@@ -235,6 +235,20 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
   · Done when: each ecosystem's first real pull request started `Checks` by itself (no reopen, no approval), carried
   everything that moves with it, and went green. `dependabot.yml` keeps no version updates, and the follow workflows
   and `dependabot_follow*.py` are gone.
+
+  Progress:
+  - [ ] **5a actions.** Renovate writes (no `RENOVATE_DRY_RUN`); the last rules of renovate.json5 hold every other
+    manager off, and `node`/`java-jdk` too (decision log); `dependabot.yml` loses its `github-actions` entry. No follow
+    code served actions. Measured on the branch's tree with the pinned image: a lookup run enables only
+    `renovate/actions` (cosign v3.1.4 in publish.yml and release.yml, Renovate 44.258.1), 174 dependencies `disabled`;
+    an extract run as `pins` makes it is still `304 pins in 42 files, every one reached by Renovate`. Open: the first
+    real `renovate/actions` pull request starts `Checks` by itself and goes green.
+  - [ ] **5b docker and compose**, with the chart, the image constants and the Playwright image; the images follow
+    leaves `dependabot_follow.py`.
+  - [ ] **5c npm**, with pnpm; the Playwright follow leaves.
+  - [ ] **5d gradle**: the gradleWrapper measurement, the metadata follow, then the follow workflows go.
+  - [ ] **5e the rest**: Helm, PyYAML, the OpenAPI generator, Schemathesis with `lock.py`, libwebp and Emscripten with
+    `build.py --write`; `webp-encoder-update.yml` goes; security updates move.
 - [ ] **6 docs.**
   - `infra/README.md` § Cutting a release: no pin bump, and the Helm paragraph goes.
   - `docs/crosscutting/release-and-deployment.md`: the pin paragraph names Renovate, and the *Decided, not built*
@@ -306,6 +320,14 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
 - **2026-11-23, phase 4.** `validate_workflow_paths.py` reads renovate.json5 too, through a JSON5 subset reader in the
   guard (the standard library has none, and a dependency for one file is not worth it): a rule whose file moved stops
   applying without a word, which `pins` sees only for a manager.
+
+- **2026-11-23, phase 5.** `dryRun` is one setting for the whole run, so "the dry run is turned off per ecosystem"
+  became: the dry run is off, and the ecosystems not moved yet are `enabled: false` by the last rules of renovate.json5.
+  Their lookups are no longer logged; phases 2 and 3 compared them with Dependabot already, and Dependabot keeps
+  proposing them until their step. A disabled dependency is still extracted, so `pins` stays meaningful (measured).
+- **2026-11-23, phase 5.** `node-version` and `java-version` are the github-actions manager's, but their majors are one
+  group with the images' `node`/`eclipse-temurin` (phase 2), so they stay held until the docker step: enabled alone
+  they could open a runtime major the images do not follow.
 
 ## Definition of done
 
