@@ -9,12 +9,12 @@
 # The client binaries of the server's own version (`mariadb:12.3`, the pin validate_image_pins.py holds): Ubuntu's
 # archive carries 10.11, so they are copied from the pinned server image, which is Ubuntu 24.04 like the base below
 # — the same C library, measured with `ldd`.
-FROM mariadb:12.3@sha256:d46e102fa8b9b72bfcdeb56f9dd538742092119dc8b11f31fe662605cd234cd9 AS mariadb-client
+FROM mariadb:12.3@sha256:4aaf88b3106382c8c18e49f0cec60267be618fc22f858c4503afb2a2555afed3 AS mariadb-client
 
 # The rclone the tool already runs as a container (`RCLONE_IMAGE`), as a binary: a static Go build.
 FROM rclone/rclone:1.76.0@sha256:7cbeec24a44f206067597c0368be4de90ae19a64d5113c7d1938bd737a81e466 AS rclone
 
-FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852 AS runtime-tools
+FROM ubuntu:24.04@sha256:9c7f200c07e3d4a03e7249d2c16bf66a51120fb876aa2242cf31451412543289 AS runtime-tools
 # python3 for the tool; libedit2, libncurses6 and libbsd0 for the `mariadb` client, which links them (`ldd` on the
 # pinned image), libssl3t64 and zlib1g for both client binaries; ca-certificates for an operator's own store over TLS.
 RUN apt-get update \

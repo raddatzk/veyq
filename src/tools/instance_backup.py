@@ -237,7 +237,7 @@ DEFAULT_BACKUP_ROOT = REPO / "infra/backups"
 # host happens to carry years later — and neither tool is installed on a typical dev host anyway, so a host
 # install would be a new prerequisite for the runbook and for CI.
 RCLONE_IMAGE = "rclone/rclone:1.76.0@sha256:7cbeec24a44f206067597c0368be4de90ae19a64d5113c7d1938bd737a81e466"
-DB_IMAGE = "mariadb:12.3@sha256:d46e102fa8b9b72bfcdeb56f9dd538742092119dc8b11f31fe662605cd234cd9"
+DB_IMAGE = "mariadb:12.3@sha256:4aaf88b3106382c8c18e49f0cec60267be618fc22f858c4503afb2a2555afed3"
 
 # The rclone remote's name. Only ever appears in `RCLONE_CONFIG_<NAME>_*` and in `<name>:<bucket>` — never in a
 # config file, because none is written. rclone logs `NOTICE: Config file ... not found - using defaults` on
