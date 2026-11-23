@@ -937,6 +937,7 @@ final class AppModel {
     /// its files to the pick mode, as a share's (an open Pot takes its own, `receiveDrop`); a row's or a gallery's refusal
     /// is said.
     func drop(_ providers: [NSItemProvider], onto target: DropTarget) async {
+        Self.dropLog("drop onto \(type(of: target)): \(providers.count) items")
         let items = await IncomingFiles.dropped(providers)
         Self.dropLog("drop: \(items.map { "\(type(of: $0))" })")
         let files = items.compactMap { ($0 as? Dropped.File)?.source }
@@ -945,15 +946,22 @@ final class AppModel {
         if let m = shellModel {
             for h in holdings where answered == nil { answered = await h.drop(m, target, items) }
             if answered == nil {
-                answered = try? await m.drop(target: target, items: items, depot: nil, left: { @Sendable source in
-                    if let url = ApplePlatform.shared.urlOf(source: source) { AppModel.removePicked(url) }
-                }, deletedName: say(.potDeletedPerson))
+                do {
+                    answered = try await m.drop(target: target, items: items, depot: nil, left: { @Sendable source in
+                        if let url = ApplePlatform.shared.urlOf(source: source) { AppModel.removePicked(url) }
+                    }, deletedName: say(.potDeletedPerson))
+                } catch {
+                    Self.dropLog("core's drop threw \(type(of: error))")
+                }
             }
         }
+        // no outcome is a drop that says nothing (inbox #1039): the trace names it
         guard let outcome = answered else {
+            Self.dropLog("drop: no outcome\(shellModel == nil ? " (no shell)" : "")")
             for s in files { if let url = ApplePlatform.shared.urlOf(source: s) { Self.removePicked(url) } }
             return
         }
+        Self.dropLog("drop outcome \(type(of: outcome))")
         if let refused = outcome as? DropOutcome.Refused {
             Self.dropLog("drop refused")
             if target is DropTarget.Level, !files.isEmpty {

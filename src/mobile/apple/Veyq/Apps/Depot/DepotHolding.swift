@@ -194,9 +194,15 @@ final class DepotHolding: Holding, LevelUploads {
     /// Files dropped onto the level shown or a folder's row: uploaded under it (core's one drop).
     func drop(_ shell: ShellModel, _ target: DropTarget, _ items: [Dropped]) async -> DropOutcome? {
         guard target is DropTarget.Level || target is DropTarget.Row else { return nil }
-        return try? await shell.drop(target: target, items: items, depot: uploads, left: { @Sendable source in
-            if let url = ApplePlatform.shared.urlOf(source: source) { AppModel.removePicked(url) }
-        }, deletedName: say(.potDeletedPerson))
+        do {
+            return try await shell.drop(target: target, items: items, depot: uploads, left: { @Sendable source in
+                if let url = ApplePlatform.shared.urlOf(source: source) { AppModel.removePicked(url) }
+            }, deletedName: say(.potDeletedPerson))
+        } catch {
+            // a throw here leaves the drop to core's own, which refuses a level without Depot: the debug trace names it (#1039)
+            AppModel.dropLog("Depot's drop threw \(type(of: error))")
+            return nil
+        }
     }
 
     /// A share's files the extension handed over for a folder or a space's top: queued under it.
