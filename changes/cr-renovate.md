@@ -189,7 +189,7 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
     2026-11-28, read before phase 5 starts.
   - `pin_follow_selftest.py` (31 cases) and `pin_inventory_selftest.py` run in `Checks`' `guards` job, each bitten by
     breaking one of its checks.
-- [ ] **4 the guards take over the follow's rules.**
+- [x] **4 the guards take over the follow's rules.**
   - The append-only check on `verification-metadata.xml` becomes a guard.
   - The Playwright match is completed in `validate_image_pins.py`.
   - Each guard that names Dependabot or the follow is edited to name Renovate.
@@ -198,8 +198,32 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
     read from its first pull request), or every Renovate pull request is red on *The pull request carries a release
     note* and missing from the draft (found 2026-11-22 on this CR's phase 1 pull request).
 
-  · Done when: the trust chain is green. Each moved rule is bitten: a removed metadata entry is red, and a Playwright
+  · Done when: the trust chain is green. Each moved rule is bitten: a changed metadata entry is red, and a Playwright
   image one minor off is red.
+
+  Built 2026-11-23:
+  - `scripts/verification_metadata_diff.py --base <commit>`, run in `Checks`' `guards` job against a pull request's
+    base or a push's previous tip (decision log). Red on a changed `<configuration>`, a kept artifact's checksum changed
+    or of another kind, an `also-trust` added, a deleted file, a DOCTYPE, a duplicate component, a malformed checksum;
+    a dropped component or artifact and a moved file pass. Run against every one of the 15 commits on `main` that touch
+    a `gradle/verification-metadata.xml` (each against its first parent, in a detached worktree): all green.
+    `verification_metadata_diff_selftest.py` (17 verdict cases, 4 through the command in a throwaway repository) runs
+    beside it; bitten by switching off the checksum compare (3 cases red), the `<configuration>` compare (2 red) and
+    the move pairing (1 red), with a no-op edit as the control (green).
+  - `validate_image_pins.py` reads every tracked `pnpm-lock.yaml`'s resolved `@playwright/test`, `playwright` and
+    `playwright-core` (6 resolutions today, all 1.65.1). Bitten: `playwright-core` at 1.66.1 in the lockfile red, the
+    image at v1.66.1 red, a lockfile resolving none of them red.
+  - `release_notes.py` exempts `UPDATERS`, Dependabot's two logins and `veyq-renovate[bot]`, matched exactly; its
+    self-test gained Renovate's exemption, the hosted `renovate[bot]` not exempt, and a Renovate pull request in the
+    draft's dependency line. Bitten by dropping `veyq-renovate[bot]` (red) and adding `renovate[bot]` (red).
+  - `validate_workflow_paths.py` rule 6: renovate.json5's 20 path entries (managers, rules, task filters, ignored
+    paths). Bitten six ways, each red: a manager regex at a moved file, a stale `matchFileNames`, a stale `fileFilters`,
+    a stale literal `ignorePaths`, a single-quoted key (no JSON5 this reader takes), a regex Python cannot compile.
+  - Reworded for Renovate: `validate_image_pins.py` (one tag per repository, the Playwright pair),
+    `validate_action_pins.py` (the version comment: Renovate's dry run read `currentValue` `v7.0.1` from
+    `actions/checkout@3d3c42e… # v7.0.1`), `validate_release_identity.py` and `checks.yml` (an updater's pull request
+    writes nothing), `release-note.yml`.
+  - Every `validate_*.py` green, `validate_guard_gaps.py --force` green (104 cases), the five self-tests green.
 - [ ] **5 the switch, one ecosystem at a time.** Order: actions → docker/compose (with the chart and the constants) →
   npm → gradle → the rest. For each ecosystem:
   - Renovate's dry run for it is turned off.
@@ -263,6 +287,25 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
 - **2026-11-23, phase 3.** `pins` runs in `checks.yml`, so a docs-only or site-only commit does not run it (the
   workflow's `paths-ignore`). A site-only change can touch `site/package.json`; its pins are checked by the next
   commit that runs `Checks`. Accepted: no new shape lives only under `site/`.
+
+- **2026-11-23, phase 4.** The metadata rule is no `validate_*.py`: the glob reads one tree and never history (the
+  trust-chain skill's fourth edge), and "only gains" is a property of a change. It is a script `Checks` runs with the
+  event's base, fetched alone (`--depth=1`); a first push or a local `run_pipeline.py` run has none and checks the form.
+- **2026-11-23, phase 4.** Dropping a metadata entry is allowed, whole components and single artifacts: the CR's
+  "a removed entry is red" was the follow's rule over a file Gradle wrote, which only appends. Over a change it was
+  wrong twice in history: 7f28ce7d2 dropped `kotlin-stdlib-2.3.21.pom` from a kept version, and 408ce9c73 moved the
+  file under `src/`. A drop cannot widen trust, since Gradle refuses an artifact with no entry. What is red is a
+  changed one: the trust rules, or the bytes a kept artifact is trusted under.
+- **2026-11-23, phase 4.** No exception exists for a legitimate change of the trust rules or a re-published artifact:
+  such a pull request merges red, by the owner, which is the decision the check is there to make visible.
+- **2026-11-23, phase 4.** Completing the Playwright match meant the lockfile: the manifest's exact pin was already
+  held to the image, but what installs is what pnpm resolves, which an override or a second copy can move.
+- **2026-11-23, phase 4.** Renovate's author login is `veyq-renovate[bot]`, read from the App's bot account (`gh api
+  /users/veyq-renovate%5Bbot%5D`: a Bot, id 359998714), not from a first pull request as the phase said: phase 2 and 3
+  open none, and the first real one comes in phase 5, which would then be red on its release note.
+- **2026-11-23, phase 4.** `validate_workflow_paths.py` reads renovate.json5 too, through a JSON5 subset reader in the
+  guard (the standard library has none, and a dependency for one file is not worth it): a rule whose file moved stops
+  applying without a word, which `pins` sees only for a manager.
 
 ## Definition of done
 

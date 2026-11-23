@@ -45,7 +45,7 @@ manifests, the image signatures, the predicates and the tag each name it.
      `snapshot-…`.** Every write in the files — found by what a step does (a login or build-push action, or a `run:`
      that pushes, logs in, signs or attests), never listed — is gated by its step, its job or its push input on its
      file's gate (`needs.version.outputs.kind == 'stage'` in checks.yml, `needs.checks-run.outputs.kind == 'snapshot'`
-     in publish.yml), so a pull request (Dependabot's included) and a local run write nothing.
+     in publish.yml), so a pull request (an updater's included) and a local run write nothing.
      `workflow_dispatch` takes no input: a dispatch is a snapshot now, by hand, and a release is a promotion in a
      workflow of its own. The `snapshot` job holds `packages: write` and `id-token: write` and never `contents: write`; the
      `snapshot-tag` job needs it, is gated the same way and holds exactly `contents: write`; a ref write (`git push`, or
@@ -815,7 +815,7 @@ elif compute is not None and version_match:
                 "tagged", event("push", "main"), 0, {"kind": "stage", **stamp},
             ),
             (
-                # Dependabot's included: a pull request builds and tests, and writes nothing.
+                # An updater's included: a pull request builds and tests, and writes nothing.
                 "a pull request",
                 "full", event("pull_request", "12/merge"), 0, {"kind": "none", **stamp},
             ),
@@ -1294,7 +1294,7 @@ if workflow_doc:
             if writes and not (job_gated or gated_on(step.get("if"), gate)):
                 fail(
                     f"job `{job_name}`, step `{step.get('name') or step.get('id')}` {' and '.join(writes)} when "
-                    f"`{gate}` is not true — a pull request (Dependabot's included) and a local run write to no "
+                    f"`{gate}` is not true — a pull request (an updater's included) and a local run write to no "
                     f"registry and no remote. Gate the step, its job, or the push input on `{gate}`."
                 )
     if registry_writes == 0:

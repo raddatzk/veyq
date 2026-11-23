@@ -3,7 +3,7 @@ name: Checks
 # The one pipeline per commit (ADR 0091 decision 2): the guards, the surface checks, the races, the API end-to-end
 # run, the API fuzzing and the image build start together, the stack lanes wait for the build, and `green` waits for
 # every stage. Every pull request and every push to `main` or `release/<major>.x` runs it, and it publishes nothing:
-#   - a pull request (Dependabot's included) builds and tests the images and keeps them in the runner — no job of a
+#   - a pull request (an updater's included) builds and tests the images and keeps them in the runner — no job of a
 #     pull request's run holds a write permission (`build-local` builds there, `build` only on a push);
 #   - a push to `main` or `release/<major>.x` also STAGES them: the `version` job's `kind` is `stage`, `build` pushes the
 #     per-arch `build-<sha>-<arch>` staging tags (unsigned, no published name), lane L1 pulls exactly those by digest,
@@ -90,6 +90,23 @@ jobs:
             exit 1
           fi
           echo "$count guards green"
+
+      # A Gradle verification metadata change only adds trust: the trust rules and every checksum already committed for
+      # a kept artifact stay as the base has them (scripts/verification_metadata_diff.py; ADR 0158, cr-renovate phase 4).
+      # It compares two trees, so it is no `validate_*.py`, which read one: the base is a pull request's base or a
+      # push's previous tip, fetched alone. A first push reports an all-zero `before`, and a local run of
+      # scripts/run_pipeline.py none; the check then holds the file's form only, and says so.
+      - name: Verification metadata only gains
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE"
+          fi
+          .venv/bin/python scripts/verification_metadata_diff.py --base "${BASE:-0}"
+
+      - name: Verification metadata self-test
+        run: .venv/bin/python scripts/verification_metadata_diff_selftest.py
 
       # The snapshot's pure decisions (the asset-set hash, the lane records and predicates, the write-once verdicts),
       # offline: publish.yml acts on them only after every stage, so they are proven here, before it.

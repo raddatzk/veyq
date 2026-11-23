@@ -23,10 +23,10 @@ area's tone: what a person sees, never a class name), under any of three bold he
 or the single word `none` when nobody using or running veyq would notice the change (CI, docs, a refactor). HTML
 comments are ignored, so the pull request template's guidance may stay in place; the section ends at the next `#`/`##`
 heading or at a thematic break (`---`), below which a body may close with lines that are no note (an attribution).
-Dependabot's pull requests need none.
+An updater's pull requests need none: Dependabot's, and Renovate's App's (`UPDATERS`).
 
 **check** — `release-note.yml` runs it on every pull request event: red, naming what is wrong, unless the body has a
-usable note or the author is Dependabot. It reads the body from the event file only (never from a `${{ }}` expression
+usable note or the author is an updater. It reads the body from the event file only (never from a `${{ }}` expression
 in a run line, where a body would be shell).
 
 **draft** — `publish.yml`'s `release-draft` job runs it after the snapshot is tagged, and on a run that publishes
@@ -39,7 +39,7 @@ itself: the job's own lines do the one `gh api` write (create or edit a draft), 
   1. **The range**: from the newest `v<major>.<m>` tag that is an ancestor of the snapshot's commit to that commit,
      first-parent, oldest first. No such tag: no draft (the first release of a major gets its notes by hand).
   2. **Each commit's pull request** (`commits/<sha>/pulls`, the one merged into the branch as that commit). Its note's
-     items go under their heading in merge order; `none` adds nothing; Dependabot's become one line under **Under the
+     items go under their heading in merge order; `none` adds nothing; an updater's become one line under **Under the
      hood**; one without a usable note is named under **Needs a note**, visible to the owner who reads the draft; a
      commit without a pull request is named in the job summary only.
   3. **The drafts**: `release.yml` promotes only when exactly one draft exists (promote.py check 1), so this keeps it at
@@ -140,13 +140,20 @@ def parse(text: str) -> dict[str, list[str]] | str:
     return {h: v for h, v in items.items() if v}
 
 
-def is_dependabot(author: str) -> bool:
-    return author in ("dependabot[bot]", "dependabot-preview[bot]")
+# The authors whose pull requests are dependency bumps: they carry upstream release notes, never veyq's, and are listed as
+# one line under the dependencies. Renovate's is its GitHub App's bot account, `<app slug>[bot]` (ADR 0158 decision 3;
+# the account read with `gh api /users/veyq-renovate%5Bbot%5D` 2026-11-23: a Bot, id 359998714). An author is matched
+# exactly: a person or another App named like one is not exempt.
+UPDATERS = ("dependabot[bot]", "dependabot-preview[bot]", "veyq-renovate[bot]")
+
+
+def is_updater(author: str) -> bool:
+    return author in UPDATERS
 
 
 def verdict(body: str | None, author: str) -> str:
     """'' when the pull request may merge as far as its note goes, else why not."""
-    if is_dependabot(author):
+    if is_updater(author):
         return ""
     text = section(body)
     if text is None:
@@ -180,7 +187,7 @@ def assemble(pulls: list[dict]) -> str:
     dependencies: list[int] = []
     missing: list[str] = []
     for pull in pulls:
-        if is_dependabot(str(pull.get("author") or "")):
+        if is_updater(str(pull.get("author") or "")):
             dependencies.append(int(pull["number"]))
             continue
         text = section(pull.get("body"))

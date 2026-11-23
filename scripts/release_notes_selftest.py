@@ -69,6 +69,8 @@ check(rn.verdict("## Release note\n\n**Changed**\n- x\n", "someone") != "", "an 
 check(rn.verdict("## Release note\n\n**Fixed**\nprose, no item\n", "someone") != "", "prose under a heading passes")
 check(rn.verdict("## Release note\n\n**fixed:**\n- x\n", "someone") == "", "a heading's case or a colon refuses the note")
 check(rn.verdict("", "dependabot[bot]") == "", "Dependabot's pull request needs a note")
+check(rn.verdict("", "veyq-renovate[bot]") == "", "Renovate's pull request needs a note")
+check(rn.verdict("", "renovate[bot]") != "", "the hosted Renovate's App, which is not ours, is exempt")
 ATTRIBUTION = "\n---\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n"
 check(rn.verdict("## Release note\n\nnone\n" + ATTRIBUTION, "someone") == "",
       "a `none` note above a thematic break and the attribution line is refused")
@@ -98,10 +100,11 @@ pulls = [
     {"number": 42, "title": "feat: d", "author": "someone", "body": NOTE},
     {"number": 43, "title": "fix: e", "author": "someone", "body": "no section"},
     {"number": 36, "title": "chore(deps): f", "author": "dependabot[bot]", "body": ""},
+    {"number": 44, "title": "chore(deps): g", "author": "veyq-renovate[bot]", "body": "This PR contains …"},
 ]
 body = rn.assemble(pulls)
 want_order = ["**What is new**", "- **A start screen.**", "**Fixed**", "- A Memory is not numbered (2).",
-              "**Under the hood**", "- Dependencies updated: #22, #36.", "**Needs a note**", "- #43 fix: e —",
+              "**Under the hood**", "- Dependencies updated: #22, #36, #44.", "**Needs a note**", "- #43 fix: e —",
               "**What an operator must act on**", "- Set `VEYQ_X` before upgrading.", rn.FOOTER, "<!-- veyq-release-draft"]
 at = [body.find(s) for s in want_order]
 check(all(i >= 0 for i in at) and at == sorted(at), f"the draft's body is not in the house order: {body}")
