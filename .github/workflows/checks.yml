@@ -215,6 +215,19 @@ jobs:
         if: runner.environment == 'github-hosted'
         run: npm install -g pnpm@12.16.1
 
+      # The OpenAPI generator JAR (ADR 0057 §6), restored to the storageDir both openapitools.json name, so the install's
+      # `generate:api` reads it from the cache instead of asking Maven Central in every job: several jobs start at once,
+      # and Central answered HTTP 429 to both packages' download (2026-11-22, the stack lane on PR #43). A cached file is
+      # trusted no more than a downloaded one: scripts/verify_openapi_generator_jar.mjs hashes it against
+      # scripts/openapi_generator_jar.sha256 on every run and fails the install on a mismatch, leaving the file (a bad
+      # entry then stays red until it is deleted: `gh cache delete <key>`). Keyed on the pin and both configs that name
+      # the version, so a bump is a new key; a hit saves nothing. Every job that installs the root lockfile restores it.
+      - name: Restore the OpenAPI generator JAR
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.openapi-generator
+          key: openapi-generator-jar-${{ hashFiles('scripts/openapi_generator_jar.sha256', 'src/web/openapitools.json', 'src/admin-web/openapitools.json') }}
+
       # One install for the whole workspace (a root `pnpm install` links `@veyq/crypto` into src/web/), then each
       # package proves ITSELF. The shared crypto package is checked first and separately on purpose: it is the
       # one place a defect would be a defect in BOTH surfaces, so its own suite failing must not read as a
@@ -416,6 +429,13 @@ jobs:
         working-directory: src/backend
         run: ./gradlew --no-daemon quarkusBuild
 
+      # The OpenAPI generator JAR, cached and verified as `frontend`'s says.
+      - name: Restore the OpenAPI generator JAR
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.openapi-generator
+          key: openapi-generator-jar-${{ hashFiles('scripts/openapi_generator_jar.sha256', 'src/web/openapitools.json', 'src/admin-web/openapitools.json') }}
+
       - name: Install frontend dependencies
         # The registry half is asked once per commit, by `frontend`.
         run: python3 scripts/pnpm_install_no_deprecated.py --skip-registry-check
@@ -507,6 +527,13 @@ jobs:
       - name: Build backend fast-jar
         working-directory: src/backend
         run: ./gradlew --no-daemon quarkusBuild
+
+      # The OpenAPI generator JAR, cached and verified as `frontend`'s says.
+      - name: Restore the OpenAPI generator JAR
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.openapi-generator
+          key: openapi-generator-jar-${{ hashFiles('scripts/openapi_generator_jar.sha256', 'src/web/openapitools.json', 'src/admin-web/openapitools.json') }}
 
       - name: Install frontend dependencies
         # The seeder (src/web/scripts/fuzz-seed.mts) runs on web's generated client; the registry half is `frontend`'s.
@@ -918,6 +945,13 @@ jobs:
         if: runner.environment == 'github-hosted'
         run: npm install -g pnpm@12.16.1
 
+      # The OpenAPI generator JAR, cached and verified as `frontend`'s says.
+      - name: Restore the OpenAPI generator JAR
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.openapi-generator
+          key: openapi-generator-jar-${{ hashFiles('scripts/openapi_generator_jar.sha256', 'src/web/openapitools.json', 'src/admin-web/openapitools.json') }}
+
       # The browser container installs nothing: it mounts this root install read-only, with `@playwright/test` pinned
       # to the image's version (the orchestrator refuses a mismatch). The registry half is asked once per commit, by
       # `frontend`.
@@ -1152,6 +1186,14 @@ jobs:
         if: steps.predecessor.outputs.ref != ''
         working-directory: src/backend
         run: ./gradlew --no-daemon quarkusBuild
+      # The OpenAPI generator JAR, cached and verified as `frontend`'s says.
+      - name: Restore the OpenAPI generator JAR
+        if: steps.predecessor.outputs.ref != ''
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.openapi-generator
+          key: openapi-generator-jar-${{ hashFiles('scripts/openapi_generator_jar.sha256', 'src/web/openapitools.json', 'src/admin-web/openapitools.json') }}
+
       - name: Install the candidate's dependencies
         if: steps.predecessor.outputs.ref != ''
         # The registry half is asked once per commit, by this workflow's `frontend`.
