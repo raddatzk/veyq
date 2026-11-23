@@ -580,3 +580,43 @@ names were the implementation session's and are not kept.
     `PlacesLiveTest`) opened their device's offline store over the host's volume, so on a machine under 5 % free each
     keep was refused (ADR 0140 decision 8) as `UnlockForgetTest`'s was (#1085); each now sets `offlineFiles` to a
     `SizedVolume`. Found by `grep -rn "offlineRoot" src/mobile/*/src/*Test` — no other test opens a store without one.
+62. **2026-11-23 — The core's native tests are Checks stages (inbox #1102).** Each native test task runs where its
+    binary can run: `macosArm64Test` in `app-inputs` (macOS, the one host that can, beside the libraries `inputs` has
+    just built; `--continue`); the Linux and Windows test binaries are **linked** there too (`linux/run.py test-inputs`,
+    `windows/run.py test-inputs`, new verbs: `test`'s link alone) and **run** by two new jobs that need it —
+    `kotlin-core-linux`, one leg per architecture on its own runner (`ubuntu-latest`, `ubuntu-24.04-arm`), natively,
+    through `linux/run.py test --prebuilt` in the Fedora container a developer uses (Berlin's zone, gnome-keyring's
+    Secret Service, the probe without a bus and without libsecret); `kotlin-core-windows` on `windows-latest` through
+    `windows/run.py test --prebuilt` with `VEYQ_WINDOWS_SSH=local`, as `msix` builds there. Both are in `green`'s
+    `needs:` (validate_release_identity.py assertion 9 derives the list from the file: dropping `kotlin-core-windows`
+    from `green` was red, bitten). The pattern is `flatpak`'s and `msix`'s: link once on macOS, hand the binaries over
+    as an artifact per host (`core-tests-linux-x86_64`, `core-tests-linux-aarch64`, `core-tests-windows`; 204–246 MB
+    each, uncompressed, kept 3 days).
+63. **2026-11-23 — Why the Linux binaries are linked on macOS, not on ubuntu.** Options: link and run on each Linux
+    runner; link on macOS and run there. Kotlin/Native has no Linux arm64 host (`core/konan_toolchain.py` knows
+    macOS and Linux x86-64), so the arm64 leg needs its binary from elsewhere either way; linking x86-64 on ubuntu
+    would be a second, never-measured build host (libsodium's `configure` and utf8proc's with Kotlin/Native's clang on
+    Linux) for one leg of two. Chosen macOS, whose link is the one every developer runs. Even so,
+    `build_libsodium.py` now builds Apple's slices only on a Mac (`sys.platform == "darwin"`, as `build_libwebp.py`
+    already did): the one `xcrun` dependency that made a Linux host fail before Kotlin was reached. Unproved on a
+    Linux host (none here); on the Mac a no-op (the run below built every slice through it).
+64. **2026-11-23 — Windows' zone, and an artifact's lost mode.** `WallClockTest` reads the host's own zone, which
+    must be Berlin's; a GitHub runner's is UTC, so `kotlin-core-windows` runs `tzutil /s "W. Europe Standard Time"`
+    first, on a GitHub runner only (thrown away after the job). An artifact keeps no file mode (upload-artifact's
+    documented limit; remembered, not measured on GitHub), so `linux/run.py test` sets the executable bit on each
+    binary before the container runs it — measured: the binaries with `chmod a-x` came out `rwxr-xr-x`.
+65. **2026-11-23 — The iOS simulator's task stays out (#1130).** `iosSimulatorArm64Test` runs the same sources as
+    `macosArm64Test` (`appleTest`; no module has an `iosTest`) in a simulator, which no machine here boots; it has
+    never run. Filed, not wired blind.
+66. **2026-11-23 — Measured, and what the first run found.** On the arm64 Mac under a load of 10–17:
+    `./gradlew --no-daemon --continue macosArm64Test` from a fresh worktree 23.2 min green (1,339 tests, every library's
+    every slice built first), its tests alone again (`--rerun`) 2.7 min; `linux/run.py test-inputs` 7.0 min (both
+    architectures), `windows/run.py test-inputs` 2.6 min; `windows/run.py test --prebuilt` against the ARM Windows VM
+    (x64 under emulation) 2.7 min, 1,343 tests, one red. `linux/run.py test --prebuilt` was not run: Docker's disk on
+    the Mac was full (`no space left on device` at `docker build`), and nothing of the developer's was pruned for it —
+    owed to the first CI run or a pass with room. The red, in `macosArm64Test`'s second run and on Windows:
+    `GuestDoorsTest.anUnnamedGuestsGalleryOffersAddPhotosAndAsksTheNameAtTheUpload` counted the gallery's own first
+    `GET …/media`, landing after the count, as the declined upload's (#1131; the extra request printed by a probe, 2 of
+    6 runs red). Fixed in the test: it waits for the gallery's first read (`rows != null`) before counting — 30 of 30
+    green after, the Windows VM and the JVM green. A first fix that filtered GETs out raced the list itself
+    (`ConcurrentModificationException`, 1 of 20) and was dropped.

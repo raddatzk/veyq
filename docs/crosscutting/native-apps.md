@@ -631,7 +631,10 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   never run on GitHub: the first push to `main` proves them (inbox #914). Android's and Apple's apps have none.
 - **The core's own tests on the JVM** run in Checks' `kotlin-core` (every module but `:bridge`, a JDK alone) and the
   bridge's in `app-inputs` (inbox #1085): written, measured only by running their commands locally, never run on GitHub.
-  The core's native test tasks (`macosArm64Test`, the Linux and Windows ones) run in no CI job.
+  The core's native tests (inbox #1102): `app-inputs` runs `macosArm64Test` and links the Linux and Windows test
+  binaries, `kotlin-core-linux` runs them on x86-64 and arm64 runners (each natively, in the Fedora container with its
+  Secret Service) and `kotlin-core-windows` on an x64 runner set to Berlin's zone — written, measured only by running
+  their commands locally, never run on GitHub. `iosSimulatorArm64Test` runs in no CI job and has never run (#1130).
 
 **Cameras** ([ADR 0141](../decisions/0141-qr-codes-are-read-and-drawn-by-the-core.md); inbox #912)
 - **No real camera has scanned yet** — every `Found` came through a debug test camera. Owed, each the owner's (a
