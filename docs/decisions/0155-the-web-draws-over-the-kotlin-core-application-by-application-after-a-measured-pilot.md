@@ -12,7 +12,9 @@
   `@veyq/core-js/sharing`, § The share links' slice — 2.63×, inside R; inbox #1057 fixed for every app through the same
   rule); its third (2026-11-22: a node header's and a level row's plans and core's favourite, cover and bookmark rights,
   `@veyq/core-js/navigation`, § The rights and plans' slice — 1.90×); its fourth (2026-11-22: a content sniff, a download name
-  and an archive name, `@veyq/core-js/files`, § The file facts' slice — 1.93×; inbox #1059 decided per app). Decision 7.3 and 8 are not built: Expenses' move is parked, half built on
+  and an archive name, `@veyq/core-js/files`, § The file facts' slice — 1.93×; inbox #1059 decided per app); its fifth (2026-11-23: an image's size, a
+  video's size and capture time and a photo's tags, `@veyq/core-js/media`, § The media headers' slice — 2.73×; the ExifReader
+  library gone). Decision 7.3 and 8 are not built: Expenses' move is parked, half built on
   branch `claude/p2-impl`; the owner (2026-11-22) counts the platform code its façade needs against the platform module's
   running budget and retired the search-alone budget (§ Consequences)
 - Date: 2026-11-20
@@ -147,7 +149,8 @@ Measured before the decision (2026-11-20):
       4. **the file facts** — a content sniff, a download name, an archive name (2,566 B gz): lazy today (Depot's
          viewer), and the SVG rule is a security rule — **built**, § The file facts' slice (2,539 B gz deleted; measured
          eager, not lazy: every part sat in the eager set already);
-      5. **the media headers** — EXIF, video and image headers (4,780 B gz): lazy, and no vectors yet;
+      5. **the media headers** — EXIF, video and image headers (4,780 B gz): lazy, and no vectors yet — **built**, § The media
+         headers' slice (4,809 B gz deleted; its two header readers measured eager, the EXIF reader and its library lazy);
       6. **the export archive** — the ZIP, its CRC and manifest (5,726 B gz): lazy, streamed, and a wrong byte loses data;
       7. **the music order and fades** (859 B gz).
 
@@ -157,7 +160,8 @@ Measured before the decision (2026-11-20):
       `v1.json#name_folding`; the **URL fragment rules** are the router's (decision 1). Every platform façade lands in
       `:core`'s one JavaScript file, which a bundler cannot split, so a rule that is lazy in TypeScript turns eager when
       it moves — the reason slices 4 to 6 come last, each asking first whether a module of its own is cheaper (slice 4 measured
-      its TypeScript eager already, so the question did not arise: § The file facts' slice, D2) — and the
+      its TypeScript eager already, so the question did not arise: § The file facts' slice, D2; slice 5 turned ~10 KB gz eager
+      and took a 45 KB gz lazy library out: § The media headers' slice, D2) — and the
       package's size check becomes one running bound on that file: the split's measured search alone plus R × each moved
       slice's deleted TypeScript (a slice the owner granted another ratio carries it, named with the owner's date, on its row
       of `src/packages/core-js/src/slice.test.ts`; R stays the rule). Platform code an application's façade needs (Expenses'
@@ -742,6 +746,96 @@ Measured before the decision (2026-11-20):
     *Left:* Android's hostile-file proof on a device and a committed Apple one (the macOS probe is the session's, no Apple
     test target exists; inbox #1110); iOS's first run (CoreSimulator is out of date here) and every app's click pass
     (#1111); Linux's region rendering for a far zoom (#1112).
+
+- **The media headers' slice** (decision 7.2's fifth, built 2026-11-23, branch `claude/media-headers-slice`). An image's pixel
+  size from its header (`media/ImageHeader`, new in the core), a video's display size and capture time from its container
+  (`media/VideoHeader`, Matroska's size new) and a photo's EXIF, XMP and IPTC tags (`media/ExifReader`, its XMP scanned by
+  `media/Xmp`) are the platform's alone; the web draws them through `@veyq/core-js/media` (`jsMain/…/media/web/`) behind its
+  unchanged `shared/image/imageHeader.ts`, `videoHeader.ts` and `exifTags.ts`, which hold no rule, and the ExifReader library
+  they called is gone (D1). `contracts/platform/media/v1-vectors.json` holds every side — 50 image, 65 video and 104 tag
+  cases, each case's bytes as parts (hex, a fill, a repeat) and what its reads may reach (`bounds`) — (`MediaVectorsTest`, the
+  writer; the package's `media.test.ts`; the web's `media.vectors.test.ts`). Its gate (each number against `3f355d862`):
+
+  | Criterion | Measured | Bound |
+  |---|---|---|
+  | size: the platform module, every entry | 42,049 → 55,190 B gz; own code 13,141 = 2.73× the 4,809 B gz deleted | 46,251 + 3.0 × 4,809 = 60,678 |
+  | size: the eager set | +9,694 B gz (641,702 → 651,396: the Kotlin in the `review` chunk +12,966, `main` −3,252 for the two header readers it no longer carries) | 14,427 at R |
+  | size: any lazy chunk | +9 B gz at most (`itemFavorites`, `people`); the `exif-reader` chunk −45,226 (gone), `media` −1,255 | ≤ 1,024 |
+  | time (Node 22, a pick's corpus at once, median of 15 after 3 warm-ups, three runs) | `imageSizeFromHeader` over 50 phone JPEGs 1.25–1.69× (≤ 0.97 ms); `readExifTags` `date` over them 0.82–1.19×, `all` 0.36–0.51× (the TypeScript without its XMP parse under Node, so its share is low); `date` over 50 HEICs 0.55–0.61×; `videoSizeFromHeader` over 20 MP4s with the `moov` last 1.09–1.14×, `videoCaptureTimeFromHeader` 1.19–1.21×, over 20 WebMs 0.82–1.02×; every answer identical | ≤ 2.5× and ≤ 100 ms |
+  | delivery | three `--no-daemon --rerun-tasks :composition:jsPackage` builds from a removed `dist/`, one digest (`7d52fd8a…`); `verify:csp`, `verify:license-sources` green (51 packages, each with its source) | identical |
+  | tests | the deleted `imageHeader.test.ts`, `videoHeader.test.ts` and `exifTags.test.ts` each case a vector case (the library-shape cases of `tagsFrom` as files that carry those shapes); bitten — orientation 5 not swapped (1 red in the core's, the package's and the web's vector tests), the first Exif `APP1` read (D6), an XMP prefix not read by its local name (D7), the slice's row at 2,000 B gz deleted (the running budget red) | — |
+  | behaviour | the web's tests pass with their imports unchanged (591 files, 7,838 tests, every suite mocking `readExifTags` as it was); `readExif.fixture.test.ts` seals the same tiers from the fixtures over the core's reader. The browser pass of a pick (photos and videos: tile sizes, capture times, the panel) is owed (inbox #1140) | identical |
+
+  The slice's decision log, kept by its implementer (question, options, choice and why, evidence, cost):
+  - **D1 — The slice's set: the three readers and the library behind one of them.** *Q:* what TypeScript leaves, and does the
+    ExifReader library stay? *Options:* (a) `imageHeader.ts` and `videoHeader.ts` only — the readers the core lacked a twin
+    of in part; (b) (a) and `exifTags.ts`' own code, the library kept and its shapes handed to Kotlin; (c) (a), `exifTags.ts`
+    and the library, the core's `ExifReader` the one reader. *Choice:* (c). The core already read every tag the web names for
+    the apps (ADR 0123), held to the web's fixtures by `MediaMetadataFixtureTest`; keeping the library would keep two
+    readers and hand Kotlin a library's object shapes; and decision 1 keeps only what a browser does, which a TIFF walk is not.
+    *Evidence:* measured, `node scratchpad/mh/measure-ts.mjs src/web/src` (each set bundled alone with esbuild, every other
+    import external, minified, gzip -9): `imageHeader.ts` 2,004 B min / 1,021 B gz, `videoHeader.ts` 6,141 / 2,496,
+    `exifTags.ts` 3,914 / 1,678; **together 12,097 B min / 4,809 B gz** (ADR 0155's row said 4,780). The library is not
+    counted as deleted (it is not TypeScript the web wrote), though its 45,226 B gz chunk left. *Cost:* the readers' answers
+    are now the core's where the library read more — what it did that the core does not is D8's residual.
+  - **D2 — Lazy or eager: measured, a mix.** *Q:* the platform module is eager; what turns eager? *Evidence:* measured on the
+    production build at `3f355d862` (`vite build` under Node 22, `scratchpad/mh/eager.py dist`: `index.html`'s entry and
+    modulepreloads, each gzip -9; the rules located by grep in the minified chunks): the two header readers sat in `main`
+    (eager); `exifTags.ts` in the lazy `media` chunk and the library in its own lazy `exif-reader` chunk (45,226 B gz), loaded
+    by the first photo picked (`useOptimisticTiles`' date probe). *Choice:* the platform module, as every slice before, no
+    second module: the eager set grows by 9,694 B gz (inside R × 4,809 = 14,427) and every pick stops loading 46 KB gz of
+    lazy code. *Cost:* a visitor who never picks a photo carries ~10 KB gz more.
+  - **D3 — The entry is `@veyq/core-js/media`.** `jsMain/…/media/web/`, a core area's name, read by the web's direction guard
+    as core's; its code the module file, its types `dist/media.d.mts` (remembered from the earlier slices' entries).
+  - **D4 — The reads stay the browser's, awaited without kotlinx.coroutines.** *Q:* the readers walk a file in windows whose
+    places depend on what they read (a `moov` behind the media data, a JPEG's segments), and a `Blob`'s slice is a promise.
+    *Options:* (a) the web reads a fixed head and hands it over (a `moov` at the end out of reach); (b) a resumable walk that
+    answers "need bytes at X" and is run again (every reader rewritten twice); (c) the core's readers stay `suspend` and the
+    façade hands them the web's `read(from, length): Promise<Uint8Array>` (`MediaFile`), awaited by `suspendCoroutine` and
+    answered as a `Promise` built with `startCoroutine` — the standard library's coroutine intrinsics, not kotlinx.coroutines
+    (decision 4 bans the library, whose floor was variant A's). *Choice:* (c). *Evidence:* the slice check's forbidden list
+    stays empty for every entry (`pnpm run check` in `src/packages/core-js`); the time row. *Cost:* each `suspend` function
+    is a state-machine class in the module.
+  - **D5 — No `Long`, `Regex`, `HashMap` or `Pair` on the path; the apps keep their API.** Offsets, sizes and instants are
+    `Double`s (`MediaBytes`, exact to 2^53; `localWallClockMs`, the `expect` the four platforms answer, `localWallClock` its
+    `Long` for the apps); the apps' `ByteSource` adapts through `media()`, `ExifTags`' dates keep `Long` getters over their
+    `…Ms` fields, `VideoHeader.size`/`captureTime(ByteSource, Long)` stay. The XMP is scanned by hand (`Xmp`), the dates and
+    `Number()`'s reading of a rating parsed by hand, the IFDs dispatched by `when`, a HEIF's item found without a map. A
+    signed rational is read as a signed `Int` — a `Double` of an unsigned value saturates in `toInt()` (measured: the
+    fixtures' −0.7 read as 214,748,364.7 until fixed).
+  - **D6 — Where the library and the core answered apart, the web's answer won** (ADR 0154's rule; each a vector case now,
+    the phase-1 file recorded from the web, `media.vectors.write.test.ts` under happy-dom, deleted when the core took over):
+    a `DateTimeOriginal` in IFD0 is read (the library merges IFD0 and the Exif IFD by tag); of two Exif `APP1` segments the
+    last is read; a coordinate needs its reference; an empty ASCII tag is none; a WebM's and a Matroska file's size is read
+    (the apps answered null: `MediaUpload` now sizes them); Apple's creation date rolls a month 00 or 13 over the year as
+    `Date.UTC` does. *Evidence:* measured, `:core:jvmTest --tests '*MediaVectorsTest*'` green and the file rewritten by the
+    core byte for byte (`VEYQ_WRITE_VECTORS=1`), but the twelve cases the library **rejected** (bytes of no image, eleven
+    near misses of a magic number): the core answers none — the callers catch both the same (`media.ts`). *Cost:* an app's
+    sealed metadata of such a file changes as described; nothing the web sealed changes.
+  - **D7 — XMP by local name, without an XML parser.** *Q:* the library parsed XMP with the browser's `DOMParser` through
+    `parseInertXml` (ADR 0117) and keyed a property by its local name, whatever its namespace; the core matched literal
+    prefixes by regular expression. *Choice:* the library's reading, scanned by hand (`Xmp`): an attribute or an element by
+    local name, the last occurrence winning, an `rdf:Alt`/`Bag`/`Seq`'s `x-default` item else its first, a structure or a
+    CDATA section no value, a packet with unbalanced tags, a broken attribute or an unknown entity none at all (the parser
+    refused it). *Evidence:* the vectors' XMP cases (a foreign prefix, a default namespace, an attribute and an element of one
+    name, a malformed packet), each recorded from the library. *Cost:* a well-formedness check of our own, not the XML
+    specification's; the XMP no longer reaches a DOM parser (one Trusted Types door fewer used: `parseInertXml` keeps the GPX
+    track, `cc.security.csp.md`).
+  - **D8 — Left: what the library read that the core does not.** A PNG's compressed XMP `iTXt` (and `zTXt` raw profiles), a
+    HEIC's XMP item, a JPEG's extended XMP, an IPTC character set other than UTF-8/Latin-1: none is a vector case, none was
+    read by any fixture; filed as inbox #1141. A value whose bytes are not valid UTF-8 in Apple's creation date fell back to
+    the `mvhd` time in the core where the web's fatal decoder rejected the read — kept, the caller's outcome the same.
+  - **D9 — A refused read rejects; a damaged block keeps what was read.** The web's readers rejected for a read the browser
+    refused and answered none for a malformed header; the core's `ExifReader` swallowed both. Now a refusal anywhere rejects
+    (`ExifReader.read` notes a read's failure and rethrows it), damage keeps what was read — the package's `media.test.ts`
+    holds a refusal at the head and inside a JPEG's walk.
+  - **D10 — The gate** (phase 5, Node 22.23.4, macOS arm64, Kotlin 2.4.21; the machine at a load of ~9 from other
+    applications, no other agent): the size rows by the package's `slice.test.ts` (`pnpm run check` in `src/packages/core-js`)
+    and `scratchpad/mh/eager.py` over `vite build`'s `dist` at `3f355d862` and after; the time rows by
+    `scratchpad/mh/bench/bench.mjs` (the three deleted files from git over ExifReader 4.54.0, installed offline from the
+    store, against the web's adapters over the shipped module, both bundled by esbuild; the answers compared first, the
+    TypeScript's XMP tags left out of the comparison since Node has no `DOMParser`); delivery by
+    `scratchpad/mh/repro.py` (three `--no-daemon --rerun-tasks :composition:jsPackage` builds from a removed `dist/`).
 
 - **Expenses' move is parked, not merged** ([cr-web-expenses-on-the-core](../../changes/cr-web-expenses-on-the-core.md)),
   on branch `claude/p2-impl`: the vectors (`c76d3212f`), the JSON seam and Expenses' pure homes (`c5793db14`), the
