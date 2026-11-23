@@ -63,6 +63,13 @@ data class SearchShown(
      * never delivered again (a flow keeps distinct states only); the count tells the second choice apart.
      */
     val openSettingsCount: Int = 0,
+    /**
+     * How many results were opened in this field (inbox #959): whenever this moves, a platform closes its field — its list,
+     * and the place Search took where it took one — and empties its own text. The model has already emptied itself ([text]
+     * and [chips] in the same state), so whatever the result was — a node, a person, a settings section ([openSettings] in
+     * this state too), a photo, the page on screen ([ResultShown.here]) — each platform leaves the field the same way.
+     */
+    val openedCount: Int = 0,
 )
 
 /** A chip set: its [id] (`Query.chipKey`), its type's [word] (*Year*, *Place*, …), its value as [label], and the icon kind it draws. */
@@ -99,6 +106,13 @@ data class ResultShown(
     val name: List<PartShown>,
     val line: List<Piece>,
     val reason: List<PartShown>? = null,
+    /** The page on screen is this node's (`Results.isHere`): its row says *You are here* (`search_here`). */
+    val here: Boolean = false,
+    /**
+     * The values of the chips in force this row carries (`Query.matchedValues`: its years, the month, its place, the
+     * person), each drawn as a small label at its end, as the web's muted badges.
+     */
+    val matched: List<Piece> = emptyList(),
 )
 
 /** The words the search matches and names in the UI's language (each platform's catalog: Android's, Apple's, the host's). */
@@ -202,6 +216,7 @@ class SearchModel(
     private var chipNote: Pair<Notice, String>? = null
     private var openSettings: String? = null
     private var openSettingsCount = 0
+    private var openedCount = 0
     @kotlin.concurrent.Volatile private var closed = false
     private val matcher = Query.Matcher()
     private var results: List<SearchDocument> = emptyList()
@@ -263,6 +278,8 @@ class SearchModel(
     fun open(index: Int) = act {
         val doc = results.getOrNull(index) ?: return@act
         when {
+            // the page on screen (the web's isHere): nothing opens again, the field only closes (owner 2026-11-09 on the web)
+            Results.isHere(doc, door.where()) -> Unit
             doc.kind == SearchDocument.PERSON -> door.openPerson(doc.id)
             doc.kind == SearchDocument.SETTINGS -> {
                 openSettings = doc.id
@@ -275,10 +292,15 @@ class SearchModel(
                 door.openNode(doc.scopeId, doc.nodeId)
             }
         }
+        // a result opened closes the field on every platform (inbox #959): emptied here, in the same state as the count
+        openedCount++
+        reset()
     }
 
     /** The field was left: the text and the chips go, the matcher forgets, nothing is revalidated any more. */
-    fun close() = act {
+    fun close() = act { reset() }
+
+    private fun reset() {
         text = ""
         chips = emptyList()
         shown = PAGE
@@ -441,7 +463,10 @@ class SearchModel(
     /** Every document now: the index's, the page's contribution (winning over the same object), the members and the sections. */
     private suspend fun documents(): SearchDocuments {
         val people = door.people()
-        val contribution = contributions.current.value
+        // a page's contribution counts only while its node is the one open (inbox #958): one a page left behind would hide
+        // the space's listing of the same photos, and lists nothing itself (Results.placeOf)
+        val where = door.where()
+        val contribution = contributions.current.value?.takeIf { it.scopeId == where.activeScopeId && it.nodeId == where.openNodeId }
         val sections = settingsRead
         val inputs = listOf(revision, people, contribution, sections, spaces)
         docs?.let { d -> if (inputs.size == docsOf.size && inputs.indices.all { inputs[it] === docsOf[it] || inputs[it] == docsOf[it] }) return d }
@@ -503,6 +528,7 @@ class SearchModel(
         val note = chipNote
         val settings = openSettings
         val settingsCount = openSettingsCount
+        val opened = openedCount
         answering = scope.launch(lane) {
             val all = documents()
             val asked = JsText.trim(text).isNotEmpty() || chips.isNotEmpty()
@@ -515,7 +541,7 @@ class SearchModel(
             results = found?.results.orEmpty()
             suggestions = offered
             revalidate(asked)
-            _state.value = shown(text, chips, asked, found, offered, note, settings, settingsCount)
+            _state.value = shown(text, chips, asked, found, offered, note, settings, settingsCount, opened, where)
             scheduleLoading(asked)
         }
     }
@@ -548,14 +574,15 @@ class SearchModel(
 
     private fun shown(
         text: String, chips: List<SearchChip>, asked: Boolean, found: Results.SearchResults?, offered: List<Query.ChipSuggestion>,
-        note: Pair<Notice, String>?, settings: String?, settingsCount: Int,
+        note: Pair<Notice, String>?, settings: String?, settingsCount: Int, opened: Int, at: Results.SearchContext,
     ): SearchShown {
         val t = Query.matchedText(text)
         val rows = found?.results.orEmpty().map { d ->
             val reason = Query.reasonKeyword(d, t)
             ResultShown(
                 id = "${d.scopeId}:${d.kind}:${d.id}", icon = iconOf(d), name = parts(Query.nameParts(d.name, t)), line = line(d),
-                reason = reason?.let { parts(Query.nameParts(it, t)) },
+                reason = reason?.let { parts(Query.nameParts(it, t)) }, here = Results.isHere(d, at),
+                matched = Query.matchedValues(d, chips).map(::matchedPiece),
             )
         }
         val total = found?.total ?: 0
@@ -579,8 +606,14 @@ class SearchModel(
                 SuggestionShown("chip:${c.id}", c.word, c.label, c.icon, where(s.chip))
             },
             results = rows, more = minOf(total - rows.size, PAGE).coerceAtLeast(0), total = total, status = status,
-            announcement = announcement, openSettings = settings, openSettingsCount = settingsCount,
+            announcement = announcement, openSettings = settings, openSettingsCount = settingsCount, openedCount = opened,
         )
+    }
+
+    /** A matched value as a row draws it: a month in the UI's language (as its chip is labelled), the rest as it is. */
+    private fun matchedPiece(v: MatchedValue): Piece = when (v) {
+        is MatchedValue.Text -> Piece.Plain(v.text)
+        is MatchedValue.Month -> Piece.Said(Notice(Msg.SEARCH_MONTH_YEAR, Notice(MONTHS[v.month - 1]), v.year.toString()))
     }
 
     private fun parts(p: List<Query.NamePart>) = p.map { PartShown(it.text, it.strong) }

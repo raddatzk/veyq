@@ -34,12 +34,6 @@ external interface FacetsShape {
     val people: JsReadonlyArray<String>?
 }
 
-/** A document with its facets (what `yearsOf` reads). */
-@JsExport
-external interface FacetedShape {
-    val facets: FacetsShape
-}
-
 /** One searchable object as the web holds it, without its `open` and `icon`: [opensItself] stands for `open`. */
 @JsExport
 external interface DocumentShape {
@@ -161,6 +155,22 @@ external interface RankShape {
     val wordStart: Int
     val inside: Int
     val place: Int
+}
+
+/** A value of a chip in force a result carries (the core's `MatchedValue`): [text] shown as it is, or a month chip's
+ *  [year] and [month] (1–12), which the web names in its language. */
+@JsExport
+external interface MatchedShape {
+    val text: String?
+    val year: Int?
+    val month: Int?
+}
+
+/** Where the page on screen is (the core's `SearchContext` as `isHere` reads it). */
+@JsExport
+external interface HereShape {
+    val activeScopeId: String?
+    val hereNodeId: String?
 }
 
 /** The search's numbers a caller reading the same grammar needs (Memories' gallery filter). */

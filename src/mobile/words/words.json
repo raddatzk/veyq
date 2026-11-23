@@ -151,6 +151,11 @@
     "en": "Results",
     "de": "Treffer"
   },
+  "search_here": {
+    "note": "the badge on the search result that is the page on screen (the web's shell.search.here)",
+    "en": "You are here",
+    "de": "Du bist hier"
+  },
   "search_filter_by": {
     "note": "the heading over the search's chip suggestions: a suggestion filters, a result opens",
     "en": "Filter by",

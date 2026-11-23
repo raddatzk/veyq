@@ -6,7 +6,7 @@
 // where the apps order by the core's own. The list is ranked only as far as it is drawn; `total` stays exact. Each row
 // says where it lies (`SearchField.vue`), so the order needs no heading.
 import * as core from '@veyq/core-js/search'
-import { corpusOf, matcherHandle, type Matcher, type SearchQuery } from './query'
+import { corpusOf, matcherHandle, shapeOf, type Matcher, type SearchQuery } from './query'
 import type { SearchDocument } from './model'
 
 /** Where the member stands. */
@@ -38,3 +38,8 @@ export function searchResults(
   const hits = core.search(corpusOf(docs), query, ctx, limit, options.match ? matcherHandle(options.match) : null, collator.compare)
   return { results: hits.positions.map((at) => docs[at]), total: hits.total }
 }
+
+/** Whether `doc` is the node whose page is on screen: a node's own document in the active space `activeScopeId` whose id is
+ *  `hereNodeId` (the breadcrumb's last crumb, a folder's level too). Its row says "You are here". */
+export const isHere = (doc: SearchDocument, activeScopeId: string | null, hereNodeId: string | null): boolean =>
+  core.isHere(shapeOf(doc), { activeScopeId, hereNodeId })

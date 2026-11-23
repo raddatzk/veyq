@@ -238,6 +238,8 @@ class SearchModelTest {
             model.settled()
         }
         val first = model.current
+        // the field closed with the first (inbox #959): the same section asked and chosen again
+        ask("locat")
         runBlocking {
             model.open(0)
             model.settled()
@@ -247,6 +249,106 @@ class SearchModelTest {
         assertEquals(1, first.openSettingsCount)
         assertEquals(2, second.openSettingsCount, "the second choice of the same section is a state of its own")
         assertTrue(first != second, "a flow delivers distinct states only: an equal one would never reach the platform")
+    }
+
+    // inbox #959 — bite: a result opened that leaves the text, or a count that does not move, turns this red
+    @Test
+    fun aResultOpenedEmptiesTheFieldInTheStateThatCountsIt() {
+        started()
+        ask("2024")
+        runBlocking {
+            model.choose(0)
+            model.text("rome")
+            model.settled()
+        }
+        assertTrue(model.current.chips.isNotEmpty())
+        runBlocking {
+            model.open(model.current.results.indexOfFirst { r -> r.name.joinToString("") { it.text } == "Rome 2024" })
+            model.settled()
+        }
+        val opened = model.current
+        assertEquals(listOf("node:s1:rome"), door.opened)
+        assertEquals(1, opened.openedCount)
+        assertEquals("", opened.text)
+        assertTrue(opened.chips.isEmpty(), "the chips go with the text")
+        assertEquals(false, opened.asked)
+        ask("locat")
+        runBlocking {
+            model.open(0)
+            model.settled()
+        }
+        val settings = model.current
+        assertEquals("maps", settings.openSettings, "a settings section opened is said in the same state: nothing a platform's close loses")
+        assertEquals(1, settings.openSettingsCount)
+        assertEquals("", settings.text)
+        assertEquals(2, model.current.openedCount, "every result opened counts, whatever it is")
+    }
+
+    // inbox #962 — bite: a row of the page on screen not marked, or opened again, turns this red
+    @Test
+    fun theRowOfThePageOnScreenSaysYouAreHereAndOpeningItOnlyClosesTheField() {
+        door.where = Results.SearchContext("s1", "rome", hereNodeId = "rome")
+        started()
+        val shown = ask("rome")
+        val rome = shown.results.single { r -> r.name.joinToString("") { it.text } == "Rome 2024" }
+        assertTrue(rome.here)
+        assertTrue(shown.results.filter { it !== rome }.none { it.here }, "only the page's own row")
+        runBlocking {
+            model.open(shown.results.indexOf(rome))
+            model.settled()
+        }
+        assertEquals(emptyList(), door.opened, "the page on screen is not opened again")
+        assertEquals(1, model.current.openedCount, "the field closes")
+        door.where = Results.SearchContext("s2", null, hereNodeId = "rome")
+        assertTrue(ask("rome").results.none { it.here }, "the same node from another space is not here")
+    }
+
+    // inbox #962 — bite: a row without the value its chip matched, or a month not in the UI's words, turns this red
+    @Test
+    fun aRowCarriesTheValuesItsChipsMatched() {
+        started()
+        ask("2024")
+        runBlocking {
+            model.choose(0)
+            model.settled()
+        }
+        val byYear = model.current
+        assertTrue(byYear.results.isNotEmpty())
+        for (r in byYear.results) assertEquals(listOf<me.raddatz.veyq.mobile.words.Piece>(me.raddatz.veyq.mobile.words.Piece.Plain("2024")), r.matched, r.id)
+        runBlocking {
+            model.removeLastChip()
+            model.text("May 2024")
+            model.settled()
+        }
+        val month = model.current.suggestions.indexOfFirst { it.id.startsWith("chip:month:") }
+        assertTrue(month >= 0, "a month offered: ${model.current.suggestions.map { it.id }}")
+        runBlocking {
+            model.choose(month)
+            model.settled()
+        }
+        val rome = model.current.results.first { r -> r.name.joinToString("") { it.text } == "Rome 2024" }
+        assertEquals(
+            listOf<me.raddatz.veyq.mobile.words.Piece>(me.raddatz.veyq.mobile.words.Piece.Said(Notice(Msg.SEARCH_MONTH_YEAR, Notice(Msg.SEARCH_MONTH_5), "2024"))),
+            rome.matched,
+        )
+        assertTrue(ask("kev").results.all { it.matched.isEmpty() }, "no chip, no value")
+    }
+
+    // inbox #958 — bite: a contribution of a page no longer open hiding the listing's photo turns this red
+    @Test
+    fun aContributionOfAPageLeftHidesNothing() {
+        started()
+        contributions.contribute(
+            SearchContributions.Contribution("s1", "rome", listOf(ContributedDocument("memories.photo", "m1", "1:b1", "Rome beach.jpg", SearchFacets.NONE, "image"))),
+        )
+        door.where = Results.SearchContext("s1", null)
+        val shown = ask("beach")
+        assertEquals(listOf("Rome beach.jpg"), names(shown), "the space's listing finds it as before the page was open")
+        runBlocking {
+            model.open(0)
+            model.settled()
+        }
+        assertEquals(listOf("node:s1:rome"), door.opened, "opened through its Memory, as any listed photo")
     }
 
     @Test

@@ -16,14 +16,14 @@ public sealed class SearchPlanTest
     private static SuggestionShown Offered(string id) => new() { id = id, word = "search_chip_year", label = P(id), icon = "calendar", where = [] };
 
     private static ResultShown Found(string name) =>
-        new() { id = name, icon = "folder", name = [new PartShown { text = name[..1], strong = true }, new PartShown { text = name[1..], strong = false }], line = [P("Home")], reason = null };
+        new() { id = name, icon = "folder", name = [new PartShown { text = name[..1], strong = true }, new PartShown { text = name[1..], strong = false }], line = [P("Home")], reason = null, here = false, matched = [] };
 
     private static SearchShown Shown(bool asked, int offered, int found, int more = 0, params string[] status) => new()
     {
         text = "k", chips = [], asked = asked,
         suggestions = Enumerable.Range(0, offered).Select(i => Offered($"20{i:00}")).ToList(),
         results = Enumerable.Range(0, found).Select(i => Found($"K{i}")).ToList(),
-        more = more, total = found + more, status = status.Select(N).ToList(), announcement = [], openSettings = null, openSettingsCount = 0,
+        more = more, total = found + more, status = status.Select(N).ToList(), announcement = [], openSettings = null, openSettingsCount = 0, openedCount = 0,
     };
 
     [TestMethod]
@@ -78,5 +78,14 @@ public sealed class SearchPlanTest
         Assert.AreEqual("Kiel, Home", SearchPlan.Spoken(r, "Home"));
         Assert.AreEqual("Kiel", SearchPlan.Spoken(r, ""));
         Assert.AreEqual("Storage, Settings, cache", SearchPlan.Spoken(r with { name = [new PartShown { text = "Storage", strong = false }], reason = [new PartShown { text = "cache", strong = true }] }, "Settings"));
+    }
+
+    // inbox #962: the badges at a row's end are heard after its lines
+    [TestMethod]
+    public void AResultsBadgesAreSpokenAfterItsLines()
+    {
+        var r = Found("Kiel");
+        Assert.AreEqual("Kiel, Home, You are here, 2024", SearchPlan.Spoken(r, "Home", ["You are here", "2024"]));
+        Assert.AreEqual("Kiel, Home", SearchPlan.Spoken(r, "Home", []));
     }
 }

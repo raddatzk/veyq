@@ -22,10 +22,10 @@ import { mediaDocuments, memorySearchFacets } from '../../features/memories/sear
 import { mediaItem, treeNode } from '../../test/models'
 import { searchDocument, type SearchDocument, type SearchFacets } from './model'
 import {
-  chipKey, corpusOf, createMatcher, matchedText, nameParts, reasonKeyword, suggestChips, tailsOf, textRank, wordPrefix, type ChipSources,
-  type SearchChip, type SearchQuery,
+  chipKey, corpusOf, createMatcher, matchedText, matchedValues, nameParts, reasonKeyword, suggestChips, tailsOf, textRank, wordPrefix,
+  type ChipSources, type SearchChip, type SearchQuery,
 } from './query'
-import { searchResults, type SearchContext } from './results'
+import { isHere, searchResults, type SearchContext } from './results'
 
 const FILE = resolve(__dirname, '../../../../../contracts/platform/search/v1-vectors.json')
 
@@ -70,6 +70,8 @@ const answers: Record<string, (c: any) => unknown> = {
     }
   },
   nameParts: (c) => nameParts(c.name, matchedText(c.text)),
+  matchedValues: (c) => matchedValues(docOf(c.document), c.chips as SearchChip[]),
+  here: (c) => isHere(docOf(c.document), c.context.activeScopeId, c.context.hereNodeId),
   facets: (c) => {
     vi.useFakeTimers({ toFake: ['Date'] })
     vi.setSystemTime(new Date(c.now))

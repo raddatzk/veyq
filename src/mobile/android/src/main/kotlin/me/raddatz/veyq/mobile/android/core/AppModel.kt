@@ -183,10 +183,17 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** The last settings result the page was opened for (core's `SearchShown.openSettingsCount`, counted per model). */
     private var settingsOpenedCount = 0
 
+    /** The last result Search was left for (core's `SearchShown.openedCount`, counted per model). */
+    private var searchOpenedCount = 0
+    private var searchOpenedWatch: kotlinx.coroutines.Job? = null
+
     private fun closeSearch() {
+        searchOpenedWatch?.cancel()
+        searchOpenedWatch = null
         _searchModel.value?.dispose()
         _searchModel.value = null
         settingsOpenedCount = 0
+        searchOpenedCount = 0
     }
 
     private val _screen = MutableStateFlow<Screen>(Screen.Starting)
@@ -1002,7 +1009,17 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         _levelView.value = model.levelView
         closeSearch()
         val app = getApplication<Application>()
-        _searchModel.value = model.searchModel({ msg -> app.words(msg) }, appearance = true) { android.util.Log.i("veyq-search", it) }
+        val search = model.searchModel({ msg -> app.words(msg) }, appearance = true) { android.util.Log.i("veyq-search", it) }
+        _searchModel.value = search
+        // a result opened is followed here, not by the Search screen: a node's page replaces the screen at once, and Search
+        // drawn again on back must not take that opening for a new one; a settings section first, in the same state
+        searchOpenedWatch?.cancel()
+        searchOpenedWatch = viewModelScope.launch {
+            search.state.collect {
+                openSettingsFromSearch(it.openSettings, it.openSettingsCount)
+                searchResultOpened(it.openedCount)
+            }
+        }
         // another tenant's music stops; the same tenant opened again plays on
         if (switched || _music.value == null) {
             stopMusic()
@@ -1831,7 +1848,19 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val m = shellModel ?: return
         viewModelScope.launch { m.goneSeen() }
     }
-    /** Search opened from the bar (a fresh field) or left (its text and chips go); back from a result returns to it as it was. */
+    /**
+     * A result was opened (core's `SearchShown.openedCount` moved, inbox #959; followed from the model's state where the
+     * search is made): core emptied the field, and Search gives up its place where the result left it standing — the page
+     * on screen chosen (only the field closes), a photo of it, a settings section —; a node or a person already moved the
+     * shell, and back from it returns to an empty Search. Once per result.
+     */
+    private fun searchResultOpened(count: Int) {
+        if (count <= searchOpenedCount) return
+        searchOpenedCount = count
+        if (shellModel?.shell?.searching == true) updateShell { it.search(false) }
+    }
+
+    /** Search opened from the bar (a fresh field) or left (its text and chips go); back from a result returns to it, emptied. */
     fun search(on: Boolean) {
         _searchModel.value?.close()
         updateShell { it.search(on) }
@@ -1842,7 +1871,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * opens scrolled to its section once per choice — the same result chosen twice opens it twice, and Search drawn again
      * after the page (the same state) opens nothing.
      */
-    fun openSettingsFromSearch(section: String?, count: Int) {
+    private fun openSettingsFromSearch(section: String?, count: Int) {
         if (section == null || count <= settingsOpenedCount) return
         settingsOpenedCount = count
         _settingsAt.value = section

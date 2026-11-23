@@ -56,6 +56,8 @@ internal class MemoriesHolding(private val model: AppModel) : Holding() {
         personSection = null
         closeCuration()
         closeViews()
+        leftWatch?.cancel()
+        leftWatch = null
         openGallery?.close()
         openGallery = null
         openContributions = null
@@ -80,6 +82,8 @@ internal class MemoriesHolding(private val model: AppModel) : Holding() {
         openMusic?.close()
         openMusic = null
         closeCuration()
+        leftWatch?.cancel()
+        leftWatch = null
         openGallery?.close()
         openGallery = null
         media?.close()
@@ -170,6 +174,26 @@ internal class MemoriesHolding(private val model: AppModel) : Holding() {
         return m.galleryModel(node, uploads, music, galleryCalendar()).also {
             openGallery = it
             followSearchOpened(it)
+            closeWhenLeft(it)
+        }
+    }
+
+    private var leftWatch: Job? = null
+
+    /**
+     * [gallery] closed once its page is left (inbox #958): not when its composable goes — a rotation recreates the activity
+     * and keeps the page, its lightbox with it (#934) — but when the shell no longer keeps it (core's `Shell.keeps`: neither
+     * on screen nor where back returns), so what the page holds goes with it — its watch, its lightbox and its contribution
+     * to the search (`GalleryModel.close` withdraws it).
+     */
+    private fun closeWhenLeft(gallery: GalleryModel) {
+        leftWatch?.cancel()
+        val shellModel = model.shellModel ?: return
+        leftWatch = scope.launch {
+            shellModel.state.collect { st ->
+                val shell = st?.shell ?: return@collect
+                if (openGallery === gallery && !shell.keeps(gallery.node)) closeGallery(gallery)
+            }
         }
     }
 
@@ -232,6 +256,10 @@ internal class MemoriesHolding(private val model: AppModel) : Holding() {
     /** The gallery page went: its lightbox and any video's reader close with it, and its Music view (the music plays on). */
     fun closeGallery(gallery: GalleryModel) {
         if (openGallery !== gallery) return
+        leftWatch?.cancel()
+        leftWatch = null
+        searchOpenedWatch?.cancel()
+        searchOpenedWatch = null
         openMusic?.close()
         openMusic = null
         openTracks?.close()

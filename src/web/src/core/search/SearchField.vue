@@ -56,12 +56,12 @@ import PersonAvatar from '../people/PersonAvatar.vue'
 import { useSettingsSections } from '../../features/settings/sections'
 import { searchContribution } from './contribution'
 import { requestOpenItem } from './openRequest'
-import { yearsOf } from '@veyq/core-js/search'
 import { PERSON_DOCUMENT, SETTINGS_DOCUMENT, searchDocument, type SearchDocument } from './model'
 import {
-  chipKey, createMatcher, matchedText, nameParts, reasonKeyword, suggestChips, type ChipSuggestion, type NamePart, type SearchChip,
+  chipKey, createMatcher, matchedText, matchedValues as matchedValuesOf, nameParts, reasonKeyword, suggestChips, type ChipSuggestion,
+  type NamePart, type SearchChip,
 } from './query'
-import { searchResults } from './results'
+import { isHere as isHereOf, searchResults } from './results'
 import { placeWithin } from './documents'
 import { personDocuments, settingsDocuments } from './peopleAndSettings'
 import { indexedDocuments, indexedScope, indexedTree, refreshSearchIndex, searchState, type SearchScope } from './searchIndex'
@@ -294,20 +294,11 @@ function secondLine(option: ResultOption): string {
   const where = [spaceLabel(indexedScope(doc.scopeId)), path].filter(Boolean).join(' · ')
   return [where, day].filter(Boolean).join(' · ')
 }
-/** The values of the chips in force a row carries (its years, its place, the person), shown beside it. */
+/** The values of the chips in force a row carries (its years, the month, its place, the person), shown beside it - the
+ *  core's rule (`Query.matchedValues`), a month named here in the UI's language as its chip is. */
 function matchedValues(doc: SearchDocument): string[] {
-  const out: string[] = []
-  for (const c of chips.value) {
-    if (c.type === 'year') {
-      const y = yearsOf(doc)
-      if (y) out.push(y.from === y.to ? String(y.from) : `${y.from}–${y.to}`)
-    } else if (c.type === 'month') out.push(chipLabel(c))
-    else if (c.type === 'place') {
-      const at = doc.foldedPlaces.indexOf(c.place)
-      if (at >= 0) out.push(doc.facets.places![at])
-    } else if (c.type === 'person') out.push(c.label)
-  }
-  return [...new Set(out)]
+  const said = matchedValuesOf(doc, chips.value).map((v) => ('text' in v ? v.text : chipLabel({ type: 'month', year: v.year, month: v.month })))
+  return [...new Set(said)]
 }
 
 /** The node whose page is on screen (the breadcrumb's last crumb - a folder's level too): a result of it is marked
@@ -315,7 +306,7 @@ function matchedValues(doc: SearchDocument): string[] {
  *  the page one stands on seemed to do nothing). */
 const hereId = computed(() => breadcrumb.trail.at(-1)?.id ?? null)
 function isHere(doc: SearchDocument): boolean {
-  return doc.scopeId === activeSpace.scopeId && doc.id === doc.nodeId && doc.nodeId === hereId.value
+  return isHereOf(doc, activeSpace.scopeId, hereId.value)
 }
 
 function choose(option: ResultOption) {
