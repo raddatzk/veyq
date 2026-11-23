@@ -2,7 +2,7 @@ name: Release note
 
 # Every pull request carries the release's words for what it changes, in a `## Release note` section of its body (or
 # `none`), because the weekly draft is gathered from them (publish.yml's `release-draft`, scripts/release_notes.py;
-# cr-release-draft-from-publish). Dependabot's pull requests need none.
+# cr-release-draft-from-publish). An updater's pull requests (Dependabot's, Renovate's) need none.
 #
 # Its own workflow, not a job in checks.yml: editing a body re-runs this one small job, never the pipeline. Advisory —
 # the ruleset requires no check. The body is read from the event file by the script, never through a `${{ }}`
