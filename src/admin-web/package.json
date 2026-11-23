@@ -18,12 +18,12 @@
     "check": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run verify:argon-worker && pnpm run build:cli"
   },
   "dependencies": {
-    "@lucide/vue": "^1.76.0",
+    "@lucide/vue": "^1.77.0",
     "@veyq/crypto": "workspace:*",
     "jspdf": "^4.2.1",
     "qrcode": "^1.5.4",
     "reka-ui": "^2.11.0",
-    "vue": "^3.5.45",
+    "vue": "^3.5.46",
     "vue-i18n": "^11.4.23",
     "vue-router": "^5.5.1"
   },
