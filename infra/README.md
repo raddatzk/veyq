@@ -277,7 +277,9 @@ per release:
    pull request merged since the last release — **What is new**, **Fixed**, Dependabot's bumps in one line under
    **Under the hood**, a pull request without a usable note under **Needs a note**, and **What an operator must act
    on** (*Nothing.* unless a note says otherwise). Read it, edit what needs it (a lede line, a note to fix), **Save
-   draft** (never *Publish*). An edited draft is never overwritten: a later Publish leaves it, with a notice, until it
+   draft** (never *Publish*). A missing note can instead be written in its pull request: **Actions → Publish → Run
+   workflow** on `main` then rewrites the untouched draft of the snapshot already made, publishing nothing. Release
+   refuses a draft that still has a **Needs a note** section. An edited draft is never overwritten: a later Publish leaves it, with a notice, until it
    is released or deleted — so a draft from an older week waits for you rather than moving on. A fix release on
    `release/<major>.x`, and the first release of a major, get no draft: write one on their snapshot's tag by hand.
    Leave no other draft lying around: the promotion releases exactly one draft and refuses when there are several.

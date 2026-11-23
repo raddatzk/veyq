@@ -260,6 +260,11 @@ for tags, want in ((["snapshot-1.247"], "snapshot-1.247"), (["v1.247"], "v1.247"
                    (["v1.247-rc"], ""), (["v1"], ""), (["release-1.2"], ""), ([], "")):
     check(snapshot.published_by(tags) == want, f"the tags {tags} make a commit published as {snapshot.published_by(tags)!r}, "
                                                f"not {want!r}")
+for published, want in (("snapshot-1.262", "1.262"), ("v1.262", ""), ("snapshot-1.262 v1.262", ""),
+                        ("v1.262 snapshot-1.262", ""), ("snapshot-1.261 snapshot-1.262", ""), ("", ""),
+                        ("snapshot-1.262-rc", "")):
+    check(snapshot.unreleased_snapshot(published) == want,
+          f"the published tags {published!r} name {snapshot.unreleased_snapshot(published)!r} for a draft, not {want!r}")
 
 
 # The wiring, on a throwaway history: `checks_run` walks git, reads checks.yml's filter, counts C's version, names C.
@@ -313,17 +318,21 @@ with tempfile.TemporaryDirectory(prefix="snapshot_walk_") as tmp:
     try:
         found = quiet(head)
         check(found == {"kind": "snapshot", "commit": tested, "run_id": "11", "attempt": "2", "version": "0.1",
-                        "run_url": "https://github.com/o/veyq/actions/runs/7"},
+                        "run_url": "https://github.com/o/veyq/actions/runs/7", "draft_version": "0.1"},
               f"a docs-only HEAD's publish does not name its tested ancestor and that commit's version: {found}")
         git(repo, "tag", "snapshot-0.1", tested)
         found = quiet(head)
         check(found.get("kind") == "none" and found.get("commit") == tested,
               f"a docs-only HEAD over a tested ancestor that has its snapshot publishes again: {found}")
+        check(found.get("draft_version") == "0.1",
+              f"a run over an unreleased snapshot does not name it for its draft to be refreshed: {found}")
         git(repo, "tag", "-d", "snapshot-0.1")
         git(repo, "tag", "v0.1", tested)
         found = quiet(head)
         check(found.get("kind") == "none" and found.get("commit") == tested,
               f"a released commit whose snapshot tag the release deleted is published as a snapshot again: {found}")
+        check(found.get("draft_version") == "",
+              f"a released commit gets its draft written again: {found}")
         git(repo, "tag", "-d", "v0.1")
         git(repo, "mv", "docs/a.md", "a.kt")
         git(repo, "commit", "-q", "-m", "a doc becomes code")

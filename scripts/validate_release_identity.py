@@ -442,6 +442,13 @@ DRAFT_UPLOAD = re.compile(r"\buploads\.github\.com\b")  # the release-asset host
 DRAFT_WRITE = re.compile(r'^\s*gh api --method (?:POST "repos/\$\{GITHUB_REPOSITORY\}/releases"|'
                          r'PATCH "repos/\$\{GITHUB_REPOSITORY\}/releases/\$\{DRAFT_ID\}") --input "\$payload" --jq \.html_url\s*$')
 DRAFT_GUARD = re.compile(r'if \[\[ "\$\(jq -r \.draft "\$payload"\)" != "true" \]\]; then\s*\n[^\n]*\n\s*exit 1')
+# The draft job's whole gate, pinned: on `main`, for a version `checks-run` named, and only once the snapshot's tag
+# exists — after a green `snapshot-tag`, or because the commit already carried its snapshot (`kind == 'none'`, the one
+# case `snapshot-tag` is skipped with the tag there; a dispatch refreshes the draft then, cr-release-draft-from-publish phase 5).
+# Assertion 16 accepts this disjunction for `snapshot-tag` here and nowhere else; release_notes.py refuses unless
+# `snapshot-<version>` names the commit.
+DRAFT_IF = ("!cancelled() && github.ref_name == 'main' && needs.checks-run.outputs.draft_version != '' && "
+            "(needs.snapshot-tag.result == 'success' || needs.checks-run.outputs.kind == 'none')")
 REFUSE_STEP, TAG_STEP = "assert-snapshot-unpublished", "snapshot-tag"
 STAGED_STEP = "assert-staged"  # publish.yml's check that the bytes are the Checks run's (scripts/snapshot.py staged)
 BUILD_JOB, LOCAL_BUILD_JOB = "build", "build-local"
@@ -1226,11 +1233,12 @@ if workflow_doc:
             fail(f"the `{DRAFT_JOB}` job's permissions are {draft_job.get('permissions') or 'the default'}, not exactly "
                  f"{DRAFT_PERMISSIONS} — it writes a draft and reads pull requests, and signs, stages and tags nothing")
         draft_if = " ".join(str(draft_job.get("if") or "").split())
-        if SNAPSHOT_TAG_JOB not in (draft_job.get("needs") or []) \
-                or f"needs.{SNAPSHOT_TAG_JOB}.result == 'success'" not in draft_if \
-                or "github.ref_name == 'main'" not in draft_if or "||" in draft_if:
-            fail(f"the `{DRAFT_JOB}` job does not run only after a green `{SNAPSHOT_TAG_JOB}` and only on `main` (its "
-                 f"`if:` is `{draft_if}`) — a draft names a tagged snapshot, and a fix release's draft is the owner's")
+        if draft_if.startswith("${{") and draft_if.endswith("}}"):
+            draft_if = draft_if[3:-2].strip()
+        if not {SNAPSHOT_TAG_JOB, "checks-run"} <= set(draft_job.get("needs") or []) or draft_if != DRAFT_IF:
+            fail(f"the `{DRAFT_JOB}` job's `if:` is `{draft_if}`, not exactly `{DRAFT_IF}`, or it does not need "
+                 f"`checks-run` and `{SNAPSHOT_TAG_JOB}` — a draft names a tagged snapshot (a green `{SNAPSHOT_TAG_JOB}`, "
+                 f"or a commit that already carries it), and a fix release's draft is the owner's")
         for step in job_steps(workflow_doc, DRAFT_JOB):
             if RELEASE_ASSET_WRITE.search(str(step.get("run") or "")) and not draft_write_ok(step):
                 fail(f"job `{DRAFT_JOB}`, step `{step.get('name') or step.get('id')}` writes a release other than by "
@@ -2477,6 +2485,8 @@ for wf_path, wf_doc in ((WORKFLOW, publish_doc), (CHECKS, checks_doc),
             )
             continue
         for need in risky:
+            if wf_path == WORKFLOW and name == DRAFT_JOB and need == SNAPSHOT_TAG_JOB and condition == DRAFT_IF:
+                continue  # its pinned gate: a skipped `snapshot-tag` is accepted only with `kind == 'none'` (DRAFT_IF)
             if (f"needs.{need}.result == 'success'" not in terms
                     and not any(f"needs.{need}.result)" in t and t.startswith("contains(fromJSON(") for t in terms)):
                 fail(
