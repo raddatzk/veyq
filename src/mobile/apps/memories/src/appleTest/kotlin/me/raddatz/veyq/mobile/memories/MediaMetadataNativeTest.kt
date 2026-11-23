@@ -31,7 +31,11 @@ class MediaMetadataNativeTest {
     @Test
     fun aJpegAndAHeicReadAsOnTheJvm() = runTest {
         val taken = localWallClock(2021, 7, 15, 18, 4, 5)
-        for ((name, title) in listOf("exif-sample.jpg" to "Marienplatz", "exif-sample.heic" to null)) {
+        for ((name, title) in listOf(
+            "exif-sample.jpg" to "Marienplatz", "exif-sample.heic" to null,
+            // inbox #1141: a HEIC's XMP item, a PNG's compressed chunks (the platform's zlib), a JPEG's extended XMP
+            "exif-sample-xmp.heic" to "Marienplatz", "exif-sample-compressed.png" to "Marienplatz", "exif-sample-extended.jpg" to "Marienplatz",
+        )) {
             val read = MediaMetadata.read(photo(name), "image/jpeg", 0)
             assertEquals(taken, read.capturedAt, name)
             assertEquals(48.136944444444445, read.gpsLat, name)

@@ -10,11 +10,25 @@ package me.raddatz.veyq.mobile.media
  * answers nothing, as the parser refused it.
  */
 internal object Xmp {
-    private val NAMES = arrayOf("DateTimeOriginal", "DateCreated", "CreateDate", "CreatorTool", "Rating", "title", "description")
+    private val NAMES = arrayOf("DateTimeOriginal", "DateCreated", "CreateDate", "CreatorTool", "Rating", "title", "description", "HasExtendedXMP")
+
+    /** The index of `xmpNote:HasExtendedXMP` in [scan]'s answer: the GUID a JPEG's extended packet must carry. */
+    const val EXTENDED = 7
 
     /** [packet]'s properties into [tags]. */
     fun read(packet: String, tags: ExifTags) {
-        val values = scan(packet) ?: return
+        apply(scan(packet) ?: return, tags)
+    }
+
+    /**
+     * A JPEG's standard packet's [values] and its extended packet's (Adobe's XMP specification, part 3, 1.1.3.1): one
+     * document split in two, so each property the extended one carries is the one read — the later in the document.
+     */
+    fun merge(values: Array<String?>, extended: Array<String?>): Array<String?> =
+        Array(values.size) { k -> extended[k] ?: values[k] }
+
+    /** [values] (as [scan] answers) into [tags]. */
+    fun apply(values: Array<String?>, tags: ExifTags) {
         tags.xmpCapturedAtMs = ExifReader.xmpClock(values[0]) ?: ExifReader.xmpClock(values[1]) ?: ExifReader.xmpClock(values[2])
         tags.xmpCreatorTool = values[3]
         tags.xmpRating = ExifReader.jsNumber(values[4])
@@ -26,7 +40,7 @@ internal object Xmp {
     fun value(packet: String, name: String): String? = scan(packet)?.get(NAMES.indexOf(name))
 
     /** Each of [NAMES]' last value in [packet], or null where the packet is not well-formed. */
-    private fun scan(packet: String): Array<String?>? {
+    fun scan(packet: String): Array<String?>? {
         val values = arrayOfNulls<String>(NAMES.size)
         val open = ArrayList<String>()
         var i = 0

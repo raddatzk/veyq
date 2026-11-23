@@ -59,10 +59,22 @@ fun videoCaptureTime(file: MediaFile, now: Double): Promise<Double?> = promise {
 
 /**
  * [file]'s tags under the web's names ([ExifReader.read]), only those [scope] asks for — `date`: the three EXIF dates;
- * `xmpDate`: XMP's capture time; `all`: every one —, or null where none is there. Only the tags present are set.
+ * `xmpDate`: XMP's capture time; `all`: every one —, or null where none is there. Only the tags present are set. A
+ * compressed chunk is inflated by [inflater], the browser's zlib: the platform module carries none on JavaScript.
  */
 @JsExport
-fun exifTags(file: MediaFile, scope: String): Promise<ExifShape?> = promise { project(ExifReader.read(bytesOf(file)), scope) }
+fun exifTags(file: MediaFile, scope: String, inflater: MediaInflater): Promise<ExifShape?> = promise {
+    project(ExifReader.read(bytesOf(file)) { bytes, cap -> inflate(inflater, bytes, cap) }, scope)
+}
+
+/** [bytes] inflated by the web's [inflater], awaited; its answer's bytes read through a view, as a slice's are. */
+private suspend fun inflate(inflater: MediaInflater, bytes: ByteArray, cap: Int): ByteArray? {
+    val view = bytes.unsafeCast<Int8Array>()
+    val out: Uint8Array? = suspendCoroutine { c ->
+        inflater.inflate(Uint8Array(view.buffer, view.byteOffset, view.length), cap).then({ c.resume(it) }, { c.resumeWithException(it) })
+    }
+    return out?.let { Int8Array(it.buffer, it.byteOffset, it.length).unsafeCast<ByteArray>() }
+}
 
 private fun project(t: ExifTags?, scope: String): ExifShape? {
     t ?: return null

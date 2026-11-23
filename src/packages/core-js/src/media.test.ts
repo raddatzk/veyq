@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { inflateSync } from 'node:zlib'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const dist = resolve(here, '../dist')
@@ -44,6 +45,21 @@ function recording(b: Uint8Array) {
   return rec
 }
 
+/** The zlib the web hands the tag reader, here Node's: a broken stream or one past `cap` is none. Each answer a view into
+ *  a larger buffer, as each read's is. */
+const inflater = {
+  inflate: async (bytes: Uint8Array, cap: number): Promise<Uint8Array | null> => {
+    try {
+      const out = inflateSync(bytes, { maxOutputLength: cap })
+      const outer = new Uint8Array(out.length + 8).fill(0x7a)
+      outer.set(out, 5)
+      return outer.subarray(5, 5 + out.length)
+    } catch {
+      return null
+    }
+  },
+}
+
 const pad = (n: number, w = 2) => String(n).padStart(w, '0')
 const wall = (ms: number) => {
   const d = new Date(ms)
@@ -83,7 +99,7 @@ describe('exif', () => {
     const answers: Record<string, unknown> = {}
     for (const scope of ['date', 'xmpDate', 'all']) {
       const rec = recording(b)
-      answers[scope] = shown((await m.exifTags(rec.file, scope)) as Record<string, unknown> | null)
+      answers[scope] = shown((await m.exifTags(rec.file, scope, inflater)) as Record<string, unknown> | null)
       bounded(c, rec)
     }
     expect(answers).toEqual(c.expected)
@@ -91,7 +107,7 @@ describe('exif', () => {
 
   it('a read the file refuses rejects, as any read of the file would', async () => {
     const refused = { size: 4096, read: async (): Promise<Uint8Array> => { throw new Error('refused') } }
-    await expect(m.exifTags(refused, 'all')).rejects.toThrow('refused')
+    await expect(m.exifTags(refused, 'all', inflater)).rejects.toThrow('refused')
     await expect(m.imageSize(refused)).rejects.toThrow('refused')
     await expect(m.videoSize(refused)).rejects.toThrow('refused')
     await expect(m.videoCaptureTime(refused, 0)).rejects.toThrow('refused')
@@ -101,7 +117,7 @@ describe('exif', () => {
       if (from === 0 && length === 12) return jpeg.subarray(0, 12)
       throw new Error('refused later')
     } }
-    await expect(m.exifTags(later, 'all')).rejects.toThrow('refused later')
+    await expect(m.exifTags(later, 'all', inflater)).rejects.toThrow('refused later')
   })
 })
 

@@ -16,6 +16,15 @@ external interface MediaFile {
     fun read(from: Double, length: Int): Promise<Uint8Array>
 }
 
+/**
+ * The browser's zlib, which a compressed chunk of a photo's metadata is inflated by (a PNG's compressed XMP or raw
+ * profile): [bytes] as a zlib stream (RFC 1950) inflated, or null where it is broken or would pass [cap] bytes.
+ */
+@JsExport
+external interface MediaInflater {
+    fun inflate(bytes: Uint8Array, cap: Int): Promise<Uint8Array?>
+}
+
 /** A size in pixels. */
 @JsExport
 external interface SizeShape {

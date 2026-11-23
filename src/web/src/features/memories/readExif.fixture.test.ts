@@ -57,6 +57,10 @@ describe('media.ts over the real EXIF reader', () => {
     // exifr read nothing of these two; each now reads what its sibling above reads
     ['exif-sample.webp', 'image/webp', BUNDLE],
     ['exif-sample-ftyp52.heic', 'image/heic', BUNDLE_WITHOUT_XMP],
+    // the XMP forms read since inbox #1141: a HEIC's XMP item, a PNG's compressed chunks, a JPEG's extended XMP
+    ['exif-sample-xmp.heic', 'image/heic', BUNDLE],
+    ['exif-sample-compressed.png', 'image/png', BUNDLE],
+    ['exif-sample-extended.jpg', 'image/jpeg', BUNDLE],
   ])('%s: the date and the position in the listed tier, the rest in the panel bundle', async (name, mediaType, exif) => {
     expect(await sealedFrom(name, mediaType)).toEqual({
       meta: { dims: null, ...SAMPLE, exif },
