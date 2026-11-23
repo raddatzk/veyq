@@ -1053,7 +1053,8 @@ internal sealed class Call {
      * Files at [paths] added by a WRITE_ONLY link's guest (a drop box's, a Memory's uploader), or by a READ_WRITE guest into
      * the folder on screen ([ReceivedPage.writes], #1034: each its own file, the link read anew as each settles). A guest
      * not named yet is asked its name by the core at the write ([ReceivedShown.naming], ADR 0154 decision 1, #1042): the
-     * call answers once it was, refused where it declined.
+     * call answers once it was: [Answer.Done], refused `NOT_CHOSEN` where it declined (nothing is said, as a declined move:
+     * `AskedUpload.declined`, #1091) and `NOT_TAKEN` where nothing was taken (a failed upload, said so).
      */
     @Serializable @SerialName("Received.Upload") data class ReceivedUpload(val received: Long, val paths: List<String>) : Call()
     /**
@@ -1240,7 +1241,8 @@ internal sealed class Call {
      * (`GalleryModel.upload` onto the app's one queue, `MediaUploads`): the core opens each path and reads it at offsets a
      * frame at a time (ADR 0137 decision 3), each one's tiers asked of the host on the queue's own thread
      * ([HostRequest.MediaTiers]). One that is no photo or video, or no file that reads, is left out. Answered once queued
-     * ([Answer.Queued]: how many, and what is said of those left out); refused `NOT_OFFERED` where the rights add nothing.
+     * ([Answer.Queued]: how many, and what is said of those left out); refused `NOT_OFFERED` where the rights add nothing,
+     * `NOT_CHOSEN` where a link's guest declined to name itself at the upload (nothing is said, #1091).
      */
     @Serializable @SerialName("Memory.Upload") data class MemoryUpload(val gallery: Long, val paths: List<String>) : Call()
 

@@ -1862,7 +1862,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val sources = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { uris.mapNotNull { picked(it)?.let(::source) } }
             // a guest not named yet is asked its name first (core's `uploadAsking`); declined, nothing is queued
-            if (level.uploadAsking(sources) == 0) sources.forEach { it.close() }
+            if (level.uploadAsking(sources).queued == 0) sources.forEach { it.close() }
         }
     }
 

@@ -107,13 +107,14 @@ class GuestLevel internal constructor(
 
     /**
      * [sources] uploaded here as [upload] does, a guest not named yet asked its name first through the core's one naming
-     * flow ([GuestAccess.naming], ADR 0154 decision 1); declined, none is queued (and each is the caller's to close).
+     * flow ([GuestAccess.naming], ADR 0154 decision 1); declined or refused ([AskedUpload], #1091), none is queued (and
+     * each is the caller's to close).
      */
-    suspend fun uploadAsking(sources: List<me.raddatz.veyq.mobile.blob.UploadSource>): Int {
-        val a = access ?: return 0
-        if (!writes || sources.isEmpty()) return 0
-        a.naming.request() ?: return 0
-        return upload(sources)
+    suspend fun uploadAsking(sources: List<me.raddatz.veyq.mobile.blob.UploadSource>): AskedUpload {
+        val a = access ?: return AskedUpload.REFUSED
+        if (!writes || sources.isEmpty()) return AskedUpload.REFUSED
+        a.naming.request() ?: return AskedUpload.unnamed(a)
+        return AskedUpload(upload(sources))
     }
 
     /**

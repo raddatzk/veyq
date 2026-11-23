@@ -528,7 +528,7 @@ private struct GuestLevelView: View {
             let sources = urls.compactMap(model.guestSource)
             Task {
                 // the core asks a guest not named yet its name first (`GuestLevel.uploadAsking`); declined, none is queued
-                let queued = (try? await level.uploadAsking(sources: sources))?.int32Value ?? 0
+                let queued = (try? await level.uploadAsking(sources: sources))?.queued ?? 0
                 if queued == 0 { sources.forEach { $0.close() } }
             }
         }

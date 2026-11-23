@@ -41,7 +41,7 @@ use gtk::{gio, glib};
 
 use crate::bridge::{
     self, Watch,
-    wire::{Answer, Call, Create, HeaderAction, LevelTool, Msg, NodeAt, ReceivedGate, ReceivedPage, ReceivedPageKind, ReceivedRefusal, ReceivedShown, Update, Watched},
+    wire::{Answer, Call, Create, HeaderAction, LevelTool, Msg, NodeAt, ReceivedGate, ReceivedPage, ReceivedPageKind, ReceivedRefusal, ReceivedShown, Update, Watched, Why},
 };
 use crate::core_ui::home::{glib_escape, kind_icon};
 use crate::core_ui::registry::{registry, GuestFrame, Page};
@@ -860,6 +860,8 @@ impl Inner {
             }
             match bridge::call(&Call::ReceivedUpload { received: id, paths }).await.map(|(a, _)| a) {
                 Ok(Answer::Done) => {}
+                // the guest declined the core's naming at the upload: nothing to say, it chose so (#1091)
+                Ok(Answer::Refused { why: Why::NotChosen }) => eprintln!("veyq: Received.Upload: not chosen"),
                 other => {
                     eprintln!("veyq: a guest's upload answered {}", answer_kind(&other));
                     toasts.add_toast(said::word_toast("share_failed", &words::share_failed()));

@@ -302,6 +302,33 @@ class GuestDoorsTest {
         share.assertNoKeyInAnyRequest()
     }
 
+    /**
+     * #1091: a Memory's uploader who declines the name at its upload is told apart from a refusal — declined, nothing is
+     * queued and nothing is said (as a declined move); with nothing to send, the upload is refused, never asked.
+     */
+    @Test
+    fun aMemorysUploaderWhoDeclinesTheNameIsToldApartFromARefusal() = runTest {
+        val share = PlayedShare(p, role = "WRITE_ONLY", rootKind = "MEMORY")
+        PlayedGuestContent(share).dropKey()
+        // a queue and tiers at hand (`Uploader.offered`): the upload is offered, its sources never derived here
+        val deriver = object : Derivation.Deriver {
+            override fun derive(source: UploadSource, type: String, done: (Derivation.Derived) -> Unit) = done(Derivation.Derived(null, null, null, null))
+        }
+        val queue = me.raddatz.veyq.mobile.blob.UploadQueue()
+        val v = GuestView.over((ReceivedLink.open(share.link) as ReceivedLink.Parsed.Ok).link, share.client(), MemoryDeviceStore(), MemoryGuestSessions(), queue = queue, deriver = deriver)
+        v.load()
+        val uploader = assertIs<MemoriesGuest.Uploader>(v.page.value).model
+        val access = assertNotNull(v.access)
+        assertEquals(AskedUpload.REFUSED, uploader.uploadAsking(emptyList()), "nothing to send was not refused")
+        assertFalse(access.naming.asking.value, "nothing to send asked a name")
+        val declined = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).async { uploader.uploadAsking(listOf(source("a.jpg", "a"))) }
+        withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(5_000) { access.naming.asking.first { it } } }
+        access.naming.decline()
+        assertEquals(AskedUpload.DECLINED, declined.await())
+        assertTrue(queue.state.value.batches.isEmpty(), "a declined uploader's photo was queued")
+        assertTrue(share.requests.none { it.path.endsWith("/identities") }, "an identity was made for a declined uploader")
+    }
+
     /** #1034: a READ_WRITE folder's guest adds a folder and files at the level, as the web's share page offers; a READ guest nothing. */
     @Test
     fun aReadWriteFoldersGuestAddsAFolderAndFilesAtTheLevel() = runTest {
@@ -312,6 +339,9 @@ class GuestDoorsTest {
         assertFalse(readLevel.writes, "a READ guest's level offers a write")
         assertEquals(emptyList(), readLevel.creates, "a READ guest's New offers something")
         assertEquals(0, readLevel.upload(listOf(source("x.txt", "x"))))
+        // a READ guest's upload is refused, never asked and never a decline (#1091: a platform says a refusal)
+        assertEquals(AskedUpload.REFUSED, readLevel.uploadAsking(listOf(source("x.txt", "x"))))
+        assertFalse(r.access!!.naming.asking.value, "a READ guest's level asked a name")
 
         val f = fixture("READ_WRITE")
         val queue = me.raddatz.veyq.mobile.blob.UploadQueue()
@@ -330,7 +360,8 @@ class GuestDoorsTest {
         val declinedUpload = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).async { level.uploadAsking(listOf(source("x.txt", "x"))) }
         withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(5_000) { access.naming.asking.first { it } } }
         access.naming.decline()
-        assertEquals(0, declinedUpload.await())
+        // declined, told from a refusal (#1091): nothing to say, as a declined move (`NodeMove.Outcome.DECLINED`)
+        assertEquals(AskedUpload.DECLINED, declinedUpload.await())
         assertEquals(0, level.upload(listOf(source("x.txt", "x"))))
         assertTrue(f.content.created.isEmpty())
         // named at the write: the folder the write asked for is made as the guest
@@ -429,7 +460,7 @@ class GuestDoorsTest {
         r.load()
         r.open(read.memory)
         val readGallery = assertIs<MemoriesGuest.Gallery>(r.page.value).model
-        assertEquals(0, readGallery.uploadAsking(listOf(source("a.jpg", "x"))))
+        assertEquals(AskedUpload.REFUSED, readGallery.uploadAsking(listOf(source("a.jpg", "x"))), "a READ guest's upload not refused (#1091)")
         assertFalse(r.access!!.naming.asking.value, "a READ guest's gallery asked a name")
 
         val f = fixture("READ_WRITE")
@@ -449,7 +480,7 @@ class GuestDoorsTest {
         val declined = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).async { gallery.uploadAsking(listOf(picked)) }
         withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(5_000) { access.naming.asking.first { it } } }
         access.naming.decline()
-        assertEquals(0, declined.await())
+        assertEquals(AskedUpload.DECLINED, declined.await(), "a declined naming not told from a refusal (#1091)")
         assertEquals(1, closed, "a declined pick was not handed back")
         assertEquals(requests, f.share.requests.size, "a declined guest's upload reached the server")
         val door = MemoriesGuest.GuestGalleryDoor(access, access.tree!!.node(f.memory)!!)
@@ -482,13 +513,13 @@ class GuestDoorsTest {
         val declined = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).async { drop.uploadAsking(listOf(source("a.txt", "a"))) }
         withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(5_000) { access.naming.asking.first { it } } }
         access.naming.decline()
-        assertEquals(0, declined.await())
+        assertEquals(AskedUpload.DECLINED, declined.await(), "a declined naming not told from a refusal (#1091)")
         assertTrue(queue.state.value.batches.isEmpty(), "a declined guest's file was queued")
         assertTrue(share.requests.none { it.path.endsWith("/identities") }, "an identity was made for a declined guest")
         val sending = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).async { drop.uploadAsking(listOf(source("a.txt", "a"))) }
         withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(5_000) { access.naming.asking.first { it } } }
         assertEquals(me.raddatz.veyq.mobile.navigation.NameAnswer.DONE, access.naming.name("Ben"))
-        assertEquals(1, sending.await(), "the named uploader's file was not queued")
+        assertEquals(AskedUpload(1), sending.await(), "the named uploader's file was not queued")
         assertNotNull(access.session.value?.uploaderKey, "the drop box's guest was not named as an uploader")
         assertNotNull(share.requests.last { it.path.endsWith("/identities") }.json()["wrappedIdentityKey"], "K_up was not wrapped to the drop key")
         withContext(kotlinx.coroutines.Dispatchers.Default) {

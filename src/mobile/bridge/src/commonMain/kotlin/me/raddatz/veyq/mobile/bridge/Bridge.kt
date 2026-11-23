@@ -1454,8 +1454,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 // file crosses, none is held whole
                 val sources = call.paths.mapNotNull { path -> parts.files.source(path)?.let { PathSource(path, it) } }
                 // a link's guest not named yet is asked its name first, at the write (`GalleryModel.uploadAsking`, #1044)
-                val queued = g.uploadAsking(sources)
-                Answer.Queued(queued, me.raddatz.veyq.mobile.memories.MediaUploads.notTaken(call.paths.size - queued))
+                val asked = g.uploadAsking(sources)
+                // declined, nothing was left out for being no photo or video: nothing is said (#1091)
+                if (asked.declined) return Answer.Refused(Answer.Why.NOT_CHOSEN)
+                Answer.Queued(asked.queued, me.raddatz.veyq.mobile.memories.MediaUploads.notTaken(call.paths.size - asked.queued))
             } ?: noGallery
             is Call.LightboxOpen -> galleries[call.gallery]?.let { g ->
                 // one lightbox a gallery: the one open before is closed by the gallery as this one opens
@@ -2326,10 +2328,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 is me.raddatz.veyq.mobile.memories.MemoriesGuest.Uploader -> page.model.uploadAsking(sources)
                 // a READ_WRITE guest's files into the folder on screen (#1034), each its own file
                 is me.raddatz.veyq.mobile.sharing.GuestPage.Level -> page.model.uploadAsking(sources)
-                else -> 0
+                else -> me.raddatz.veyq.mobile.sharing.AskedUpload.REFUSED
             }
-            if (sent == 0) sources.forEach { it.close() }
-            taken(sent > 0)
+            if (sent.queued == 0) sources.forEach { it.close() }
+            // a declined naming is `NOT_CHOSEN`, as `Received.Replace` answers it: nothing to say (#1091); a refusal `NOT_TAKEN`
+            if (sent.declined) Answer.Refused(Answer.Why.NOT_CHOSEN) else taken(sent.queued > 0)
         } ?: noReceived
         is Call.ReceivedUploadFolder -> received[call.received]?.let { h ->
             val level = h.screen.view.page.value as? me.raddatz.veyq.mobile.sharing.GuestPage.Level ?: return Answer.Refused(Answer.Why.NOT_OFFERED)

@@ -759,7 +759,9 @@ internal sealed class ReceivedView : IDisposable
             if (paths.Count == 0) return;
             Log.Write($"guest upload: {paths.Count} picked");
             var (answer, _) = await Core.CallAsync(new Call.ReceivedUpload { received = Received, paths = paths });
-            if (answer is not Answer.Done)
+            // the guest declined the core's naming at the upload: nothing to say, it chose so (#1091)
+            if (answer is Answer.Refused { why: Why.NotChosen }) Log.Write("guest upload: not chosen");
+            else if (answer is not Answer.Done)
             {
                 Log.Write($"a guest's upload answered {answer.GetType().Name}");
                 Say(Spoken.Own("share_failed", Words.ShareFailed()));
