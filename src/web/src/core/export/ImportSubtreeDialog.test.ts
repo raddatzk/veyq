@@ -5,6 +5,8 @@ import { flushPromises, mount } from '@vue/test-utils'
 vi.mock('./importSubtree', async (orig) => ({ ...(await orig<typeof import('./importSubtree')>()), openExport: vi.fn(), importSubtree: vi.fn() }))
 vi.mock('../../features/tenant/tenantStorage', () => ({ tenantStorageFits: vi.fn() }))
 vi.mock('../node/treeStore', async (orig) => ({ ...(await orig<typeof import('../node/treeStore')>()), loadTree: vi.fn(async () => {}) }))
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn(), showUndo: vi.fn(), dismissUndo: vi.fn() }))
+vi.mock('../../shared/state/useToast', () => ({ useToast: () => toast }))
 
 import ImportSubtreeDialog from './ImportSubtreeDialog.vue'
 import { ImportFailed, importSubtree, openExport, type OpenedExport } from './importSubtree'
@@ -136,6 +138,8 @@ describe('ImportSubtreeDialog', () => {
     expect(vi.mocked(importSubtree).mock.calls[0][0]).toMatchObject({ scopeId: 'scope-1', parent: null, opened })
     expect(w.emitted('done')).toEqual([['new1']])
     expect(w.emitted('close')).toBeTruthy()
+    // the apps' word, read from words.json (inbox #1171)
+    expect(toast.success).toHaveBeenCalledWith('Imported “Trip”')
   })
 
   it('a stop part-way says how far it got and that the rest was removed; a quota stop says so too', async () => {

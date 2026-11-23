@@ -515,6 +515,18 @@ Decision log (question, choice and why, evidence, cost):
   singular forms are new (en "1 item, 2 kB, will be added to …", de "1 Eintrag, 2 kB, wird zu … hinzugefügt"; "1 item,
   1 file, …", "1 Eintrag, 1 Datei, …"); the plural forms read as before. Note: vue-i18n also takes a named `n` or
   `count` as the plural choice implicitly, so the tests bite on the catalog's forms, not only on the call's count.
+- *The short notice words (inbox #1171, 2026-11-23):* the three the pairing could not offer (two words or fewer) are
+  decided. Twins, so the web reads them from `words` and its copies are deleted: `import_imported` (was
+  `export.imported`), `left_out_line` (was `node.copy.leftOutLine`) and `left_out_unsupported` (was
+  `export.reason.unsupported_kind` and `node.copy.reason.unsupported_kind` / `unknown_application` / `newer_content`, which
+  all said "not supported"); the copy and download dialogs' reason tables point there. Each was equal in both languages
+  before the move, so no text a user reads changed. Apart: `left_out_line` from `node.deleteMany.reason` and
+  `node.move.many.reason` — the same "“name”: reason" shape, but a selection's node that was not deleted or moved,
+  which the apps say with their own `select_reason` (raised by `SelectionTrash` and `MoveSheet`, not a notices table, so
+  it cannot be read); those two now twin `select_reason`, held equal. `words.json`'s notes on `import_imported` and
+  `import_imported_left_out` no longer name deleted web keys. Eager set (`vite build`, the entry and its modulepreloads,
+  gzip -9): 659,430 B before, 659,361 B after, **−69 B gz** (three words added to `read`, six web keys deleted in
+  both languages).
 
 ## Alternatives considered
 

@@ -90,7 +90,7 @@ async function run() {
     toast.success(
       result.skipped.length > 0
         ? t('words.import_imported_left_out', [rootName.value, result.skipped.map((s) => s.name).join(', ')])
-        : t('export.imported', { name: rootName.value }),
+        : t('words.import_imported', [rootName.value]),
     )
     emit('done', result.nodeId)
     emit('close')

@@ -72,16 +72,16 @@ watch(place, () => (error.value = ''))
 const size = computed(() => formatBytes(prepared.value?.bytes ?? 0, locale.value))
 const canCopy = computed(() => (prepared.value?.nodes ?? 0) > 0)
 const running = computed(() => step.value === 'running')
-/** Why a node stays behind: the apps' notices' words where they say it too (ADR 0136 § The web's words), else the web's. */
+/** Why a node stays behind: the apps' notices' words (ADR 0136 § The web's words). */
 const LEFT_OUT_TEXT: Record<CopyLeftOut['reason'], string> = {
-  unsupported_kind: 'node.copy.reason.unsupported_kind',
+  unsupported_kind: 'words.left_out_unsupported',
   nothing_to_export: 'words.left_out_nothing',
-  unknown_application: 'node.copy.reason.unknown_application',
-  newer_content: 'node.copy.reason.newer_content',
+  unknown_application: 'words.left_out_unsupported',
+  newer_content: 'words.left_out_unsupported',
   not_copyable: 'words.left_out_not_copyable',
 }
 const leftOutLines = computed(() =>
-  (prepared.value?.leftOut ?? []).map((x) => t('node.copy.leftOutLine', { name: x.name, reason: t(LEFT_OUT_TEXT[x.reason]) })),
+  (prepared.value?.leftOut ?? []).map((x) => t('words.left_out_line', [x.name, t(LEFT_OUT_TEXT[x.reason])])),
 )
 /** What does not come along: core's own, then each copied kind's (from the use case's list, only what applies). */
 const losses = computed(() => {

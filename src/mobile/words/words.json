@@ -6746,7 +6746,7 @@
     "apple_en": "Import the Rest"
   },
   "import_imported_left_out": {
-    "note": "the web's export.importedLeftOut (ADR 0152 decision 8)",
+    "note": "ADR 0152 decision 8; the web reads it from this catalog (web.json read)",
     "en": "Imported “{1}”. Left out: {2}",
     "de": "„{1}“ importiert. Weggelassen: {2}"
   },
@@ -6788,7 +6788,7 @@
     "de": "Importiere… {1:int} von {2:int} Einträgen"
   },
   "import_imported": {
-    "note": "the web's export.imported (ADR 0152 decision 8)",
+    "note": "ADR 0152 decision 8; the web reads it from this catalog (web.json read)",
     "en": "Imported “{1}”",
     "de": "„{1}“ importiert"
   },

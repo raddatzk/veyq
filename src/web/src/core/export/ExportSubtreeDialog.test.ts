@@ -49,7 +49,7 @@ describe('ExportSubtreeDialog: Download as a ZIP', () => {
     expect(vi.mocked(prepareExport).mock.calls[0][0]).toMatchObject({ rootId: 'n1', access, tree })
     expect(vi.mocked(prepareExport).mock.calls[0][0]).not.toHaveProperty('options')
     expect(body().querySelector('[data-testid="export-summary"]')?.textContent).toContain('4')
-    expect(body().querySelector('[data-testid="export-skipped"]')?.textContent).toContain('Box')
+    expect(body().querySelector('[data-testid="export-skipped"]')?.textContent).toContain('Box (not supported)')
     // no warning, no location choice (ADR 0082 decision 4)
     expect(body().querySelector('input[type="checkbox"]')).toBeNull()
     expect(body().querySelector('[role="alert"]')).toBeNull()

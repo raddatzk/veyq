@@ -29,7 +29,6 @@ const en = {
     itemCount: '{n} item | {n} items',
     fileCount: '{n} file | {n} files',
     skipped: 'Left out, because this version cannot download them:',
-    reason: { unsupported_kind: 'not supported' },
     save: 'Save as ZIP…',
     writing: 'Writing the file…',
     done: 'Download saved',
@@ -63,7 +62,6 @@ const en = {
     importSkipped: 'Left out, because this version cannot import them:',
     importSubmit: 'Import',
     importing: 'Importing… {done} of {total} items',
-    imported: 'Imported “{name}”',
     importFailed: 'The import stopped after {done} of {total} items. What was created has been moved to the trash.',
     importFailedLeft: 'The import stopped after {done} of {total} items and what was created could not be removed. Look for “{name}” and delete it.',
     importQuota: 'There is not enough storage space for this import.',
@@ -1926,7 +1924,7 @@ const en = {
     // Core's move dialog (`core/node/MoveNodeDialog.vue`, inbox #358): pick a destination, then the placement write.
     // Each refusal the server answers is explained by its code (`refused.<code>`, `core/node/move.ts` `moveRefusalOf`).
     // "Copy to…" (uc.platform.copy-node, `core/export/CopyNodesDialog.vue`): the move's browser with "Copy here", then what the
-    // copy creates, what it leaves out and what does not come along; `reason` names why a node is left out.
+    // copy creates, what it leaves out (its line and reason the apps' words, `words.left_out_*`) and what does not come along.
     copy: {
       action: 'Copy to…',
       title: 'Copy “{name}”',
@@ -1936,12 +1934,6 @@ const en = {
       summary: '{nodes} item, {size}, will be copied to “{target}”. | {nodes} items, {size}, will be copied to “{target}”.',
       walkFailed: 'What is in it could not be read. Nothing was copied.',
       leftOut: 'Left out, because this version cannot copy them:',
-      leftOutLine: '“{name}”: {reason}',
-      reason: {
-        unsupported_kind: 'not supported',
-        unknown_application: 'not supported',
-        newer_content: 'not supported',
-      },
       losses: 'What does not come along:',
       lossAlways: 'Shares, favourites, the trash and the original upload times. You become the owner of the copy.',
       lossFolderCover: 'A folder’s cover.',
@@ -2291,7 +2283,6 @@ const de: typeof en = {
     itemCount: '{n} Eintrag | {n} Einträge',
     fileCount: '{n} Datei | {n} Dateien',
     skipped: 'Weggelassen, weil diese Version sie nicht herunterladen kann:',
-    reason: { unsupported_kind: 'nicht unterstützt' },
     save: 'Als ZIP speichern…',
     writing: 'Schreibe die Datei…',
     done: 'Download gespeichert',
@@ -2325,7 +2316,6 @@ const de: typeof en = {
     importSkipped: 'Weggelassen, weil diese Version sie nicht importieren kann:',
     importSubmit: 'Importieren',
     importing: 'Importiere… {done} von {total} Einträgen',
-    imported: '„{name}“ importiert',
     importFailed: 'Der Import wurde nach {done} von {total} Einträgen abgebrochen. Was angelegt wurde, liegt jetzt im Papierkorb.',
     importFailedLeft: 'Der Import wurde nach {done} von {total} Einträgen abgebrochen, und das Angelegte konnte nicht entfernt werden. Suche „{name}“ und lösche es.',
     importQuota: 'Für diesen Import ist nicht genug Speicherplatz vorhanden.',
@@ -4093,12 +4083,6 @@ const de: typeof en = {
       summary: '{nodes} Eintrag, {size}, wird nach „{target}“ kopiert. | {nodes} Einträge, {size}, werden nach „{target}“ kopiert.',
       walkFailed: 'Was darin ist, ließ sich nicht lesen. Nichts wurde kopiert.',
       leftOut: 'Ausgelassen, weil diese Version sie nicht kopieren kann:',
-      leftOutLine: '„{name}“: {reason}',
-      reason: {
-        unsupported_kind: 'nicht unterstützt',
-        unknown_application: 'nicht unterstützt',
-        newer_content: 'nicht unterstützt',
-      },
       losses: 'Was nicht mitkommt:',
       lossAlways: 'Freigaben, Favoriten, der Papierkorb und die ursprünglichen Hochladezeiten. Die Kopie gehört dir.',
       lossFolderCover: 'Das Cover eines Ordners.',
