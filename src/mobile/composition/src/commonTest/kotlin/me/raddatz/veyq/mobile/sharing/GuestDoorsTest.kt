@@ -445,13 +445,16 @@ class GuestDoorsTest {
             override suspend fun read(from: Long, length: Int) = ByteArray(1)
             override fun close() { closed++ }
         }
+        // The gallery's first read done before the count: its media read (`GET …/media`) landed after it on a native
+        // target under load as often as not and was counted as the declined upload's (inbox #1131, measured 2026-11-23).
+        withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(5_000) { gallery.state.first { it.rows != null } } }
         val requests = f.share.requests.size
         val declined = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).async { gallery.uploadAsking(listOf(picked)) }
         withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(5_000) { access.naming.asking.first { it } } }
         access.naming.decline()
         assertEquals(0, declined.await())
         assertEquals(1, closed, "a declined pick was not handed back")
-        assertEquals(requests, f.share.requests.size, "a declined guest's upload reached the server")
+        assertEquals(requests, f.share.requests.size, "a declined guest's upload reached the server: ${f.share.requests.drop(requests)}")
         val door = MemoriesGuest.GuestGalleryDoor(access, access.tree!!.node(f.memory)!!)
         val named = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).async { door.named() }
         withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(5_000) { access.naming.asking.first { it } } }

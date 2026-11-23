@@ -10,7 +10,12 @@ Verbs:
                              the whole common suite, the conformance over libsodium, `NormalizationTest` and
                              `WallClockTest` (in the host's own zone, which must be Europe/Berlin's, W. Europe Standard
                              Time). `--tests` is Kotlin/Native's `--ktest_filter` pattern (`*LiveSignInTest*`). Its exit
-                             code is the first red test binary's.
+                             code is the first red test binary's. `--prebuilt` runs the binaries `test-inputs` left in
+                             this tree instead of linking them (CI's `core-native-windows` job, after `app-inputs` on
+                             macOS; inbox #1102).
+  test-inputs                what `test` links on this host, alone: every core module's Windows test binary, beside
+                             utf8proc's NormalizationTest.txt, at their paths in this tree. CI's `app-inputs` runs it
+                             and hands the files to `test --prebuilt`.
   bridge                     links the bridge's release DLL (`:bridge:linkReleaseSharedMingwX64`), checks its export
                              table on this host (`objdump -p`) — exactly bridge.h's six functions and Kotlin/Native's
                              `veyq_symbols` —, cross-compiles `bridge/smoke/smoke.c` for mingw against bridge.h alone
@@ -296,14 +301,35 @@ def env_file() -> Path:
     return path
 
 
-def test(pattern: str | None) -> int:
-    # every core module with tests of its own (the shared test support `:testing` has none), the platform first
-    modules = [(p, d) for p, d in repo_layout.mobile_core_modules() if any((d / "src").glob("*Test/kotlin"))]
-    run("./gradlew", *(f"{p}:linkDebugTestMingwX64" for p, _ in modules), cwd=repo_layout.MOBILE)
-    binaries = {p.strip(":").replace(":", "-"): d / "build" / "bin" / "mingwX64" / "debugTest" / "test.exe" for p, d in modules}
-    for binary in binaries.values():
-        if not binary.exists():
-            sys.exit(f"no test binary at {binary}")
+def test_modules() -> list[tuple[str, Path]]:
+    """The core modules with tests of their own (the shared test support `:testing` has none), the platform first."""
+    return [(p, d) for p, d in repo_layout.mobile_core_modules() if any((d / "src").glob("*Test/kotlin"))]
+
+
+def test_binaries() -> dict[str, Path]:
+    """Each test module's name as a directory (`apps-memories`) -> where its Windows test binary is linked."""
+    return {p.strip(":").replace(":", "-"): d / "build" / "bin" / "mingwX64" / "debugTest" / "test.exe"
+            for p, d in test_modules()}
+
+
+def missing_test_inputs() -> list[Path]:
+    return [f for f in [*test_binaries().values(), NORMALIZATION_TEST] if not f.exists()]
+
+
+def test_inputs() -> int:
+    """`test`'s part on this host, alone: every test module's Windows test binary linked (CI's `app-inputs`)."""
+    run("./gradlew", *(f"{p}:linkDebugTestMingwX64" for p, _ in test_modules()), cwd=repo_layout.MOBILE)
+    if missing := missing_test_inputs():
+        sys.exit(f"no {', '.join(map(str, missing))}")
+    return 0
+
+
+def test(pattern: str | None, prebuilt: bool = False) -> int:
+    if not prebuilt:
+        test_inputs()
+    elif missing := missing_test_inputs():
+        sys.exit(f"--prebuilt finds no {', '.join(str(f.relative_to(ROOT)) for f in missing)}: run `run.py test-inputs` first")
+    binaries = test_binaries()
     remote = REMOTE_DIR / "test"
     copy_to([VECTORS, NORMALIZATION_TEST], remote)
     for name, binary in binaries.items():
@@ -1244,6 +1270,8 @@ def main() -> None:
     verbs = parser.add_subparsers(dest="verb", required=True)
     t = verbs.add_parser("test", help="link the core's Windows test binary and run it on the Windows host")
     t.add_argument("--tests", help="Kotlin/Native --ktest_filter pattern, e.g. '*LiveSignInTest*'")
+    t.add_argument("--prebuilt", action="store_true", help="run the test binaries `test-inputs` left in this tree")
+    verbs.add_parser("test-inputs", help="link every core module's Windows test binary, alone (CI's app-inputs)")
     verbs.add_parser("bridge", help="link the bridge's DLL, check its export table and run the C smoke on the Windows host")
     verbs.add_parser("build", help="generate the C#'s sources, gate the packages, build and test here and on the Windows host")
     r = verbs.add_parser("run", help="build the app, start it in the Windows host's logged-on session, hold the tunnel")
@@ -1268,7 +1296,9 @@ def main() -> None:
     verbs.add_parser("register", help="register the scheduled tasks veyq-app and veyq-drive on the Windows host (owner)")
     args = parser.parse_args()
     if args.verb == "test":
-        sys.exit(test(args.tests))
+        sys.exit(test(args.tests, args.prebuilt))
+    if args.verb == "test-inputs":
+        sys.exit(test_inputs())
     if args.verb == "bridge":
         sys.exit(bridge())
     if args.verb == "build":

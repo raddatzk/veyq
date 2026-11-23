@@ -13,8 +13,14 @@ Verbs:
                              its login collection unlocked by a password drawn in the container, so the DeviceKeys
                              contract runs over a real Secret Service; without `--tests`, the Secret Service probe
                              runs twice more, without a session bus and with libsecret moved away. Its exit code is
-                             the first red test binary's.
-  bridge                     links the bridge's release library (`:bridge:linkReleaseShared<Target>`), checks with
+                             the first red test binary's. `--prebuilt` runs the binaries `test-inputs` left in this
+                             tree instead of linking them (CI's `core-native-linux` job, after `app-inputs` on macOS;
+                             inbox #1102).
+  test-inputs [--arch aarch64|x86_64]...
+                             what `test` links on this host, alone: every core module's Linux test binary for each
+                             architecture named (default both), beside utf8proc's NormalizationTest.txt, at their paths
+                             in this tree. CI's `app-inputs` runs it and hands the files to `test --prebuilt`.
+  bridge                  links the bridge's release library (`:bridge:linkReleaseShared<Target>`), checks with
                              `nm -D` that it defines exactly bridge.h's six functions and Kotlin/Native's own
                              symbols (none of the static libraries linked in), and builds and runs
                              `bridge/smoke/smoke.c` against it through bridge.h alone; with VEYQ_LIVE set the smoke
@@ -148,14 +154,39 @@ def test_modules() -> list[tuple[str, Path]]:
     return [(p, d) for p, d in repo_layout.mobile_core_modules() if any((d / "src").glob("*Test/kotlin"))]
 
 
-def test(pattern: str | None) -> int:
+def test_kexe_dirs(target: str) -> dict[str, Path]:
+    """Each test module's name as a directory (`apps-memories`) -> where its [target] test binary is linked."""
+    return {p.strip(":").replace(":", "-"): d / "build" / "bin" / (target[0].lower() + target[1:]) / "debugTest"
+            for p, d in test_modules()}
+
+
+def missing_test_inputs(target: str) -> list[Path]:
+    return [f for f in [*(d / "test.kexe" for d in test_kexe_dirs(target).values()), NORMALIZATION_TEST] if not f.exists()]
+
+
+def test_inputs(flatpak_arches: list[str]) -> int:
+    """`test`'s part on this host, alone: every test module's test binary for each of [flatpak_arches] linked (CI's
+    `app-inputs`)."""
+    targets = [FLATPAK_ARCHES[a][1] for a in flatpak_arches]
+    run("./gradlew", *(f"{p}:linkDebugTest{t}" for t in targets for p, _ in test_modules()), cwd=repo_layout.MOBILE)
+    missing = [f for t in targets for f in missing_test_inputs(t)]
+    if missing:
+        sys.exit(f"no {', '.join(map(str, missing))}")
+    return 0
+
+
+def test(pattern: str | None, prebuilt: bool = False) -> int:
     docker_platform, target = arch()
-    modules = test_modules()
-    run("./gradlew", *(f"{p}:linkDebugTest{target}" for p, _ in modules), cwd=repo_layout.MOBILE)
-    kexe_dirs = {p.strip(":").replace(":", "-"): d / "build" / "bin" / (target[0].lower() + target[1:]) / "debugTest" for p, d in modules}
+    if not prebuilt:
+        test_inputs([a for a, (_, t) in FLATPAK_ARCHES.items() if t == target])
+    missing = missing_test_inputs(target)
+    if missing:
+        sys.exit(f"--prebuilt finds no {', '.join(str(f.relative_to(ROOT)) for f in missing)}: run `run.py test-inputs` first")
+    kexe_dirs = test_kexe_dirs(target)
+    # an artifact keeps no file mode: a binary CI's `app-inputs` handed over arrives without its executable bit
     for kexe_dir in kexe_dirs.values():
-        if not (kexe_dir / "test.kexe").exists():
-            sys.exit(f"no test binary at {kexe_dir / 'test.kexe'}")
+        kexe = kexe_dir / "test.kexe"
+        kexe.chmod(kexe.stat().st_mode | 0o111)
     build_image(docker_platform)
     # each module's binary in turn, the first red one's exit code the run's
     runner = repo_layout.MOBILE / "build" / "linux" / "test-modules.sh"
@@ -667,6 +698,9 @@ def main() -> None:
     verbs = parser.add_subparsers(dest="verb", required=True)
     t = verbs.add_parser("test", help="link the core's Linux test binary and run it in the container")
     t.add_argument("--tests", help="Kotlin/Native --ktest_filter pattern, e.g. '*LiveSignInTest*'")
+    t.add_argument("--prebuilt", action="store_true", help="run the test binaries `test-inputs` left in this tree")
+    ti = verbs.add_parser("test-inputs", help="link every core module's Linux test binaries, alone (CI's app-inputs)")
+    ti.add_argument("--arch", choices=sorted(FLATPAK_ARCHES), action="append", help="repeatable; default: both")
     verbs.add_parser("bridge", help="link the bridge's library, check what it exports and run the C smoke against it")
     verbs.add_parser("build", help="generate, then cargo clippy, test and build the app in the container")
     r = verbs.add_parser("run", help="build the app and run it under gtk4-broadwayd, drawn into a browser")
@@ -702,7 +736,9 @@ def main() -> None:
         sys.exit(flatpak(args.arch or {"linux/arm64": "aarch64", "linux/amd64": "x86_64"}[arch()[0]], args.prebuilt,
                          args.smoke))
     if args.verb == "test":
-        sys.exit(test(args.tests))
+        sys.exit(test(args.tests, args.prebuilt))
+    if args.verb == "test-inputs":
+        sys.exit(test_inputs(args.arch or sorted(FLATPAK_ARCHES)))
     if args.verb == "bridge":
         sys.exit(bridge())
 

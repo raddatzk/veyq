@@ -10,7 +10,7 @@ from the tarball the 1.0.22 release publishes; its minisign signature verifies u
 (RWQf6LRCGA9i5wo9HfNnazrIs0NImEukX60BIekT/3jXngTz10KIA0QNHhbHH8sobMtntYu/Y2j+3BP3lzI/elViHDtShDBTEAI=, the key in the
 `.minisig` beside the tarball names it) — check it with `minisign -Vm libsodium-1.0.22.tar.gz -P <key>` when moving
 the pin. Only the slices the build uses are compiled: macOS arm64, iOS arm64 and the iOS simulator on arm64 by Xcode's
-clang, and Linux arm64 and x86-64 and Windows x86-64 (mingw) by Kotlin/Native's own clang against the C library it
+clang (on a Mac only: elsewhere there is no Xcode, and no Apple target to link), and Linux arm64 and x86-64 and Windows x86-64 (mingw) by Kotlin/Native's own clang against the C library it
 links the core against (`core/konan_toolchain.py` says why, and finds it).
 
 On mingw, libsodium's CPU detection reads XCR0 only through the `_xgetbv` intrinsic (`HAVE__XGETBV`): its `configure`
@@ -147,9 +147,12 @@ def main() -> None:
         sys.exit(__doc__)
     out = Path(sys.argv[1]).resolve()
     tarball = fetch(out)
-    for name, (sdk, arch, version_flag, host) in SLICES.items():
-        build(out, name, sdk, arch, version_flag, host, tarball)
-        print(f"{name}: {out / name / 'lib/libsodium.a'}")
+    # Apple's slices need Xcode, which only a Mac has: a Linux build host builds the bridged slices alone, as
+    # build_libwebp.py does (inbox #1102)
+    if sys.platform == "darwin":
+        for name, (sdk, arch, version_flag, host) in SLICES.items():
+            build(out, name, sdk, arch, version_flag, host, tarball)
+            print(f"{name}: {out / name / 'lib/libsodium.a'}")
     for name in konan_toolchain.SLICES:
         build_konan(out, name, tarball)
         print(f"{name}: {out / name / 'lib/libsodium.a'}")

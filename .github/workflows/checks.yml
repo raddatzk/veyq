@@ -1195,7 +1195,9 @@ jobs:
   app-inputs:
     name: Desktop app inputs (macOS)
     runs-on: macos-latest
-    timeout-minutes: 45
+    # 45 until the core's native tests joined (inbox #1102): their link of three targets took 9.6 min locally and the
+    # macOS tests' run 2.7, beside the inputs' 9.8 and the bridge's 1.7 (an estimate still: no CI run yet)
+    timeout-minutes: 60
     permissions:
       contents: read
     steps:
@@ -1228,6 +1230,23 @@ jobs:
         working-directory: src/mobile
         run: ./gradlew --no-daemon :bridge:jvmTest
 
+      # The core's native tests (inbox #1102): every core module's suite over libsodium, utf8proc and libwebp as each
+      # native target links them, and the cases only a native target has. macOS's run here, the one host that can;
+      # the Linux and Windows test binaries are linked here too — Kotlin/Native cross-compiles them beside the
+      # libraries the inputs just built, and no Linux arm64 or Windows host links Kotlin — and run by
+      # `kotlin-core-linux` and `kotlin-core-windows` on their own hosts. `--continue`: one module's red hides no
+      # other's. The iOS simulator's task (`iosSimulatorArm64Test`) is not run: it runs the same `appleTest` sources (no
+      # module has an `iosTest`) in a simulator, and has never been run anywhere (inbox #1130).
+      - name: Run the core's macOS tests
+        working-directory: src/mobile
+        run: ./gradlew --no-daemon --continue macosArm64Test
+
+      - name: Link the core's Linux and Windows test binaries
+        run: |
+          set -euo pipefail
+          python3 src/mobile/linux/run.py test-inputs
+          python3 src/mobile/windows/run.py test-inputs
+
       - name: Keep the inputs for the package builds
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -1239,6 +1258,106 @@ jobs:
             src/mobile/bridge/build/bin/mingwX64/releaseShared/veyq.dll
           if-no-files-found: error
           retention-days: 3
+
+      # One artifact per host that runs them, each with Unicode's NormalizationTest.txt utf8proc's build fetched; the
+      # paths below src/mobile/ are kept, so `run.py test --prebuilt` finds each binary where `test-inputs` linked it.
+      - name: Keep the Linux x86-64 test binaries
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: core-tests-linux-x86_64
+          path: |
+            src/mobile/build/utf8proc/NormalizationTest.txt
+            src/mobile/**/build/bin/linuxX64/debugTest/test.kexe
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Keep the Linux arm64 test binaries
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: core-tests-linux-aarch64
+          path: |
+            src/mobile/build/utf8proc/NormalizationTest.txt
+            src/mobile/**/build/bin/linuxArm64/debugTest/test.kexe
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Keep the Windows test binaries
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: core-tests-windows
+          path: |
+            src/mobile/build/utf8proc/NormalizationTest.txt
+            src/mobile/**/build/bin/mingwX64/debugTest/test.exe
+          if-no-files-found: error
+          retention-days: 3
+
+  # The core's Linux tests (inbox #1102), each architecture on its own runner, natively: the binaries `app-inputs`
+  # linked, run by `run.py test --prebuilt` in the Fedora 44 container a developer runs them in — the wall clock in
+  # Europe/Berlin, the DeviceKeys contract over a real Secret Service (gnome-keyring-daemon on a session bus of its
+  # own), the Secret Service probe without a bus and without libsecret. Docker is the runner's. The budget is an
+  # estimate until the first run replaces it (the same binaries' run on Windows took 2.7 min locally).
+  kotlin-core-linux:
+    name: Kotlin core tests on Linux (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    needs:
+      - app-inputs
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-latest
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Fetch the test binaries app-inputs linked
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: core-tests-linux-${{ matrix.arch }}
+          path: src/mobile
+
+      - name: Run the core's Linux tests
+        run: python3 src/mobile/linux/run.py test --prebuilt
+
+  # The core's Windows tests (inbox #1102) on x64 Windows, the binaries `app-inputs` linked, run by `run.py test
+  # --prebuilt` with this runner as its Windows host (`local`), as `msix` builds there. `WallClockTest` reads the host's
+  # own zone, which must be Berlin's: a GitHub runner's is UTC, so the job sets it first (its runner only, which is
+  # thrown away after the job; a local run's zone is the developer's). The budget is an estimate until the first run
+  # replaces it.
+  kotlin-core-windows:
+    name: Kotlin core tests on Windows (x64)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    needs:
+      - app-inputs
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Fetch the test binaries app-inputs linked
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: core-tests-windows
+          path: src/mobile
+
+      - name: Set the runner's zone to Berlin's
+        if: runner.environment == 'github-hosted'
+        run: tzutil /s "W. Europe Standard Time"
+
+      - name: Run the core's Windows tests
+        env:
+          VEYQ_WINDOWS_SSH: local
+          VEYQ_WINDOWS_DIR: ${{ runner.temp }}\veyq
+          PYTHONUTF8: "1"
+        run: python src/mobile/windows/run.py test --prebuilt
 
   flatpak:
     name: Flatpak (${{ matrix.arch }})
@@ -1458,6 +1577,8 @@ jobs:
       - stack
       - upgrade-proof
       - app-inputs
+      - kotlin-core-linux
+      - kotlin-core-windows
       - flatpak
       - msix
       - apps-stage
@@ -1478,6 +1599,8 @@ jobs:
       && needs.stack.result == 'success'
       && needs.upgrade-proof.result == 'success'
       && needs.app-inputs.result == 'success'
+      && needs.kotlin-core-linux.result == 'success'
+      && needs.kotlin-core-windows.result == 'success'
       && needs.flatpak.result == 'success'
       && needs.msix.result == 'success'
       && contains(fromJSON('["success", "skipped"]'), needs.apps-stage.result)
