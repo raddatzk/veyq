@@ -98,7 +98,9 @@ describe('VeyqDateField', () => {
   it('at minute granularity writes the time after the day, in the language\'s clock, with named segments', async () => {
     const { wrapper } = host('2026-05-03T09:05', undefined, 'minute')
     await flushPromises()
-    expect(shown().trim()).toBe('05/03/2026, 09:05\u202fAM') // the language's narrow space before AM/PM
+    // The space before AM/PM is the language's, read from the runtime's ICU: Node 22's writes U+202F (a narrow
+    // no-break space), Node 26's a plain space (measured in CI 2026-11-23). Either is the field showing Intl's own text.
+    expect(shown().trim()).toMatch(/^05\/03\/2026, 09:05[ \u202f]AM$/)
     expect(segments().map((s) => s.getAttribute('aria-label'))).toEqual(['Month', 'Day', 'Year', 'Hour', 'Minute', 'AM/PM'])
     const { i18n } = await import('../../i18n')
     i18n.global.locale.value = 'de'

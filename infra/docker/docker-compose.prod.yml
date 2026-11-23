@@ -261,7 +261,7 @@ services:
   # And every invitation link is built as https://<domain>/tenant/accept#<token>, so an HTTP-only instance mails
   # links pointing at a scheme it does not answer.
   traefik:
-    image: traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d
+    image: traefik:v3.7@sha256:a6c0194dda77bcb804824580f36fa7edc56e315b1acfe933366c8b52844a78a4
     restart: unless-stopped
     <<: *hardened
     logging: *logging

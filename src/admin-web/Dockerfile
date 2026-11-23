@@ -10,7 +10,7 @@
 # Mirrors the app image Dockerfile's frontend-build stage, including its two hard-won details: the OpenAPI client is
 # GENERATED and never tracked (so the stage needs a JRE for openapi-generator), and the specs must land BEFORE
 # the install because `prepare` runs generate:api during it.
-FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS build
+FROM node:26-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1 AS build
 WORKDIR /repo/src/admin-web
 RUN apt-get update \
     && apt-get install -y --no-install-recommends default-jre-headless \
