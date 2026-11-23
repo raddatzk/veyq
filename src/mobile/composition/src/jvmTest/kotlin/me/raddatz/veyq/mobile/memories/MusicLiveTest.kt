@@ -134,7 +134,7 @@ class MusicLiveTest {
             two.signOut()
 
             // a device of its own pins the Memory: both tracks' originals kept, every frame
-            val device = ThisDevice(liveRun.store(), SoftwareDeviceKeys(p), "live music pins", p, offlineRoot = root.absolutePath)
+            val device = ThisDevice(liveRun.store(), SoftwareDeviceKeys(p), "live music pins", p, offlineRoot = root.absolutePath).also { it.offlineFiles = me.raddatz.veyq.mobile.offline.SizedVolume() }
             val door = AccountDoor(p, device, client)
             val account = signIn("live music pins", device).also { pinned = it }
             assertEquals(VeyqAccount.TrustOutcome.REMEMBERED, account.trustThisDevice(null, StaySignedIn.LOGIN))

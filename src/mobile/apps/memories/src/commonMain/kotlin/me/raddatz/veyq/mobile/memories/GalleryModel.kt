@@ -611,7 +611,7 @@ class GalleryModel(
         if (read != null) {
             searched(settled = true)
             // the marks with each listing (a kept read: offline as last read), the badges and the filter after them
-            scope.launch { readMarks(here.marks) }
+            scope.launch { readMarks() }
         }
         // the Memory opening is a settle point (the self-heal): once, on its first listing the server answered
         if (read != null && read.offline == null && !openedSettle) {
@@ -634,14 +634,14 @@ class GalleryModel(
 
     private fun factsNow(): GalleryFilter.Facts = factsOf(current.rows)
 
-    /** Every member's marks read (with the gallery's first read and its live poll's); the badges and the filter follow. */
-    suspend fun readMarks() = readMarks(runCatching { door.queuedHere().marks }.getOrDefault(emptyMap()))
-
-    /** [readMarks] with the marks set offline and not sent yet ([queued]) shown as the person set them. */
-    private suspend fun readMarks(queued: Map<String, Boolean>) {
+    /**
+     * Every member's marks read (with the gallery's first read and its live poll's), the marks set offline and not sent
+     * yet shown as the person set them; the badges and the filter follow. The outbox is read after the listing, inside
+     * [ItemMarks.load] — never a copy taken before it: a mark queued while the read was in flight stands (inbox #1100).
+     */
+    suspend fun readMarks() {
         val m = itemMarks ?: return
-        val ok = runCatching { m.load() }.getOrDefault(false)
-        if (ok) queued.forEach { (id, marked) -> m.setLocal(id, marked) }
+        val ok = runCatching { m.load { runCatching { door.queuedHere().marks }.getOrDefault(emptyMap()) } }.getOrDefault(false)
         _state.update { it.copy(marksLoaded = ok || it.marksLoaded) }
         refilter()
     }

@@ -69,7 +69,7 @@ class PersonProfileLiveTest {
         val p = BouncyCastlePrimitives
         val env = liveRun.env
         val root = Files.createTempDirectory("veyq-profile-live").toFile()
-        val device = ThisDevice(liveRun.store(), SoftwareDeviceKeys(p), "live profile test", p, offlineRoot = root.absolutePath)
+        val device = ThisDevice(liveRun.store(), SoftwareDeviceKeys(p), "live profile test", p, offlineRoot = root.absolutePath).also { it.offlineFiles = me.raddatz.veyq.mobile.offline.SizedVolume() }
         var account = VeyqAccount.signIn(p, origin!!, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), device, client)
         assertEquals(VeyqAccount.TrustOutcome.REMEMBERED, account.trustThisDevice(null, StaySignedIn.LOGIN), "the dev instance does not let a device stay signed in")
         val tenant = account.open(account.defaultTenant!!)

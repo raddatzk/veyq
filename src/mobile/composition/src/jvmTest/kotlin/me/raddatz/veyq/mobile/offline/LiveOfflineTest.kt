@@ -76,7 +76,7 @@ class LiveOfflineTest {
         val env = liveRun.env
         val root = Files.createTempDirectory("veyq-offline-live").toFile()
         val keys = SoftwareDeviceKeys(p)
-        val device = ThisDevice(liveRun.store(), keys, "live offline test", p, offlineRoot = root.absolutePath)
+        val device = ThisDevice(liveRun.store(), keys, "live offline test", p, offlineRoot = root.absolutePath).also { it.offlineFiles = me.raddatz.veyq.mobile.offline.SizedVolume() }
         var account = VeyqAccount.signIn(p, origin!!, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), device, client)
         assertEquals(VeyqAccount.TrustOutcome.REMEMBERED, account.trustThisDevice(null, StaySignedIn.LOGIN), "the dev instance does not let a device stay signed in")
         assertNotNull(account.offline, "a remembered account on a device with a store directory keeps no store")
