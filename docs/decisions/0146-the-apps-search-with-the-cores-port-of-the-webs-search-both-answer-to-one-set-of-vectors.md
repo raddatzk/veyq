@@ -177,6 +177,39 @@ search is a measured module of about 1,600 lines (`src/web/src/core/search/`, Me
       shows; a chip's remove button is named by the word `search_remove_chip` (the web's `ui.removeTag`); and
       `ShellModel.searchModel` takes an optional `trace` (counts and milliseconds, never a name) through which a platform
       times the index's walks (Android logs it as `veyq-search`).
+    - **Added 2026-11-23** (inbox #958, #959, #962; decided by the agent that built them, the owner's passes owed):
+      - **The *here* badge and the matched values are the core's** (#962). `ResultShown.here` (`Results.isHere`: a node's
+        own document in the active space whose id is `SearchContext.hereNodeId`, the node the screen heads — `Shell.headed`:
+        an open object, a kept link's page, the folder Home shows —, the web's breadcrumb's last crumb) and
+        `ResultShown.matched` (`Query.matchedValues`: the chips in force' values the row carries — its years, a span as
+        "from–to", the month, its place as the document names it, the person —, each once in the chips' order; a space, a
+        kind and an *In:* chip add none, as the row's line and icon say them; a month crosses as a `Piece` the UI names).
+        Both are plaintext the row's document already holds, never a key. The vectors pin both (`here`, `matchedValues`),
+        and the web now draws from the same rules through `@veyq/core-js/search` (its own copies removed; the façade's
+        `yearsOf`, whose one caller they were, went with them). Opening the *here* result opens nothing again: the field
+        only closes, as on the web. Drawn in each platform's idiom: Android small tonal labels in the `ListItem`'s trailing
+        slot (`secondaryContainer` for *here*, `surfaceVariant` for a value), Apple capsules before the chevron (accent,
+        muted), Linux caption labels at the row's end (`accent`, `dim-label`), Windows caption text in the row's third
+        column (the accent text brush, the secondary one); Linux and Windows read both after the row's lines to a screen
+        reader.
+      - **Opening a result empties and closes the field on every app** (#959). The core's `open` resets the field as
+        `close` does (text, chips, the matcher, revalidation) and counts `SearchShown.openedCount`, in the state that also
+        carries what opened (`openSettings`); every platform answers the count and never the click, so a settings section
+        is never lost to a close that came first: Android leaves Search where the shell still stands in it (the page on
+        screen chosen, a settings section; a node or a person already moved the shell, and back returns to an empty Search),
+        Apple empties its field and leaves the search the same way, Linux closes the search bar (which gives the sidebar
+        back), Windows empties the box and its chip row. Why one rule over the web's two: the web's sheet — the narrow
+        layout, the field that takes the page's place as the apps' does — goes with its query; the web's inline field keeps
+        the text with its list shut, but on the apps a query left standing keeps Linux's sidebar replaced by the list and
+        Windows' chip row over the content, where it reads as a filter on the page that opened. The residual: GNOME's own
+        sidebar searches (Settings, Files) keep the query after a result, and Android's back from a result returns to an
+        empty Search, not to the list.
+      - **A page's contribution counts only while its page is the open one** (#958). The documents take the contribution
+        only where `where().openNodeId` is its node, as `Results.placeOf` lists it only there: one a page left behind hid
+        the space's listing of the same photos and listed nothing itself, so they were not found at all. Android closes its
+        gallery once `Shell.keeps(node)` no longer holds (neither on screen nor where back returns), not when its composable
+        leaves (a rotation keeps the page and its lightbox, #934); Apple keeps its one gallery at a time, which the core's
+        rule covers for the search.
 
 ## Consequences
 
