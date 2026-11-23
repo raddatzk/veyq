@@ -109,7 +109,7 @@ class MediaVectorsTest {
             ),
         )
         @Suppress("UNCHECKED_CAST")
-        val present = all.filterValues { it != null }.toSortedMap() as Map<String, Any>
+        val present = all.filterValues { it != null }.entries.sortedBy { it.key }.associate { it.key to it.value } as Map<String, Any>
         return present.ifEmpty { null }
     }
 
