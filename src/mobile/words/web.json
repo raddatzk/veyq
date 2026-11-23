@@ -755,6 +755,7 @@
     "share_uploader_intro": ["share.uploaderIntro"],
     "share_your_name": ["share.yourName"],
     "share_your_name_placeholder": ["share.yourNamePlaceholder"],
+    "signin_error_rate_limited": ["login.rateLimited"],
     "signin_forgot": ["recovery.forgot"],
     "signin_kit_scan_hint": ["unlock.scanHint"],
     "signin_link_scan": ["pairing.joinEntry"],
@@ -813,6 +814,7 @@
     {"app": "report_cat_csam", "web": "moderation.csam.title", "why": "a moderation case's heading (Darstellungen); the app's word is the report category, twin of report.categories.CHILD_SEXUAL_ABUSE (Darstellung)"},
     {"app": "share_guest_not_you_title", "web": "depot.dropBox.guestStartOver", "why": "a dialog's question (with ?) against the action that answers it"},
     {"app": "signin_kit_held", "web": "rotation.secretKeyHint", "why": "a row's value (no full stop) against a hint sentence"},
+    {"app": "upload_name_taken", "web": "memory.slugTaken", "why": "an upload's refusal against a Memory's create dialog, whose twin is memory_slug_taken; the same text since inbox #1180, by the owner's choice, not by one meaning"},
     {"app": "upload_status_done", "web": "common.done", "why": "the button that closes a dialog against a file's finished upload, which the web reads from words.json"},
     {"app": "upload_status_preparing", "web": "memory.banner.preparing", "why": "a Memory's banner being made ready against a file's upload being prepared, which the web reads from words.json"}
   ],

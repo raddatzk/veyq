@@ -44,6 +44,10 @@ import kotlin.test.assertTrue
  * [theWayBackSignsInKeepingNothing] red; the key material read after the login in [VeyqAccount.signInLocked] turns
  * [theLockedLoginReadsNoKeyAndKeepsNothingOnTheDevice] red; the model's `MAIL_UNAVAILABLE` worded as a failed request
  * turns [aTenantWithoutMailAndAFailedAskSayWhy] red (measured 2026-11-23, seven of twelve red, restored with `/bin/cp -f`).
+ *
+ * The rate limit (inbox #1190): the login's `429` read as `PROTOCOL` again in [SignInFailure.refused] turns
+ * [aLoginTheRateLimitRefusedSaysToWait] red; the resume's `429` check deleted from [VeyqAccount.resumeOnline] turns
+ * [aResumeTheRateLimitRefusedKeepsTheRecordAndItsToken] red (measured 2026-11-23, restored with `/bin/cp -f`).
  */
 class SignInEntriesTest {
     private data class Acc(override val key: String, override val tenants: List<TenantRef>) : Connection {
@@ -258,6 +262,10 @@ class SignInEntriesTest {
         val seen = mutableListOf<String>()
         var recoveryStatus = HttpStatusCode.Accepted
         var expireFirstAccess = false
+        /** The one path the server answers `429 rate_limited` on (ADR 0051's per-address budget), or null. */
+        var limited: String? = null
+        /** The status `/api/login/verify` answers with in place of its own, or null. */
+        var verifyStatus: HttpStatusCode? = null
         val bodies = mutableListOf<String>()
         private val authPublic = p.ed25519Public(suite.authSeed(password, suite.authSalt(instanceSalt, email)))
 
@@ -273,6 +281,12 @@ class SignInEntriesTest {
             val bearer = r.headers[HttpHeaders.Authorization]
             seen += "${r.method.value} $path${bearer?.let { " $it" } ?: ""}"
             return when {
+                path == limited -> respond(
+                    """{"code":"rate_limited"}""",
+                    HttpStatusCode.TooManyRequests,
+                    headersOf(HttpHeaders.ContentType to listOf("application/json"), "Retry-After" to listOf("17")),
+                )
+                path == "/api/login/verify" && verifyStatus != null -> json("{}", verifyStatus!!)
                 r.method == HttpMethod.Get && path == "/api/setup" -> json(
                     """{"setupRequired":false,"version":{"major":${VeyqAccount.MAJOR},"build":1},"capabilities":[],"suites":["v1"],"instanceSalt":"${b64(instanceSalt)}"}""",
                 )
@@ -357,5 +371,51 @@ class SignInEntriesTest {
             HttpClient(MockEngine { throw IllegalStateException("no route") }, block)
         }
         assertEquals(RecoveryAsked.FAILED, unreachable.requestRecovery("http://a.example", email))
+    }
+
+    @Test
+    fun aLoginTheRateLimitRefusedSaysToWait() = runTest {
+        val server = Server()
+        val door = AccountDoor(p, ThisDevice(MemoryDeviceStore(), SoftwareDeviceKeys(p), "test device", p), server.client)
+        for (step in listOf("/api/login/challenge", "/api/login/verify")) {
+            server.limited = step
+            val refused = assertFailsWith<SignInFailure> { door.signInLocked("http://a.example", email, password) }
+            assertEquals(SignInFailure.Reason.RATE_LIMITED, refused.reason, "a 429 at $step")
+        }
+        // the control: another refusal of the verify is no rate limit
+        server.limited = null
+        server.verifyStatus = HttpStatusCode.InternalServerError
+        assertEquals(SignInFailure.Reason.PROTOCOL, assertFailsWith<SignInFailure> { door.signInLocked("http://a.example", email, password) }.reason)
+        // and the sign-in screen says the owner's words for it, not "signing in did not work"
+        assertEquals(Msg.SIGNIN_ERROR_RATE_LIMITED, SessionModel.words(SignInFailure.Reason.RATE_LIMITED))
+    }
+
+    @Test
+    fun aResumeTheRateLimitRefusedKeepsTheRecordAndItsToken() = runTest {
+        // the refresh shares the login's per-address budget (`TokenResource`, ADR 0051): its 429 ends no session, so the
+        // remembered device keeps its record, its kept token and its store, where any other 4xx forgets them
+        val server = Server().apply { limited = "/api/token/refresh" }
+        val keys = SoftwareDeviceKeys(p)
+        val device = ThisDevice(MemoryDeviceStore(), keys, "test device", p)
+        val record = TrustedDevice("http://a.example", email, "u1", TrustedDevice.Method.DEVICE_KEY, "w1", "veyq.device.test", StaySignedIn.PRESENCE)
+        device.remember(record)
+        keys.putSecret(record.refreshAlias, "refresh-0")
+        val refused = assertFailsWith<SignInFailure> { VeyqAccount.resume(p, record, device, server.client) }
+        assertEquals(SignInFailure.Reason.RATE_LIMITED, refused.reason)
+        assertEquals(listOf(record), device.trusted(), "the rate limit forgot the remembered device")
+        assertEquals("refresh-0", keys.secret(record.refreshAlias), "the rate limit deleted the kept token")
+        // the control: a refresh the server refuses (401) still ends the remembered session
+        val refusing = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit ->
+            HttpClient(MockEngine { r ->
+                if (r.url.encodedPath == "/api/token/refresh") respond("{}", HttpStatusCode.Unauthorized, headersOf(HttpHeaders.ContentType, "application/json"))
+                else respond(
+                    """{"setupRequired":false,"version":{"major":${VeyqAccount.MAJOR},"build":1},"capabilities":[],"suites":["v1"],"instanceSalt":"${b64(instanceSalt)}"}""",
+                    HttpStatusCode.OK,
+                    headersOf(HttpHeaders.ContentType, "application/json"),
+                )
+            }, block)
+        }
+        assertEquals(SignInFailure.Reason.SESSION_ENDED, assertFailsWith<SignInFailure> { VeyqAccount.resume(p, record, device, refusing) }.reason)
+        assertEquals(emptyList(), device.trusted())
     }
 }
