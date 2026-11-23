@@ -503,6 +503,18 @@ Decision log (question, choice and why, evidence, cost):
   offer (`import_imported` ~ `export.imported`, `left_out_line` ~ `node.copy.leftOutLine`, `left_out_unsupported` ~
   `node.copy.reason.unsupported_kind`) stay the web's: moving the first changes what a user reads (the owner's copy
   call), the second are inbox #1171's to pair first.
+- *A summary's counts (inbox #1173, 2026-11-23):* a download's and an import's summary took their counts in one form
+  ("1 items", "1 Einträge"). The import's summary is a plural on both sides (`import_summary` `one`/`other` ~
+  `export.importSummary` `one | other`, still twins); the apps needed no call-site change, since the core's
+  `Notice(Msg.IMPORT_SUMMARY, nodes, …)` already passes the count first, which every platform's generated words choose
+  the form by. The web passes `plan.nodes` as the plural count. A download's summary (web only — the apps' download has
+  none) is built from two counted parts, `export.itemCount` and `export.fileCount` (`summary: '{items}, {files},
+  {size}'`) rather than one plural of two counts, which vue-i18n's one choice per message cannot express. Pairing:
+  `export.fileCount` twins `dropbox_guest_files` (Datei/Dateien, the same count); `export.itemCount` is `apart` from
+  `memory_items`, since a download counts entries (Eintrag) and a Memory its items (Objekt). User-visible: only the
+  singular forms are new (en "1 item, 2 kB, will be added to …", de "1 Eintrag, 2 kB, wird zu … hinzugefügt"; "1 item,
+  1 file, …", "1 Eintrag, 1 Datei, …"); the plural forms read as before. Note: vue-i18n also takes a named `n` or
+  `count` as the plural choice implicitly, so the tests bite on the catalog's forms, not only on the call's count.
 
 ## Alternatives considered
 

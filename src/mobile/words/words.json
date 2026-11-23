@@ -6758,8 +6758,14 @@
   },
   "import_summary": {
     "note": "the web's export.importSummary (ADR 0152 decision 8)",
-    "en": "{1:int} items, {2}, will be added to “{3}”.",
-    "de": "{1:int} Einträge, {2}, werden zu „{3}“ hinzugefügt."
+    "en": {
+      "one": "{1:int} item, {2}, will be added to “{3}”.",
+      "other": "{1:int} items, {2}, will be added to “{3}”."
+    },
+    "de": {
+      "one": "{1:int} Eintrag, {2}, wird zu „{3}“ hinzugefügt.",
+      "other": "{1:int} Einträge, {2}, werden zu „{3}“ hinzugefügt."
+    }
   },
   "import_notice": {
     "note": "the web's export.importNotice (ADR 0152 decision 8)",

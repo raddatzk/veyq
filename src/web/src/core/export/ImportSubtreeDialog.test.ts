@@ -86,6 +86,34 @@ describe('ImportSubtreeDialog', () => {
     expect(importSubtree).not.toHaveBeenCalled()
   })
 
+  // inbox #1173: the count chooses the plural form, so one item never reads as many, and no raw `|` form separator
+  it.each([
+    ['en', 'n1', '1 item, ', 'will be added to “Home”.'],
+    ['de', 'n1', '1 Eintrag, ', 'wird zu „Home“ hinzugefügt.'],
+    ['en', 'n2', '2 items, ', 'will be added to “Home”.'],
+    ['de', 'n2', '2 Einträge, ', 'werden zu „Home“ hinzugefügt.'],
+  ] as const)('the summary counts in %s (%s)', async (lang, which, start, end) => {
+    const one: Manifest = { ...manifest, root: { ...manifest.root, children: [] } }
+    const two: Manifest = { ...manifest, root: { ...manifest.root, children: [{ id: 'n2', kind: 'FOLDER', name: 'Day 1' }] } }
+    vi.mocked(openExport).mockResolvedValue({ source: {}, manifest: which === 'n1' ? one : two } as unknown as OpenedExport)
+    const plugin = realI18n()
+    plugin.global.locale.value = lang
+    try {
+      mount(ImportSubtreeDialog, {
+        props: { input, access: memberAccessOf({ epochs: epochsOf(new Uint8Array(32)) }), parent: null, targetName: 'Home' },
+        global: { plugins: [plugin] },
+        attachTo: document.body,
+      })
+      await flushPromises()
+      const text = body().querySelector('[data-testid="import-summary"]')?.textContent ?? ''
+      expect(text).toContain(`Trip${start}`)
+      expect(text.trim().endsWith(end)).toBe(true)
+      expect(text).not.toContain('|')
+    } finally {
+      plugin.global.locale.value = 'en'
+    }
+  })
+
   it('newer content is listed as newer; an archive with nothing importable offers only Cancel', async () => {
     const nothing: Manifest = {
       format: 'veyq-subtree', version: 2, exportedAt: 'x', appVersion: 'x', applications: [{ id: 'ledgers', contentSchema: 1 }],

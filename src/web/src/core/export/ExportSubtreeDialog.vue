@@ -93,7 +93,7 @@ function close() {
     <form class="veyq-form" data-testid="export-dialog" @submit.prevent="save">
       <p v-if="step === 'preparing'" class="veyq-form-copy" role="status">{{ t('export.preparing') }}</p>
       <template v-else-if="prepared">
-        <p class="veyq-form-copy" data-testid="export-summary">{{ t('export.summary', { nodes: prepared.nodes, files: prepared.payloads, size }) }}</p>
+        <p class="veyq-form-copy" data-testid="export-summary">{{ t('export.summary', { items: t('export.itemCount', { n: prepared.nodes }, prepared.nodes), files: t('export.fileCount', { n: prepared.payloads }, prepared.payloads), size }) }}</p>
         <div v-if="prepared.skipped.length > 0" data-testid="export-skipped">
           <p class="veyq-form-copy">{{ t('export.skipped') }}</p>
           <ul class="export-skipped">

@@ -133,7 +133,7 @@ function close() {
       <template v-else-if="plan && step !== 'invalid'">
         <p class="veyq-form-copy" data-testid="import-summary">
           <strong>{{ rootName }}</strong><br />
-          <template v-if="canImport">{{ t('export.importSummary', { nodes: plan.nodes, size, target: targetName }) }}</template>
+          <template v-if="canImport">{{ t('export.importSummary', { nodes: plan.nodes, size, target: targetName }, plan.nodes) }}</template>
           <template v-else>{{ t('export.importNothing') }}</template>
         </p>
         <div v-if="leavesOut" data-testid="import-skipped">
