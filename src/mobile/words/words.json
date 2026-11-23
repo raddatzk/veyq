@@ -430,6 +430,11 @@
     "en": "Signing in did not work.",
     "de": "Die Anmeldung hat nicht geklappt."
   },
+  "signin_error_rate_limited": {
+    "note": "A sign-in or unlock the server refused with 429 rate_limited (its per-address budget, ADR 0051): the wording the owner chose 2026-11-23 (inbox #1190); the server's Retry-After is not shown.",
+    "en": "Too many sign-in attempts. Please wait a minute.",
+    "de": "Zu viele Anmeldeversuche. Bitte warte eine Minute."
+  },
   "signin_kit_unreadable": {
     "en": "Couldn’t read that kit. Try another file or enter your Secret Key.",
     "de": "Konnte das Kit nicht lesen. Versuche eine andere Datei oder gib deinen Secret Key ein.",
@@ -3349,8 +3354,8 @@
     "de": "ein Kapitel"
   },
   "memory_slug_taken": {
-    "en": "A folder or Memory with a similar name already exists here.",
-    "de": "Ein Ordner oder eine Erinnerung mit ähnlichem Namen existiert hier bereits."
+    "en": "A folder, Memory or file with a similar name already exists here.",
+    "de": "Hier gibt es schon einen Ordner, eine Erinnerung oder eine Datei mit ähnlichem Namen."
   },
   "memory_not_media": {
     "note": "Memories' Add on a desktop: picked or dropped files that are no photo or video are left out (the core's MediaUploads.notTaken).",

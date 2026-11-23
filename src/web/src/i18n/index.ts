@@ -1399,6 +1399,9 @@ const en = {
     submit: 'Sign in',
     submitting: 'Signing in…',
     failed: 'Sign-in failed. Check your email and password.',
+    // The login's challenge or verify answered `429 rate_limited`: this address spent the server's per-address budget
+    // (ADR 0051, `veyq.ratelimit.auth.*`). The owner's wording (inbox #1190); `Retry-After` is not shown.
+    rateLimited: 'Too many sign-in attempts. Please wait a minute.',
     rememberMe: 'Stay signed in on this device',
     rememberMeHint:
       'On, this device opens straight to your memories next time — but once you sign out, it asks for your Secret Key again; off, next time just your password.',
@@ -3605,6 +3608,7 @@ const de: typeof en = {
     submit: 'Anmelden',
     submitting: 'Wird angemeldet…',
     failed: 'Anmeldung fehlgeschlagen. Prüfe E-Mail und Passwort.',
+    rateLimited: 'Zu viele Anmeldeversuche. Bitte warte eine Minute.',
     rememberMe: 'Auf diesem Gerät angemeldet bleiben',
     rememberMeHint:
       'An öffnet dieses Gerät beim nächsten Mal direkt deine Erinnerungen — nach dem Abmelden fragt es aber wieder nach deinem Secret Key; aus brauchst du nächstes Mal nur dein Passwort.',
