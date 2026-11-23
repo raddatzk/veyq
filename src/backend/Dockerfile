@@ -21,7 +21,7 @@ RUN apt-get update \
 # pnpm itself, at exactly the version the root package.json pins in `packageManager` — the one npm install this image
 # runs (scripts/validate_pnpm_installs_gated.py holds the two equal). A layer of its own, above every COPY, so only a
 # pnpm bump rebuilds it.
-RUN npm install -g pnpm@12.16.1
+RUN npm install -g pnpm@12.22.0
 # The specs must land BEFORE the install: src/web/package.json has `"prepare": "pnpm run generate:api"`, which pnpm
 # runs as part of the install, and generate:api reads `../../contracts/api/*.openapi.yaml` relative to src/web/.
 # (Measured the hard way, under npm — with this COPY below the install, it fails with "spec file is not found".)
