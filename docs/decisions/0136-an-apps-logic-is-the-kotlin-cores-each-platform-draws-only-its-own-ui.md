@@ -544,7 +544,7 @@ Decision log (question, choice and why, evidence, cost):
   `MemoryCreate`), which already twins it word for word ("A folder or Memory with a similar name already exists here.");
   the apps' `upload_name_taken` is an upload's refusal, which the web words inside `depot.upload…slug_taken` ("“{name}”
   was not uploaded: a folder, Memory or file …"). Moving the Memory dialog to `upload_name_taken` would change what it
-  says and break its true twin, so it stays; the question left is whether a Memory's name conflict should also name
+  says and break its true twin, so it stays; the question left (inbox #1180) is whether a Memory's name conflict should also name
   files (then `memory_slug_taken` and `memory.slugTaken` change together). Eager set (measured as above): 659,361 B
   before, 659,380 B after, **+19 B gz**.
 
