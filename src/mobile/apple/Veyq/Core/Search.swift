@@ -49,7 +49,15 @@ extension AppModel {
 
     private func searchChanged(_ state: SearchShown) {
         let was = found?.openSettingsCount ?? 0
+        let opened = found?.openedCount ?? 0
         found = state
+        // a result opened (inbox #959): core emptied the field in this state; the field's own text empties too, and the
+        // search gives up its place where the result left it standing (the page on screen chosen, a settings section) — a
+        // node or a person already moved the shell, whose back returns to an empty search
+        if state.openedCount != opened {
+            searchFieldReset += 1
+            if shell.searching { search(false) }
+        }
         // a settings result: the Settings page opens there (the field opens the Mac's window, `SearchField`) — whenever
         // core's count of openings moves, the same section chosen twice included; a later state keeping the section is
         // no new opening
@@ -308,9 +316,28 @@ private struct ResultRow: View {
                 }
             }
             Spacer(minLength: 0)
+            // the web's badges (inbox #962): *You are here* on the page on screen, the values its chips matched — capsules,
+            // as the system tags a row
+            if result.here {
+                Self.badge(say(.searchHere), tint: Role.accent)
+            }
+            ForEach(Array(result.matched.enumerated()), id: \.offset) { _, v in
+                Self.badge(say(piece: v), tint: Role.muted)
+            }
             Image(systemName: "chevron.forward").font(.footnote.weight(.semibold)).foregroundStyle(Role.muted)
         }
         .contentShape(Rectangle())
+    }
+
+    /// A small capsule at a row's end, its text in `tint`.
+    static func badge(_ text: String, tint: Color) -> some View {
+        Text(text)
+            .font(.caption2.weight(.medium))
+            .lineLimit(1)
+            .foregroundStyle(tint)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(tint.opacity(0.14), in: Capsule())
     }
 
     /// A name in its parts, bold where it matched.

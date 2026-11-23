@@ -9,7 +9,9 @@
 // chip offered, else the first result —, Esc empties the field and its chips (Search.Close), Backspace in an empty box
 // removes the last chip; Up and Down move through the list as the box's own. A result opens where it lives (the core's
 // SearchModel.open: the shell's state moves, a photo of another Memory opens its lightbox through the gallery's request);
-// a settings section is handed to [Settings]. What a screen reader hears is the core's announcement, raised as UI
+// a settings section is handed to [Settings]. Once the core counts a result opened (SearchShown.openedCount, inbox #959)
+// the box and its chips empty, as on every app. A result row carries the web's badges at its end: *You are here* on the
+// page on screen, the values its chips matched. What a screen reader hears is the core's announcement, raised as UI
 // Automation's notification event on the box.
 //
 // Every state is the core's (Search.Open, Watched.Search: SearchShown), every action one call, the text sent in the
@@ -51,6 +53,9 @@ internal sealed class SearchBox
     /// <summary>How many settings results the last state counted (SearchShown.openSettingsCount): each new one opens the
     /// page, the same section chosen twice included.</summary>
     private int _settingsOpened;
+    /// <summary>How many results the last state counted opened (SearchShown.openedCount, inbox #959): each new one empties
+    /// the field and its chips, as on every app.</summary>
+    private int _opened;
     /// <summary>A result was opened: the list stays shut until the person types, chooses or focuses again.</summary>
     private bool _held;
     private bool _focused;
@@ -195,6 +200,7 @@ internal sealed class SearchBox
         _id = null;
         // the next search is a new model, counting from nothing
         _settingsOpened = 0;
+        _opened = 0;
         Clear();
     }
 
@@ -225,10 +231,10 @@ internal sealed class SearchBox
             case SearchPlan.Entry.Open o:
                 Log.Write($"search opens result {o.Index}");
                 Act.Send(new Call.SearchOpenResult { search = search, index = o.Index });
-                // the list shuts once a result opened, as Explorer's does; the query stays
+                // the list shuts at once; the field empties once the core counts the result opened (Draw), never before
+                // the state that says what opened (a settings section) has come
                 _held = true;
                 _box.IsSuggestionListOpen = false;
-                Opened?.Invoke(_shown?.results.ElementAtOrDefault(o.Index)?.icon != "settings");
                 break;
             case SearchPlan.Entry.More:
                 Act.Send(new Call.SearchMore { search = search });
@@ -254,14 +260,25 @@ internal sealed class SearchBox
         DrawList(s);
         Announce(s);
         // a settings result: the page opens at its section, once per result chosen (the count moves with each)
+        var settings = false;
         if (_settingsOpened != s.openSettingsCount)
         {
             _settingsOpened = s.openSettingsCount;
             if (s.openSettings is { } section)
             {
                 Log.Write($"search opens settings at {section} ({s.openSettingsCount})");
+                settings = true;
                 Settings?.Invoke(section);
             }
+        }
+        // a result opened (inbox #959): the core emptied itself in this state; the box and its chips empty too, and the
+        // shell closes an overlaid pane where the result opens in its content (a node, a person, the page on screen)
+        if (_opened != s.openedCount)
+        {
+            _opened = s.openedCount;
+            Log.Write($"search empties after a result opened ({s.openedCount})");
+            Clear();
+            Opened?.Invoke(!settings);
         }
     }
 
@@ -357,7 +374,33 @@ internal sealed class SearchBox
                 Parts(second, reason);
             }
         }
-        return Item(entry, Row(r.icon, name, second, null), $"search-result:{index}", SearchPlan.Spoken(r, line));
+        // the web's badges at the row's end (inbox #962): *You are here* on the page on screen, the values its chips matched
+        var here = r.here ? Words.SearchHere() : null;
+        var matched = r.matched.Select(p => Said.Piece(p)).ToList();
+        var marks = (here is null ? matched : matched.Prepend(here)).ToList();
+        return Item(entry, Row(r.icon, name, second, null, Badges(here, matched)), $"search-result:{index}", SearchPlan.Spoken(r, line, marks));
+    }
+
+    /// <summary>A result's small labels at its row's end: <paramref name="here"/> (null: none) in the accent text colour,
+    /// each matched value secondary, all captions; null where there is none.</summary>
+    private static StackPanel? Badges(string? here, IReadOnlyList<string> matched)
+    {
+        if (here is null && matched.Count == 0) return null;
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+        if (here is not null)
+        {
+            var mark = Line(here, dim: true);
+            mark.Foreground = Brush("AccentTextFillColorPrimaryBrush");
+            AutomationProperties.SetAutomationId(mark, "search-here");
+            panel.Children.Add(mark);
+        }
+        foreach (var v in matched)
+        {
+            var value = Line(v, dim: true);
+            AutomationProperties.SetAutomationId(value, "search-matched");
+            panel.Children.Add(value);
+        }
+        return panel;
     }
 
     private static ListViewItem More(SearchPlan.Entry entry, int count)
@@ -369,8 +412,9 @@ internal sealed class SearchBox
         return Item(entry, row, "search-more", said);
     }
 
-    /// <summary>A row: the kind's glyph, the title with a dim second line under it where it has one, a dim word at its end.</summary>
-    private static Grid Row(string icon, TextBlock title, TextBlock? second, string? suffix)
+    /// <summary>A row: the kind's glyph, the title with a dim second line under it where it has one, a dim word at its end
+    /// (or <paramref name="end"/>, a result's badges).</summary>
+    private static Grid Row(string icon, TextBlock title, TextBlock? second, string? suffix, FrameworkElement? end = null)
     {
         var row = new Grid { ColumnSpacing = 12, Padding = new Thickness(0, 2, 0, 2) };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -389,6 +433,11 @@ internal sealed class SearchBox
             word.VerticalAlignment = VerticalAlignment.Center;
             Grid.SetColumn(word, 2);
             row.Children.Add(word);
+        }
+        else if (end is not null)
+        {
+            Grid.SetColumn(end, 2);
+            row.Children.Add(end);
         }
         return row;
     }
