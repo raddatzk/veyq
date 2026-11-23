@@ -82,7 +82,7 @@ async function run(write: () => Promise<void>) {
     await write()
     return true
   } catch (e) {
-    if (!(e instanceof Error && e.name === 'GuestDeclinedError')) error.value = t('expenses.people.failed')
+    if (!(e instanceof Error && e.name === 'GuestDeclinedError')) error.value = t('words.people_failed')
     return false
   } finally {
     busy.value = false
@@ -187,7 +187,7 @@ async function erase(p: Participant) {
       </li>
     </ul>
     <p v-if="erasedCount" class="veyq-form-copy">{{ t('expenses.people.deletedSummary', erasedCount) }}</p>
-    <p v-if="managePeople && shown.some((p) => !isSettled(ledger, p.id))" class="veyq-form-copy">{{ t('expenses.people.settleFirst') }}</p>
+    <p v-if="managePeople && shown.some((p) => !isSettled(ledger, p.id))" class="veyq-form-copy">{{ t('words.people_settle_first') }}</p>
     <form v-if="addPeople" class="expenses-inline-form" @submit.prevent="add">
       <VeyqInput v-model="newName" autocomplete="off" :aria-label="t('expenses.people.nameLabel')" :placeholder="t('expenses.people.nameLabel')" />
       <VeyqButton type="submit" :label="t('expenses.people.add')" icon="user-plus" size="small" :loading="busy" :disabled="!newName.trim()" />

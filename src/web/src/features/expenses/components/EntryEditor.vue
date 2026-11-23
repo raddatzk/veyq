@@ -4,7 +4,7 @@
 // rights say no (`../rights.ts`, inbox #401: a reader sees the very form a writer edits). What may be saved is
 // `../entryForm.ts`'s answer, and the write path asks `entryProblem` again before sealing: an entry that does not add up
 // is never saved (owner 2026-10-24). A `409 stale_revision` re-reads the Pot (the session's write does), loads the other
-// writer's version into the form and says so (`expenses.entry.stale`); saving again puts this one on top.
+// writer's version into the form and says so (`words.ed_stale`); saving again puts this one on top.
 //
 // Its receipts (uc.expenses.attach-receipts, `EntryReceipts`): what is picked is uploaded with the save, BEFORE the revision
 // that lists it (a new entry's id is minted when the dialog opens, so its receipts are completed against it), and the
@@ -51,7 +51,7 @@ import {
   formOf,
   itemAmount,
   payersTotal,
-  problemKey,
+  problemTextKey,
   restLeft,
   sharesPreview,
   today,
@@ -236,7 +236,7 @@ const rest = computed(() => restLeft(form.value))
 const showRest = computed(() => rest.value > 0n || form.value.items.length === 0)
 const money = (amount: bigint) => formatMoney(amount, form.value.currency, form.value.minorUnits, locale.value)
 
-const problemText = (p: FormProblem | PotWriteRefused['reason']) => t(`expenses.entry.problem.${problemKey(p)}`)
+const problemText = (p: FormProblem | PotWriteRefused['reason']) => t(problemTextKey(p))
 
 /** Problems a live line already says where they are as they are typed (items above the amount, a split's percents or
  *  amounts beside what they must make): the save adds no second line for them. */
@@ -274,11 +274,11 @@ async function run(write: () => Promise<void>) {
       error.value = problemText(e.reason)
     } else if (httpStatus(e) === BLOCKED) {
       // a moderator blocked the Pot or this entry since the page read it (inbox #542): nothing was stored
-      error.value = t('expenses.entry.blocked')
+      error.value = t('words.ed_blocked')
     } else if (e instanceof Error && e.name === 'GuestDeclinedError') {
       error.value = null
     } else {
-      error.value = t('expenses.entry.saveFailed')
+      error.value = t('words.ed_save_failed')
     }
   } finally {
     busy.value = false
@@ -389,11 +389,11 @@ function restore() {
 <template>
   <VeyqDialog :visible="true" :header="header" :closable="!busy" :close-on-escape="!busy" class="expenses-entry-dialog" @update:visible="emit('close')">
     <form class="veyq-form" @submit.prevent="save">
-      <VeyqMessage v-if="stale" tone="warn">{{ t('expenses.entry.stale') }}</VeyqMessage>
+      <VeyqMessage v-if="stale" tone="warn">{{ t('words.ed_stale') }}</VeyqMessage>
       <VeyqMessage v-if="deleted" tone="info">
         {{ t('expenses.entry.deletedHint') }}
         <template v-if="purgeAfter && restorable">{{ t('expenses.entry.restorableUntil', { date: purgeDate }) }}</template>
-        <template v-else-if="purgeAfter">{{ t('expenses.entry.notRestorable') }}</template>
+        <template v-else-if="purgeAfter">{{ t('words.entry_not_restorable') }}</template>
       </VeyqMessage>
       <VeyqMessage v-if="entry?.status === 'invalid'" tone="warn">{{ t('expenses.entry.invalid') }}</VeyqMessage>
 

@@ -35,12 +35,12 @@ describe('useTrashUndo', () => {
     const restore = vi.fn(async () => {})
     offer('Trips', restore)
     await flushPromises()
-    expect(bodyText()).toContain(t('node.trash.moved', { name: 'Trips' }))
+    expect(bodyText()).toContain(t('words.trash_moved', ['Trips']))
     expect(restore).not.toHaveBeenCalled()
     undoButton()!.click()
     await flushPromises()
     expect(restore).toHaveBeenCalledOnce()
-    expect(bodyText()).not.toContain(t('node.trash.undoFailed', { name: 'Trips' }))
+    expect(bodyText()).not.toContain(t('words.trash_undo_failed', ['Trips']))
   })
 
   it('a restore that fails says so and points at the trash', async () => {
@@ -49,6 +49,6 @@ describe('useTrashUndo', () => {
     await flushPromises()
     undoButton()!.click()
     await flushPromises()
-    expect(bodyText()).toContain(t('node.trash.undoFailed', { name: 'Report.pdf' }))
+    expect(bodyText()).toContain(t('words.trash_undo_failed', ['Report.pdf']))
   })
 })

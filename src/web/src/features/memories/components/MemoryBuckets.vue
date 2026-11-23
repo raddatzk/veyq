@@ -27,7 +27,7 @@ import {
 import { openedBlobMeta, openedMeta } from '../openedListing'
 import { useMemoryView } from '../source'
 import { guestDisplayName } from '../../../core/sharing/guestIdentity'
-import { refusalsByReason, sealedMediaName } from '../mediaRefusal'
+import { MEDIA_REFUSAL_TEXT, refusalsByReason, sealedMediaName } from '../mediaRefusal'
 import { isSupportedMediaFile } from '../uploadQueue'
 import { useToast } from '../../../shared/state/useToast'
 import { useUndo } from '../../../shared/state/useUndo'
@@ -390,7 +390,7 @@ async function deleteSelected() {
     toast.showUndo({ summary: t('memory.buckets.deletedToTrash', { count: deleted.length }, deleted.length), onUndo: undoDelete, life: 8000 })
   }
   for (const [why, refusedNames] of refused) {
-    toast.error(t('memory.buckets.deleteRefused', { names: refusedNames.join(', '), reason: t(`memory.buckets.deleteRefusedReason.${why}`) }))
+    toast.error(t('memory.buckets.deleteRefused', { names: refusedNames.join(', '), reason: t(MEDIA_REFUSAL_TEXT[why]) }))
   }
 }
 // Undo restores what went, one write per medium; a refused restore is named with its reason as a refused delete is
@@ -403,7 +403,7 @@ async function undoDelete() {
   await loadBuckets()
   emit('changed')
   for (const [why, refusedNames] of refused) {
-    toast.error(t('memory.buckets.restoreRefused', { names: refusedNames.join(', '), reason: t(`memory.buckets.deleteRefusedReason.${why}`) }))
+    toast.error(t('memory.buckets.restoreRefused', { names: refusedNames.join(', '), reason: t(MEDIA_REFUSAL_TEXT[why]) }))
   }
 }
 onBeforeUnmount(() => { toast.dismissUndo() }) // drop any lingering undo-toast (the `useUndo` window tears itself down)

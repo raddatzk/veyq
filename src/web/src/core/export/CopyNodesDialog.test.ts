@@ -116,7 +116,7 @@ describe('CopyNodesDialog: the summary, before anything is written', () => {
     }))
     await mountDialog([byId('reisen')])
     expect(text('copy-summary')).toBe(t('node.copy.summary', { nodes: 3, size: '2 kB', target: 'Familie' }, 3))
-    expect(listed('copy-left-out')).toEqual([t('node.copy.leftOutLine', { name: 'Lissabon', reason: t('node.copy.reason.not_copyable') })])
+    expect(listed('copy-left-out')).toEqual([t('node.copy.leftOutLine', { name: 'Lissabon', reason: t('words.left_out_not_copyable') })])
     expect(listed('copy-losses')).toEqual([t('node.copy.lossAlways'), t('node.copy.lossFolderCover'), t('depot.dropBox.copyLoss')])
     expect(listed('copy-losses')).not.toContain(t('memory.copyLoss'))
   })
@@ -144,7 +144,7 @@ describe('CopyNodesDialog: the summary, before anything is written', () => {
   it('nothing copyable: says so and offers no copy', async () => {
     vi.mocked(prepareCopy).mockResolvedValue(prepared({ nodes: 0, bytes: 0, kinds: [], leftOut: [{ name: 'Lissabon', kind: MEMORY_KIND, reason: 'not_copyable' }] }))
     await mountDialog([byId('lissabon')])
-    expect(text('copy-summary')).toBe(t('node.copy.nothing'))
+    expect(text('copy-summary')).toBe(t('words.copy_nothing'))
     expect(submit().disabled).toBe(true)
     expect(tenantStorageFits).not.toHaveBeenCalled()
   })

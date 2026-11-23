@@ -192,7 +192,7 @@ describe('a refused rename in place', () => {
     await renameInHeader('Paris')
     expect(renameNode).not.toHaveBeenCalled()
     expect(nameField(), 'the field stays open').not.toBeNull()
-    expect(document.body.querySelector('.veyq-node-header-rename-error')?.textContent).toBe(t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'Paris' }))
+    expect(document.body.querySelector('.veyq-node-header-rename-error')?.textContent).toBe(t('words.node_name_taken_by', [t('node.aFolder'), 'Paris']))
     expect(router.currentRoute.value.hash).toBe('#~me/trips/rome/')
     nameField()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
     await flushPromises()

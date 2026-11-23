@@ -154,7 +154,7 @@ describe('a READ_WRITE guest moves inside its share', () => {
     const at3 = { purpose: 'content-key', scopeId: SCOPE_ID, nodeId: NESTED, epoch: 0, placementRevision: 3 } as const
     expect(Array.from(v1.open(at3, keys.root, fromB64std(req.wrappedContentKey)))).toEqual(Array.from(keys.nested))
     expect(reload, 're-resolved after the move').toHaveBeenCalled()
-    expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('node.move.moved', { name: 'Feldpost', to: 'Familie' }) }))
+    expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('words.move_moved', ['Feldpost', 'Familie']) }))
     expect(authenticatedCalls).toEqual([])
   })
 
@@ -210,7 +210,7 @@ describe('a READ_WRITE guest moves a selection of its level', () => {
       expect(call.updateShareNodeRequest).toMatchObject({ parentId: LETTERS, placementRevision: call.nodeId === SLIP ? 1 : 0 })
     }
     expect(reload, 're-resolved once, after the last').toHaveBeenCalledTimes(1)
-    expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('node.move.many.moved', { count: 2, to: 'Briefe' }) }))
+    expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('words.move_many_moved', [2, 'Briefe']) }))
     expect(authenticatedCalls).toEqual([])
     w.unmount()
   })
@@ -242,7 +242,7 @@ describe('a READ_WRITE guest drags and drops', () => {
     expect(updateShareNode).toHaveBeenCalledTimes(1)
     expect(updateShareNode.mock.calls[0][0]).toMatchObject({ nodeId: NOTE, xContributorToken: 'contributor-token' })
     expect(updateShareNode.mock.calls[0][0].updateShareNodeRequest).toMatchObject({ parentId: LETTERS, placementRevision: 0 })
-    expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('node.move.moved', { name: 'Notizen', to: 'Briefe' }) }))
+    expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('words.move_moved', ['Notizen', 'Briefe']) }))
     w.unmount()
 
     w = await mountAt(ShareRole.ReadWrite, LETTERS, { requestGuest: async () => guest, reload })

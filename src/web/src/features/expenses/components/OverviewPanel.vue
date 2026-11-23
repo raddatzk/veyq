@@ -107,7 +107,7 @@ async function record(list: readonly Transfer[]) {
         <VeyqButton v-if="canWrite" :label="t('expenses.balances.record')" variant="secondary" appearance="outlined" size="small" :disabled="busy" @click="record([tr])" />
       </li>
     </ul>
-    <VeyqMessage v-if="failed" tone="error">{{ t('expenses.entry.saveFailed') }}</VeyqMessage>
+    <VeyqMessage v-if="failed" tone="error">{{ t('words.ed_save_failed') }}</VeyqMessage>
 
     <h3 class="expenses-subhead">{{ t('expenses.overview.byCategory') }}</h3>
     <p v-if="!categories.length" class="veyq-empty veyq-empty-inline">{{ t('expenses.overview.empty') }}</p>

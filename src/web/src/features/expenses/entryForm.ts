@@ -64,7 +64,7 @@ export interface EntryForm {
   refunds?: string
 }
 
-/** Why the form cannot be saved: a field the person must fix (an i18n key under `expenses.entry.problem`), or one of the
+/** Why the form cannot be saved: a field the person must fix (its words in {@link PROBLEM_WORDS}), or one of the
  *  ledger's rules. */
 export type FormProblem =
   | 'title'
@@ -363,9 +363,37 @@ function allocationOf(form: EntryForm, amount: bigint): { allocation: Allocation
   return 'problem' in split ? { problem: split.problem === 'empty' ? 'split' : split.problem, at: 'rest' } : { allocation: { items, rest: split.split } }
 }
 
-/** The catalog key of a problem (`expenses.entry.problem.<key>`): the reason's words in camelCase (`payers-unbalanced` →
- *  `payersUnbalanced`), as every key of the catalog is spelled. */
+/** The catalog key of a write path's own refusal (`expenses.entry.problem.<key>`): the reason's words in camelCase
+ *  (`not-settled` → `notSettled`), as every key of the catalog is spelled. */
 export const problemKey = (problem: string): string => problem.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())
+
+/** A form's problems say what the apps' notices say, in the apps' catalog's words (`words.*`, ADR 0136 § The web's
+ *  words); a `Record` so a new problem cannot go unsaid. */
+export const PROBLEM_WORDS: Record<FormProblem, string> = {
+  title: 'words.problem_title',
+  date: 'words.problem_date',
+  amount: 'words.problem_amount',
+  rate: 'words.problem_rate',
+  payers: 'words.problem_payers',
+  split: 'words.problem_split',
+  'split-shares': 'words.problem_split_shares',
+  'split-percents': 'words.problem_split_percents',
+  'split-amounts': 'words.problem_split_amounts',
+  items: 'words.problem_items',
+  transfer: 'words.problem_transfer',
+  'payers-unbalanced': 'words.problem_payers_unbalanced',
+  'receivers-unbalanced': 'words.problem_receivers_unbalanced',
+  'items-above-total': 'words.problem_items_above_total',
+  'rest-unallocated': 'words.problem_rest_unallocated',
+  'percent-unbalanced': 'words.problem_percent_unbalanced',
+  'amounts-unbalanced': 'words.problem_amounts_unbalanced',
+  'named-twice': 'words.problem_named_twice',
+  'unknown-participant': 'words.problem_unknown_participant',
+}
+
+/** The message key of a problem: a form's in the shared words, a write path's own refusal under `expenses.entry.problem`. */
+export const problemTextKey = (problem: string): string =>
+  Object.hasOwn(PROBLEM_WORDS, problem) ? PROBLEM_WORDS[problem as FormProblem] : `expenses.entry.problem.${problemKey(problem)}`
 
 /** The sum of typed amounts that parse, in minor units; one that does not parse counts nothing. */
 export function typedSum(texts: readonly string[], minorUnits: number): bigint {

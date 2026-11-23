@@ -184,12 +184,12 @@ describe('a Pot under its own link', () => {
     await flushPromises()
     await buttonIn(dialog()!, t('common.save'))!.click()
     await flushPromises()
-    expect(dialog()!.textContent).toContain(t('expenses.entry.blocked'))
+    expect(dialog()!.textContent).toContain(t('words.ed_blocked'))
     vi.mocked(appendPotWrites).mockRejectedValueOnce(httpError(500))
     await buttonIn(dialog()!, t('common.save'))!.click()
     await flushPromises()
-    expect(dialog()!.textContent).toContain(t('expenses.entry.saveFailed'))
-    expect(dialog()!.textContent).not.toContain(t('expenses.entry.blocked'))
+    expect(dialog()!.textContent).toContain(t('words.ed_save_failed'))
+    expect(dialog()!.textContent).not.toContain(t('words.ed_blocked'))
   })
 
   it('READ: reads everything, writes nothing (control: READ_WRITE above adds)', async () => {

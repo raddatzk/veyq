@@ -17,7 +17,7 @@
 import { useI18n } from 'vue-i18n'
 import type { OptimisticTileVM } from '../useOptimisticTiles'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
-import { APPLICATION_OFF } from '../../../core/blob/queue'
+import { APPLICATION_OFF, UPLOAD_STATUS_TEXT } from '../../../core/blob/queue'
 
 const props = defineProps<{
   tile: OptimisticTileVM
@@ -33,7 +33,7 @@ const emit = defineEmits<{ retry: [fileId: string]; delete: [fileId: string] }>(
 const { t } = useI18n()
 const RING_CIRCUMFERENCE = 2 * Math.PI * 16 // matches the SVG circle radius below
 /** What this file is doing right now, in the user's language — the same string the upload tray shows. */
-const statusLabel = () => t(`media.uploadStatus.${props.tile.upload.status}`)
+const statusLabel = () => t(UPLOAD_STATUS_TEXT[props.tile.upload.status])
 // A settled uploader tile stays in the grid (its upload lists no media for the uploader) with a delete affordance
 // instead of the progress ring — the local preview IS the session-only own-view.
 const isDoneDeletable = () => props.deletable === true && props.tile.upload.status === 'done'

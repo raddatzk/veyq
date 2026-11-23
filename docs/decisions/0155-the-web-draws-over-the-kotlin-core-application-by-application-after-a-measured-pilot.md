@@ -160,8 +160,10 @@ Measured before the decision (2026-11-20):
          eager, its rules in `main`; the last of this list, which is built).
 
       Not slices: the **formats** move with the slice or application that owns each (money with Expenses) — alone they
-      miss R by a measured factor (ADR 0154 § Consequences: 7.1×); **notices** wait until the web and the apps read one
-      word catalog (their words are generated for the web since 2026-11-22, ADR 0136 § The web's words); the **slug folding** (`shared/naming.ts`) stays beside the Kotlin as decision 9's crypto does, held by
+      miss R by a measured factor (ADR 0154 § Consequences: 7.1×); **notices** waited until the web and the apps read one
+      word catalog — released 2026-11-23: the web registers the notices' words from `words.json` and says them there
+      (ADR 0136 § The notices' move), so the notices slice (the web's toasts raised by the core's `*Notices.kt` tables)
+      is open, and adds the words it raises to `web.json`'s `read`; the **slug folding** (`shared/naming.ts`) stays beside the Kotlin as decision 9's crypto does, held by
       `v1.json#name_folding`; the **URL fragment rules** are the router's (decision 1). Every platform façade lands in
       `:core`'s one JavaScript file, which a bundler cannot split, so a rule that is lazy in TypeScript turns eager when
       it moves — the reason slices 4 to 6 come last, each asking first whether a module of its own is cheaper (slice 4 measured

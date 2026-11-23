@@ -20,6 +20,8 @@ import {
   parsePercent,
   payersTotal,
   problemKey,
+  problemTextKey,
+  PROBLEM_WORDS,
   restLeft,
   splitRow,
   withCurrency,
@@ -32,6 +34,7 @@ import { buildLedger } from './domain/ledger'
 import { sealPotWrites, type PotWrite } from './domain/potApi'
 import { openServedRevisions, type HeldRevision } from './domain/revisions'
 import { expensesMessages } from './i18n'
+import generatedWords from '../../i18n/words.generated.json'
 
 type VectorPot = {
   name: string
@@ -232,10 +235,16 @@ describe('the form as a person fills it', () => {
     const reasons = ['title', 'date', 'amount', 'rate', 'payers', 'split', 'split-shares', 'split-percents', 'split-amounts', 'items', 'transfer', 'payers-unbalanced',
       'receivers-unbalanced', 'items-above-total', 'rest-unallocated', 'percent-unbalanced', 'amounts-unbalanced', 'named-twice', 'unknown-participant', 'record-twice',
       'erasure-through-append', 'not-a-participant', 'not-settled', 'joined-moved', 'empty', 'receipt-dropped-and-kept']
+    // a form's problem is said in the shared words (ADR 0136 § The web's words), a write path's own under expenses.entry.problem
+    const shared = reasons.filter((r) => Object.hasOwn(PROBLEM_WORDS, r))
+    const own = reasons.filter((r) => !Object.hasOwn(PROBLEM_WORDS, r))
+    expect(shared.sort()).toEqual(Object.keys(PROBLEM_WORDS).sort())
     for (const locale of ['en', 'de'] as const) {
       const sentences = expensesMessages[locale].expenses.entry.problem as Record<string, string>
-      expect(reasons.map(problemKey).filter((k) => !sentences[k])).toEqual([])
-      expect(Object.keys(sentences).sort()).toEqual(reasons.map(problemKey).sort())
+      expect(own.map(problemKey).filter((k) => !sentences[k])).toEqual([])
+      expect(Object.keys(sentences).sort()).toEqual(own.map(problemKey).sort())
+      const words = generatedWords[locale] as Record<string, string>
+      expect(shared.map((r) => problemTextKey(r)).filter((k) => !k.startsWith('words.') || !words[k.slice('words.'.length)])).toEqual([])
     }
   })
 })

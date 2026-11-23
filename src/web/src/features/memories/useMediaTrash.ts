@@ -15,7 +15,7 @@ import { hasDerivatives, type MediaItem } from './media'
 import { openListing, openedMeta } from './openedListing'
 import type { MemorySource } from './source'
 import { galleryDisplayAspectRatio } from './mediaGridLayout'
-import { refusalsByReason, sealedMediaName } from './mediaRefusal'
+import { MEDIA_REFUSAL_TEXT, refusalsByReason, sealedMediaName } from './mediaRefusal'
 import { useThumbnailPipeline } from './useThumbnailPipeline'
 import { useToast } from '../../shared/state/useToast'
 import type { TreeNode } from '../../core/node/tree'
@@ -74,7 +74,7 @@ export function useMediaTrash(ctx: MediaTrashContext) {
     ctx.reloadGallery()
     const refused = await refusalsByReason(results, names)
     for (const [why, refusedNames] of refused) {
-      toast.error(t('memory.buckets.restoreRefused', { names: refusedNames.join(', '), reason: t(`memory.buckets.deleteRefusedReason.${why}`) }))
+      toast.error(t('memory.buckets.restoreRefused', { names: refusedNames.join(', '), reason: t(MEDIA_REFUSAL_TEXT[why]) }))
     }
     if (refused.size) void loadTrash() // resync the tab, as a refused purge does
   }

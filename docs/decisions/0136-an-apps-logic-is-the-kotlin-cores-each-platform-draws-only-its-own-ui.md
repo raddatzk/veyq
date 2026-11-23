@@ -443,23 +443,66 @@ punctuation, case); only 427 web keys derive an app key's name.
 3. **The notices' words are generated for the web** — the mechanism ADR 0155 decision 7.2 waited on ("notices after one
    word catalog"). `generate_words.py --web` writes `src/web/src/i18n/words.generated.json` (committed): the keys
    `web.json`'s `read` names, in vue-i18n's syntax with list placeholders (`{n}` → `{n-1}`, a `Notice`'s arguments
-   arrive positional), plurals as ` | ` forms, syntax characters as literal interpolations. The guard holds `read` equal
-   to the `Msg`s the `*Notices.kt` tables name (110) and the file to the generator's output; `words.test.ts` renders
-   every word through vue-i18n in both languages against the catalog's own text. The web does not register the
-   `words` namespace yet: the notices' move does, switching its toasts' call sites to it, so ~110 unread words do not
-   ride the eager set meanwhile.
+   arrive positional), plurals as ` | ` forms, syntax characters as literal interpolations. The guard holds the file to
+   the generator's output and every `read` key to a `Msg` the `*Notices.kt` tables name; `words.test.ts` renders every
+   word through vue-i18n in both languages against the catalog's own text. Until the notices' move (§ The notices'
+   move, below) `read` was all 113 of those `Msg`s and nothing registered them; the move registers `words` and narrows
+   `read` to the 76 the web says.
 4. **One source for all of it is staged, not built.** Generating every web message from `words.json` would add the
    1,287 web-only keys to it (the apps generating resources for words they never show) and rename or map the web's
    5,092 `t('…')` calls in 202 files (`grep -rhoE "\bt\(['\"\`]" src/web/src --include='*.vue' --include='*.ts'`);
    that churn would not merge beside the work that adds words to both. The order: (1) the notices' move registers
-   `words` and deletes the web's twin keys of those words; (2) each application, as ADR 0155 decision 7.3 moves it onto
+   `words` and deletes the web's twin keys of those words (**built** 2026-11-23, § The notices' move); (2) each application, as ADR 0155 decision 7.3 moves it onto
    the core, joins its shared words to `read` and deletes its web twins; (3) the web-only words stay the web's until an
    app needs one.
 
 The guard's limits (its docstring): a pair is only as true as `web.json` says; a meaning worded apart in English
 entirely, or in one or two words, is not offered for pairing (the homographs live there — "Open" the state and the
-verb); a notice raised outside a `*Notices.kt` is not in `read`. `validate_guard_gaps.py` cases 126–131 pin its rules
+verb); a notice raised outside a `*Notices.kt` cannot be in `read`. `validate_guard_gaps.py` cases 126–132 pin its rules
 and the short-text limit.
+
+### The notices' move (inbox #1170, built 2026-11-23, branch `claude/notices-words`)
+
+Step (1) of item 4. `src/web/src/i18n/index.ts` registers `words.generated.json` as core's `words` namespace (so no
+application can take it, `addApplicationMessages`); every call site of a web key `web.json` twinned with a notice's word
+calls `t('words.<key>', [args…])` instead — the named arguments become the list the apps' `{1}`, `{2}` are, in the
+order the twin-equal rule already held them to — and the 80 such keys of `index.ts` and the applications' `i18n.ts`
+are deleted in both languages, with Memories' `media.uploadStatus.*` (six one-word labels the pairing never offered,
+the same states as core's `upload.status.*`: both now read `UPLOAD_STATUS_TEXT`). A refusal or a reason built at run
+time (`node.move.refused.${code}`, `expenses.entry.problem.${…}`, the upload state) reads a typed table instead
+(`MOVE_REFUSAL_TEXT`, `DELETE_REFUSAL_TEXT`, `PROBLEM_WORDS`, `UPLOAD_STATUS_TEXT`, `MEDIA_REFUSAL_TEXT`, and the copy and
+export dialogs' reason tables): its codes the apps' notices say point into `words`, the rest stay the web's keys, and
+`Record<Code, string>` makes a new code a type error rather than a raw key. No text a user sees changed: a twin was
+held equal in both languages before it was deleted (twin-equal), and `words.test.ts` renders each word as the catalog
+writes it.
+
+Its checks: `validate_web_words` **read-has-no-twin** (a `read` word stands in no `twins` / `open` pair, and no web
+message says what a `read` word says, of any length, unless the pair is `apart` — guard-gaps case 132 re-adds
+`Queued`); `i18n.test.ts` **names only words it registered** (every `words.<key>` a source quotes is a registered word,
+no `words.*` key is built at run time) beside the existing **uses every key it carries** (a registered word no source
+names is red). Measured eager set (`vite build`, `index.html`'s entry and modulepreloads, gzip -9): 658,043 B before,
+659,341 B after, **+1,298 B gz**; the generated words file alone is 3,956 B gz for the 76 words and would be 5,501 B gz
+for all 113.
+
+Decision log (question, choice and why, evidence, cost):
+- *Which words does the web register?* Only those it says: `read` narrows from the 113 `Msg`s of the notices tables to
+  the 76 with a web twin, and **read-is-notices** turns from equality into `read` ⊆ the notices' `Msg`s. Registering
+  all 113 would put 37 words no web source names on the eager set (+1,545 B gz on the file alone, measured; with the move's own +1,298 B an estimated
+  ~2.8 KB gz, over the 2 KB the move was allowed) and redden `i18n.test.ts`' unused-key rule. Cost: a notice's word no longer becomes the web's by being
+  raised; ADR 0155 decision 7.2's notices slice, which draws the web's notices from the core, adds its words to `read`
+  then, and step (2) widens the subset rule to an application's shared words.
+- *A twin's return:* a `read` word's copy coming back as a web key is red by text, of any length, because `unpaired`
+  asks for three words and the upload states are one ("Queued", "Done"). Two web keys say a `read` word's text with
+  another meaning and are `apart`: `common.done` (the button) and `memory.banner.preparing` (a banner being made ready).
+- *Twins that only paired through a deleted web key:* `memory_refused_scope_deleting` and `trash_name_taken` were twinned
+  with web keys that were also a `read` word's twin (`memory.buckets.deleteRefusedReason.scope_deleting`,
+  `node.slugTaken`); those pairs went with the keys. Nothing holds those two app keys equal to `delete_refused_scope_deleting`
+  / `node_slug_taken` now — the apps' own catalog, not the web's, is where that duplication lives.
+- *Near-twins left alone:* notice words the web says in other words (`copy_done` ~ `node.copy.copied`, `create_pot_*` ~
+  `expenses.create.*`, `share_reissue_hint` ~ `depot.dropBox.shareReissueHint`) and short exact ones the pairing does not
+  offer (`import_imported` ~ `export.imported`, `left_out_line` ~ `node.copy.leftOutLine`, `left_out_unsupported` ~
+  `node.copy.reason.unsupported_kind`) stay the web's: moving the first changes what a user reads (the owner's copy
+  call), the second are inbox #1171's to pair first.
 
 ## Alternatives considered
 

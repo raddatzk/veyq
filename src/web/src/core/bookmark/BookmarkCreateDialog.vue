@@ -80,7 +80,7 @@ async function submit() {
     emit('done')
     emit('close')
   } catch (e) {
-    error.value = httpStatus(e) === HttpStatus.conflict ? t('node.slugTaken') : t('node.bookmark.createFailed')
+    error.value = httpStatus(e) === HttpStatus.conflict ? t('words.node_slug_taken') : t('node.bookmark.createFailed')
   } finally {
     loading.value = false
   }

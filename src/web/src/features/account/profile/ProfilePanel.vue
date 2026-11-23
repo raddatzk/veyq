@@ -61,7 +61,7 @@ const { run: runSave, pending: saving } = useAsyncAction(
       if (!isUnauthorized(e)) error.value = t('profilePicture.saveFailed')
       return
     }
-    toast.success(t('profile.saved'))
+    toast.success(t('words.profile_saved'))
   },
   {
     onError: async (e) => {

@@ -16,9 +16,15 @@ import type { TreeNode } from '../node/tree'
 import { formatBytes } from '../../shared/formatBytes'
 import { SaveTooLarge, isSaveCancelled, openSaveTarget } from '../../shared/saveStream'
 import { useToast } from '../../shared/state/useToast'
-import { prepareExport, type PreparedExport } from './exportSubtree'
+import { prepareExport, type PreparedExport, type SkippedNode } from './exportSubtree'
 import { archiveName } from './archiveName'
 import { ExportError, MANIFEST_APP_VERSION } from './manifest'
+
+/** Why a node stays out of the download: the apps' notices' words where they say it too (ADR 0136 § The web's words). */
+const SKIP_TEXT: Record<SkippedNode['reason'], string> = {
+  unsupported_kind: 'export.reason.unsupported_kind',
+  nothing_to_export: 'words.left_out_nothing',
+}
 
 const props = defineProps<{ node: TreeNode; access: Access; tree: TreeSource<TreeNode>; displayName: string }>()
 const emit = defineEmits<{ close: [] }>()
@@ -91,7 +97,7 @@ function close() {
         <div v-if="prepared.skipped.length > 0" data-testid="export-skipped">
           <p class="veyq-form-copy">{{ t('export.skipped') }}</p>
           <ul class="export-skipped">
-            <li v-for="(s, i) in prepared.skipped" :key="i">{{ s.name }} <small>({{ t(`export.reason.${s.reason}`) }})</small></li>
+            <li v-for="(s, i) in prepared.skipped" :key="i">{{ s.name }} <small>({{ t(SKIP_TEXT[s.reason]) }})</small></li>
           </ul>
         </div>
         <template v-if="step === 'writing'">

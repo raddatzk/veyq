@@ -80,7 +80,7 @@ describe('moveTo: one node, as MoveNodeDialog moves it', () => {
     expect(mover.moveMany).not.toHaveBeenCalled()
     expect(toast.showUndo).toHaveBeenCalledOnce()
     const undo = toast.showUndo.mock.calls[0][0] as { summary: string; onUndo: () => void }
-    expect(undo.summary).toBe(t('node.move.moved', { name: 'bericht.pdf', to: 'Rom' }))
+    expect(undo.summary).toBe(t('words.move_moved', ['bericht.pdf', 'Rom']))
     expect(stayOn).toHaveBeenCalledWith('reisen')
     undo.onUndo()
     await flushPromises()
@@ -93,7 +93,7 @@ describe('moveTo: one node, as MoveNodeDialog moves it', () => {
     mountHost(mover).doors.moveTo([byId('rom')], null)
     await flushPromises()
     expect(mover.move.mock.calls).toEqual([['rom', null]])
-    expect((toast.showUndo.mock.calls[0][0] as { summary: string }).summary).toBe(t('node.move.moved', { name: 'Rom', to: 'Familie' }))
+    expect((toast.showUndo.mock.calls[0][0] as { summary: string }).summary).toBe(t('words.move_moved', ['Rom', 'Familie']))
   })
 
   it('a name a sibling there already takes is refused before anything is sent, in the dialog\'s words', async () => {
@@ -109,7 +109,7 @@ describe('moveTo: one node, as MoveNodeDialog moves it', () => {
     let mover = recorder({ rom: coded(422, 'illegal_structure') })
     mountHost(mover).doors.moveTo([byId('rom')], 'archiv')
     await flushPromises()
-    expect(toast.error.mock.calls).toEqual([[t('node.move.refused.illegal_structure')]])
+    expect(toast.error.mock.calls).toEqual([[t('words.move_refused_illegal_structure')]])
     toast.error.mockClear()
     mover = recorder({ rom: new MoveDeclined() })
     mountHost(mover).doors.moveTo([byId('rom')], 'archiv')
@@ -155,7 +155,7 @@ describe('moveTo: several, as MoveNodesDialog moves them', () => {
     await flushPromises()
     expect(mover.moveMany.mock.calls).toEqual([[[{ nodeId: 'rom', to: null }, { nodeId: 'file', to: null }]]])
     expect(mover.move).not.toHaveBeenCalled()
-    expect((toast.showUndo.mock.calls[0][0] as { summary: string }).summary).toBe(t('node.move.many.moved', { count: 2, to: 'Familie' }))
+    expect((toast.showUndo.mock.calls[0][0] as { summary: string }).summary).toBe(t('words.move_many_moved', [2, 'Familie']))
     expect(stayOn).toHaveBeenCalledWith('reisen')
     expect(document.body.querySelector('.move-dialog'), 'everything moved: no dialog').toBeNull()
   })
@@ -174,10 +174,10 @@ describe('moveTo: several, as MoveNodesDialog moves them', () => {
     // bericht.pdf folds onto Bericht.PDF there: left out, never sent
     expect(mover.moveMany.mock.calls).toEqual([[[{ nodeId: 'rom', to: 'archiv' }, { nodeId: 'box2', to: 'archiv' }]]])
     expect(state.movingMany.value?.summary).toBeDefined()
-    expect(summaryMoved()).toBe(t('node.move.many.moved', { count: 1, to: 'Archiv' }))
+    expect(summaryMoved()).toBe(t('words.move_many_moved', [1, 'Archiv']))
     expect(summaryLines()).toEqual([
       t('node.move.many.reason', { name: 'bericht.pdf', reason: t('node.move.nameTakenThere', { kind: t('depot.aFile'), name: 'Bericht.PDF' }) }),
-      t('node.move.many.reason', { name: 'Rom', reason: t('node.move.refused.slug_taken') }),
+      t('node.move.many.reason', { name: 'Rom', reason: t('words.move_refused_slug_taken') }),
     ])
     expect(document.body.querySelector('.move-browser'), 'the summary, not the browser').toBeNull()
   })

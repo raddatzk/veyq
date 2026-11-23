@@ -172,7 +172,7 @@ describe('FolderShareDialog — "Add files only"', () => {
     await byText(w, t('share.create'))!.trigger('click')
     await flushPromises()
     expect(createLink).not.toHaveBeenCalled()
-    expect(w.get('.folder-share-name-taken').text()).toBe(t('node.nameTakenBy', { kind: t('depot.dropBox.aDropBox'), name: 'Einsendungen' }))
+    expect(w.get('.folder-share-name-taken').text()).toBe(t('words.node_name_taken_by', [t('depot.dropBox.aDropBox'), 'Einsendungen']))
   })
 
   it('says a name the server found taken (the race backstop), and still has the host re-read the tree', async () => {
@@ -182,7 +182,7 @@ describe('FolderShareDialog — "Add files only"', () => {
     await chooseUpload(w, 'Einsendungen')
     await byText(w, t('share.create'))!.trigger('click')
     await flushPromises()
-    expect(w.get('.folder-share-name-taken').text()).toBe(t('node.slugTaken'))
+    expect(w.get('.folder-share-name-taken').text()).toBe(t('words.node_slug_taken'))
     expect(w.emitted('done')).toHaveLength(1)
   })
 })

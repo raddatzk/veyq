@@ -12,7 +12,7 @@ import { useI18n } from 'vue-i18n'
 import type { TreeSource } from '../access'
 import type { TreeNode } from './tree'
 import { registry } from '../applications/registry'
-import { moveRefusalOf, MoveDeclined, type NodeMover } from './move'
+import { MOVE_REFUSAL_TEXT, moveRefusalOf, MoveDeclined, type NodeMover } from './move'
 import { collidingSibling, endsIdentity, planMove } from './treeRules'
 import { joinList } from './selection'
 import { TRASH_UNDO_MS } from './trashUndo'
@@ -54,7 +54,7 @@ export function useMoveRun() {
   }
   function nameTakenText(sibling: TreeNode): string {
     const info = registry.kind(sibling.kind)
-    const noun = (info.supported && info.nounWithArticle) || 'node.anItem'
+    const noun = (info.supported && info.nounWithArticle) || 'words.node_an_item'
     return t('node.move.nameTakenThere', { kind: t(noun), name: sibling.name })
   }
 
@@ -84,10 +84,10 @@ export function useMoveRun() {
       const code = await moveRefusalOf(e)
       // A lost race: re-read, so the next attempt builds on the node as it now is.
       if (code === 'stale_placement') await mover.refresh().catch(() => {})
-      return { status: 'refused', text: t(`node.move.refused.${code}`) }
+      return { status: 'refused', text: t(MOVE_REFUSAL_TEXT[code]) }
     }
     opts.sending?.(false)
-    const summary = t('node.move.moved', { name, to: destinationName(target, to) })
+    const summary = t('words.move_moved', [name, destinationName(target, to)])
     if (identity) {
       toast.success(summary) // nothing moves back into a drop box: no undo
     } else {
@@ -136,16 +136,16 @@ export function useMoveRun() {
     } catch (e) {
       opts.sending?.(false)
       if (e instanceof MoveDeclined) return { status: 'cancelled' } // a guest declined to name itself: nothing sent, nothing said
-      return { status: 'refused', text: t(`node.move.refused.${await moveRefusalOf(e)}`) }
+      return { status: 'refused', text: t(MOVE_REFUSAL_TEXT[await moveRefusalOf(e)]) }
     }
     opts.sending?.(false)
     const byId = new Map(send.map((n) => [n.id, n]))
     const moved = outcomes.filter((o) => o.error === null).map((o) => byId.get(o.nodeId)!)
     const refusedLines: string[] = []
     for (const o of outcomes) {
-      if (o.error !== null) refusedLines.push(t('node.move.many.reason', { name: nameOf(byId.get(o.nodeId)!), reason: t(`node.move.refused.${await moveRefusalOf(o.error)}`) }))
+      if (o.error !== null) refusedLines.push(t('node.move.many.reason', { name: nameOf(byId.get(o.nodeId)!), reason: t(MOVE_REFUSAL_TEXT[await moveRefusalOf(o.error)]) }))
     }
-    const movedText = moved.length > 0 ? t('node.move.many.moved', { count: moved.length, to: destinationName(target, to) }) : t('node.move.many.noneMoved')
+    const movedText = moved.length > 0 ? t('words.move_many_moved', [moved.length, destinationName(target, to)]) : t('node.move.many.noneMoved')
     if (moved.length > 0) {
       // Nothing moves back into a drop box: a guest's folder that left one has no undo, the rest move back where they were.
       const undoable = moved.filter((n) => !endsIdentity(target.tree, n))

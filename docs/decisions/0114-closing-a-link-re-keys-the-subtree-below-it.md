@@ -129,7 +129,7 @@ which every re-key commit bumps, so a new key under an unchanged scope key needs
    [ADR 0080](0080-every-node-carries-a-key-a-folders-key-behaves-like-a-memorys.md) Decision 11), a scope being
    deleted, and an end date leave the marks for any member's worker (owner-only nodes for an owner's). A group
    removal's rotation marks every node anyway; its close's marks add nothing. **What the screen says** is the
-   re-keying state a rotation shows, worded for the subtree, not the space (`share.closedRekeying`, the owner's words):
+   re-keying state a rotation shows, worded for the subtree, not the space (`share.closedRekeying`, since the notices' move `words.share_closed_rekeying`, the owner's words):
    *de* „Der Link ist abgeschaltet. Was darunter liegt, bekommt ein neues Schloss, damit der alte Link auch künftig
    nichts mehr öffnet.“ *en* "The link is switched off. What is below it gets a new lock, so the old link opens
    nothing that comes later either."

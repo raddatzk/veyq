@@ -134,7 +134,7 @@ reads).
   retry could still land one stays. A member's refused folders stay for the member to delete. Core's "New → Import…" is gone: upload recognises an archive
   itself.
 - **The upload** is one job of core's upload queue per file (`uploadFile.ts`): create the `FILE` node (or, for a name a
-  FILE sibling already holds by `fileNameSlug`, replace that file after the uploader confirmed (`depot.replaceConfirm`,
+  FILE sibling already holds by `fileNameSlug`, replace that file after the uploader confirmed (`words.depot_replace_confirm`,
   for a member and a contributor guest alike — the one way a row's file is replaced, owner decision 2026-10-14); the
   opened file's replace asks too, naming the file and the picked one, and both questions say the old content cannot be
   restored, there being no version history (owner decision 2026-10-08, inbox #383); a file that holds no content is

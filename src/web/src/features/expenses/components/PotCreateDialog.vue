@@ -109,7 +109,7 @@ async function submit() {
       // The Pot exists; its people can be added on its page.
       emit('done')
       error.value = t('expenses.create.peopleFailed')
-    } else error.value = httpStatus(e) === HttpStatus.conflict ? t('node.slugTaken') : t('expenses.create.failed')
+    } else error.value = httpStatus(e) === HttpStatus.conflict ? t('words.node_slug_taken') : t('expenses.create.failed')
   } finally {
     loading.value = false
   }

@@ -438,7 +438,7 @@ async function revoke(invite: PendingMemberInvite) {
       />
       <!-- the scope-level rows are sealed again under the new key before the rotation commits (ADR 0115 decision 2) -->
       <VeyqMessage v-if="resealing" tone="info">{{ t('spaceLock.resealing') }}</VeyqMessage>
-      <VeyqMessage v-else-if="isOwner && rekeying" tone="info">{{ closeRekeying ? t('share.closedRekeying') : t('rotation.statusHint.rekeying') }}</VeyqMessage>
+      <VeyqMessage v-else-if="isOwner && rekeying" tone="info">{{ closeRekeying ? t('words.share_closed_rekeying') : t('rotation.statusHint.rekeying') }}</VeyqMessage>
 
       <div class="settings-section-header">
         <div>

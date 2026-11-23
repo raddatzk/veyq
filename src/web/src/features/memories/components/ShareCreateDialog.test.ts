@@ -247,7 +247,7 @@ describe('ShareCreateDialog — a renew that lost (#252)', () => {
     await flushPromises()
 
     expect(w.emitted('saved')).toHaveLength(1)
-    expect(w.text()).toContain(t('share.reissueAlreadyReplaced'))
+    expect(w.text()).toContain(t('words.share_gone'))
     expect(w.text()).not.toContain(t('share.reissueFailed'))
     expect(w.text()).not.toContain('https://x/s/')
     await submit(w).trigger('click')
@@ -263,7 +263,7 @@ describe('ShareCreateDialog — a renew that lost (#252)', () => {
 
     expect(w.emitted('saved')).toBeUndefined()
     expect(w.text()).toContain(t('share.reissueFailed'))
-    expect(w.text()).not.toContain(t('share.reissueAlreadyReplaced'))
+    expect(w.text()).not.toContain(t('words.share_gone'))
     await submit(w).trigger('click')
     await flushPromises()
     expect(reissueShare).toHaveBeenCalledTimes(2)

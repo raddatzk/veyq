@@ -34,7 +34,7 @@ const en = {
     create: 'New Memory',
     createMemoryTitle: 'Create a Memory',
     createChapterTitle: 'Create a chapter',
-    // The kinds' nouns with their article, for core's `node.nameTakenBy` (the registry's `nounWithArticle`).
+    // The kinds' nouns with their article, for core's `words.node_name_taken_by` (the registry's `nounWithArticle`).
     aMemory: 'a Memory',
     aChapter: 'a chapter',
     addChapter: 'Add chapter',
@@ -45,7 +45,7 @@ const en = {
     // MEMORY's and CHAPTER's `deleteTitle` (registered in `register.ts`, read by core's delete dialog).
     deleteMemoryTitle: 'Delete Memory',
     deleteChapterTitle: 'Delete chapter',
-    // Memories' own create dialog keeps naming what can collide in a folder; core's `node.slugTaken` is neutral.
+    // Memories' own create dialog keeps naming what can collide in a folder; core's `words.node_slug_taken` is neutral.
     slugTaken: 'A folder or Memory with a similar name already exists here.',
     meta: {
       conflict: 'Someone else changed this meanwhile. It now shows their version — save again to replace it.',
@@ -249,7 +249,6 @@ const en = {
       empty: 'The trash is empty.',
       hint: 'Deleted photos stay here for 30 days, then they are removed for good.',
       restore: 'Restore',
-      movedToTrash: 'Moved to trash',
       purge: 'Delete forever',
       selected: '{selected} of {visible} selected',
       selectAllVisible: 'Select all',
@@ -293,7 +292,6 @@ const en = {
       restoreRefused: 'Not restored: {names}. {reason}',
       deleteRefusedReason: {
         gone: 'Already gone from this Memory, or you no longer have access.',
-        scope_deleting: 'This space is being deleted.',
         blocked_by_operator: 'Blocked by the operator: it can be deleted, not restored.',
         failed: 'Please try again.',
       },
@@ -313,7 +311,6 @@ const en = {
     gallery: 'Memory gallery',
     upload: 'Upload',
     uploadRetry: 'Retry',
-    uploadStatus: { queued: 'Queued', preparing: 'Preparing…', uploading: 'Uploading…', done: 'Done', failed: 'Failed', cancelled: 'Cancelled' },
     uploadTileFailed: 'Upload failed',
     uploadTileLinkFull: 'This link isn’t taking more uploads right now',
     uploadTileSwitchedOff: 'Memories is switched off here, so nothing can be added',
@@ -640,7 +637,6 @@ const de: typeof en = {
       empty: 'Der Papierkorb ist leer.',
       hint: 'Gelöschte Fotos bleiben 30 Tage hier, danach werden sie endgültig entfernt.',
       restore: 'Wiederherstellen',
-      movedToTrash: 'In den Papierkorb verschoben',
       purge: 'Endgültig löschen',
       selected: '{selected} von {visible} ausgewählt',
       selectAllVisible: 'Alle auswählen',
@@ -680,7 +676,6 @@ const de: typeof en = {
       restoreRefused: 'Nicht wiederhergestellt: {names}. {reason}',
       deleteRefusedReason: {
         gone: 'Nicht mehr in dieser Erinnerung, oder du hast keinen Zugriff mehr.',
-        scope_deleting: 'Dieser Bereich wird gelöscht.',
         blocked_by_operator: 'Von der Moderation gesperrt: Es kann gelöscht, aber nicht wiederhergestellt werden.',
         failed: 'Bitte versuche es erneut.',
       },
@@ -698,7 +693,6 @@ const de: typeof en = {
     gallery: 'Erinnerungs-Galerie',
     upload: 'Hochladen',
     uploadRetry: 'Erneut versuchen',
-    uploadStatus: { queued: 'In Warteschlange', preparing: 'Wird vorbereitet …', uploading: 'Lädt hoch …', done: 'Fertig', failed: 'Fehlgeschlagen', cancelled: 'Abgebrochen' },
     uploadTileFailed: 'Upload fehlgeschlagen',
     uploadTileLinkFull: 'Dieser Link nimmt gerade keine Uploads mehr an',
     uploadTileSwitchedOff: 'Erinnerungen ist hier abgeschaltet, deshalb kann nichts dazukommen',

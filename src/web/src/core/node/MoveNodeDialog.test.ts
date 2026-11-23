@@ -133,7 +133,7 @@ describe('MoveNodeDialog: the browser', () => {
     expect(mover.move).toHaveBeenCalledWith('rom', 'archiv')
     expect(w.emitted('moved')).toEqual([[{ node: byId('rom'), from: 'reisen', to: 'archiv' }]])
     expect(w.emitted('close')).toHaveLength(1)
-    expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('node.move.moved', { name: 'Rom', to: 'Archiv' }) }))
+    expect(toast.showUndo).toHaveBeenCalledWith(expect.objectContaining({ summary: t('words.move_moved', ['Rom', 'Archiv']) }))
     // Undo moves it back where it was, through the same door, and tells the host
     toast.showUndo.mock.calls[0][0].onUndo()
     await flushPromises()
@@ -193,15 +193,17 @@ describe('MoveNodeDialog: refused before sending', () => {
 describe('MoveNodeDialog: every server refusal explained by its name', () => {
   const coded = (status: number, code: string) => ({ response: new Response(JSON.stringify({ code }), { status, headers: { 'content-type': 'application/json' } }) })
   it.each([
-    [409, 'slug_taken'], [422, 'illegal_structure'], [422, 'illegal_scope'], [409, 'stale_epoch'],
-    [403, 'share_not_contributable'], [429, 'rate_limited'], [409, 'scope_deleting'],
-  ])('%s %s', async (status, code) => {
+    [409, 'slug_taken', 'words.move_refused_slug_taken'], [422, 'illegal_structure', 'words.move_refused_illegal_structure'],
+    [422, 'illegal_scope', 'node.move.refused.illegal_scope'], [409, 'stale_epoch', 'node.move.refused.stale_epoch'],
+    [403, 'share_not_contributable', 'node.move.refused.share_not_contributable'], [429, 'rate_limited', 'node.move.refused.rate_limited'],
+    [409, 'scope_deleting', 'words.move_refused_scope_deleting'],
+  ])('%s %s', async (status, code, key) => {
     const mover = recorder()
     mover.move.mockRejectedValueOnce(coded(status, code))
     const w = mountDialog(byId('rom'), mover)
     await flushPromises()
     await moveTo('Familie', 'Archiv')
-    expect(errorText()).toBe(t(`node.move.refused.${code}`))
+    expect(errorText()).toBe(t(key))
     expect(w.emitted('close'), 'the dialog stays for another pick').toBeUndefined()
     expect(mover.refresh).not.toHaveBeenCalled()
     expect(toast.showUndo).not.toHaveBeenCalled()
@@ -214,20 +216,20 @@ describe('MoveNodeDialog: every server refusal explained by its name', () => {
       const w = mountDialog(byId('rom'), mover)
       await flushPromises()
       await moveTo('Familie', 'Archiv')
-      expect(errorText()).toBe(t('node.move.refused.stale_placement'))
+      expect(errorText()).toBe(t('words.move_refused_stale_placement'))
       expect(mover.refresh).toHaveBeenCalledTimes(1)
       w.unmount()
     }
   })
 
   it('a node or link that is gone, and anything unexpected', async () => {
-    for (const [e, key] of [[coded(404, 'node_not_found'), 'gone'], [new TypeError('Failed to fetch'), 'failed']] as const) {
+    for (const [e, key] of [[coded(404, 'node_not_found'), 'words.move_refused_gone'], [new TypeError('Failed to fetch'), 'words.move_refused_failed']] as const) {
       const mover = recorder()
       mover.move.mockRejectedValueOnce(e)
       const w = mountDialog(byId('rom'), mover)
       await flushPromises()
       await moveTo('Familie', 'Archiv')
-      expect(errorText()).toBe(t(`node.move.refused.${key}`))
+      expect(errorText()).toBe(t(key))
       w.unmount()
     }
   })
@@ -260,7 +262,7 @@ describe('MoveNodeDialog: a guest\'s folder out of a drop box', () => {
     confirm.click(t('node.move.identityAccept'))
     await flushPromises()
     expect(mover.move).toHaveBeenCalledWith('anna', 'archiv')
-    expect(toast.success).toHaveBeenCalledWith(t('node.move.moved', { name: 'Anna', to: 'Archiv' }))
+    expect(toast.success).toHaveBeenCalledWith(t('words.move_moved', ['Anna', 'Archiv']))
     expect(toast.showUndo).not.toHaveBeenCalled()
   })
 

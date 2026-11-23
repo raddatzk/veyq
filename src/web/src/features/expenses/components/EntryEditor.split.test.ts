@@ -176,7 +176,7 @@ describe('splits by percent and by amount, and items', () => {
     expect(redIn(rest()!)).toEqual([]) // they make the rest; Cleo, still on it with no amount, is the save's to find
     await click(button(t('common.save'))!)
     expect(write).not.toHaveBeenCalled() // Cleo is on it with no amount
-    expect(redIn(rest()!)).toEqual([t('expenses.entry.problem.splitAmounts')])
+    expect(redIn(rest()!)).toEqual([t('words.problem_split_amounts')])
     await click(buttonNamed(t('expenses.split.removePerson', { name: 'Cleo' }), rest()!)!)
     await click(button(t('common.save'))!)
     expect(written()).toMatchObject({
@@ -242,7 +242,7 @@ describe('what the save finds wrong is said at its field', () => {
     await type(dialog().querySelector('input') as HTMLInputElement, 'Dinner')
     await click(button(t('common.save'))!)
     expect(write).not.toHaveBeenCalled()
-    expect(redIn(payers())).toEqual([t('expenses.entry.problem.payers')])
+    expect(redIn(payers())).toEqual([t('words.problem_payers')])
     expect(bottomMessage()).toBeNull()
     await type(byLabel(t('expenses.entry.payerAmount', { name: 'Anna' }))!, '12')
     await click(button(t('common.save'))!)
@@ -256,7 +256,7 @@ describe('what the save finds wrong is said at its field', () => {
     await click(button(t('common.save'))!)
     const title = dialog().querySelector('input') as HTMLInputElement
     expect(title.getAttribute('aria-invalid')).toBe('true')
-    expect((title.closest('label')!.nextElementSibling as HTMLElement).textContent!.trim()).toBe(t('expenses.entry.problem.title'))
+    expect((title.closest('label')!.nextElementSibling as HTMLElement).textContent!.trim()).toBe(t('words.problem_title'))
     expect(bottomMessage()).toBeNull()
 
     await type(title, 'Dinner')
@@ -268,8 +268,8 @@ describe('what the save finds wrong is said at its field', () => {
     await type(byLabel(t('expenses.entry.sharesOf', { name: 'Ben' }), item)!, '1,5')
     await click(button(t('common.save'))!)
     expect(write).not.toHaveBeenCalled()
-    expect(redIn(item)).toEqual([t('expenses.entry.problem.splitShares')])
-    expect(redIn(dialog())).toEqual([t('expenses.entry.problem.splitShares')]) // the title's line went with the save that found this
+    expect(redIn(item)).toEqual([t('words.problem_split_shares')])
+    expect(redIn(dialog())).toEqual([t('words.problem_split_shares')]) // the title's line went with the save that found this
   })
 })
 

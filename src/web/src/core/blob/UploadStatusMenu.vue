@@ -29,6 +29,7 @@ import {
   QUOTA_EXCEEDED,
   type UploadBatch,
   type UploadItem,
+  UPLOAD_STATUS_TEXT,
 } from './queue'
 
 const { t } = useI18n()
@@ -125,7 +126,7 @@ onBeforeUnmount(() => {
         <div>
           <h3>{{ t('upload.title') }}</h3>
           <!-- Only the active summary here; the "no uploads" line lives in the empty row below (no double). -->
-          <p v-if="activeFileCount">{{ t('upload.active', { count: activeFileCount }) }}</p>
+          <p v-if="activeFileCount">{{ t('words.upload_active', [activeFileCount]) }}</p>
         </div>
         <button v-if="activeFileCount" type="button" class="uploads-cancel-all" @click="cancelAll">
           {{ t('upload.cancelAll') }}
@@ -146,7 +147,7 @@ onBeforeUnmount(() => {
           <li v-for="file in list.files" :key="file.id" class="uploads-file" :class="`is-${file.status}`">
             <VeyqIcon class="uploads-file-icon" :name="statusIcon(file)" :spin="isActive(file)" />
             <span class="uploads-file-name">{{ file.name }}</span>
-            <span class="uploads-file-status">{{ t(`upload.status.${file.status}`) }}</span>
+            <span class="uploads-file-status">{{ t(UPLOAD_STATUS_TEXT[file.status]) }}</span>
             <button
               v-if="canCancel(file)"
               type="button"
@@ -169,7 +170,7 @@ onBeforeUnmount(() => {
             </button>
             <!-- A refusal for lack of room says why, and offers no retry: none can help (ADR 0073 §6). -->
             <span v-if="file.status === 'failed' && file.error === QUOTA_EXCEEDED" class="uploads-file-reason">
-              {{ t('upload.noSpace') }}
+              {{ t('words.upload_no_space') }}
             </span>
           </li>
         </ul>

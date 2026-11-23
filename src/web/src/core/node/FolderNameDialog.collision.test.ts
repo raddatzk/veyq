@@ -68,7 +68,7 @@ describe('FolderNameDialog names the sibling a name collides with (inbox #389)',
     await typeAndClickSubmit(w, '  trips ')
 
     expect(createFolder).not.toHaveBeenCalled()
-    expect(w.find('.msg').text()).toBe(t('node.nameTakenBy', { kind: t('node.aFolder'), name: 'Trips' }))
+    expect(w.find('.msg').text()).toBe(t('words.node_name_taken_by', [t('node.aFolder'), 'Trips']))
     expect(w.emitted('done')).toBeFalsy()
   })
 
@@ -94,7 +94,7 @@ describe('FolderNameDialog names the sibling a name collides with (inbox #389)',
     const w = mountDialog({ mode: 'rename', node: node('x9', 'FILE', 'Old.txt') })
     await typeAndClickSubmit(w, 'FOTO.JPG')
     expect(renameNode).not.toHaveBeenCalled()
-    expect(w.find('.msg').text()).toBe(t('node.nameTakenBy', { kind: t('depot.aFile'), name: 'foto.jpg' }))
+    expect(w.find('.msg').text()).toBe(t('words.node_name_taken_by', [t('depot.aFile'), 'foto.jpg']))
 
     await typeAndClickSubmit(w, 'Day1 md')
     expect(renameNode).toHaveBeenCalledWith(SCOPE, EPOCHS, treeStore.nodes, 'x9', 'Day1 md')
@@ -113,6 +113,6 @@ describe('FolderNameDialog names the sibling a name collides with (inbox #389)',
     await typeAndClickSubmit(w, 'Elsewhere')
 
     expect(createFolder).toHaveBeenCalledOnce()
-    expect(w.find('.msg').text()).toBe(t('node.slugTaken'))
+    expect(w.find('.msg').text()).toBe(t('words.node_slug_taken'))
   })
 })

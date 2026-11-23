@@ -72,7 +72,7 @@ import me.raddatz.veyq.mobile.expenses.RevisionFormat
  *  only remove functions, never a reader's own screen). */
 internal val LocalEditable = androidx.compose.runtime.staticCompositionLocalOf { true }
 
-/** A problem of the form or the write path in words (the web's `expenses.entry.problem.*`). */
+/** A problem of the form or the write path in words (the web says a form's in these words too, its `PROBLEM_WORDS`). */
 @Composable
 internal fun problemText(problem: String): String = say(me.raddatz.veyq.mobile.words.Notices.entryProblem(problem))
 

@@ -401,8 +401,8 @@ function endOfDay(d: Date): Date {
         </div>
       </div>
 
-      <p v-if="alreadyReplaced" class="share-error">{{ t('share.reissueAlreadyReplaced') }}</p>
-      <p v-else-if="error && requirementRefused" class="share-error">{{ t('share.requirementRefused') }}</p>
+      <p v-if="alreadyReplaced" class="share-error">{{ t('words.share_gone') }}</p>
+      <p v-else-if="error && requirementRefused" class="share-error">{{ t('words.share_requirement_refused') }}</p>
       <p v-else-if="error" class="share-error">{{ isEdit ? t('share.noteSaveFailed') : isReissue ? t('share.reissueFailed') : t('share.createFailed') }}</p>
       <div class="veyq-dialog-action-row">
         <VeyqButton :label="t('common.cancel')" icon="times" variant="secondary" appearance="outlined" :disabled="busy" @click="emit('close')" />

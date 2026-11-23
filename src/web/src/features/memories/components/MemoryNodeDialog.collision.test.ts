@@ -71,14 +71,14 @@ describe('MemoryNodeDialog names the sibling a name collides with (inbox #389)',
     await typeAndClickSubmit(w, 'ROM!')
 
     expect(createMemory).not.toHaveBeenCalled()
-    expect(w.find('.msg').text()).toBe(t('node.nameTakenBy', { kind: t('memory.aMemory'), name: 'Rom' }))
+    expect(w.find('.msg').text()).toBe(t('words.node_name_taken_by', [t('memory.aMemory'), 'Rom']))
   })
 
   it('a chapter onto a sibling chapter names the chapter; another name is sent', async () => {
     const w = mountDialog({ kind: CHAPTER_KIND, parentId: 'm1', parentKey: KEY, parentEpoch: 0, parentScopeEpoch: 0 })
     await typeAndClickSubmit(w, 'tag-1')
     expect(createChapter).not.toHaveBeenCalled()
-    expect(w.find('.msg').text()).toBe(t('node.nameTakenBy', { kind: t('memory.aChapter'), name: 'Tag 1' }))
+    expect(w.find('.msg').text()).toBe(t('words.node_name_taken_by', [t('memory.aChapter'), 'Tag 1']))
 
     await typeAndClickSubmit(w, 'Tag 2')
     expect(createChapter).toHaveBeenCalledWith(SCOPE, EPOCHS, KEY, 'Tag 2', 'm1', expect.objectContaining({ epoch: 0, scopeEpoch: 0 }), { reread: expect.any(Function), pull: expect.any(Function), epochs: expect.any(Function) })

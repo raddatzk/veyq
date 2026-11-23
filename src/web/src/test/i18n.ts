@@ -38,7 +38,9 @@ export function realI18n(): typeof i18n {
 
 /** Resolve a key through the real catalog, for an assertion that follows whatever the catalog says. A key the
  *  catalog lacks fails the test like a rendered one. */
-export function t(key: string, named?: Record<string, unknown>, plural?: number): string {
-  if (plural !== undefined) return i18n.global.t(key, named ?? {}, plural) // a `one | many` entry, chosen by `plural`
-  return named ? i18n.global.t(key, named) : i18n.global.t(key)
+export function t(key: string, args?: Record<string, unknown> | unknown[], plural?: number): string {
+  // the shared words (`words.*`, ADR 0136 § The web's words) take their arguments as a list, as the apps' `{1}`, `{2}` are
+  if (Array.isArray(args)) return plural !== undefined ? i18n.global.t(key, args, plural) : i18n.global.t(key, args)
+  if (plural !== undefined) return i18n.global.t(key, args ?? {}, plural) // a `one | many` entry, chosen by `plural`
+  return args ? i18n.global.t(key, args) : i18n.global.t(key)
 }

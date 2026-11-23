@@ -129,8 +129,8 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
   // ADR 0114 decision 9: a re-key only closed links started is worded for what lies below them, never the whole space;
   // the control on the same panel is a rotation's re-key, worded for the space.
   it.each([
-    ['close', 'share.closedRekeying', 'rotation.statusHint.rekeying'],
-    ['rotation', 'rotation.statusHint.rekeying', 'share.closedRekeying'],
+    ['close', 'words.share_closed_rekeying', 'rotation.statusHint.rekeying'],
+    ['rotation', 'rotation.statusHint.rekeying', 'words.share_closed_rekeying'],
   ] as const)("the owner's re-keying hint after a %s says what re-keys", async (cause, shown, absent) => {
     vi.mocked(scopeLifecycle).mockResolvedValue({ deletedAt: null, purgeAfter: null, compromiseRotation: null, rekeying: true })
     vi.mocked(rekeyingCause).mockResolvedValue(cause)
