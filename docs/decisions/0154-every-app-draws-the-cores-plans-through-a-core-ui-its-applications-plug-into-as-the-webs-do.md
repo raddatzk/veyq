@@ -695,7 +695,8 @@ held for the screens' models but not around them:
     then offers *Open in the veyq app* (ADR 0150 § O2). A scheme carrying a secret is ADR 0150 § O's rejection; pasting a
     mailed link the owner rejected for the address change (ADR 0148 decision 6, 2026-11-18). So release, open and
     complete are not ported — without a transport no ADR allows they would be dead code; whether the app finishes a reset
-    itself is the owner's (inbox #1106). *Cost:* a reset begun in the app ends in a browser.
+    itself was the owner's: **the owner, 2026-11-23: it stays so** — the app asks for the link, the browser
+    finishes with the kit; no transport for the token is added. *Cost:* a reset begun in the app ends in a browser.
   - **S2 — The locked sign-in is the login alone.** `VeyqAccount.signInLocked`: `connect` without the device (not even
     the instance salt is kept), the login, no `key-material`; a `SessionModel.LockedSession` holds the tokens in memory
     only and renews an expired access token once over its refresh token (the locked screen can stand longer than an access
