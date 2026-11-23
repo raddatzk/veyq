@@ -705,6 +705,8 @@ class WireTest {
                     me.raddatz.veyq.mobile.search.ResultShown(
                         "s:MEMORY:n", "images", listOf(me.raddatz.veyq.mobile.search.PartShown("Kev", true), me.raddatz.veyq.mobile.search.PartShown("elaer", false)),
                         listOf(Piece.Plain("Family"), Piece.Plain("Trips"), Piece.Day("2024-05-15")),
+                        here = true,
+                        matched = listOf(Piece.Plain("2024"), Piece.Said(Notice(Msg.SEARCH_MONTH_YEAR, Notice(Msg.SEARCH_MONTH_5), "2024"))),
                     ),
                     me.raddatz.veyq.mobile.search.ResultShown(
                         ":settings:sessions", "settings", listOf(me.raddatz.veyq.mobile.search.PartShown("Devices and sessions", false)),
@@ -714,6 +716,7 @@ class WireTest {
                 more = 3, total = 13,
                 status = listOf(Notice(Msg.SEARCH_LOADING, 2), Notice(Msg.SEARCH_NOT_SEARCHED, me.raddatz.veyq.mobile.words.Joined(listOf("Club"), ", "))),
                 announcement = listOf(Notice(Msg.SEARCH_ANNOUNCE_RESULTS, 13)), openSettings = "maps", openSettingsCount = 1,
+                openedCount = 2,
             )),
             Update.Search(114, me.raddatz.veyq.mobile.search.SearchShown()), Update.Search(114, null),
         ),

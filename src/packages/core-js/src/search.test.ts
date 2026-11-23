@@ -92,8 +92,17 @@ describe('what the web passes crosses', () => {
   })
 
   it('a capture time that is no finite number is none, as the web read it', () => {
-    expect(s.yearsOf({ facets: { capturedAt: Number.NaN } })).toBeNull()
-    expect(s.yearsOf({ facets: { capturedAt: Date.UTC(2024, 5, 15, 12) } })).toEqual({ from: 2024, to: 2024 })
+    const photo = (capturedAt: number): DocumentShape => ({ scopeId: 'a', kind: 'memories.photo', id: 'p', nodeId: 'm', name: 'p', path: [], facets: { capturedAt } })
+    const year: ChipShape = { type: 'year', year: 2024 }
+    expect(s.matchedValues(photo(Number.NaN), [year])).toEqual([])
+    expect(s.matchedValues(photo(Date.UTC(2024, 5, 15, 12)), [year])).toEqual([{ text: '2024' }])
+  })
+
+  it('a month crosses as its year and month, which the web names', () => {
+    const memory: DocumentShape = { scopeId: 'a', kind: 'MEMORY', id: 'm', nodeId: 'm', name: 'Rome', path: [], facets: { months: { from: '2024-05', to: '2024-06' } } }
+    expect(s.matchedValues(memory, [{ type: 'month', year: 2024, month: 6 }])).toEqual([{ year: 2024, month: 6 }])
+    expect(s.isHere(memory, { activeScopeId: 'a', hereNodeId: 'm' })).toBe(true)
+    expect(s.isHere(memory, { activeScopeId: 'a', hereNodeId: null })).toBe(false)
   })
 
   it('a chip the web spells is the chip the core reads', () => {

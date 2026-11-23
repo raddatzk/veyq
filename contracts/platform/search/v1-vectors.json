@@ -1,6 +1,6 @@
 {
   "format": "veyq-search-v1-vectors",
-  "note": "Conformance vectors for the search (ADR 0125; ADR 0146 decision 1): the core (src/mobile/core/.../search) answers to them on every app and, through @veyq/core-js/search, on the web (ADR 0155), whose vectors.test.ts runs them over the shipped module beside Memories' search.ts. Each case names the rule it pins (`rule`). Inputs chosen by hand; every `expected` recorded by running the core's functions (SearchVectorsTest with VEYQ_WRITE_VECTORS=1) and read against its rule before commit. Strings are JavaScript's (UTF-16): a fold map's indices count UTF-16 units. `corpus` is the documents a `match` or `matcher` case names as \"corpus\"; a document with `opensItself` opens itself (a contribution, a person, a settings section). `match` orders with `collator` (the web's Intl.Collator; the core's NameOrder), its names chosen where both agree. `matcher` records fresh scans; a field's matcher must give each step. `facets` reads a Memory's plaintext meta at `now`; `medium` a listed medium's plaintext tier (`meta`, null: did not open) and blob meta, named by `unnamed` without a name. Every capturedAt is 12:00 UTC on a 15th.",
+  "note": "Conformance vectors for the search (ADR 0125; ADR 0146 decision 1): the core (src/mobile/core/.../search) answers to them on every app and, through @veyq/core-js/search, on the web (ADR 0155), whose vectors.test.ts runs them over the shipped module beside Memories' search.ts. Each case names the rule it pins (`rule`). Inputs chosen by hand; every `expected` recorded by running the core's functions (SearchVectorsTest with VEYQ_WRITE_VECTORS=1) and read against its rule before commit. Strings are JavaScript's (UTF-16): a fold map's indices count UTF-16 units. `corpus` is the documents a `match` or `matcher` case names as \"corpus\"; a document with `opensItself` opens itself (a contribution, a person, a settings section). `match` orders with `collator` (the web's Intl.Collator; the core's NameOrder), its names chosen where both agree. `matcher` records fresh scans; a field's matcher must give each step. `facets` reads a Memory's plaintext meta at `now`; `medium` a listed medium's plaintext tier (`meta`, null: did not open) and blob meta, named by `unnamed` without a name. `matchedValues` the values of the chips in force a result carries (a month as its year and month, which each UI names); `here` whether a document is the page on screen (inbox #962). Every capturedAt is 12:00 UTC on a 15th.",
   "unnamed": {
     "photo": "Photo",
     "video": "Video"
@@ -2460,6 +2460,383 @@
         "facets": {},
         "icon": "image"
       }
+    }
+  ],
+  "matchedValues": [
+    {
+      "rule": "a year chip: the span of years the document carries, as from–to",
+      "document": {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "trip",
+        "name": "Trip",
+        "facets": {
+          "years": {
+            "from": 2019,
+            "to": 2021
+          }
+        }
+      },
+      "chips": [
+        {
+          "type": "year",
+          "year": 2020
+        }
+      ],
+      "expected": [
+        {
+          "text": "2019–2021"
+        }
+      ]
+    },
+    {
+      "rule": "a year chip on a single year: that year alone",
+      "document": {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "rome",
+        "name": "Rome",
+        "facets": {
+          "years": {
+            "from": 2024,
+            "to": 2024
+          }
+        }
+      },
+      "chips": [
+        {
+          "type": "year",
+          "year": 2024
+        }
+      ],
+      "expected": [
+        {
+          "text": "2024"
+        }
+      ]
+    },
+    {
+      "rule": "a year chip on a photo: its capture year",
+      "document": {
+        "scopeId": "s1",
+        "kind": "memories.photo",
+        "id": "p1",
+        "nodeId": "rome",
+        "name": "Beach.jpg",
+        "pathIds": [
+          "rome"
+        ],
+        "facets": {
+          "capturedAt": 1715774400000,
+          "places": [
+            "Roma"
+          ]
+        }
+      },
+      "chips": [
+        {
+          "type": "year",
+          "year": 2024
+        }
+      ],
+      "expected": [
+        {
+          "text": "2024"
+        }
+      ]
+    },
+    {
+      "rule": "a month chip: the month chosen, which the UI names",
+      "document": {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "rome",
+        "name": "Rome",
+        "facets": {
+          "months": {
+            "from": "2024-05",
+            "to": "2024-05"
+          }
+        }
+      },
+      "chips": [
+        {
+          "type": "month",
+          "year": 2024,
+          "month": 5
+        }
+      ],
+      "expected": [
+        {
+          "year": 2024,
+          "month": 5
+        }
+      ]
+    },
+    {
+      "rule": "a place chip: the place as the document names it, not as the chip is labelled",
+      "document": {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "lake",
+        "name": "Lake",
+        "facets": {
+          "places": [
+            "Lago",
+            "Zürich"
+          ]
+        }
+      },
+      "chips": [
+        {
+          "type": "place",
+          "place": "zurich",
+          "label": "Zurich"
+        }
+      ],
+      "expected": [
+        {
+          "text": "Zürich"
+        }
+      ]
+    },
+    {
+      "rule": "a place chip the document does not carry adds nothing",
+      "document": {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "lake",
+        "name": "Lake",
+        "facets": {
+          "places": [
+            "Lago"
+          ]
+        }
+      },
+      "chips": [
+        {
+          "type": "place",
+          "place": "zurich",
+          "label": "Zurich"
+        }
+      ],
+      "expected": []
+    },
+    {
+      "rule": "a person chip: the person's name",
+      "document": {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "rome",
+        "name": "Rome",
+        "facets": {
+          "people": [
+            "u-anna"
+          ]
+        }
+      },
+      "chips": [
+        {
+          "type": "person",
+          "userId": "u-anna",
+          "label": "Anna Schmidt"
+        }
+      ],
+      "expected": [
+        {
+          "text": "Anna Schmidt"
+        }
+      ]
+    },
+    {
+      "rule": "a space, a kind and an In: chip add nothing (the row's line and icon say them)",
+      "document": {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "rome",
+        "name": "Rome",
+        "facets": {
+          "years": {
+            "from": 2024,
+            "to": 2024
+          }
+        }
+      },
+      "chips": [
+        {
+          "type": "space",
+          "scopeId": "s1",
+          "label": "Family"
+        },
+        {
+          "type": "kind",
+          "kinds": [
+            "MEMORY"
+          ],
+          "label": "Memory"
+        },
+        {
+          "type": "in",
+          "scopeId": "s1",
+          "nodeId": "trips",
+          "label": "Trips",
+          "path": []
+        }
+      ],
+      "expected": []
+    },
+    {
+      "rule": "the chips' order, each value once (two year chips over one span)",
+      "document": {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "tour",
+        "name": "Tour",
+        "facets": {
+          "years": {
+            "from": 2024,
+            "to": 2025
+          },
+          "places": [
+            "Roma"
+          ],
+          "people": [
+            "u-anna"
+          ]
+        }
+      },
+      "chips": [
+        {
+          "type": "person",
+          "userId": "u-anna",
+          "label": "Anna Schmidt"
+        },
+        {
+          "type": "year",
+          "year": 2024
+        },
+        {
+          "type": "place",
+          "place": "roma",
+          "label": "Roma"
+        },
+        {
+          "type": "year",
+          "year": 2025
+        }
+      ],
+      "expected": [
+        {
+          "text": "Anna Schmidt"
+        },
+        {
+          "text": "2024–2025"
+        },
+        {
+          "text": "Roma"
+        }
+      ]
+    }
+  ],
+  "here": [
+    {
+      "rule": "the node whose page is on screen, in the active space",
+      "document": {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "rome",
+        "name": "Rome",
+        "facets": {}
+      },
+      "context": {
+        "activeScopeId": "s1",
+        "hereNodeId": "rome"
+      },
+      "expected": true
+    },
+    {
+      "rule": "a folder's level is a page too",
+      "document": {
+        "scopeId": "s1",
+        "kind": "FOLDER",
+        "id": "trips",
+        "name": "Trips",
+        "facets": {}
+      },
+      "context": {
+        "activeScopeId": "s1",
+        "hereNodeId": "trips"
+      },
+      "expected": true
+    },
+    {
+      "rule": "the same id in another space is not here",
+      "document": {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "rome",
+        "name": "Rome",
+        "facets": {}
+      },
+      "context": {
+        "activeScopeId": "s2",
+        "hereNodeId": "rome"
+      },
+      "expected": false
+    },
+    {
+      "rule": "a photo of the page on screen is no page of its own",
+      "document": {
+        "scopeId": "s1",
+        "kind": "memories.photo",
+        "id": "p1",
+        "nodeId": "rome",
+        "name": "Beach.jpg",
+        "pathIds": [
+          "rome"
+        ],
+        "facets": {
+          "capturedAt": 1715774400000,
+          "places": [
+            "Roma"
+          ]
+        }
+      },
+      "context": {
+        "activeScopeId": "s1",
+        "hereNodeId": "rome"
+      },
+      "expected": false
+    },
+    {
+      "rule": "no page headed (a space's root, a person's page): nothing is here",
+      "document": {
+        "scopeId": "s1",
+        "kind": "MEMORY",
+        "id": "rome",
+        "name": "Rome",
+        "facets": {}
+      },
+      "context": {
+        "activeScopeId": "s1",
+        "hereNodeId": null
+      },
+      "expected": false
+    },
+    {
+      "rule": "a document of no space never is",
+      "document": {
+        "scopeId": "",
+        "kind": "person",
+        "id": "u-anna",
+        "name": "Anna Schmidt",
+        "facets": {}
+      },
+      "context": {
+        "activeScopeId": null,
+        "hereNodeId": null
+      },
+      "expected": false
     }
   ]
 }

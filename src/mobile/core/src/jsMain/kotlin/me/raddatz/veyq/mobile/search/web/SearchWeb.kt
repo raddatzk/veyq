@@ -3,6 +3,7 @@
 package me.raddatz.veyq.mobile.search.web
 
 import me.raddatz.veyq.mobile.search.Fold
+import me.raddatz.veyq.mobile.search.MatchedValue
 import me.raddatz.veyq.mobile.search.MonthSpan
 import me.raddatz.veyq.mobile.search.Query
 import me.raddatz.veyq.mobile.search.Results
@@ -12,7 +13,6 @@ import me.raddatz.veyq.mobile.search.SearchDocuments
 import me.raddatz.veyq.mobile.search.SearchFacets
 import me.raddatz.veyq.mobile.search.SearchQuery
 import me.raddatz.veyq.mobile.search.YearSpan
-import me.raddatz.veyq.mobile.search.yearsOf as coreYearsOf
 import kotlin.js.collections.JsReadonlyArray
 
 // The search's façade for the web (ADR 0155 decisions 4 and 5; `@veyq/core-js/search`): the core's `Fold`, `Query` and
@@ -63,11 +63,6 @@ fun nameParts(name: String, t: String): JsReadonlyArray<NamePartShape> =
 
 @JsExport
 fun chipKey(chip: ChipShape): String = Query.chipKey(chipOf(chip))
-
-/** The years a document spans: its own span, else its capture year in local time. */
-@JsExport
-fun yearsOf(doc: FacetedShape): YearSpanShape? =
-    coreYearsOf(SearchDocument.of(scopeId = "", kind = "", id = "", name = "", facets = facetsOf(doc.facets)))?.let { shape("from" to it.from, "to" to it.to) }
 
 /** The search's numbers (see [SearchRulesShape]). */
 @JsExport
@@ -132,6 +127,21 @@ fun satisfies(doc: DocumentShape, chip: ChipShape): Boolean = Query.satisfies(do
 /** The settings word that is the reason [doc] matches the folded text [t], as the section names it, or null. */
 @JsExport
 fun reasonKeyword(doc: DocumentShape, t: String): String? = Query.reasonKeyword(documentOf(doc), t)
+
+/** The values of [chips] that [doc] carries, each once, in the chips' order (the core's `Query.matchedValues`). */
+@JsExport
+fun matchedValues(doc: DocumentShape, chips: JsReadonlyArray<ChipShape>): JsReadonlyArray<MatchedShape> =
+    array(Query.matchedValues(documentOf(doc), list(chips).map(::chipOf)).map { v ->
+        when (v) {
+            is MatchedValue.Text -> shape<MatchedShape>("text" to v.text)
+            is MatchedValue.Month -> shape("year" to v.year, "month" to v.month)
+        }
+    })
+
+/** Whether [doc] is the node whose page is on screen (the core's `Results.isHere`). */
+@JsExport
+fun isHere(doc: DocumentShape, here: HereShape): Boolean =
+    Results.isHere(documentOf(doc), Results.SearchContext(here.activeScopeId, null, here.hereNodeId))
 
 private fun documentOf(d: DocumentShape): SearchDocument = SearchDocument.of(
     scopeId = d.scopeId, kind = d.kind, id = d.id, name = d.name, nodeId = d.nodeId, revision = d.revision ?: "", path = list(d.path),

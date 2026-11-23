@@ -16,8 +16,19 @@ object Results {
         const val NOWHERE = 3
     }
 
-    /** Where the member stands: the space on screen (null: none), the node whose page is on screen (not a folder level). */
-    data class SearchContext(val activeScopeId: String?, val openNodeId: String?)
+    /**
+     * Where the member stands: the space on screen (null: none), the node whose page is on screen (not a folder level), and
+     * the node the screen heads ([hereNodeId], a folder's level too: the web's breadcrumb's last crumb), which only marks a
+     * result *You are here* ([isHere]) and orders nothing.
+     */
+    data class SearchContext(val activeScopeId: String?, val openNodeId: String?, val hereNodeId: String? = null)
+
+    /**
+     * Whether [doc] is the node whose page is on screen (the web's `isHere`, inbox #962): a node's own document in the active
+     * space whose id is [SearchContext.hereNodeId]. Its row is marked *You are here*, and opening it only closes the field.
+     */
+    fun isHere(doc: SearchDocument, ctx: SearchContext): Boolean =
+        ctx.hereNodeId != null && doc.scopeId == ctx.activeScopeId && doc.id == doc.nodeId && doc.nodeId == ctx.hereNodeId
 
     /** The best matches in order (the first `limit`) and how many documents match. */
     class SearchResults(val results: List<SearchDocument>, val total: Int)

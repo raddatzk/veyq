@@ -189,6 +189,18 @@ class SearchVectorsTest {
                 }
             } ?: JsonNull
         },
+        "matchedValues" to { c ->
+            JsonArray(Query.matchedValues(docOf(c["document"]!!), c["chips"]!!.jsonArray.map(::chipOf)).map { v ->
+                when (v) {
+                    is MatchedValue.Text -> buildJsonObject { put("text", v.text) }
+                    is MatchedValue.Month -> buildJsonObject { put("year", v.year); put("month", v.month) }
+                }
+            })
+        },
+        "here" to { c ->
+            val ctx = c["context"]!!.jsonObject
+            JsonPrimitive(Results.isHere(docOf(c["document"]!!), Results.SearchContext(ctx["activeScopeId"].str(), null, ctx["hereNodeId"].str())))
+        },
     )
 
     private fun section(name: String) {
@@ -225,6 +237,8 @@ class SearchVectorsTest {
     @Test fun nameParts() = section("nameParts")
     @Test fun facets() = section("facets")
     @Test fun medium() = section("medium")
+    @Test fun matchedValues() = section("matchedValues")
+    @Test fun here() = section("here")
 
     /** The write mode (see the class): every section's answers as its cases' `expected`, the rest of the file as it was. */
     @Test
@@ -286,7 +300,7 @@ class SearchVectorsTest {
     @Test
     fun everyCaseIsRecorded() {
         // a case without its `expected` would compare nothing: the file is the recorded one, every case answered
-        for (s in listOf("fold", "tails", "wordPrefix", "suggest", "match", "matcher", "nameParts", "facets", "medium")) {
+        for (s in listOf("fold", "tails", "wordPrefix", "suggest", "match", "matcher", "nameParts", "facets", "medium", "matchedValues", "here")) {
             for (c in vectors[s]!!.jsonArray) assertTrue("expected" in c.jsonObject, "$s case without its expected: $c")
         }
     }

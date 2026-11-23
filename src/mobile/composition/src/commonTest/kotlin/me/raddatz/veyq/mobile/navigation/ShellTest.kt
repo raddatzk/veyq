@@ -45,6 +45,21 @@ class ShellTest {
         assertTrue(back.isHome, "back is Home again, not Memories")
     }
 
+    // inbox #958 — bite: a page kept once it was left (Home, another space) or dropped while back returns to it turns this red
+    @Test
+    fun aPageIsKeptWhileOnScreenOrOnTheWayBackAndNoLonger() {
+        val home = Shell(null, space = "s")
+        val opened = home.open(memory)
+        assertTrue(opened.keeps(memory.at))
+        assertTrue(opened.search(true).keeps(memory.at), "Search over the page: the page is still there")
+        assertTrue(opened.openPerson("u").keeps(memory.at), "a person's page opened from it: back returns to it")
+        assertTrue(opened.open(pot).keeps(memory.at), "another object opened from it: back returns to it")
+        assertFalse(opened.close().keeps(memory.at), "back to Home: the page is left")
+        assertFalse(opened.switchSpace("s2").keeps(memory.at), "another space: the page is left")
+        assertFalse(opened.choose(ApplicationId.EXPENSES).keeps(memory.at), "the drawer chose another application")
+        assertFalse(opened.keeps(memory.at.copy(scopeId = "other")), "the same id in another space is another page")
+    }
+
     @Test
     fun backWalksBackThroughObjectsOpenedOneFromAnother() {
         val list = Shell(ApplicationId.EXPENSES)

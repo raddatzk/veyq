@@ -1476,7 +1476,10 @@ class ShellModel(
         }
         override fun where(): me.raddatz.veyq.mobile.search.Results.SearchContext {
             val s = shell
-            return me.raddatz.veyq.mobile.search.Results.SearchContext(s?.openObject?.scopeId ?: s?.space, s?.openObject?.nodeId)
+            val active = s?.openObject?.scopeId ?: s?.space
+            // the node the screen heads (an open object, a kept link's page, the folder Home shows): a result of it is "here"
+            val here = s?.headed?.takeIf { it.scopeId == active }?.nodeId
+            return me.raddatz.veyq.mobile.search.Results.SearchContext(active, s?.openObject?.nodeId, here)
         }
         override fun applicationsOff() = tenant.applicationsOff()
         override suspend fun scopeDocuments(
