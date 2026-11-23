@@ -69,37 +69,42 @@ object NodeMove {
         else -> Block.KIND
     }
 
-    /** Where the browser opens: the place the node is in, else the scope root (null) — the platform's [MovePlan.start]. */
-    fun start(tree: List<NodeRef>, moved: NodeRef): String? = MovePlan.start(facts(tree), null, moved(moved))
+    /**
+     * Where the browser opens: the place the node is in, else the top — the platform's [MovePlan.start]. [top] is the top
+     * of what the session reads: null for a member (the scope root), a link's root for its guest (inbox #1063), who then
+     * places into a folder only ([MovePlan]'s `guest`); every function here takes it.
+     */
+    fun start(tree: List<NodeRef>, moved: NodeRef, top: String? = null): String? = MovePlan.start(facts(tree), top, moved(moved))
 
-    /** The trail from the scope root (null) down to [at], both included: the breadcrumb's places ([MovePlan.trail]). */
-    fun trail(tree: List<NodeRef>, at: String?): List<NodeRef?> {
+    /** The trail from the top (the scope root as null, a guest's link root as its node) down to [at], both included: the
+     *  breadcrumb's places ([MovePlan.trail]). */
+    fun trail(tree: List<NodeRef>, at: String?, top: String? = null): List<NodeRef?> {
         val byId = tree.associateBy { it.nodeId }
-        return listOf<NodeRef?>(null) + MovePlan.trail(facts(tree), null, at).drop(1).mapNotNull { id -> id?.let { byId[it] } }
+        return listOf(top?.let { byId[it] }) + MovePlan.trail(facts(tree), top, at).drop(1).mapNotNull { id -> id?.let { byId[it] } }
     }
 
     /**
      * The places listed at [at] (null: the scope root): a folder always (the way down), else a node whose kind takes the moved
      * one, in the tree's order; the moved node itself and what lies below it are listed blocked ([MovePlan.places]).
      */
-    fun places(tree: List<NodeRef>, moved: NodeRef, at: String?, allows: PlacementAllows): List<Place> {
+    fun places(tree: List<NodeRef>, moved: NodeRef, at: String?, allows: PlacementAllows, top: String? = null): List<Place> {
         val byId = tree.associateBy { it.nodeId }
-        return MovePlan.places(allows::allows, facts(tree), moved(moved), guest = false, at = at)
+        return MovePlan.places(allows::allows, facts(tree), moved(moved), guest = top != null, at = at)
             .map { Place(byId.getValue(it.node.id), it.blocked?.let(::block)) }
     }
 
     /** Why [moved] cannot be moved — or, with [copy], copied — to [at] (null: the scope root), or null where it can. A copy
      *  may go where its original is (it takes the next free name there) — the platform's [MovePlan.hereBlock]. */
-    fun hereBlock(tree: List<NodeRef>, moved: NodeRef, at: String?, allows: PlacementAllows, copy: Boolean = false): Block? =
-        MovePlan.hereBlock(allows::allows, facts(tree), moved(moved), guest = false, at = at, copy = copy)?.let(::block)
+    fun hereBlock(tree: List<NodeRef>, moved: NodeRef, at: String?, allows: PlacementAllows, copy: Boolean = false, top: String? = null): Block? =
+        MovePlan.hereBlock(allows::allows, facts(tree), moved(moved), guest = top != null, at = at, copy = copy)?.let(::block)
 
     /** Where the browser opens for several [moved] nodes: the place they are all in, else the scope root ([MovePlan.start]). */
-    fun start(tree: List<NodeRef>, moved: List<NodeRef>): String? = MovePlan.start(facts(tree), null, moved.map(::fact))
+    fun start(tree: List<NodeRef>, moved: List<NodeRef>, top: String? = null): String? = MovePlan.start(facts(tree), top, moved.map(::fact))
 
     /** The places listed at [at] for several [moved] nodes: a node whose kind takes every one of them ([MovePlan.places]). */
-    fun places(tree: List<NodeRef>, moved: List<NodeRef>, at: String?, allows: PlacementAllows): List<Place> {
+    fun places(tree: List<NodeRef>, moved: List<NodeRef>, at: String?, allows: PlacementAllows, top: String? = null): List<Place> {
         val byId = tree.associateBy { it.nodeId }
-        return MovePlan.places(allows::allows, facts(tree), moved.map(::fact), guest = false, at = at)
+        return MovePlan.places(allows::allows, facts(tree), moved.map(::fact), guest = top != null, at = at)
             .map { Place(byId.getValue(it.node.id), it.blocked?.let(::block)) }
     }
 
@@ -110,9 +115,9 @@ object NodeMove {
      * Why several [moved] nodes cannot be moved — or, with [copy], copied — to [at], naming the one that blocks it; a node
      * already there blocks nothing (it is left out when sent) unless all are ([MovePlan.hereBlockOf]).
      */
-    fun hereBlockOf(tree: List<NodeRef>, moved: List<NodeRef>, at: String?, allows: PlacementAllows, copy: Boolean = false): BlockOf? {
+    fun hereBlockOf(tree: List<NodeRef>, moved: List<NodeRef>, at: String?, allows: PlacementAllows, copy: Boolean = false, top: String? = null): BlockOf? {
         val byId = moved.associateBy { it.nodeId }
-        return MovePlan.hereBlockOf(allows::allows, facts(tree), moved.map(::fact), guest = false, at = at, copy = copy)
+        return MovePlan.hereBlockOf(allows::allows, facts(tree), moved.map(::fact), guest = top != null, at = at, copy = copy)
             ?.let { BlockOf(block(it.block), it.node?.let { n -> byId[n.id] }) }
     }
 
@@ -140,6 +145,8 @@ object NodeMove {
         /** Not re-keyed since its space's key changed, and still not after waiting. */
         BUSY,
         FAILED,
+        /** A link's guest declined to name itself at the move (the web's `MoveDeclined`): nothing was sent, nothing is said. */
+        DECLINED,
     }
 
     /** What came of a move: [taken] is the node at the destination its name collides with, where the loaded tree shows one. */

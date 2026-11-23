@@ -439,29 +439,74 @@ private struct GuestLevelView: View {
     @State private var pickingFiles = false
     @State private var pickingFolder = false
     @State private var said: VeyqCore.Notice?
+    /// The level's selection while it picks (core's `GuestLevelMoves.selection`, #1063).
+    @State private var picking: CoreState<LevelSelection.Picking?>?
+    /// A row's move asked: the member's sheet over the guest's door.
+    @State private var moving: MovedRow?
+
+    private struct MovedRow: Identifiable {
+        let id: String
+        let ref: NodeAt
+    }
 
     var body: some View {
         let rows = level.rows
+        let move = level.move
+        let sel = picking?.value
         Group {
             if rows.isEmpty {
                 Text(say(.listEmpty)).foregroundStyle(Role.muted).padding()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             } else {
                 List(rows, id: \.nodeId) { r in
-                    Button { held.open(r.nodeId) } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: r.kind == "FOLDER" ? "folder" : Names.kindSymbol(r.kind)).foregroundStyle(Role.accent).frame(width: 28)
-                            Text(r.displayName).foregroundStyle(Role.text)
-                            Spacer(minLength: 0)
-                        }
-                        .contentShape(Rectangle())
+                    if let sel {
+                        // while the level picks, as a member's: the row one toggle with its check (Files' Select)
+                        SelectableRow(selected: sel.has(id: r.nodeId)) { move.selectToggle(nodeId: r.nodeId); picking?.refresh() } label: { line(r) }
+                    } else {
+                        Button { held.open(r.nodeId) } label: { line(r) }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                // the row's menu as the core plans it (Move where the guest moves its node), drawn as a member's
+                                let plan = move.rowPlan(nodeId: r.nodeId)
+                                let words = NodeActionWords(kind: r.kind, pinned: nil, hasCover: false, offline: nil, own: [])
+                                ForEach(plan.menu + plan.last, id: \.self) { id in
+                                    words.entry(id) { asked in
+                                        if asked == .move { moving = MovedRow(id: r.nodeId, ref: NodeAt(scopeId: level.node.scopeId, nodeId: r.nodeId, kind: r.kind, name: r.name)) }
+                                    }
+                                }
+                            }
                     }
-                    .buttonStyle(.plain)
                 }
                 .scrollContentBackground(.hidden)
                 .accessibilityIdentifier("guest-level")
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            // the member's selection bar, its calls the guest level's
+            if let sel { SelectionBar(model: model, selection: sel, guest: move) }
+        }
+        .toolbar {
+            if move.tools.contains(LevelTool.select) {
+                ToolbarItem(placement: ViewModeMenu.placement) {
+                    // the member's Select tool (core's `LevelTool.SELECT`), on while the level picks
+                    Toggle(isOn: Binding(get: { picking?.value != nil }, set: { $0 ? move.selectStart() : move.selectCancel(); picking?.refresh() })) {
+                        Label(say(LevelSelection.shared.word), systemImage: "checkmark.circle")
+                    }
+                    .toggleStyle(.button)
+                    .accessibilityIdentifier("level-select")
+                }
+            }
+        }
+        .sheet(item: $moving) { m in
+            NodeMoveSheet(model: model, ref: m.ref) { [move] in move.sheet(nodeId: m.id) }
+        }
+        .task(id: ObjectIdentifier(level)) {
+            picking?.stop()
+            picking = CoreState({ move.selection.value as? LevelSelection.Picking }) { changed in
+                ApplePlatform.shared.watch(flow: move.selection) { @Sendable _ in changed() }
+            }
+        }
+        .onDisappear { picking?.stop() }
         // what a guest adds here: a folder, files or a folder (Depot's level actions); a guest makes no Memory, Pot or drop box
         // offered by the core alone (`GuestLevel.writes`): a guest not named yet is asked its name at the write (`naming`)
         .createMenu(say(.drawerNew), shown: !level.creates.isEmpty) {
@@ -499,6 +544,16 @@ private struct GuestLevelView: View {
             nameAnswered(try? await AppleSharing.shared.createFolder(level: level, name: name)) { said = $0 }
         }
         .saidNotice($said)
+    }
+
+    /// A row's line: its kind's symbol and its name.
+    private func line(_ r: GuestLevel.Row) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: r.kind == "FOLDER" ? "folder" : Names.kindSymbol(r.kind)).foregroundStyle(Role.accent).frame(width: 28)
+            Text(r.displayName).foregroundStyle(Role.text)
+            Spacer(minLength: 0)
+        }
+        .contentShape(Rectangle())
     }
 }
 

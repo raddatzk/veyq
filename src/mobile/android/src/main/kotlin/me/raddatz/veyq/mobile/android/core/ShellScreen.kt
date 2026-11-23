@@ -598,39 +598,12 @@ private fun WithRowMenu(
  * every action of its plan in its order — each enabled where some selected row allows it, with what it cannot reach under
  * it — and *Cancel*. Each action opens core's own sheet over the selected rows it reaches.
  */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun SelectionBar(sel: me.raddatz.veyq.mobile.navigation.LevelSelection.Picking, model: AppModel) {
-    val palette = LocalPalette.current
     val notices = LocalShellNotices.current
     val context = androidx.compose.ui.platform.LocalContext.current
     var open by remember { mutableStateOf<me.raddatz.veyq.mobile.navigation.SelectionAction?>(null) }
-    val label = say(sel.label)
-    androidx.compose.material3.Surface(
-        color = role(palette.accentSoft), shape = MaterialTheme.shapes.medium,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).testTag("selection-bar")
-            .semantics { paneTitle = label },
-    ) {
-        Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-            androidx.compose.foundation.layout.FlowRow(verticalArrangement = Arrangement.Center, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    say(sel.count), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.CenterVertically).padding(end = 4.dp)
-                        .semantics { liveRegion = LiveRegionMode.Polite },
-                )
-                TextButton(onClick = model::selectAll) { Text(say(sel.all)) }
-                TextButton(onClick = model::selectNone) { Text(say(sel.none)) }
-                for (a in sel.entries) {
-                    val danger = a.action == me.raddatz.veyq.mobile.navigation.SelectionAction.DELETE
-                    TextButton(onClick = { open = a.action }, enabled = a.enabled, modifier = Modifier.testTag("select-${a.action.name.lowercase()}")) {
-                        Text(say(a.word), color = if (danger && a.enabled) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified)
-                    }
-                }
-                TextButton(onClick = model::selectCancel) { Text(say(sel.cancel)) }
-            }
-            for (a in sel.entries) a.cannot?.let { Text(say(it), style = MaterialTheme.typography.bodySmall, color = role(palette.muted)) }
-        }
-    }
+    SelectionBarBody(sel, model::selectAll, model::selectNone, model::selectCancel) { open = it }
     val close = { open = null }
     when (open) {
         me.raddatz.veyq.mobile.navigation.SelectionAction.MOVE, me.raddatz.veyq.mobile.navigation.SelectionAction.COPY ->
@@ -659,6 +632,45 @@ private fun SelectionBar(sel: me.raddatz.veyq.mobile.navigation.LevelSelection.P
             )
         } ?: close()
         null -> {}
+    }
+}
+
+/**
+ * The selection bar as it is drawn — the count, *All*, *None*, the plan's actions ([onAction]), *Cancel* and what an action
+ * cannot reach —, a member's level's ([SelectionBar]) and a link guest's (#1063) alike.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+internal fun SelectionBarBody(
+    sel: me.raddatz.veyq.mobile.navigation.LevelSelection.Picking, onAll: () -> Unit, onNone: () -> Unit, onCancel: () -> Unit,
+    onAction: (me.raddatz.veyq.mobile.navigation.SelectionAction) -> Unit,
+) {
+    val palette = LocalPalette.current
+    val label = say(sel.label)
+    androidx.compose.material3.Surface(
+        color = role(palette.accentSoft), shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).testTag("selection-bar")
+            .semantics { paneTitle = label },
+    ) {
+        Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+            androidx.compose.foundation.layout.FlowRow(verticalArrangement = Arrangement.Center, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    say(sel.count), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.CenterVertically).padding(end = 4.dp)
+                        .semantics { liveRegion = LiveRegionMode.Polite },
+                )
+                TextButton(onClick = onAll) { Text(say(sel.all)) }
+                TextButton(onClick = onNone) { Text(say(sel.none)) }
+                for (a in sel.entries) {
+                    val danger = a.action == me.raddatz.veyq.mobile.navigation.SelectionAction.DELETE
+                    TextButton(onClick = { onAction(a.action) }, enabled = a.enabled, modifier = Modifier.testTag("select-${a.action.name.lowercase()}")) {
+                        Text(say(a.word), color = if (danger && a.enabled) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified)
+                    }
+                }
+                TextButton(onClick = onCancel) { Text(say(sel.cancel)) }
+            }
+            for (a in sel.entries) a.cannot?.let { Text(say(it), style = MaterialTheme.typography.bodySmall, color = role(palette.muted)) }
+        }
     }
 }
 

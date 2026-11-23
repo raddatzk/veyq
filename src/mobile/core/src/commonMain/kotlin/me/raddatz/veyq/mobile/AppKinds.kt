@@ -396,6 +396,13 @@ object AppKinds {
     }
 
     /**
+     * Whether a READ_WRITE link's guest may move a node of [kind] (inbox #1063; the web's `nodeRights` for a guest narrowed
+     * by its application's rights): a folder always — core's —, any other kind where its application lets a guest move it
+     * ([ApplicationKinds.guestMoves]); a kind this build does not know never (fail closed).
+     */
+    fun guestMoves(kind: String): Boolean = kind == FOLDER || applications.any { it.guestMoves(kind) }
+
+    /**
      * What a READ_WRITE guest's upload at a folder of the link creates (the web's level upload: an application's own level
      * action, Depot's `guestFileUploadJob`): one job per source, each its own node created as the guest under [parent].
      */

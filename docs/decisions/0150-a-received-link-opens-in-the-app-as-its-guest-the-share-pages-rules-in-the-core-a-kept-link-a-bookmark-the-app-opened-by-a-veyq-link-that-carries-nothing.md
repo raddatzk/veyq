@@ -211,6 +211,26 @@ den du bekommen hast*, *Open in the browser* / *Im Browser öffnen*, *Keep* / *B
   `metaShown`, #1035). *The guest-write record's notice* (ADR 0093 § 10) stands before every guest write on every app:
   in a READ_WRITE guest's naming question and on a drop box's and an uploader's page, with the N the resolve served
   (#1018).
+- **A READ_WRITE guest moves within the link's folders** (#1063, built 2026-11-22; the web's `move.ts` `guestMover`): the
+  core's `sharing/GuestMove` — one `updateShareNode` per node, its key re-wrapped and its name and slug token sealed
+  under the destination folder's key, sent after the core's one naming flow (`GuestAccess.naming`; declined, nothing is
+  sent or said: `NodeMove.Outcome.DECLINED`), a lost race read anew and built once more, a re-key in flight waited on.
+  It is offered where the web's rights offer it (`GuestMove.moves`): a node a folder of the link holds — never the link's
+  root —, not in or of an identity folder, of a kind its application lets a guest move (`ApplicationKinds.guestMoves`: a
+  file, a Memory and a folder; never a chapter, a drop box or a Pot). **The browser is the member's** `MoveSheet`, its
+  top the link's root (`MoveSheet.Door.top`, which `NodeMove` hands the platform's `MovePlan` as `guest`): the trail
+  starts at the link named as the link, the places are its folders only, a guest copies nothing. A guest's level carries
+  the member's row menu (Move) and Select (`GuestLevel.move`: `rowPlan`, `tools`, `selection`, `sheet`,
+  `selectionSheet`; a guest's selection holds a move only and is cleared when the link is read anew after a write); the
+  bridge carries them as `ReceivedRow.menu`, `ReceivedPage.tools` and `selection`, `Received.Move` and `Received.Select*`.
+  Every app draws them with the member's own pieces: Android `GuestScreens.kt` (the long press's menu, the Select toggle,
+  `SelectionBarBody`, `NodeMoveSheet`), Apple `GuestLinks.swift` (the context menu, the toolbar's Select, `SelectionBar`
+  with its `guest`, `NodeMoveSheet`), Linux `received.rs` (the row's menu, the header's Select, `selection::bar_with`,
+  `move_sheet::open_call`), Windows `ReceivedView.cs` (the row's flyout, the CommandBar's `Selection.GuestTool`,
+  `Selection.Bar` with `Selection.Guest`, `MoveDialog.OpenWith`). Held by `GuestMoveTest` over a played link whose
+  placement write re-parents the row (bitten: a Pot offered a move, the trail rooted above the link, a name sealed under
+  the node's own key each turned it red) and `ReceivedBridgeTest`. **Not clicked on any app** (inbox #1063 holds the
+  passes).
 - **What the passes proved** (each as a throwaway owner and member, made and erased by the pass; the links minted by the
   owner through the core or the bridge, not the web). *Android* (a throwaway API 36 emulator): signed out — a READ
   Memory; a READ_WRITE folder (named, a file replaced); a password Pot (a wrong password refused, an entry added as the

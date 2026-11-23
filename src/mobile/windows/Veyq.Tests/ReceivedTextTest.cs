@@ -65,8 +65,13 @@ public sealed class ReceivedTextTest
         Assert.AreEqual(ReceivedText.DrawnKey(a), ReceivedText.DrawnKey(a with { guestName = "Ben" }));
         Assert.AreNotEqual(ReceivedText.DrawnKey(a), ReceivedText.DrawnKey(a with { askedAgain = true }));
         Assert.AreNotEqual(ReceivedText.DrawnKey(a), ReceivedText.DrawnKey(Shown(ReceivedGate.Terms)));
-        var page = new ReceivedPage { kind = ReceivedPageKind.DropBox, name = "Inbox", nodeKind = "DEPOT_DROPBOX", rows = [], file = null, gallery = null, pot = null, sent = [], writes = false, creates = [], title = "Inbox" };
+        var page = new ReceivedPage { kind = ReceivedPageKind.DropBox, name = "Inbox", nodeKind = "DEPOT_DROPBOX", rows = [], file = null, gallery = null, pot = null, sent = [], writes = false, creates = [], tools = [], selection = null, title = "Inbox" };
         var ready = Shown(ReceivedGate.Ready) with { page = page };
         Assert.AreNotEqual(ReceivedText.DrawnKey(ready), ReceivedText.DrawnKey(ready with { page = page with { sent = ["a.pdf"] } }), "a file sent shows");
+        // a guest level's Select turned on, and its selection changed, draw the level anew (#1063)
+        var picking = ready with { page = page with { tools = [LevelTool.Select] } };
+        Assert.AreNotEqual(ReceivedText.DrawnKey(ready), ReceivedText.DrawnKey(picking), "the Select tool shows");
+        var selected = picking with { page = picking.page! with { selection = new ShownSelection { selected = ["n1"], count = new Notice { msg = "select_count", args = [], kind = NoticeKind.Said }, actions = [] } } };
+        Assert.AreNotEqual(ReceivedText.DrawnKey(picking), ReceivedText.DrawnKey(selected), "a selection shows");
     }
 }

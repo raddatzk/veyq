@@ -25,6 +25,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.BookmarkAdd
+import androidx.compose.material.icons.outlined.CheckBox
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Link
@@ -343,6 +347,10 @@ private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, vie
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     var naming by remember(level) { mutableStateOf(false) }
+    // the row whose menu is open, and the move sheet shown (a row's or the selection's, #1063)
+    var menuOf by remember(level) { mutableStateOf<String?>(null) }
+    // not keyed on the level: the link read anew after the move draws a new one while the sheet still says what it did
+    var moving by remember { mutableStateOf<me.raddatz.veyq.mobile.navigation.MoveSheet?>(null) }
     val pickFiles = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) model.guestLevelUpload(level, uris)
     }
@@ -369,18 +377,61 @@ private fun GuestLevelPage(level: me.raddatz.veyq.mobile.sharing.GuestLevel, vie
             })
         }
     }) { list, bottom ->
-        if (rows.isEmpty()) Text(stringResource(R.string.list_empty), color = role(LocalPalette.current.muted), modifier = Modifier.padding(16.dp))
-        else LazyColumn(Modifier.fillMaxSize().testTag("guest-level"), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottom)) {
-            items(rows, key = { it.nodeId }) { r ->
-                ListItem(
-                    headlineContent = { Text(r.displayName) },
-                    leadingContent = { Icon(kindIcon(r.kind), null, tint = role(LocalPalette.current.accent)) },
-                    colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
-                    modifier = Modifier.clickableRow { scope.launch(Dispatchers.IO) { view.open(r.nodeId) } },
-                )
+        // the level's move (#1063, core's `GuestLevelMoves`): Select where some row moves, each row's menu, the member's sheet
+        val move = level.move
+        val selection by move.selection.collectAsStateWithLifecycle()
+        val picking = selection
+        Column(Modifier.fillMaxSize()) {
+            if (me.raddatz.veyq.mobile.navigation.LevelTool.SELECT in move.tools) Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.End) {
+                // the member's Select tool (core's `LevelTool.SELECT`), pressed while the level picks
+                androidx.compose.material3.IconToggleButton(
+                    checked = picking != null, onCheckedChange = { if (it) move.selectStart() else move.selectCancel() },
+                    modifier = Modifier.testTag("level-select"),
+                ) { Icon(Icons.Outlined.CheckBox, say(me.raddatz.veyq.mobile.navigation.LevelSelection.word)) }
+            }
+            if (rows.isEmpty()) Text(stringResource(R.string.list_empty), color = role(LocalPalette.current.muted), modifier = Modifier.padding(16.dp))
+            else LazyColumn(Modifier.weight(1f).fillMaxWidth().testTag("guest-level"), state = list, contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = bottom)) {
+                items(rows, key = { it.nodeId }) { r ->
+                    val plan = remember(level, r.nodeId) { move.rowPlan(r.nodeId) }
+                    Box {
+                        ListItem(
+                            headlineContent = { Text(r.displayName) },
+                            leadingContent = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (picking != null) androidx.compose.material3.Checkbox(picking.has(r.nodeId), onCheckedChange = null)
+                                    Icon(kindIcon(r.kind), null, tint = role(LocalPalette.current.accent))
+                                }
+                            },
+                            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
+                            modifier = if (picking != null) {
+                                // Material's selection mode: the whole row one toggle
+                                Modifier.testTag("select-row").toggleable(value = picking.has(r.nodeId), role = androidx.compose.ui.semantics.Role.Checkbox) { move.selectToggle(r.nodeId) }
+                            } else {
+                                // the row's menu (core's plan) on a long press, Material's gesture for an item's actions
+                                Modifier.clickableRow(stringResource(R.string.node_more), if (plan.isEmpty) null else ({ menuOf = r.nodeId })) {
+                                    scope.launch(Dispatchers.IO) { view.open(r.nodeId) }
+                                }
+                            },
+                        )
+                        DropdownMenu(menuOf == r.nodeId, { menuOf = null }) {
+                            for (id in plan.menu + plan.last) DropdownMenuItem(
+                                text = { Text(me.raddatz.veyq.mobile.navigation.NodeHeader.label(id, r.kind, false, hasCover = false)?.let { say(it) } ?: id.name) },
+                                onClick = {
+                                    menuOf = null
+                                    if (id == me.raddatz.veyq.mobile.navigation.HeaderAction.MOVE) moving = move.sheet(r.nodeId)
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+            // the member's selection bar, its calls the guest level's: a guest's plan holds a move only
+            if (picking != null) SelectionBarBody(picking, move::selectAll, move::selectNone, move::selectCancel) { a ->
+                if (a == me.raddatz.veyq.mobile.navigation.SelectionAction.MOVE) moving = move.selectionSheet()
             }
         }
     }
+    moving?.let { sheet -> NodeMoveSheet(sheet, onDone = { done -> moved(done, snackbar, scope, context) }, onClose = { moving = null }) }
     if (naming) NameAnswerDialog(
         stringResource(R.string.folder_new), onClose = { naming = false },
         onSaid = { n -> scope.launch { snackbar.show(context, n) } },

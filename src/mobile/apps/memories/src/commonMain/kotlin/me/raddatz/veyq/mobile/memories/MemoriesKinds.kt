@@ -156,6 +156,9 @@ object MemoriesKinds : ApplicationKinds {
 
     override fun share(kind: String): ShareAnswer? = if (kind in kinds) MemoryShare.answer else null
 
+    // a guest moves a Memory, never a chapter (the web's `memories/rights.ts`)
+    override fun guestMoves(kind: String): Boolean = kind == MEMORY
+
     override fun guestDoor(kind: String, role: String): GuestDoor? = when {
         kind !in kinds -> null
         role == GuestAccess.WRITE_ONLY -> MemoriesGuest.uploader

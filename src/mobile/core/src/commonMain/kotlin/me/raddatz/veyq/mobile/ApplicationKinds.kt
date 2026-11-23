@@ -131,6 +131,13 @@ interface ApplicationKinds {
     /** Its door for a link's guest of [role] at a node of [kind] ([AppKinds.guestDoor]). */
     fun guestDoor(kind: String, role: String): GuestDoor? = null
 
+    /**
+     * Whether a READ_WRITE link's guest may move a node of its kind [kind] out of a folder into another of the link
+     * ([AppKinds.guestMoves], the web's application rights for a guest: a file and a Memory move; a chapter, a drop box and
+     * a Pot do not); false for a kind not its own.
+     */
+    fun guestMoves(kind: String): Boolean = false
+
     /** The job a READ_WRITE guest's upload of [source] into a link's folder makes ([AppKinds.guestLevelUploads]). */
     fun guestLevelUpload(access: GuestAccess, session: GuestSession, parent: OpenNode, source: UploadSource): UploadQueue.Job? = null
 }

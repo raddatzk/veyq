@@ -1357,6 +1357,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.LinkConfirm -> links[call.link]?.let { taken(it.model.confirm(call.label)) } ?: noLink
             is Call.LinkEnterCode -> links[call.link]?.let { taken(it.model.enterCode(call.code)) } ?: noLink
             is Call.LinkClose -> links.remove(call.link)?.let { closeLink(it); Answer.Done } ?: noLink
+            is Call.ReceivedMove, is Call.ReceivedSelectStart, is Call.ReceivedSelectCancel, is Call.ReceivedSelectToggle, is Call.ReceivedSelectAll,
+            is Call.ReceivedSelectNone, is Call.ReceivedSelectMove -> receivedMove(call)
             is Call.ReceivedOpen, is Call.ReceivedPassword, is Call.ReceivedAcceptTerms, is Call.ReceivedAcceptNote, is Call.ReceivedOpenNode, is Call.ReceivedBack, is Call.ReceivedStay, is Call.ReceivedLeave, is Call.ReceivedClose, is Call.ReceivedForgetGuest, is Call.ReceivedKeep, is Call.ReceivedUpload, is Call.ReceivedUploadFolder, is Call.ReceivedReplace, is Call.ReceivedNewFolder, is Call.ReceivedNamingSave, is Call.ReceivedNamingDecline, is Call.ReceivedReportNode, is Call.ReceivedReport, is Call.ReceivedKeepPlaces, is Call.ReceivedReportShown -> receivedCall(parts, call)
             is Call.BookmarkOpen -> openBookmark(parts, call.node)
             is Call.BookmarkOwnPage -> bookmarks[call.bookmark]?.let { b ->
@@ -2396,6 +2398,42 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         return Answer.ReceivedOpened(id)
     }
 
+    /**
+     * A guest level's move (inbox #1063): a row's sheet, the Select mode and the selection's sheet — the core's
+     * `GuestLevelMoves` on the level on screen, the sheets registered with the member's (`Move.*`).
+     */
+    private suspend fun receivedMove(call: Call): Answer {
+        val id = when (call) {
+            is Call.ReceivedMove -> call.received
+            is Call.ReceivedSelectStart -> call.received
+            is Call.ReceivedSelectCancel -> call.received
+            is Call.ReceivedSelectToggle -> call.received
+            is Call.ReceivedSelectAll -> call.received
+            is Call.ReceivedSelectNone -> call.received
+            is Call.ReceivedSelectMove -> call.received
+            else -> return Answer.Refused(Answer.Why.NOT_A_CALL)
+        }
+        val h = received[id] ?: return noReceived
+        val move = (h.screen.view.page.value as? me.raddatz.veyq.mobile.sharing.GuestPage.Level)?.model?.move ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+        fun opened(sheet: MoveSheet?): Answer {
+            sheet ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+            val mid = ids.incrementAndFetch()
+            moves.put(mid, sheet)
+            scope.launch { sheet.load() }
+            return Answer.MoveOpened(mid)
+        }
+        return when (call) {
+            is Call.ReceivedMove -> opened(move.sheet(call.node))
+            is Call.ReceivedSelectMove -> opened(move.selectionSheet())
+            is Call.ReceivedSelectStart -> move.selectStart().let { Answer.Done }
+            is Call.ReceivedSelectCancel -> move.selectCancel().let { Answer.Done }
+            is Call.ReceivedSelectToggle -> move.selectToggle(call.node).let { Answer.Done }
+            is Call.ReceivedSelectAll -> move.selectAll().let { Answer.Done }
+            is Call.ReceivedSelectNone -> move.selectNone().let { Answer.Done }
+            else -> Answer.Refused(Answer.Why.NOT_A_CALL)
+        }
+    }
+
     /** After a gate: the content where the gates passed. */
     private suspend fun enterReceived(h: HeldReceived): Answer {
         h.screen.enter()
@@ -2420,11 +2458,29 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         fun shown(kind: ReceivedPageKind, rows: List<ReceivedRow> = emptyList(), file: Long? = null, gallery: Long? = null, pot: Long? = null, sent: List<String> = emptyList()) =
             ReceivedPage(kind, node.name, node.kind, rows, file, gallery, pot, sent)
         h.page.value = when (page) {
-            is me.raddatz.veyq.mobile.sharing.GuestPage.Level -> ReceivedPage(
-                ReceivedPageKind.LEVEL, node.name, node.kind, page.model.rows.map { ReceivedRow(it.nodeId, it.kind, it.name, it.identity, it.displayName) },
-                null, null, null, emptyList(), writes = page.model.writes,
-                creates = page.model.creates.map { ShellShown.ShownCreate(it, it.word) }, title = page.model.title,
-            )
+            is me.raddatz.veyq.mobile.sharing.GuestPage.Level -> {
+                val move = page.model.move
+                fun shownLevel(sel: me.raddatz.veyq.mobile.navigation.LevelSelection.Picking?) = ReceivedPage(
+                    ReceivedPageKind.LEVEL, node.name, node.kind,
+                    page.model.rows.map { r ->
+                        // the row's menu as the core plans it, each entry with the member's words (inbox #1063)
+                        val plan = move.rowPlan(r.nodeId)
+                        ReceivedRow(
+                            r.nodeId, r.kind, r.name, r.identity, r.displayName,
+                            menu = plan.menu.map { a -> HeaderShown.PlanAction(a, me.raddatz.veyq.mobile.navigation.NodeHeader.label(a, r.kind, false, hasCover = false)) },
+                        )
+                    },
+                    null, null, null, emptyList(), writes = page.model.writes,
+                    creates = page.model.creates.map { ShellShown.ShownCreate(it, it.word) }, title = page.model.title,
+                    tools = move.tools,
+                    selection = sel?.let { s ->
+                        ShellShown.ShownSelection(s.selected.toList(), s.count, s.entries.map { ShellShown.ShownSelectionAction(it.action, it.word, it.enabled, it.cannot) })
+                    },
+                )
+                // the level's selection followed into the page while it shows
+                h.sending = scope.launch { move.selection.collect { sel -> h.page.value = shownLevel(sel) } }
+                shownLevel(move.selection.value)
+            }
             is me.raddatz.veyq.mobile.depot.DepotGuest.File -> shown(ReceivedPageKind.FILE, file = ids.incrementAndFetch().also { filePages.put(it, page.model) })
             is me.raddatz.veyq.mobile.memories.MemoriesGuest.Gallery -> shown(ReceivedPageKind.GALLERY, gallery = ids.incrementAndFetch().also { galleries.put(it, page.model) })
             is me.raddatz.veyq.mobile.expenses.PotGuest.Pot -> {

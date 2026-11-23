@@ -440,6 +440,11 @@ internal sealed class ReceivedView : IDisposable
             _commands.PrimaryCommands.Add(CreateAction.Menu(Words.DrawerNew(), "received-new",
                 level.creates.Select(c => (Said.Key(c.word), GuestCreateId(c.create), GuestCreating(c.create)))));
         }
+        if (s.gate == ReceivedGate.Ready && s.page is { kind: ReceivedPageKind.Level } picking && picking.tools.Contains(LevelTool.Select))
+        {
+            // a READ_WRITE guest's level (#1063): the member's Select tool, checked while the level picks
+            _commands.PrimaryCommands.Add(Selection.GuestTool(picking.selection is not null, Received));
+        }
         if (_page?.GuestReplaces is { } file && s.gate == ReceivedGate.Ready)
         {
             // a guest's Replace (#1035) where the core's FileRights offer it: on the link's own queue, signed in or out; an
@@ -552,7 +557,7 @@ internal sealed class ReceivedView : IDisposable
         switch (p.kind)
         {
             case ReceivedPageKind.Level:
-                _content.Content = p.rows.Count == 0 ? Scrolled(Empty(p.title, null)) : Rows(p.rows);
+                _content.Content = p.rows.Count == 0 ? Scrolled(Empty(p.title, null)) : Rows(p);
                 break;
             case ReceivedPageKind.DropBox or ReceivedPageKind.Uploader:
                 DrawUploadPage(p);
@@ -577,9 +582,13 @@ internal sealed class ReceivedView : IDisposable
         }
     }
 
-    /// <summary>A guest's level: its rows, each opening its kind's guest page.</summary>
-    private UIElement Rows(IReadOnlyList<ReceivedRow> rows)
+    /// <summary>A guest's level: its rows, each opening its kind's guest page, each with its menu — the core's plan (Move
+    /// where the guest moves it, #1063) then its report; while the level picks, each row's check and the member's selection
+    /// bar under them, its calls the guest level's.</summary>
+    private UIElement Rows(ReceivedPage p)
     {
+        var rows = p.rows;
+        var picking = p.selection;
         var list = new ListView { SelectionMode = ListViewSelectionMode.None, IsItemClickEnabled = true, Padding = new Thickness(12, 0, 12, 24) };
         AutomationProperties.SetAutomationId(list, "received-level");
         foreach (var r in rows)
@@ -588,7 +597,8 @@ internal sealed class ReceivedView : IDisposable
             line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            line.Children.Add(HomeView.Glyph(HomeView.KindGlyph(r.kind)));
+            var glyph = HomeView.Glyph(HomeView.KindGlyph(r.kind));
+            line.Children.Add(picking is { } sel ? Selection.Check(glyph, sel.selected.Contains(r.id)) : glyph);
             var title = new TextBlock { Text = r.displayName, TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center };
             Grid.SetColumn(title, 1);
             line.Children.Add(title);
@@ -597,17 +607,33 @@ internal sealed class ReceivedView : IDisposable
             Grid.SetColumn(chevron, 2);
             line.Children.Add(chevron);
             var item = new ListViewItem { Content = line, Tag = r.id, MinHeight = 44 };
+            var menu = new MenuFlyout();
+            var node = r.id;
+            // the core's plan first (#1063): the row's Move to…, the member's move sheet over the guest's door
+            foreach (var a in r.menu)
+            {
+                if (a.id != HeaderAction.Move)
+                {
+                    Log.Write($"a guest row's menu offered {a.id}");
+                    continue;
+                }
+                // drawn as a member's row entry is (RowMenu): its words and icon
+                var move = new MenuFlyoutItem { Text = a.word is { } w ? Said.Key(w) : HeaderPlan.Wire(a.id), Icon = NodeHeader.Icon(a, null) };
+                AutomationProperties.SetAutomationId(move, $"received-row-move:{r.name}");
+                var name = r.displayName;
+                move.Click += (_, _) => MoveDialog.OpenWith(_window, name, new Call.ReceivedMove { received = Received, node = node }, _notices);
+                menu.Items.Add(move);
+            }
             // a viewing link's row reported to the link's own operator (#1033: whole, or by its name below the root)
             if (_shown is { } s && ReceivedText.Offers(s, _mode).Report)
             {
+                if (menu.Items.Count > 0) menu.Items.Add(new MenuFlyoutSeparator());
                 var report = new MenuFlyoutItem { Text = Words.ReportAction(), Icon = new SymbolIcon(Symbol.Flag) };
                 AutomationProperties.SetAutomationId(report, $"received-row-report:{r.name}");
-                var node = r.id;
                 report.Click += (_, _) => ReportDialog.Open(_window, new Call.ReceivedReportNode { received = Received, node = node });
-                var menu = new MenuFlyout();
                 menu.Items.Add(report);
-                item.ContextFlyout = menu;
             }
+            if (picking is null && menu.Items.Count > 0) item.ContextFlyout = menu;
             AutomationProperties.SetAutomationId(item, $"received-row:{r.name}");
             AutomationProperties.SetName(item, r.displayName);
             list.Items.Add(item);
@@ -615,9 +641,19 @@ internal sealed class ReceivedView : IDisposable
         list.ItemClick += (_, e) =>
         {
             var row = e.ClickedItem as ListViewItem ?? (e.ClickedItem as FrameworkElement)?.Parent as ListViewItem;
-            if (row?.Tag is string id) Act.Send(new Call.ReceivedOpenNode { received = Received, node = id });
+            if (row?.Tag is not string id) return;
+            // while the level picks, a row's click turns it (the member's Select mode)
+            Act.Send(picking is null ? new Call.ReceivedOpenNode { received = Received, node = id } : (Call)new Call.ReceivedSelectToggle { received = Received, node = id });
         };
-        return list;
+        if (picking is not { } shown) return list;
+        var page = new Grid();
+        page.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        page.Children.Add(list);
+        var bar = Selection.Bar(shown, Selection.Guest(Received, _window, _notices));
+        Grid.SetRow(bar, 1);
+        page.Children.Add(bar);
+        return page;
     }
 
     /// <summary>A WRITE_ONLY guest's page (a drop box's, a Memory's uploader): its files picked, what it sent in this visit.</summary>

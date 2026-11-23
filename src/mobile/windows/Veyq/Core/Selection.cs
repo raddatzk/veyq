@@ -20,13 +20,30 @@ internal static class Selection
     public static string CheckedStatus => Words.SelectBar();
 
     /// <summary>The level's Select tool: checked while the level picks.</summary>
-    public static AppBarToggleButton Tool(bool on)
+    public static AppBarToggleButton Tool(bool on, Func<bool, Call>? send = null)
     {
         var b = new AppBarToggleButton { Label = Words.SelectAction(), Icon = new FontIcon { Glyph = "" }, IsChecked = on };
         AutomationProperties.SetAutomationId(b, "level-select");
-        b.Click += (_, _) => Act.Send(b.IsChecked == true ? (Call)new Call.SelectStart() : new Call.SelectCancel());
+        b.Click += (_, _) => Act.Send(send is not null ? send(b.IsChecked == true) : b.IsChecked == true ? (Call)new Call.SelectStart() : new Call.SelectCancel());
         return b;
     }
+
+    /// <summary>The Select tool of a link guest's level (#1063): the member's, its calls the guest level's.</summary>
+    public static AppBarToggleButton GuestTool(bool on, long received) =>
+        Tool(on, start => start ? new Call.ReceivedSelectStart { received = received } : (Call)new Call.ReceivedSelectCancel { received = received });
+
+    /// <summary>The calls a selection's bar sends and where its sheets open: a member's level's (Select.*, <see cref="Member"/>)
+    /// or a link guest's (Received.Select*, <see cref="Guest"/>, #1063) — the same bar, its actions the core's plan.</summary>
+    internal sealed record Calls(Call All, Call None, Call Cancel, Call MoveTo, Window? Window = null, NoticeBar? Said = null);
+
+    /// <summary>The shell's level's selection.</summary>
+    public static Calls Member => new(new Call.SelectAll(), new Call.SelectNone(), new Call.SelectCancel(), new Call.SelectMove { copy = false, deletedName = Words.PotDeletedPerson() });
+
+    /// <summary>The selection of received link <paramref name="received"/>'s guest level, its sheets over <paramref name="window"/>,
+    /// said in <paramref name="said"/>: its plan holds a move only (a guest copies, reports and deletes no selection).</summary>
+    public static Calls Guest(long received, Window window, NoticeBar said) => new(
+        new Call.ReceivedSelectAll { received = received }, new Call.ReceivedSelectNone { received = received },
+        new Call.ReceivedSelectCancel { received = received }, new Call.ReceivedSelectMove { received = received }, window, said);
 
     /// <summary>What a row's or a tile's click does while the level picks: its node turned.</summary>
     public static Action Toggle(string nodeId) => () => Act.Send(new Call.SelectToggle { nodeId = nodeId });
@@ -42,7 +59,10 @@ internal static class Selection
 
     /// <summary>The selection's bar: what an action cannot reach, then the CommandBar with the count, All, None, the plan's
     /// actions in order and Cancel.</summary>
-    public static FrameworkElement Bar(ShownSelection sel)
+    public static FrameworkElement Bar(ShownSelection sel) => Bar(sel, Member);
+
+    /// <summary><see cref="Bar(ShownSelection)"/> sending <paramref name="calls"/>.</summary>
+    public static FrameworkElement Bar(ShownSelection sel, Calls calls)
     {
         var column = new StackPanel { Spacing = 2, Padding = new Thickness(12, 4, 12, 4) };
         AutomationProperties.SetName(column, Words.SelectBar());
@@ -61,20 +81,20 @@ internal static class Selection
         var count = new TextBlock { Text = Said.Notice(sel.count), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] };
         AutomationProperties.SetLiveSetting(count, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
         var bar = new CommandBar { DefaultLabelPosition = CommandBarDefaultLabelPosition.Right, HorizontalAlignment = HorizontalAlignment.Stretch, Content = count, IsDynamicOverflowEnabled = true };
-        bar.PrimaryCommands.Add(Button(Words.SelectAll(), "select-all", true, () => Act.Send(new Call.SelectAll())));
-        bar.PrimaryCommands.Add(Button(Words.SelectNone(), "select-none", true, () => Act.Send(new Call.SelectNone())));
+        bar.PrimaryCommands.Add(Button(Words.SelectAll(), "select-all", true, () => Act.Send(calls.All)));
+        bar.PrimaryCommands.Add(Button(Words.SelectNone(), "select-none", true, () => Act.Send(calls.None)));
         foreach (var a in sel.actions)
         {
             var word = Said.Key(a.word);
             bar.PrimaryCommands.Add(a.id switch
             {
-                SelectionAction.Move => Button(word, "select-move", a.enabled, () => Move(false, Said.Notice(sel.count))),
+                SelectionAction.Move => Button(word, "select-move", a.enabled, () => MoveTo(calls, Said.Notice(sel.count))),
                 SelectionAction.Copy => Button(word, "select-copy", a.enabled, () => Move(true, Said.Notice(sel.count))),
                 SelectionAction.Report => Button(word, "select-report", a.enabled, Report),
                 SelectionAction.Delete => Button(word, "select-delete", a.enabled, Delete),
             });
         }
-        bar.PrimaryCommands.Add(Button(Words.EntryCancel(), "select-cancel", true, () => Act.Send(new Call.SelectCancel())));
+        bar.PrimaryCommands.Add(Button(Words.EntryCancel(), "select-cancel", true, () => Act.Send(calls.Cancel)));
         column.Children.Add(bar);
         return column;
     }
@@ -85,6 +105,13 @@ internal static class Selection
         AutomationProperties.SetAutomationId(b, automationId);
         b.Click += (_, _) => act();
         return b;
+    }
+
+    /// <summary>The selection's Move to… over the window and the bar <paramref name="calls"/> names (a member's: the shell's).</summary>
+    private static void MoveTo(Calls calls, string title)
+    {
+        if ((calls.Window ?? RowMenu.Window) is not { } window) return;
+        MoveDialog.OpenWith(window, title, calls.MoveTo, calls.Said ?? RowMenu.UndoBar);
     }
 
     private static void Move(bool copy, string title)
