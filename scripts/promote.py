@@ -16,8 +16,9 @@ signatures, the chart, the git tag, the GitHub Release — stay in the workflow'
 
 **check** refuses unless every one of these holds, in this order (each refusal names what it saw):
 
-  1. **Exactly one draft release exists**, and its tag is `snapshot-<major>.<minor>`. Zero is nothing to promote; two
-     or more would make the choice the workflow's.
+  1. **Exactly one draft release exists**, its tag is `snapshot-<major>.<minor>`, and its notes list nothing under
+     **Needs a note** (release_notes.py's heading for a pull request without a note — never published as it stands).
+     Zero is nothing to promote; two or more would make the choice the workflow's.
   2. **The run's branch may release it**: `main` for the major `VERSION` holds there, `release/<major>.x` for its own.
   3. **The tag's commit is the snapshot it names**: the tree at that commit counts exactly `<major>.<minor>`
      (`release_assets.tree_release`, ADR 0057 §1), and the commit is on the run's branch.
@@ -78,6 +79,9 @@ CHART = "charts/veyq"
 LANES = ("L1",)  # the lanes that exist; L2 and L3 join with #453 and #461
 OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 SNAPSHOT_TAG = re.compile(r"^snapshot-(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+# release_notes.py's heading for a pull request whose note is missing (`NEEDS_A_NOTE`; promote_selftest.py ties the
+# two): a line of its own, so the quoted refusal note that names it does not match.
+NEEDS_A_NOTE = re.compile(r"^\s*\*\*Needs a note\*\*\s*$", re.MULTILINE)
 RELEASE_TAG = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 RELEASE_BRANCH = re.compile(r"^release/(0|[1-9][0-9]*)\.x$")
 LANE_ORCHESTRATOR = "scripts/run_stack_e2e.py"
@@ -132,6 +136,10 @@ def choose_draft(releases: list[dict]) -> Draft:
         raise Refused(f"the draft is on the tag `{draft.tag}`, not on a `snapshot-<major>.<minor>` tag — a release "
                       f"promotes a snapshot, and only a snapshot's tag names one. Pick the snapshot's tag in the "
                       f"draft.", [draft.id])
+    if NEEDS_A_NOTE.search(draft.body):
+        raise Refused("the draft still lists pull requests under **Needs a note**. Edit the draft: put each one's "
+                      "note under its heading in place of that section, then run this workflow again. (Publish no "
+                      "longer refreshes this draft: this refusal note marks it as edited.)", [draft.id])
     return draft
 
 

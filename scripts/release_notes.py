@@ -29,8 +29,11 @@ Dependabot's pull requests need none.
 usable note or the author is Dependabot. It reads the body from the event file only (never from a `${{ }}` expression
 in a run line, where a body would be shell).
 
-**draft** — `publish.yml`'s `release-draft` job runs it after the snapshot is tagged, on `main` only. It decides and
-writes no release itself: the job's own lines do the one `gh api` write (create or edit a draft), where
+**draft** — `publish.yml`'s `release-draft` job runs it after the snapshot is tagged, and on a run that publishes
+nothing because the commit already carries its unreleased snapshot (a dispatch after a note was corrected in its pull
+request, cr-release-draft-from-publish phase 5); on `main` only. It refuses unless the tag `snapshot-<version>` exists in the
+checkout and names the commit, so a draft never names a snapshot that is not there. It decides and writes no release
+itself: the job's own lines do the one `gh api` write (create or edit a draft), where
 `scripts/validate_release_identity.py` sees it. It reads:
 
   1. **The range**: from the newest `v<major>.<m>` tag that is an ancestor of the snapshot's commit to that commit,
@@ -53,9 +56,11 @@ judgement; the owner adds it while reading the draft when wanted (cr-release-dra
 owner's override).
 
 **What a green selftest does not prove** (`scripts/release_notes_selftest.py`): that GitHub's `commits/<sha>/pulls`
-returns a squash-merged pull request for its merge commit, and that a draft's body comes back from the API byte for
-byte as it was sent — a run shows both; a body that came back changed would read as edited and be left, never
-overwritten.
+returns a squash-merged pull request for its merge commit, and that a draft's body comes back from the API unchanged.
+Both were measured once on GitHub, not here: Publish run 45076081333 (2026-11-22) found the two squash-merged pull
+requests since `v1.260`, and the draft it created read back through `gh api repos/raddatzk/veyq/releases/454786982`
+still counted as untouched (`untouched(body)` true, `plan` → `none`). A body that came back changed would read as
+edited and be left, never overwritten.
 """
 from __future__ import annotations  # `X | None` — the repo's scripts run on Python 3.9
 
@@ -270,6 +275,12 @@ def draft(repository: str, version: str, commit: str, branch: str, root: pathlib
         raise Refused(f"`{commit}` is not a full commit hash")
     if branch != "main":
         raise Refused(f"`{branch}`: a draft is written for `main` only; a fix release on a release branch is drafted by hand")
+    tag = f"snapshot-{version}"
+    named = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}^{{commit}}"], cwd=root,
+                           capture_output=True, text=True).stdout.strip()
+    if named != commit:
+        raise Refused(f"`{tag}` {'names ' + named if named else 'does not exist'}, not {commit}: a draft names a "
+                      f"tagged snapshot, so it is written only once that tag names the snapshot's commit")
     since = last_release(root, commit, int(m.group(1)))
     if since is None:
         return ({"action": "leave", "draft_id": "", "payload": {},

@@ -19,12 +19,14 @@
   "//dependencies": "sharp is declared although nothing here imports it: Astro's image service loads it at build time from the built chunks, and Astro asks for it only as an optional dependency. npm hoisted it to node_modules/sharp; pnpm links only what this package declares, and without it `astro build` fails with MissingSharp (measured 2026-11-03).",
   "dependencies": {
     "@astrojs/starlight": "^0.43.1",
-    "astro": "^7.4.12",
+    "astro": "^7.4.13",
     "mermaid": "^12.3.0",
     "sharp": "^0.35.5"
   },
+  "//devDependencies": "@emnapi/runtime is declared although nothing here imports it. @astrojs/check reaches it as a peer (through @astrojs/language-server, @astrojs/astro2tsx and @napi-rs/wasm-runtime 1.2.4, whose range admits ^1 and 2.0.0 prereleases), and pnpm fills an undeclared peer with the highest version in the tree. Since astro 7.4.13 that is 2.0.0-beta.2, which a rolldown wasm binding pins, and astro2tsx's own @emnapi/core 1.11.3 cannot run against it: `astro check` fails with `this.bridge.setLastError is not a function` (measured 2026-11-23 on PR #47). Declared here, the peer resolves to 1.x. Drop it once astro2tsx moves to @emnapi/core 2.",
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
+    "@emnapi/runtime": "^1.11.3",
     "starlight-links-validator": "^0.27.0",
     "typescript": "^6.0.3"
   },

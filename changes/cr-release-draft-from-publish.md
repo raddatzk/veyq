@@ -180,7 +180,17 @@ Section 4 above. **Done when:** the trust chain is green and no doc still tells 
   `gh api -X POST …releases` but not `--method POST` — now both.
 - **Phase 4** done: ADR 0091 decision 5 amended, `infra/README.md`, `release-and-deployment.md`, the headers of
   `release.yml`, `publish.yml`, `promote.py`, the stage map's budgets, inbox #460.
-- **Phase 5** owed, on GitHub, each step on the owner's go.
+- **Phase 5** under way (owner's go 2026-11-22): #44 merged (`b4d4f8e6a`); `snapshot-1.247` deleted. Publish run
+  45074147683 refused, correctly — #45 is docs-only, so the snapshot is #43's `615d3b97f`, whose Checks run was still
+  queued. Run 45076081333 tagged `snapshot-1.262` and created draft 454786982 from the two pull requests since
+  `v1.260` (#43, #44): `commits/<sha>/pulls` finds a squash-merged pull request, and the draft read back through the
+  API counts as untouched — both unknowns measured. The draft named #43 under **Needs a note** (opened before the
+  template); its note (`none`) was written in #43, and that showed two gaps, closed on
+  `claude/release-draft-refresh`: no run could refresh the draft (the job ran only after a new tag; a commit with its
+  snapshot publishes nothing) — now a dispatch over an unreleased snapshot does (`draft_version`, the pinned `if:`,
+  the tag check in `release_notes.py`); and Release would have published a draft with **Needs a note** — now
+  `promote.py` check 1 refuses it. Eleven bites red. Owed: merge that pull request, a dispatch to refresh draft
+  454786982, the owner's Release run, then a Monday with nothing new.
 
 ## Decisions (mine, at refine — 2026-11-22)
 

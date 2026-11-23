@@ -27,7 +27,10 @@ newest such run, refused, red and named, unless it is completed and `success`, a
 (`Pipeline green`) and one lane L1 leg per architecture and domain of the commit's own `stack` matrix concluded
 `success`. A run cancelled by hand, still running, or red is refused with that reason; Publish never starts Checks
 itself (owner 2026-11-07). Writes `kind`, `commit` (C — every later name of the publish is C's), `run_id`, `run_url`,
-`attempt` and `version` (C's tree release, `release_assets.tree_release`) to `$GITHUB_OUTPUT`.
+`attempt` and `version` (C's tree release, `release_assets.tree_release`) to `$GITHUB_OUTPUT`, and `draft_version`: the
+version whose release draft the run writes — `version` for a new snapshot; for `kind=none` the version of C's existing
+`snapshot-` tag while C carries no `v` tag (a dispatch refreshes the draft after a pull request's note was corrected),
+else empty.
 
 **staged** — that the bytes to be named are the ones that run tested: every image and architecture of the build has a
 digest artifact from that run, every lane record names exactly those digests for its architecture, and every
@@ -308,6 +311,20 @@ def published_by(tags: list[str]) -> str:
     return " ".join(t for t in tags if t.startswith("snapshot-") or RELEASE_TAG.match(t))
 
 
+SNAPSHOT_TAG = re.compile(r"^snapshot-([0-9]+\.[0-9]+)$")
+
+
+def unreleased_snapshot(published: str) -> str:
+    """The version of the one `snapshot-` tag among a published commit's tags, while no `v` tag says it was released —
+    the snapshot whose release draft a run that publishes nothing still refreshes (a note corrected in its pull request
+    after the snapshot; cr-release-draft-from-publish phase 5). Empty for a released commit, and for anything not exactly one tag."""
+    tags = published.split()
+    if any(RELEASE_TAG.match(t) for t in tags):
+        return ""
+    versions = [m.group(1) for m in (SNAPSHOT_TAG.match(t) for t in tags) if m]
+    return versions[0] if len(versions) == 1 else ""
+
+
 def publishable(head: str, branch: str, chain: list[str], tags_of, runs_of, files_of, ignored,
                 bound: int = WALK_BOUND) -> dict:
     """The commit a snapshot of `head` is made from, walking `chain` (`head` and its first parents, newest first):
@@ -449,7 +466,8 @@ def checks_run(repository: str, head: str, branch: str, root: pathlib.Path, boun
               f"the newest tested commit, and names it")
     if found["published"]:
         print(f"::notice::{commit} already carries its snapshot ({found['published']}): nothing to publish")
-        return {"kind": "none", "commit": commit, "run_id": "", "run_url": "", "attempt": "", "version": ""}
+        return {"kind": "none", "commit": commit, "run_id": "", "run_url": "", "attempt": "", "version": "",
+                "draft_version": unreleased_snapshot(found["published"])}
     # The matrix is HEAD's checks.yml, and C's: the walk accepts no commit that changes it (it is no ignored path).
     archs, domains = stack_matrix(root)
     run = found["run"]
@@ -464,7 +482,7 @@ def checks_run(repository: str, head: str, branch: str, root: pathlib.Path, boun
     verdict = checks_verdict(run, jobs, archs, domains)
     version = release_assets.tree_release(root, commit)
     print(f"publishing {version} of {commit} from {verdict['run_url']} (attempt {verdict['attempt']})")
-    return {"kind": "snapshot", "commit": commit, **verdict, "version": version}
+    return {"kind": "snapshot", "commit": commit, **verdict, "version": version, "draft_version": version}
 
 
 def staged(registry: str, commit: str, digests_dir: pathlib.Path, results_dir: pathlib.Path,

@@ -185,12 +185,24 @@ with tempfile.TemporaryDirectory(prefix="release_notes_range_") as tmp:
                                                   "body": f"## Release note\n\n**Fixed**\n- fix {n}.\n"}]
              for s, n in pulls_by_sha.items()}
     world["repos/o/veyq/releases?per_page=100"] = [{"id": 1, "draft": False, "tag_name": "v1.10", "body": ""}]
+    for bad, why in ((None, "does not exist"), (shas[4], "names another commit")):
+        if bad:
+            git(repo, "tag", "snapshot-1.11", bad)
+        try:
+            rn.draft("o/veyq", "1.11", shas[5], "main", repo, lambda url: world.get(url, []))
+            failures.append(f"a draft is planned while its snapshot tag {why}")
+        except rn.Refused:
+            pass
+        if bad:
+            git(repo, "tag", "-d", "snapshot-1.11")
+    git(repo, "tag", "snapshot-1.11", shas[5])
     got, summary = rn.draft("o/veyq", "1.11", shas[5], "main", repo, lambda url: world.get(url, []))
     body = got["payload"]["body"]
     check(got["action"] == "create" and body.find("- fix 11.") < body.find("- fix 12.") and body.find("- fix 11.") >= 0,
           f"the draft does not gather the range's notes in merge order: {got}")
     check(any(shas[4][:12] in line for line in summary) and shas[4][:12] not in body,
           f"a commit without a pull request is not named in the summary alone: {summary}")
+    git(repo, "tag", "snapshot-3.0", shas[5])
     got, _ = rn.draft("o/veyq", "3.0", shas[5], "main", repo, lambda url: world.get(url, []))
     check(got["action"] == "leave", f"the first release of a major is drafted: {got}")
     for bad in (("1.11", shas[5], "release/1.x"), ("1.11-SNAPSHOT", shas[5], "main"), ("1.11", "HEAD", "main")):

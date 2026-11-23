@@ -1,0 +1,73 @@
+name: Renovate
+
+# The self-hosted Renovate of ADR 0158, as a GitHub App of its own (decision 3), so that its pull requests start
+# `Checks` like a person's. Built in stages by changes/cr-renovate.md. This is phase 2: Renovate runs as a DRY RUN beside
+# Dependabot. It looks everything up and logs the branches and pull requests it would create, and it writes nothing:
+# no branch, no pull request, no Dependency Dashboard issue. Phase 5 turns the dry run off, one ecosystem at a time.
+#
+# Two configurations, kept apart. renovate.json5 at the repository root is the version policy: which updates, grouped
+# how, held back why. It names no forge, so it runs unchanged on another. The `env:` of the Renovate step below is the
+# operator's part: which repository, no onboarding, the dry run.
+#
+# Where the key is (ADR 0158 decision 3, the CR's second invariant). The App's Client ID (a variable) and its private
+# key (a secret) live in the environment `renovate`, whose deployment-branch rule admits `main` alone. So a job on any
+# other branch, and any pull request's run, never receives the key, even one that edits this file. The `if:` below says
+# the same thing for a reader. The token the action mints is scoped to this repository and expires within the hour; the
+# action revokes it when the job ends. The App is addressed by its Client ID: the action marks `app-id` deprecated.
+#
+# Renovate itself is pinned by the index digest of its image (ADR 0057 § 6), passed to the action as its version, which
+# the action appends to ghcr.io/renovatebot/renovate.
+on:
+  schedule:
+    # Saturday 05:00 UTC: Dependabot's 06:00 Europe/Berlin in winter, one hour before it in summer (cron reads UTC), so
+    # the dry run and Dependabot read the same registries on the same morning.
+    - cron: "0 5 * * 6"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: renovate
+  cancel-in-progress: false
+
+jobs:
+  renovate:
+    name: Renovate (dry run)
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: renovate
+    steps:
+      - name: Mint the installation token
+        id: app
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          client-id: ${{ vars.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+
+      # The App must be installed on this repository alone (ADR 0158 decision 3), checked on every run before Renovate
+      # gets the token. The token never reaches the log: gh reads it from the environment, and only the repository names
+      # it can see are printed.
+      - name: Check that the token reaches this repository and no other
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+        run: |
+          reach="$(gh api installation/repositories --jq '[.repositories[].full_name] | sort | join(",")')"
+          echo "App ${APP_SLUG} reaches: ${reach}"
+          if [ "$reach" != "$GITHUB_REPOSITORY" ]; then
+            echo "::error::The App must be installed on ${GITHUB_REPOSITORY} alone; it reaches: ${reach}"
+            exit 1
+          fi
+
+      - name: Run Renovate
+        uses: renovatebot/github-action@acdd6bda8b035c99ce59d5675816af2aa65a1774 # v46.3.14
+        with:
+          token: ${{ steps.app.outputs.token }}
+          renovate-version: 44.257.9@sha256:d6b65ff3562dd499240b23d34ef806ec7e5fd2675e4236a027dfb36774f2aa75
+        env:
+          RENOVATE_REPOSITORIES: ${{ github.repository }}
+          RENOVATE_ONBOARDING: "false"
+          RENOVATE_REQUIRE_CONFIG: required
+          RENOVATE_DRY_RUN: full
+          LOG_LEVEL: debug
