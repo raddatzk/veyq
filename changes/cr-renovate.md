@@ -1,7 +1,7 @@
 ---
 id: cr-renovate
 title: A self-hosted Renovate proposes every pin's bump with what moves with it, and a check is red on a pin it does not reach
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0158", "0057", "0127"]
 invariants:
@@ -103,7 +103,7 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
 
 ## Phases
 
-- [ ] **1 the App** (owner). Create a GitHub App `veyq-renovate` and install it on `raddatzk/veyq` only, with no
+- [x] **1 the App** (owner). Create a GitHub App `veyq-renovate` and install it on `raddatzk/veyq` only, with no
   webhook. Repository permissions:
   - contents: write;
   - pull requests: write;
@@ -129,6 +129,8 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
   `.github/workflows/renovate.yml` holds, until phase 2, only the job that proves the App: it mints a token and is red
   unless the token reaches this repository and no other.
   · Done when: the variable and the secret exist in `renovate`, and a dispatch of `renovate.yml` on `main` is green.
+  Measured 2026-11-23: run 45140008011 on `main` `8869a0322` was green and logged `App veyq-renovate reaches:
+  raddatzk/veyq`.
 - [ ] **2 dry run beside Dependabot.** Add `renovate.yml` and `renovate.json5` with `dryRun: "full"`. Port the version
   policy: every Dependabot group and `ignore` rule as a `packageRule` with its reason. Measure the Node.js LTS question
   first. Dependabot stays untouched.
