@@ -254,7 +254,8 @@ class SecretFreeSchemaTest {
      * queued blob (`QueuedBlob`: its `K_blob`, its frames), never an untyped JSON value (an intent carried through
      * uninterpreted). A *Save a copy*'s plaintext goes into the host's file by path, never on the wire. These shapes carry
      * exactly these fields; one added is red here until it is named below, with why: `page`, a Memory or chapter made
-     * offline as the object its row opens (ids, its kind, its application and the name the person gave, #1040).
+     * offline as the object its row opens (ids, its kind, its application and the name the person gave, #1040); `folder`, a
+     * folder made offline as the folder its row enters (its id and the name the person gave, #1095).
      */
     @Test
     fun theWritesMadeOfflineCrossAsItemsAndStatesAlone() {
@@ -263,7 +264,7 @@ class SecretFreeSchemaTest {
         val fields = schema.types.values.flatMap { t -> schema.fields(t) }.distinctBy { it.owner to it.name }.groupBy({ it.owner }, { it.name })
         fun of(name: String) = fields[name] ?: fields.entries.single { (owner, _) -> owner.endsWith(".$name") }.value
         assertEquals(
-            listOf("id", "op", "tenant", "scope", "node", "where", "title", "state", "said", "opens", "copies", "at", "page"), of("QueuedItem"),
+            listOf("id", "op", "tenant", "scope", "node", "where", "title", "state", "said", "opens", "copies", "at", "page", "folder"), of("QueuedItem"),
             "a write made offline says more than its kind's word, its name, where it goes, its state and what it offers",
         )
         assertEquals(listOf("tenant", "scope", "pot", "entry", "write"), of("QueuedOpen.Entry"))

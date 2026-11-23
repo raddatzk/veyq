@@ -166,10 +166,17 @@ class ShellModel(
         if (sentWatch == null) sentWatch = CoroutineScope(Dispatchers.Default).launch {
             tenant.account.queuedReports.collect { if (it.sent > 0) refresh() }
         }
-        // a rename made offline shows in place until it is sent, discarded or held (#1040)
+        // a rename made offline shows in place until it is sent, discarded or held (#1040); a folder made offline is entered
+        // until it is sent, and Home leaves it where it is discarded or refused (#1095)
         val box = tenant.account.outbox
         if (renameWatch == null && box != null) renameWatch = CoroutineScope(Dispatchers.Default).launch {
             box.changes.collect {
+                val made = madeQueued()
+                if (made != madeUnsent) {
+                    madeUnsent = made
+                    rebuild()
+                    leaveUnsent()
+                }
                 val now = renamesQueued()
                 if (now != renamedOffline) {
                     renamedOffline = now
@@ -200,6 +207,52 @@ class ShellModel(
      */
     @kotlin.concurrent.Volatile
     private var renamedOffline: Map<String, String> = emptyMap()
+
+    /**
+     * The folders, Memories and chapters made offline on this device and not refused, each as the node it will be (its id
+     * the write's, ADR 0153 decision 3): a folder made offline is entered as a level of its own until it is sent (#1095) —
+     * Home's path holds it, a level's New and uploads queue into it, the tray names it as the place they go.
+     */
+    @kotlin.concurrent.Volatile
+    private var madeUnsent: List<NodeRef> = emptyList()
+
+    private suspend fun madeQueued(): List<NodeRef> =
+        tenant.account.outbox?.writes().orEmpty()
+            .filter { it.tenant == tenantId && it.state != me.raddatz.veyq.mobile.offline.QueuedWrite.State.REFUSED &&
+                (it.op == me.raddatz.veyq.mobile.offline.Queued.FOLDER_CREATE.name || it.op == me.raddatz.veyq.mobile.offline.Queued.MEMORY_CREATE.name) }
+            .map { QueuedShown.madeNode(it) }
+
+    /** Whether [nodeId] is a folder made offline and not sent yet ([madeUnsent]). */
+    private fun unsentFolder(nodeId: String?): Boolean = nodeId != null && madeUnsent.any { it.nodeId == nodeId && it.isFolder }
+
+    /**
+     * [scopeId]'s tree as it is now with the folders made there offline and not refused: what Home's path is read from
+     * ([Shell.at]) — a folder made offline is where its queued create puts it, under the name it carries.
+     */
+    private suspend fun treeWithUnsent(scopeId: String): List<NodeRef> {
+        madeUnsent = madeQueued()
+        val read = overlaid(scopeNodes(scopeId))
+        return read + madeUnsent.filter { m -> m.isFolder && m.scopeId == scopeId && read.none { it.nodeId == m.nodeId } }
+    }
+
+    /**
+     * Home's path cut above a folder that is neither listed nor made offline and waiting any more — its create discarded
+     * from the tray (with what waited in it) or refused at its send (#1095): Home shows the nearest level still there. The
+     * tree is read anew first: a folder whose create was just sent is the server's now, and Home stays in it.
+     */
+    private suspend fun leaveUnsent() {
+        val s = shell ?: return
+        val space = s.space ?: return
+        val listed = current?.lists?.nodes.orEmpty()
+        if (s.path.all { f -> listed.any { it.nodeId == f.nodeId } || madeUnsent.any { it.nodeId == f.nodeId } }) return
+        tenant.forgetTree()
+        val tree = treeWithUnsent(space)
+        update { sh ->
+            if (sh.space != space) return@update sh
+            val gone = sh.path.indexOfFirst { f -> tree.none { it.nodeId == f.nodeId } }
+            if (gone < 0) sh else sh.at(tree, if (gone > 0) sh.path[gone - 1].nodeId else null)
+        }
+    }
 
     private suspend fun renamesQueued(): Map<String, String> =
         tenant.account.outbox?.writes().orEmpty()
@@ -310,7 +363,9 @@ class ShellModel(
     /** The name of [nodeId] (null: the space) as the lists hold it: where a queued write goes, as the tray groups it. */
     private fun placeName(scopeId: String, nodeId: String?): String? {
         val lists = _state.value?.lists ?: return null
-        return if (nodeId == null) lists.spaces.firstOrNull { it.scopeId == scopeId }?.name else lists.nodes.firstOrNull { it.nodeId == nodeId }?.name
+        return if (nodeId == null) lists.spaces.firstOrNull { it.scopeId == scopeId }?.name
+        // a folder or a Memory made offline names the place too (#1095)
+        else lists.nodes.firstOrNull { it.nodeId == nodeId }?.name ?: madeUnsent.firstOrNull { it.nodeId == nodeId }?.name
     }
 
     /**
@@ -485,7 +540,8 @@ class ShellModel(
     private suspend fun relocate(ref: NodeAt) {
         val s = shell ?: return
         if (s.path.none { it.nodeId == ref.nodeId }) return
-        val tree = overlaid(scopeNodes(ref.scopeId))
+        // a folder made offline is on the tree its queued create puts it in (#1095): renamed, it is shown under the new name
+        val tree = treeWithUnsent(ref.scopeId)
         update { relocated(it, tree, ref.nodeId) }
     }
 
@@ -537,6 +593,8 @@ class ShellModel(
      */
     fun takesUpload(scopeId: String, parentId: String?): Boolean {
         if (_state.value?.lists?.spaces?.none { it.scopeId == scopeId } != false) return false
+        // online into a folder made offline and not sent yet: the upload waits until the folder is sent (#1095)
+        if (online && unsentFolder(parentId)) return false
         val answer = AppKinds.share(NodeRef.FOLDER) ?: return false
         val inIdentity = parentId != null && tenant.inIdentityFolder(scopeId, parentId)
         return answer.mayChoose(ShareAnswer.Place(NodeRef.FOLDER, tenant.applicationsOff(), takesFiles, inIdentity))
@@ -595,6 +653,9 @@ class ShellModel(
             val s = shell ?: return false
             val space = s.space ?: return false
             if (!online && createsHere(isHome = true).isEmpty()) return false
+            // online in a folder made offline and not sent yet (held, or its send not come yet): a create would name a
+            // parent the server does not hold — New waits until the folder is sent (#1095)
+            if (online && unsentFolder(s.folder?.nodeId)) return false
             return s.folderAt(space)?.let { !inIdentityFolder(it) } ?: true
         }
 
@@ -971,6 +1032,8 @@ class ShellModel(
         if (queues(me.raddatz.veyq.mobile.offline.Queued.FOLDER_CREATE)) {
             if (n.isEmpty()) return NameAnswer.problem(Notice(Msg.FOLDER_NAME_EMPTY))
             val queued = runCatching { me.raddatz.veyq.mobile.offline.QueuedNodes.folder(tenant.account, tenantId, scopeId, parentId, n, wallClock()) }.getOrNull()
+            // known at once as a level its row enters, and as the place what is made in it goes (#1095)
+            if (queued != null) madeUnsent = madeQueued()
             return if (queued != null) NameAnswer.QUEUED else NameAnswer.said(noRoom)
         }
         if (!online) return NameAnswer.said(readOnly)

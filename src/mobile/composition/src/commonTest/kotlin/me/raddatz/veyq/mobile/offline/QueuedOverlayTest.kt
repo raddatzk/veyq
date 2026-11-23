@@ -7,6 +7,11 @@ import me.raddatz.veyq.mobile.composition.QueuedShown
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.expenses.Allocation
@@ -20,6 +25,9 @@ import me.raddatz.veyq.mobile.expenses.Split
 import me.raddatz.veyq.mobile.memories.MediaUpload
 import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.navigation.Hidden
+import me.raddatz.veyq.mobile.navigation.NameAnswer
+import me.raddatz.veyq.mobile.navigation.NodeAt
+import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.session.Reach
@@ -51,6 +59,13 @@ import kotlin.test.assertTrue
  * [a_capture_time_set_offline_reorders_the_gallery_in_place] red ("the grid kept its order"); `ShellModel.rebuild` over the
  * raw nodes → [a_rename_made_offline_shows_in_its_level_and_on_its_open_page] red; the gallery door's `madeOffline` answer
  * dropped → [a_memory_made_offline_opens_and_takes_media_and_a_chapter] red ("did not read").
+ * #1095's three (each mutation seen red, then restored): `QueuedShown.item` without `folder` → all three red ("enters
+ * nothing"); `relocate` over the tree alone → [a_folder_made_offline_is_entered_and_takes_a_folder_a_memory_and_a_file]
+ * red (the path left the folder); the outbox watch not calling `leaveUnsent` → that one and
+ * [a_held_folder_made_offline_offers_nothing_online_and_a_refused_one_is_left] red ("Home stayed"); `leaveUnsent` over the
+ * listed nodes without reading the tree anew → [a_folder_made_offline_is_sent_before_what_waits_in_it_and_home_stays_in_it]
+ * red ("Home left a folder that was sent"); `canCreateHere`'s or `takesUpload`'s online gate dropped → the held one red;
+ * `placeName` without the folders made offline → the first red (the tray names no place).
  */
 class QueuedOverlayTest {
     init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
@@ -245,6 +260,132 @@ class QueuedOverlayTest {
         assertEquals(Notice(Msg.QUEUED_MEMORY, "Fall"), shell.queuedAt(s.id, null).first().single().title)
         chapterPage.close()
         gallery.close()
+        a.retire()
+    }
+
+    /**
+     * #1095 (1): a folder made offline is entered from its level's row — a level empty but for what waits in it —, takes a
+     * folder, a Memory and a file made in it (each waiting for it), names them its place in the tray, is renamed on Home's
+     * path, and Home leaves it once its create is discarded with what waited in it.
+     */
+    @Test
+    fun a_folder_made_offline_is_entered_and_takes_a_folder_a_memory_and_a_file() = runTest {
+        val (_, a, sm) = offlineMemory()
+        val (s, _) = sm
+        val shell = shellOf(tenantOf(a))
+        shell.load(openLastUsed = false)
+        shell.switchSpace(s.id)
+        assertEquals(NameAnswer.QUEUED, shell.createFolder(s.id, null, "Trip"))
+        val row = shell.queuedHere.first().single()
+        assertNull(row.page)
+        val folder = assertNotNull(row.folder, "the folder made offline enters nothing")
+        assertEquals("Trip", folder.name)
+        shell.enter(folder)
+        assertEquals(listOf(folder.nodeId), shell.shell?.path?.map { it.nodeId })
+        assertTrue(shell.current!!.lists.level(shell.shell!!).isEmpty())
+        assertEquals(emptyList(), shell.queuedHere.first(), "the folder made offline shows what is not in it")
+        // its New offers what queues offline, as any level's does
+        assertTrue(shell.canCreateHere, "the folder made offline offers no New")
+        assertTrue(me.raddatz.veyq.mobile.AppKinds.Create.FOLDER in assertNotNull(shell.levelPlan()).creates)
+        assertTrue(shell.takesUpload(s.id, folder.nodeId), "the folder made offline takes no upload")
+        // a folder, a Memory and a file made in it: shown in it, each waiting for it, the tray naming it their place
+        assertEquals(NameAnswer.QUEUED, shell.createFolderHere("Day one"))
+        assertTrue(shell.createMemory(s.id, folder.nodeId, "Beach").queued)
+        val depot = shell.depotUploads(UploadQueue()) {}
+        assertEquals(1, depot.upload(s.id, folder.nodeId, "Trip", listOf(photo("ticket.pdf", "PDF-ticket"))))
+        val inside = assertNotNull(waitFor { shell.queuedHere.first().takeIf { it.size == 3 } }, "what was made in the folder made offline is not shown in it")
+        assertEquals(listOf(Queued.FOLDER_CREATE, Queued.MEMORY_CREATE, Queued.DEPOT_FILE_ADD), inside.map { it.op })
+        assertTrue(inside.all { it.where == "Trip" }, "the tray does not name the folder made offline as the place: ${inside.map { it.where }}")
+        val writes = a.outbox!!.writes()
+        assertEquals(listOf(null, folder.nodeId, folder.nodeId, folder.nodeId), writes.map { it.after })
+        // the folder made in it enters in turn
+        shell.enter(assertNotNull(inside.first().folder))
+        assertEquals(listOf("Trip", "Day one"), shell.shell?.path?.map { it.name })
+        // renamed on Home's path: the path follows the queued create
+        val renamed = shell.rename(NodeAt(s.id, folder.nodeId, NodeRef.FOLDER, "Trip"), "Holiday")
+        assertEquals(Notice(Msg.OFFLINE_WAITING), renamed.notice)
+        assertEquals(listOf("Holiday", "Day one"), shell.shell?.path?.map { it.name }, "Home's path left the folder made offline or kept its old name")
+        // discarded from the tray with what waited in it: Home shows the space's top again
+        shell.queuedTray().discard(writes.first().id)
+        assertNotNull(waitFor { shell.shell?.takeIf { it.path.isEmpty() } }, "Home stayed in a folder whose create was discarded")
+        assertEquals(0, a.outbox!!.count())
+        a.retire()
+    }
+
+    /** A create of a node the test's [answer] plays: the id the client minted, its parent, the status and body answered. */
+    private fun PlayedTenant.creates(answer: (id: String, parent: String?) -> Pair<Int, String>) {
+        route = { r ->
+            if (r.method == io.ktor.http.HttpMethod.Post && r.url.encodedPath.matches(Regex("/api/scopes/[^/]+/nodes"))) {
+                val b = Json.parseToJsonElement((r.body as io.ktor.http.content.OutgoingContent.ByteArrayContent).bytes().decodeToString()).jsonObject
+                answer(b["nodeId"]!!.jsonPrimitive.content, (b["parentId"] as? JsonPrimitive)?.contentOrNull)
+            } else null
+        }
+    }
+
+    /**
+     * #1095 (2): back online, a folder made offline is sent before the folder waiting in it, that one under it, and Home
+     * stays in both as they become the server's.
+     */
+    @Test
+    fun a_folder_made_offline_is_sent_before_what_waits_in_it_and_home_stays_in_it() = runTest {
+        val (t, a, sm) = offlineMemory()
+        val (s, _) = sm
+        val shell = shellOf(tenantOf(a))
+        shell.load(openLastUsed = false)
+        shell.switchSpace(s.id)
+        shell.createFolder(s.id, null, "Trip")
+        val outer = assertNotNull(shell.queuedHere.first().single().folder)
+        shell.enter(outer)
+        shell.createFolderHere("Day one")
+        val inner = assertNotNull(waitFor { shell.queuedHere.first().singleOrNull()?.folder })
+        shell.enter(inner)
+        val created = mutableListOf<Pair<String, String?>>()
+        val adopted = HashMap<String, PlayedTenant.Node>()
+        t.creates { id, parent ->
+            created += id to parent
+            // the played server takes it: the tree lists the folder at the id the client minted
+            adopted[id] = t.adopt(s, id, "FOLDER", parent?.let { adopted[it] }, if (id == outer.nodeId) "Trip" else "Day one")
+            201 to """{"nodeId":"$id"}"""
+        }
+        t.reachable = true
+        assertTrue(a.reconnect())
+        a.awaitSending()
+        assertEquals(listOf(outer.nodeId to null, inner.nodeId to outer.nodeId), created, "not sent in order, each under its parent")
+        assertEquals(0, a.outbox!!.count())
+        assertNotNull(waitFor { shell.current?.lists?.nodes?.takeIf { n -> n.any { it.nodeId == inner.nodeId } } }, "the lists never showed what was sent")
+        assertEquals(listOf(outer.nodeId, inner.nodeId), shell.shell?.path?.map { it.nodeId }, "Home left a folder that was sent")
+        a.retire()
+    }
+
+    /**
+     * #1095 (3): a folder made offline whose send is held (its name taken) stays a level that is entered, but online it
+     * offers no New and takes no upload — the server holds no such parent yet; one refused leaves Home for the level above.
+     */
+    @Test
+    fun a_held_folder_made_offline_offers_nothing_online_and_a_refused_one_is_left() = runTest {
+        val (t, a, sm) = offlineMemory()
+        val (s, _) = sm
+        val shell = shellOf(tenantOf(a))
+        shell.load(openLastUsed = false)
+        shell.switchSpace(s.id)
+        shell.createFolder(s.id, null, "Taken")
+        shell.createFolder(s.id, null, "Refused")
+        val made = shell.queuedHere.first().map { assertNotNull(it.folder) }
+        val taken = made.first { it.name == "Taken" }
+        val refused = made.first { it.name == "Refused" }
+        t.creates { id, _ -> if (id == taken.nodeId) 409 to """{"code":"slug_taken"}""" else 422 to """{"code":"nope"}""" }
+        shell.enter(refused)
+        t.reachable = true
+        assertTrue(a.reconnect())
+        a.awaitSending()
+        assertEquals(listOf(QueuedWrite.State.HELD, QueuedWrite.State.REFUSED), a.outbox!!.writes().map { it.state })
+        assertNotNull(waitFor { shell.shell?.takeIf { it.path.isEmpty() } }, "Home stayed in a folder whose create was refused")
+        val row = shell.queuedHere.first().first { it.id == taken.nodeId }
+        assertNull(shell.queuedHere.first().first { it.id == refused.nodeId }.folder, "a refused folder still enters")
+        shell.enter(assertNotNull(row.folder, "a held folder made offline enters nothing"))
+        assertTrue(shell.online)
+        assertTrue(!shell.canCreateHere, "online a folder not sent yet offers New")
+        assertTrue(!shell.takesUpload(s.id, taken.nodeId), "online a folder not sent yet takes an upload")
         a.retire()
     }
 
