@@ -96,25 +96,38 @@ object ExifReader {
     /** [source]'s tags, or null where it carries none this reads. */
     suspend fun read(source: ByteSource): ExifTags? = read(source.media())
 
-    /** [file]'s tags, or null where it carries none this reads. */
+    /**
+     * [file]'s tags, or null where it carries none this reads. A read the file refuses fails the whole read, as any read of
+     * the file would; a block damaged past what was read leaves what was read standing.
+     */
     suspend fun read(file: MediaBytes): ExifTags? {
-        if (file.size < 12) return null
-        val head = file.read(0.0, 12)
+        var refused: Throwable? = null
+        val reads = MediaBytes(file.size) { from, length ->
+            try {
+                file.read(from, length)
+            } catch (e: Throwable) {
+                refused = e
+                throw e
+            }
+        }
+        if (reads.size < 12) return null
+        val head = reads.read(0.0, 12)
         if (head.size < 12) return null
         val tags = ExifTags()
         try {
             when {
-                isTiff(head, 0) -> tiff(file.read(0.0, min(file.size, TIFF_PREFIX.toDouble()).toInt()), 0, tags)
-                u8(head, 0) == 0x89 && Bytes.ascii(head, 1, "PNG") -> png(file.read(0.0, min(file.size, CHUNKED_PREFIX.toDouble()).toInt()), tags)
-                Bytes.ascii(head, 0, "RIFF") && Bytes.ascii(head, 8, "WEBP") -> webp(file.read(0.0, min(file.size, CHUNKED_PREFIX.toDouble()).toInt()), tags)
-                u8(head, 0) == 0xFF && u8(head, 1) == 0xD8 -> jpeg(HeaderReader(file, WINDOW, SLICED_MAX.toDouble(), Int.MAX_VALUE), tags)
-                Bytes.ascii(head, 4, "ftyp") -> heif(HeaderReader(file, WINDOW, SLICED_MAX.toDouble(), Int.MAX_VALUE), tags)
+                isTiff(head, 0) -> tiff(reads.read(0.0, min(reads.size, TIFF_PREFIX.toDouble()).toInt()), 0, tags)
+                u8(head, 0) == 0x89 && Bytes.ascii(head, 1, "PNG") -> png(reads.read(0.0, min(reads.size, CHUNKED_PREFIX.toDouble()).toInt()), tags)
+                Bytes.ascii(head, 0, "RIFF") && Bytes.ascii(head, 8, "WEBP") -> webp(reads.read(0.0, min(reads.size, CHUNKED_PREFIX.toDouble()).toInt()), tags)
+                u8(head, 0) == 0xFF && u8(head, 1) == 0xD8 -> jpeg(HeaderReader(reads, WINDOW, SLICED_MAX.toDouble(), Int.MAX_VALUE), tags)
+                Bytes.ascii(head, 4, "ftyp") -> heif(HeaderReader(reads, WINDOW, SLICED_MAX.toDouble(), Int.MAX_VALUE), tags)
                 else -> return null
             }
         } catch (e: CancellationException) {
             throw e
-        } catch (_: Throwable) {
-            // a read refused or a block damaged past what was read: what was read stands
+        } catch (e: Throwable) {
+            refused?.let { throw it }
+            // a block damaged past what was read: what was read stands
         }
         return if (tags.isEmpty()) null else tags
     }

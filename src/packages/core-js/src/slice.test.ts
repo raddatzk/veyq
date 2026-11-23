@@ -27,6 +27,7 @@ const ENTRIES: Record<string, { control: string }> = {
   sharing: { control: 'sharing/ReceivedLink.kt' },
   navigation: { control: 'navigation/NodeHeader.kt' },
   files: { control: 'blob/Sniff.kt' },
+  media: { control: 'media/ExifReader.kt' },
 }
 
 /**
@@ -53,6 +54,11 @@ const SLICES: { slice: string; deletedGz: number; allowed?: { ratio: number; own
   // sniffSvg, sniffStream, sniffPdf, extensionOf, meta.ts' downloadName and MIME_TO_EXT, archiveName.ts' exports -
   // 5,815 B min / 2,539 B gz, measured on sources.
   { slice: 'the file facts', deletedGz: 2_539 },
+  // the media headers (ADR 0155 decision 7.2.5, § The media headers' slice): imageHeader.ts' imageSizeFromHeader,
+  // videoHeader.ts' videoSizeFromHeader and videoCaptureTimeFromHeader, exifTags.ts' readExifTags, tagsFrom, CHUNKED_PREFIX
+  // and TIFF_PREFIX - 12,097 B min / 4,809 B gz, measured on sources (the ExifReader library it called, 45,226 B gz of a lazy
+  // chunk, left with it and is not counted).
+  { slice: 'the media headers', deletedGz: 4_809 },
 ]
 const BUDGET_GZ = Math.floor(SEARCH_ALONE_GZ + SLICES.reduce((n, s) => n + (s.allowed?.ratio ?? R) * s.deletedGz, 0))
 
