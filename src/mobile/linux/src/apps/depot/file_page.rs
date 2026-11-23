@@ -548,18 +548,29 @@ fn rendered(bytes: &[u8], width: i32, height: i32) -> Result<gdk::Texture, glib:
 }
 
 /// An SVG on a file's page (inbox #1059; ADR 0155 § The file facts' slice D15), zoomable and sharp at every zoom as the
-/// web's is: at ×1 the picture fitted into the view (never past its own size), each zoom step (the core's, `File.SvgPage`)
-/// drawn again by the loader at the zoom's size × the screen's scale, within the core's cap (`File.SvgRaster`: at most
-/// 4096 × 4096 pixels — the cap wins over sharpness, so a large picture zoomed far is drawn coarser). A `foreignObject` never
-/// gets here (`SvgView.refused`, in the core's open).
+/// web's is: at ×1 the picture fitted into the view (never past its own size); at each zoom step (the core's,
+/// `File.SvgPage`) the picture laid out at the fitted size × the step, and only the part of it in view drawn again by the
+/// loader at that part's size × the screen's scale, within the core's cap (`File.SvgRaster`) — the web's tile (inbox #1112:
+/// gdk-pixbuf draws an SVG only whole, so the part is cut by the SVG's own root, `svg_clipped`, and the loader and its
+/// sandbox stay as they are). Under the sharp part the ×1 picture stretched to the zoom's size, shown while a scroll's
+/// part is drawn. A `foreignObject` never gets here (`SvgView.refused`, in the core's open).
 struct SvgZoom {
     bytes: Vec<u8>,
+    first: gdk::Texture,
     natural: (f64, f64),
     steps: Vec<f64>,
     step: Cell<usize>,
     scale: i32,
     scroll: gtk::ScrolledWindow,
     picture: gtk::Picture,
+    /// A zoom's layout: the stretched ×1 picture under the sharp part, both placed in it.
+    canvas: gtk::Fixed,
+    backdrop: gtk::Picture,
+    tile: gtk::Picture,
+    /// The zoom's laid-out size, in logical pixels.
+    laid: Cell<(i32, i32)>,
+    /// Each draw asked counts one up; an answer for an older one is dropped.
+    asked: Cell<u64>,
     level: gtk::Label,
     buttons: [gtk::Button; 3],
 }
@@ -585,26 +596,46 @@ impl SvgZoom {
                 }
             };
             let Some(inner) = weak.upgrade().filter(|inner| *inner.drawn.borrow() == asked) else { return };
-            let zoom = Rc::new(SvgZoom::new(bytes, &first, steps, scale));
-            inner.replace(&zoom.widget(&first));
+            let zoom = Rc::new(SvgZoom::new(bytes, first, steps, scale));
+            inner.replace(&zoom.widget());
         });
     }
 
-    fn new(bytes: Vec<u8>, first: &gdk::Texture, steps: Vec<f64>, scale: i32) -> Self {
+    fn new(bytes: Vec<u8>, first: gdk::Texture, steps: Vec<f64>, scale: i32) -> Self {
         let button = |icon: &str, label: String| {
             let b = gtk::Button::builder().icon_name(icon).tooltip_text(&label).build();
             b.update_property(&[gtk::accessible::Property::Label(&label)]);
             b.add_css_class("flat");
             b
         };
+        // a Fixed gives each child its minimum size: a picture that may shrink is exactly its size request
+        let sized = || {
+            let p = gtk::Picture::new();
+            p.set_can_shrink(true);
+            p.set_content_fit(gtk::ContentFit::Fill);
+            p
+        };
+        let canvas = gtk::Fixed::new();
+        canvas.set_halign(gtk::Align::Start);
+        canvas.set_valign(gtk::Align::Start);
+        let (backdrop, tile) = (sized(), sized());
+        backdrop.set_paintable(Some(&first));
+        canvas.put(&backdrop, 0.0, 0.0);
+        canvas.put(&tile, 0.0, 0.0);
         SvgZoom {
             bytes,
             natural: (first.width() as f64, first.height() as f64),
+            first,
             steps,
             step: Cell::new(0),
             scale,
             scroll: gtk::ScrolledWindow::builder().vexpand(true).hexpand(true).build(),
             picture: gtk::Picture::new(),
+            canvas,
+            backdrop,
+            tile,
+            laid: Cell::new((0, 0)),
+            asked: Cell::new(0),
             level: gtk::Label::new(Some("100 %")),
             buttons: [
                 button("zoom-out-symbolic", words::file_zoom_out()),
@@ -614,7 +645,7 @@ impl SvgZoom {
         }
     }
 
-    fn widget(self: &Rc<Self>, first: &gdk::Texture) -> gtk::Widget {
+    fn widget(self: &Rc<Self>) -> gtk::Widget {
         let bar = gtk::Box::new(gtk::Orientation::Horizontal, 4);
         bar.set_halign(gtk::Align::End);
         let [out, zoom_in, fit] = &self.buttons;
@@ -631,10 +662,27 @@ impl SvgZoom {
                 }
             });
         }
+        // a scroll, or the view's size changing, moves the part in view: drawn again once the scroll rests
+        for adjustment in [self.scroll.hadjustment(), self.scroll.vadjustment()] {
+            let weak = Rc::downgrade(self);
+            adjustment.connect_value_changed(move |_| {
+                if let Some(z) = weak.upgrade() {
+                    z.part_soon();
+                }
+            });
+            let weak = Rc::downgrade(self);
+            adjustment.connect_changed(move |_| {
+                if let Some(z) = weak.upgrade() {
+                    z.part_soon();
+                }
+            });
+        }
         // ×1: the picture at its own size, fitted into the view by GTK (never enlarged)
-        self.picture.set_paintable(Some(first));
-        self.fitted();
+        self.picture.set_paintable(Some(&self.first));
+        self.picture.set_can_shrink(true);
+        self.picture.set_content_fit(gtk::ContentFit::ScaleDown);
         self.picture.update_property(&[gtk::accessible::Property::Label(&format!("{}×{}", self.natural.0, self.natural.1))]);
+        self.canvas.update_property(&[gtk::accessible::Property::Label(&format!("{}×{}", self.natural.0, self.natural.1))]);
         self.scroll.set_child(Some(&self.picture));
         self.steps_shown();
         let column = gtk::Box::new(gtk::Orientation::Vertical, 8);
@@ -642,12 +690,6 @@ impl SvgZoom {
         column.append(&bar);
         column.append(&self.scroll);
         column.upcast()
-    }
-
-    fn fitted(&self) {
-        self.picture.set_size_request(-1, -1);
-        self.picture.set_can_shrink(true);
-        self.picture.set_content_fit(gtk::ContentFit::ScaleDown);
     }
 
     fn steps_shown(&self) {
@@ -658,41 +700,230 @@ impl SvgZoom {
         self.buttons[2].set_sensitive(i > 0);
     }
 
-    /// Zoomed to step [next]: the picture laid out at the fitted size × the step, drawn again at that size × the screen's
-    /// scale within the core's cap.
+    /// Zoomed to step [next]: the picture laid out at the fitted size × the step, its part in view drawn once laid out.
     fn zoom(self: &Rc<Self>, next: usize) {
-        self.step.set(next);
+        let was = self.step.replace(next);
         self.steps_shown();
+        self.asked.set(self.asked.get() + 1);
         if next == 0 {
-            if let Ok(t) = decoded(self.bytes.clone()) {
-                self.picture.set_paintable(Some(&t));
-            }
-            return self.fitted();
+            return self.scroll.set_child(Some(&self.picture));
         }
         let (w, h) = self.natural;
         let room = (self.scroll.width().max(1) as f64, self.scroll.height().max(1) as f64);
         let fit = (room.0 / w).min(room.1 / h).min(1.0);
-        let (lw, lh) = (w * fit * self.steps[next], h * fit * self.steps[next]);
+        let laid = ((w * fit * self.steps[next]).round().max(1.0) as i32, (h * fit * self.steps[next]).round().max(1.0) as i32);
+        self.laid.set(laid);
+        self.backdrop.set_size_request(laid.0, laid.1);
+        self.tile.set_paintable(None::<&gdk::Paintable>);
+        if was == 0 {
+            self.scroll.set_child(Some(&self.canvas));
+        }
+        self.part_soon();
+    }
+
+    /// The part in view drawn again a moment after the last scroll or resize (each asks once, the last one draws).
+    fn part_soon(self: &Rc<Self>) {
+        if self.step.get() == 0 {
+            return;
+        }
+        let asked = self.asked.get() + 1;
+        self.asked.set(asked);
         let weak = Rc::downgrade(self);
-        let scale = self.scale as f64;
-        glib::spawn_future_local(async move {
-            let raster = bridge::call(&Call::FileSvgRaster { width: lw, height: lh, ratio: scale }).await;
-            let Some(z) = weak.upgrade().filter(|z| z.step.get() == next) else { return };
-            let Ok((Answer::SvgRaster { width, height, ratio }, _)) = raster else {
-                return eprintln!("veyq: File.SvgRaster answered {:?}", raster.map(|(a, _)| a));
-            };
-            match rendered(&z.bytes, width, height) {
-                Ok(t) => {
-                    eprintln!("veyq: file SVG at ×{}: {width}×{height} px for {lw:.0}×{lh:.0} ({ratio:.2} px each)", z.steps[next]);
-                    z.picture.set_paintable(Some(&t));
-                    z.picture.set_can_shrink(false);
-                    z.picture.set_content_fit(gtk::ContentFit::Fill);
-                    z.picture.set_size_request(lw.round() as i32, lh.round() as i32);
-                }
-                Err(e) => eprintln!("veyq: the file's SVG did not draw at ×{}: {e}", z.steps[next]),
+        glib::timeout_add_local_once(PART_REST, move || {
+            if let Some(z) = weak.upgrade().filter(|z| z.asked.get() == asked) {
+                z.draw_part(asked);
             }
         });
     }
+
+    /// The part of the zoomed picture in view (`svg_region`), drawn by the loader at its size × the screen's scale within
+    /// the core's cap; an SVG whose root cannot be cut (`svg_clipped`: not UTF-8, no `<svg>` root) is drawn whole, as
+    /// before #1112.
+    fn draw_part(self: &Rc<Self>, asked: u64) {
+        let (h, v) = (self.scroll.hadjustment(), self.scroll.vadjustment());
+        let laid = self.laid.get();
+        let Some(part) = svg_region(laid, (h.value(), v.value()), (h.page_size(), v.page_size()), self.natural) else { return };
+        self.canvas.move_(&self.backdrop, part.origin.0 as f64, part.origin.1 as f64);
+        let step = self.steps[self.step.get()];
+        let weak = Rc::downgrade(self);
+        let scale = self.scale as f64;
+        glib::spawn_future_local(async move {
+            let raster = bridge::call(&Call::FileSvgRaster { width: part.size.0 as f64, height: part.size.1 as f64, ratio: scale }).await;
+            let Some(z) = weak.upgrade().filter(|z| z.asked.get() == asked) else { return };
+            let Ok((Answer::SvgRaster { width, height, ratio }, _)) = raster else {
+                return eprintln!("veyq: File.SvgRaster answered {:?}", raster.map(|(a, _)| a));
+            };
+            let (drawn, at, size) = match svg_clipped(&z.bytes, z.natural, part.natural, (width, height)) {
+                Some(cut) => (rendered(&cut, width, height), part.at, part.size),
+                None => {
+                    let whole = bridge::call(&Call::FileSvgRaster { width: laid.0 as f64, height: laid.1 as f64, ratio: scale }).await;
+                    let Ok((Answer::SvgRaster { width, height, .. }, _)) = whole else { return };
+                    if z.asked.get() != asked {
+                        return;
+                    }
+                    (rendered(&z.bytes, width, height), (0, 0), laid)
+                }
+            };
+            match drawn {
+                Ok(t) => {
+                    eprintln!(
+                        "veyq: file SVG at ×{step}: {}×{} px for the part {}×{} at {},{} of {}×{} ({ratio:.2} px each)",
+                        t.width(), t.height(), size.0, size.1, at.0, at.1, laid.0, laid.1
+                    );
+                    z.tile.set_paintable(Some(&t));
+                    z.tile.set_size_request(size.0, size.1);
+                    z.canvas.move_(&z.tile, (part.origin.0 + at.0) as f64, (part.origin.1 + at.1) as f64);
+                }
+                Err(e) => eprintln!("veyq: the file's SVG did not draw at ×{step}: {e}"),
+            }
+        });
+    }
+}
+
+/// How long a zoom's scroll rests before its part in view is drawn again: a debounce, no notice.
+const PART_REST: std::time::Duration = std::time::Duration::from_millis(80);
+
+/// The part of a zoomed SVG in view (inbox #1112), from the zoom's laid-out size, the scroll's position and the view's size.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct SvgRegion {
+    /// Where the laid-out picture stands in the scroll: centred in the view on an axis where it is smaller than the view.
+    origin: (i32, i32),
+    /// The part in view in the laid-out picture's logical pixels, whole pixels covering it: its top left and its size.
+    at: (i32, i32),
+    size: (i32, i32),
+    /// The same part in the SVG's natural pixels (its decoded size): x, y, width, height.
+    natural: (f64, f64, f64, f64),
+}
+
+/// The part of a picture laid out at [laid] in view of a scroll at [scrolled] with a view of [view], all in logical pixels,
+/// and that part in the SVG's [natural] pixels; none when nothing of it is in view.
+fn svg_region(laid: (i32, i32), scrolled: (f64, f64), view: (f64, f64), natural: (f64, f64)) -> Option<SvgRegion> {
+    let axis = |laid: f64, scrolled: f64, view: f64| {
+        let origin = ((view - laid) / 2.0).max(0.0).floor();
+        let from = (scrolled - origin).max(0.0).floor().min(laid);
+        let to = (scrolled - origin + view).min(laid).ceil();
+        (origin as i32, from as i32, (to - from).max(0.0) as i32)
+    };
+    let (ox, x, w) = axis(laid.0 as f64, scrolled.0, view.0);
+    let (oy, y, h) = axis(laid.1 as f64, scrolled.1, view.1);
+    if laid.0 < 1 || laid.1 < 1 || w < 1 || h < 1 {
+        return None;
+    }
+    let (kx, ky) = (natural.0 / laid.0 as f64, natural.1 / laid.1 as f64);
+    Some(SvgRegion { origin: (ox, oy), at: (x, y), size: (w, h), natural: (x as f64 * kx, y as f64 * ky, w as f64 * kx, h as f64 * ky) })
+}
+
+/// The SVG in [bytes] cut to [part] of its [natural] pixels (x, y, width, height) and sized [pixels]: its root's
+/// `viewBox` set to that part in the SVG's own units and its `width` and `height` to the pixels, so the loader draws that
+/// part alone, at that size. Nothing else in the file changes. None where the root is not found: bytes that are not UTF-8,
+/// or a document whose first element is not an `svg`.
+fn svg_clipped(bytes: &[u8], natural: (f64, f64), part: (f64, f64, f64, f64), pixels: (i32, i32)) -> Option<Vec<u8>> {
+    let text = std::str::from_utf8(bytes).ok()?;
+    let (start, end) = svg_root(text)?;
+    let tag = &text[start..end];
+    let name_end = 1 + tag[1..].find(|c: char| c.is_whitespace() || c == '/' || c == '>')?;
+    let (mut kept, mut view_box, mut aspect) = (String::new(), None, "");
+    let mut rest = &tag[name_end..];
+    loop {
+        let attribute = rest.trim_start();
+        if attribute.starts_with('/') || attribute.starts_with('>') {
+            rest = attribute;
+            break;
+        }
+        let eq = attribute.find('=')?;
+        let name = attribute[..eq].trim();
+        let after = attribute[eq + 1..].trim_start();
+        let quote = after.chars().next().filter(|q| *q == '"' || *q == '\'')?;
+        let close = 1 + after[1..].find(quote)?;
+        let value = &after[1..close];
+        match name {
+            "width" | "height" => {}
+            "viewBox" => view_box = svg_view_box(value),
+            "preserveAspectRatio" => aspect = value,
+            _ => {
+                kept.push(' ');
+                kept.push_str(name);
+                kept.push('=');
+                kept.push_str(&after[..=close]);
+            }
+        }
+        rest = &after[close + 1..];
+    }
+    let (x, y, w, h) = svg_user_part(view_box, aspect, natural, part);
+    let root = format!(
+        "{}{kept} width=\"{}\" height=\"{}\" viewBox=\"{x} {y} {w} {h}\" preserveAspectRatio=\"none\"{rest}",
+        &tag[..name_end], pixels.0, pixels.1
+    );
+    Some([&text[..start], &root, &text[end..]].concat().into_bytes())
+}
+
+/// The byte range of the document's root start tag where that root is an `svg` (any prefix), past the prolog: the XML
+/// declaration, processing instructions, comments and a DOCTYPE with its internal subset.
+fn svg_root(text: &str) -> Option<(usize, usize)> {
+    let mut i = 0;
+    loop {
+        let lt = i + text[i..].find('<')?;
+        let rest = &text[lt..];
+        if rest.starts_with("<?") {
+            i = lt + rest.find("?>")? + 2;
+        } else if rest.starts_with("<!--") {
+            i = lt + rest.find("-->")? + 3;
+        } else if rest.starts_with("<!") {
+            i = lt + markup_end(rest, true)?;
+        } else {
+            let name = rest[1..].split(|c: char| c.is_whitespace() || c == '/' || c == '>').next()?;
+            return (name.rsplit(':').next() == Some("svg")).then_some((lt, lt + markup_end(rest, false)?));
+        }
+    }
+}
+
+/// The end (past its `>`) of the markup [text] starts with: quotes skipped, and for a declaration its `[ … ]` subset.
+fn markup_end(text: &str, declaration: bool) -> Option<usize> {
+    let (mut quote, mut depth) = (None, 0);
+    for (i, c) in text.char_indices() {
+        match (quote, c) {
+            (Some(q), c) if c == q => quote = None,
+            (Some(_), _) => {}
+            (None, '"' | '\'') => quote = Some(c),
+            (None, '[') if declaration => depth += 1,
+            (None, ']') if declaration => depth -= 1,
+            (None, '>') if depth == 0 => return Some(i + 1),
+            _ => {}
+        }
+    }
+    None
+}
+
+/// A `viewBox`'s four numbers; none where it has not four, or a side that is not positive (the SVG then has none).
+fn svg_view_box(value: &str) -> Option<[f64; 4]> {
+    let numbers: Vec<f64> = value.split(|c: char| c.is_whitespace() || c == ',').filter(|s| !s.is_empty()).map(str::parse::<f64>).collect::<Result<_, _>>().ok()?;
+    let &[x, y, w, h] = numbers.as_slice() else { return None };
+    (w > 0.0 && h > 0.0).then_some([x, y, w, h])
+}
+
+/// [part] of the SVG's [natural] pixels in its own user units: through its [view_box] as its `preserveAspectRatio`
+/// ([aspect], SVG's default `xMidYMid meet` where none) places it in the natural size; without one a user unit is a pixel.
+fn svg_user_part(view_box: Option<[f64; 4]>, aspect: &str, natural: (f64, f64), part: (f64, f64, f64, f64)) -> (f64, f64, f64, f64) {
+    let Some([a, b, c, d]) = view_box else { return part };
+    let words: Vec<&str> = aspect.split_whitespace().filter(|w| *w != "defer").collect();
+    let align = words.first().copied().unwrap_or("xMidYMid");
+    let (sx, sy, tx, ty) = if align == "none" {
+        (natural.0 / c, natural.1 / d, 0.0, 0.0)
+    } else {
+        let (fx, fy) = (natural.0 / c, natural.1 / d);
+        let s = if words.get(1) == Some(&"slice") { fx.max(fy) } else { fx.min(fy) };
+        let at = |min: &str, max: &str, room: f64| {
+            if align.contains(min) {
+                0.0
+            } else if align.contains(max) {
+                room
+            } else {
+                room / 2.0
+            }
+        };
+        (s, s, at("xMin", "xMax", natural.0 - c * s), at("YMin", "YMax", natural.1 - d * s))
+    };
+    (a + (part.0 - tx) / sx, b + (part.1 - ty) / sy, part.2 / sx, part.3 / sy)
 }
 
 /// A PDF's pages in a scroll, each a frame of its page's size at first; a page is rendered (poppler, from memory) when it
@@ -928,5 +1159,93 @@ mod tests {
         assert_eq!(alpha(&zoomed, 100, 100), 0, "outside the square's edge");
         let partly = (90..110).filter(|x| !matches!(alpha(&zoomed, *x, 100), 0 | 255)).count();
         assert_eq!(partly, 0, "the edge is smeared: an enlarged bitmap");
+    }
+
+    /// The part of a zoom in view (inbox #1112): the scroll's window on the laid-out picture in whole pixels, clipped to the
+    /// picture, centred where the picture is smaller than the view, and the same part in the SVG's natural pixels.
+    #[test]
+    fn the_part_in_view_is_the_scrolls_window_on_the_laid_out_picture() {
+        // scrolled into the middle of a picture laid out at 10× its 200×100 natural size
+        let middle = svg_region((2000, 1000), (500.0, 200.0), (400.0, 300.0), (200.0, 100.0)).unwrap();
+        assert_eq!(middle, SvgRegion { origin: (0, 0), at: (500, 200), size: (400, 300), natural: (50.0, 20.0, 40.0, 30.0) });
+        // at the far end: only what is left of the picture
+        let end = svg_region((2000, 1000), (1800.0, 900.0), (400.0, 300.0), (200.0, 100.0)).unwrap();
+        assert_eq!((end.at, end.size), ((1800, 900), (200, 100)));
+        assert_eq!(end.natural, (180.0, 90.0, 20.0, 10.0));
+        // a fractional scroll: whole pixels covering the view
+        let between = svg_region((2000, 1000), (10.5, 0.0), (400.0, 300.0), (200.0, 100.0)).unwrap();
+        assert_eq!((between.at, between.size), ((10, 0), (401, 300)));
+        // smaller than the view: centred, all of it in view
+        let small = svg_region((200, 100), (0.0, 0.0), (400.0, 300.0), (20.0, 10.0)).unwrap();
+        assert_eq!(small, SvgRegion { origin: (100, 100), at: (0, 0), size: (200, 100), natural: (0.0, 0.0, 20.0, 10.0) });
+        // wider than the view, lower than it: scrolls across, centred down
+        let wide = svg_region((1000, 100), (300.0, 0.0), (400.0, 300.0), (100.0, 10.0)).unwrap();
+        assert_eq!((wide.origin, wide.at, wide.size), ((0, 100), (300, 0), (400, 100)));
+        // nothing laid out, or nothing in view
+        assert_eq!(svg_region((0, 0), (0.0, 0.0), (400.0, 300.0), (20.0, 10.0)), None);
+        assert_eq!(svg_region((200, 100), (0.0, 0.0), (0.0, 0.0), (20.0, 10.0)), None);
+    }
+
+    /// A part of the natural pixels in the SVG's own units: through its viewBox as its preserveAspectRatio places it.
+    #[test]
+    fn a_part_maps_into_the_svgs_own_units() {
+        // no viewBox: a user unit is a pixel
+        assert_eq!(svg_user_part(None, "", (40.0, 20.0), (10.0, 5.0, 20.0, 10.0)), (10.0, 5.0, 20.0, 10.0));
+        // a viewBox of the same shape, scaled ×10 and moved
+        assert_eq!(svg_user_part(Some([100.0, 50.0, 4.0, 2.0]), "", (40.0, 20.0), (10.0, 5.0, 20.0, 10.0)), (101.0, 50.5, 2.0, 1.0));
+        // a square viewBox in a 40×20 picture: `xMidYMid meet` scales it ×10 and centres it, 10 pixels in
+        assert_eq!(svg_user_part(Some([0.0, 0.0, 2.0, 2.0]), "", (40.0, 20.0), (10.0, 0.0, 20.0, 20.0)), (0.0, 0.0, 2.0, 2.0));
+        assert_eq!(svg_user_part(Some([0.0, 0.0, 2.0, 2.0]), "xMinYMin meet", (40.0, 20.0), (0.0, 0.0, 20.0, 20.0)), (0.0, 0.0, 2.0, 2.0));
+        assert_eq!(svg_user_part(Some([0.0, 0.0, 2.0, 2.0]), "xMaxYMid", (40.0, 20.0), (20.0, 0.0, 20.0, 20.0)), (0.0, 0.0, 2.0, 2.0));
+        // `slice` scales by the larger side
+        assert_eq!(svg_user_part(Some([0.0, 0.0, 2.0, 2.0]), "xMinYMin slice", (40.0, 20.0), (0.0, 0.0, 40.0, 20.0)), (0.0, 0.0, 2.0, 1.0));
+        // `none` stretches each side alone
+        assert_eq!(svg_user_part(Some([0.0, 0.0, 2.0, 2.0]), "none", (40.0, 20.0), (20.0, 10.0, 20.0, 10.0)), (1.0, 1.0, 1.0, 1.0));
+        assert_eq!(svg_view_box("0,0 4 2"), Some([0.0, 0.0, 4.0, 2.0]));
+        assert_eq!(svg_view_box("0 0 0 2"), None);
+        assert_eq!(svg_view_box("0 0 4"), None);
+    }
+
+    /// Cutting an SVG changes its root's size and viewBox alone, past a prolog that names `<svg` and `>` where no element is.
+    #[test]
+    fn a_cut_svg_changes_its_roots_size_and_view_alone() {
+        let svg = r#"<?xml version="1.0"?>
+<!-- an <svg> in a comment -->
+<!DOCTYPE svg [<!ENTITY a "<svg width='1'>">]>
+<svg xmlns="http://www.w3.org/2000/svg" width="40" height='20' viewBox="0 0 4 2" data-x="a>b"><rect width="4" height="2"/></svg>"#;
+        let cut = String::from_utf8(svg_clipped(svg.as_bytes(), (40.0, 20.0), (10.0, 5.0, 20.0, 10.0), (400, 200)).unwrap()).unwrap();
+        let expected = svg.replace(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="40" height='20' viewBox="0 0 4 2" data-x="a>b">"#,
+            r#"<svg xmlns="http://www.w3.org/2000/svg" data-x="a>b" width="400" height="200" viewBox="1 0.5 2 1" preserveAspectRatio="none">"#,
+        );
+        assert_eq!(cut, expected);
+        // a prefixed root, self-closing, no size at all
+        let bare = r#"<svg:svg xmlns:svg="http://www.w3.org/2000/svg"/>"#;
+        let cut = String::from_utf8(svg_clipped(bare.as_bytes(), (300.0, 150.0), (0.0, 0.0, 30.0, 15.0), (60, 30)).unwrap()).unwrap();
+        assert_eq!(cut, r#"<svg:svg xmlns:svg="http://www.w3.org/2000/svg" width="60" height="30" viewBox="0 0 30 15" preserveAspectRatio="none"/>"#);
+        // no svg root, or not UTF-8: not cut
+        assert_eq!(svg_clipped(b"<html><svg/></html>", (1.0, 1.0), (0.0, 0.0, 1.0, 1.0), (1, 1)), None);
+        assert_eq!(svg_clipped(&[0xff, 0xfe, b'<'], (1.0, 1.0), (0.0, 0.0, 1.0, 1.0), (1, 1)), None);
+    }
+
+    /// The part in view drawn alone and sharp (inbox #1112): a 20-unit square is black up to x = 12; its units 5 to 15 cut
+    /// and drawn at 100×200 put that edge at x = 70, between one opaque and one clear pixel. The whole picture drawn at
+    /// that size would put it at 60, a root not cut (no viewBox) at 12, and a part enlarged from a coarser bitmap would
+    /// smear it. With a viewBox of other units alike. Runs where glycin runs (SANDBOX_SKIPS).
+    #[test]
+    fn the_part_in_view_is_drawn_alone_and_sharp() {
+        for svg in [
+            r##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect x="0" y="0" width="12" height="20" fill="#000"/></svg>"##,
+            r##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 2 2"><rect x="0" y="0" width="1.2" height="2" fill="#000"/></svg>"##,
+        ] {
+            let cut = svg_clipped(svg.as_bytes(), (20.0, 20.0), (5.0, 0.0, 10.0, 20.0), (100, 200)).expect("the root is cut");
+            let part = rendered(&cut, 100, 200).expect("the part draws");
+            assert_eq!((part.width(), part.height()), (100, 200));
+            assert_eq!(alpha(&part, 0, 100), 255, "the part's left is black: {svg}");
+            assert_eq!(alpha(&part, 69, 100), 255, "inside the edge: {svg}");
+            assert_eq!(alpha(&part, 70, 100), 0, "outside the edge: {svg}");
+            let partly = (55..85).filter(|x| !matches!(alpha(&part, *x, 100), 0 | 255)).count();
+            assert_eq!(partly, 0, "the edge is smeared: {svg}");
+        }
     }
 }

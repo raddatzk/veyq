@@ -495,7 +495,9 @@ SANDBOX_SKIPS = ("core_ui::avatars::tests::a_picture_as_the_web_writes_it_decode
                  # an SVG through glycin's sandboxed librsvg, held to inbox #1059's threat model (file_page.rs)
                  "apps::depot::file_page::tests::an_svg_draws_with_nothing_in_it_run_or_fetched",
                  # and drawn again at a zoom's size, its vectors at that size (file_page.rs)
-                 "apps::depot::file_page::tests::a_zoomed_svg_is_drawn_at_its_size_not_enlarged")
+                 "apps::depot::file_page::tests::a_zoomed_svg_is_drawn_at_its_size_not_enlarged",
+                 # and only the part in view drawn, sharp (file_page.rs, inbox #1112)
+                 "apps::depot::file_page::tests::the_part_in_view_is_drawn_alone_and_sharp")
 
 
 def runtime_pins(flatpak_arch: str) -> dict[str, str]:
