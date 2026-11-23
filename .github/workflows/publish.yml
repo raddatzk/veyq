@@ -178,7 +178,7 @@ jobs:
 
       # The cosign every signature below is made with: the same line an operator verifies with. `cosign-release` is
       # pinned because the installer's own default lags (v4.1.2 installs v3.0.6, inside GHSA-fx35-mq7g-6g98's range),
-      # and no Dependabot ecosystem reads it: a newer cosign is a bump by hand. scripts/validate_release_identity.py
+      # and Renovate's github-actions manager proposes its bump (an action input). scripts/validate_release_identity.py
       # holds it to an exact version no older than src/tools/veyqctl.py's COSIGN_MIN_VERSION.
       - name: Install cosign
         uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3

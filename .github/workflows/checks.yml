@@ -128,10 +128,11 @@ jobs:
       - name: Staging retention self-test
         run: .venv/bin/python scripts/staging_retention_selftest.py
 
-      # What dependabot-follow.yml writes onto a Dependabot branch, and the forgeries it refuses
-      # (scripts/dependabot_follow.py): proven on every commit that could change it, before its next push.
-      - name: Dependabot follow self-test
-        run: .venv/bin/python scripts/dependabot_follow_selftest.py
+      # What renovate-follow.yml writes onto a Renovate branch (the Gradle metadata, the rebuilt WebP encoder, the
+      # fuzzer's lock), and the forgeries it refuses (scripts/renovate_follow.py): proven on every commit that could
+      # change it, before its next push.
+      - name: Renovate follow self-test
+        run: .venv/bin/python scripts/renovate_follow_selftest.py
 
       # What Renovate's postUpgradeTasks write beside a bump (scripts/pin_follow.py: Helm's SHA-256, the OpenAPI
       # generator JAR's, PyYAML's hashes) and the release pages it refuses, offline: proven before a bump runs it.
@@ -332,9 +333,9 @@ jobs:
     # image and is red on any byte that differs from the pin or the committed files — never waved through: a rebuild
     # that stops being byte-identical stays red until the cause is found. It rebuilds when anything under
     # src/web/webp-encoder/ changed since the run's base (a pull request's base, a push's previous tip); when that base
-    # cannot be read (a new branch, a local run of scripts/run_pipeline.py) it rebuilds anyway. Dependabot's bump of the
-    # Emscripten digest lands in that directory, so its pull request rebuilds — and is red until `build.py --write` is
-    # run on it, because a new toolchain writes new bytes.
+    # cannot be read (a new branch, a local run of scripts/run_pipeline.py) it rebuilds anyway. Renovate's bump of libwebp or of
+    # the Emscripten digest lands in that directory, so its pull request rebuilds, and compares what the Renovate follow
+    # wrote onto it with `build.py --write` (scripts/renovate_follow.py): a new toolchain writes new bytes.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

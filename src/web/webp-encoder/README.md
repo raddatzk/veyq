@@ -43,14 +43,15 @@ never dropped (ADR 0127 Consequences).
 
 ## A newer libwebp, a newer Emscripten
 
-- **libwebp:** `python3 build.py --newest` names libwebp's newest stable `vX.Y.Z` tag, its commit, and whether it is
-  newer than the pin; `build.py --tag <tag> --commit <sha> --write` then rebuilds from it, and the tests run against
-  the new module. ADR 0127 decision 4 has `.github/workflows/webp-encoder-update.yml` do exactly this weekly and open a
-  pull request; a person closes and reopens it (so `Checks` runs, which a `GITHUB_TOKEN` pull request does not start)
-  and merges it.
-- **Emscripten:** Dependabot bumps the `Dockerfile`'s digest. A new toolchain writes new bytes, so that pull request is
-  red (the pin's `image` no longer matches the `Dockerfile`, and the rebuild differs) until `build.py --write` is run
-  on its branch and the result committed.
+- **libwebp:** Renovate proposes libwebp's newest stable tag (a git-tags manager on `libwebp.pin`'s `tag` line,
+  `renovate.json5`), and the Emscripten image's new digest (the Dockerfile). Either way the pull request needs the
+  encoder rebuilt: `.github/workflows/renovate-follow*.yml` resolves the tag's commit with `git ls-remote`, runs
+  `build.py --tag <tag> --commit <sha> --write` read-only, and pushes the result onto Renovate's branch after checking
+  it (`scripts/renovate_follow.py`); `Checks`' rebuild then compares it byte for byte (ADR 0158, which replaces ADR 0127
+  decision 4's own updater). By hand: `python3 build.py --newest` names the newest stable tag, its commit, and whether
+  it is newer than the pin; `build.py --tag <tag> --commit <sha> --write` rebuilds from it.
+- **Emscripten:** a new toolchain writes new bytes, so its pull request is red (the pin's `image` no longer matches the
+  `Dockerfile`, and the rebuild differs) until the follow above has run `build.py --write` on its branch.
 
 ## Fixture
 

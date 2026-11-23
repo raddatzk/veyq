@@ -2,13 +2,16 @@
 // config, read by `.github/workflows/renovate.yml`, whose environment sets only the operator's part (which repository,
 // no onboarding, the commands a task may run). Nothing here is specific to GitHub, so the same file runs on another forge.
 //
-// Every rule is ported from .github/dependabot.yml, whose comments hold the measured reason; each rule here says it
-// again in its `description`. Rules are applied in order and a later match wins, so the general groups come first and
-// the exceptions after them.
+// The rules were ported from Dependabot's config (deleted by cr-renovate phase 5; its history holds the comments with
+// each measured reason), and each rule here says its reason in its `description`. Rules are applied in order and a
+// later match wins, so the general groups come first and the exceptions after them.
 //
-// Every pin in the tree has a manager here (ADR 0158 decision 1): the built-in ones Dependabot had an ecosystem for, and
-// a custom regex manager for each pin no built-in one reads. What moves with a version and no manager writes is a
-// `postUpgradeTask` running scripts/pin_follow.py, admitted by name in renovate.yml's allowed commands.
+// Every pin in the tree has a manager here (ADR 0158 decision 1): a built-in one, or a custom regex manager for each pin
+// no built-in one reads; `pins` in checks.yml is red on one that has none. What moves with a version is written in the
+// same pull request: by a manager, by a `postUpgradeTask` running scripts/pin_follow.py (admitted by name in
+// renovate.yml's allowed commands) where published bytes suffice, or by the Renovate follow
+// (.github/workflows/renovate-follow*.yml, scripts/renovate_follow.py) where the bumped tree must be executed — the
+// Gradle metadata, the WebP encoder, the fuzzer's lock — which never happens in Renovate's job.
 {
   $schema: "https://docs.renovatebot.com/renovate-schema.json",
 
@@ -134,8 +137,11 @@
 
   // A release must be this old before it is proposed: a cool-down against a hijacked release (ADR 0158 decision 5).
   // Renovate reports the wait as the commit status `renovate/stability-days`, which is why the App may write commit
-  // statuses. `strict` opens no branch while the age is not reached. Security fixes are not held (decision 6).
-  // The length is a tuning value for the dry run (ADR 0158 § Consequences); phase 6 records the settled one here.
+  // statuses. `strict` opens no branch while the age is not reached. Security fixes are not held (decision 6): see
+  // `vulnerabilityAlerts` below.
+  // Kept at three days after the dry run (cr-renovate), a judgement, not a measurement: long enough that a hijacked
+  // release is usually pulled before it is proposed, short enough that a Saturday run proposes what shipped by Wednesday. Majors
+  // wait for no Dependency Dashboard approval: each is a pull request of its own (above), and a person merges it.
   minimumReleaseAge: "3 days",
   internalChecksFilter: "strict",
 
@@ -145,6 +151,13 @@
   prConcurrentLimit: 10,
 
   dependencyDashboard: { enabled: true },
+
+  // A fix for a version GitHub's advisories name (Dependabot's alerts, which the App reads) opens at once, alone, not
+  // held by the cool-down: Renovate's defaults for these pull requests (44.257.9's config/options: `minimumReleaseAge:
+  // null`, `prCreation: "immediate"`, `vulnerabilityFixStrategy: "lowest"`, no group, no schedule). Dependabot's own
+  // security pull requests are switched off in the repository's settings (ADR 0158 decision 6), so one alert has one
+  // updater.
+  vulnerabilityAlerts: { enabled: true },
 
   packageRules: [
     // ---- groups ------------------------------------------------------------------------------------------------------
@@ -250,6 +263,21 @@
       },
     },
     {
+      description: "A Gradle wrapper bump moves `distributionUrl` alone: Renovate regenerates the wrapper only by running it (`gradleWrapper` in `allowedUnsafeExecutions`, which stays off — it would run the repository's Gradle in the job that holds the App's token), so `distributionSha256Sum` would keep the old distribution's (measured in 44.257.9's gradle-wrapper/artifacts.js). The task writes the new one, read from services.gradle.org's .sha256 and the zip's own hash, required equal. The wrapper JAR stays (scripts/gradle_wrapper_jar.sha256 pins it); the build's metadata is the Renovate follow's.",
+      matchManagers: ["gradle-wrapper"],
+      postUpgradeTasks: {
+        commands: ["python3 scripts/pin_follow.py gradle-distribution"],
+        fileFilters: ["**/gradle/wrapper/gradle-wrapper.properties"],
+        executionMode: "branch",
+      },
+    },
+    {
+      description: "The WebP encoder's two inputs, libwebp's tag and the Emscripten image, are one pull request of their own: either writes new encoder bytes, which the Renovate follow rebuilds with build.py --write (ADR 0127), and a slow rebuild does not hold back the images group.",
+      matchDepNames: ["libwebp", "emscripten/emsdk"],
+      groupName: "webp encoder",
+      separateMajorMinor: false,
+    },
+    {
       description: "PyYAML's hashed wheels: a version bump rewrites the hashes to the set PyPI publishes for it.",
       matchManagers: ["pip_requirements"],
       matchFileNames: ["scripts/requirements-release.txt"],
@@ -297,26 +325,11 @@
       matchPackageNames: ["dxflrs/garage"],
       allowedVersions: "/^v2\\.0\\./",
     },
-
-    // ---- not moved from Dependabot yet ---------------------------------------------------------------------------------
-    // The last rules, so nothing above turns them back on. Each phase-5 step of cr-renovate takes one ecosystem out of
-    // them and its entry out of .github/dependabot.yml in the same change, so no pin has two updaters and none has none.
-    // A disabled dependency is still extracted, so `pins` in checks.yml still sees it reached.
     {
-      description: "Still Dependabot's (cr-renovate phase 5 moves them in this order: gradle, the rest). Moved so far: github-actions; dockerfile and docker-compose with the image constants and the chart's values, which their regex managers read; npm, both workspaces, with pnpm, whose regex manager reads the global installs.",
-      matchManagers: ["gradle", "gradle-wrapper", "pip_requirements", "custom.regex"],
-      enabled: false,
-    },
-    {
-      description: "The regex managers that read an image pin (the chart's values, the backup tool's and measure_volume.py's constants, Renovate's own image) move with the images: one repository is one tag and one digest everywhere (scripts/validate_image_pins.py), so they are in the `images` group's pull request with the compose files and Dockerfiles. The Java runtime pinned in the version catalog moves with `java major`. pnpm's global installs (`npm install -g pnpm@…` in the workflows and Dockerfiles) move with `packageManager`, in the `pnpm` group.",
-      matchManagers: ["custom.regex"],
-      matchDatasources: ["docker", "java-version", "npm"],
-      enabled: true,
-    },
-    {
-      description: "Images held to a later step, each because something must move with it that this step does not write. The WebP encoder's Emscripten image writes new encoder bytes (build.py --write, 5e; Dependabot keeps it until then). The API fuzzer's Python image carries the wheels tests/fuzz/lock.py hashes for its Python (5e, with Schemathesis).",
-      matchPackageNames: ["emscripten/emsdk", "python"],
-      enabled: false,
+      description: "The API fuzzer's base on Python 3.13: tests/fuzz/lock.py hashes the wheels for CPython 3.13 (`-cp313-`), so a new minor moves by hand, with lock.py's tags. 3.13's own digest and patch moves still arrive in the images group.",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["python"],
+      allowedVersions: "/^3\\.13(\\.|-|$)/",
     },
   ],
 }

@@ -1,7 +1,7 @@
 # ADR 0158 — Every pin has an updater: a self-hosted Renovate proposes each bump with what moves with it
 
 - Status: Accepted
-- Built: no
+- Built: yes (cr-renovate, 2026-11-23; decisions 4 and 8 amended the same day, below)
 - Date: 2026-11-22
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 
@@ -88,19 +88,30 @@ archived, release 44.257.9 of 2026-11-21, and `renovatebot/github-action` v46.3.
      for the Dependency Dashboard; commit statuses to write, for the status that holds a release in its cool-down
      (decision 5); Dependabot alerts to read, for decision 6. It never gets checks to write, which would let it create a
      check run of any name.
-   - Its private key is a secret of an environment that admits the default branch alone, so only the Renovate job
-     reads it. A job token is minted per run and expires within the hour.
+   - Its private key is a secret of an environment that admits the default branch alone, so only jobs that run from
+     the default branch read it: the Renovate job, and the Renovate follow's push (decision 4), which mints a token
+     for contents alone. A job token is minted per run and expires within the hour.
    - This makes the close-and-reopen of the libwebp pull request and the approval of the follow's pushes unnecessary.
    - Creating the App and storing its key is the owner's step.
 
-4. **What has to move with a version moves in the same pull request, written by the updater.**
-   - Renovate's own artifact updates are used where it has one: the pnpm lockfile, Gradle wrapper checksums and
-     `verification-metadata.xml`, hashed pip requirements.
-   - Everything else is a `postUpgradeTask` that runs a repository script, for example the Helm tarball's SHA-256,
-     Schemathesis' `lock.py` and the WebP encoder's `build.py --write`. `allowedCommands` admits exactly those
-     scripts and nothing else.
-   - The rules the follow enforced stay rules, as guards that read what the pull request wrote:
-     - `verification-metadata.xml` only gains entries;
+4. **What has to move with a version moves in the same pull request, written by the updater.** (Amended
+   2026-11-23, when it was built: Renovate's Gradle artifact updates run the repository's Gradle, its plugins included,
+   in the job that holds the key — `gradleWrapper` in `allowedUnsafeExecutions` — and its container has no Docker for
+   `lock.py` or `build.py`. So a follow-up that needs the bumped tree executed is not Renovate's.)
+   - Renovate's own artifact updates are used where they execute nothing of the repository: the pnpm lockfile
+     (`--ignore-scripts`).
+   - A follow-up that published bytes decide is a `postUpgradeTask` running `scripts/pin_follow.py`: the Helm
+     tarball's SHA-256, the OpenAPI generator JAR's, PyPI's hashes, the Gradle distribution's checksum.
+     `allowedCommands` admits exactly those calls and nothing else.
+   - A follow-up that needs the bumped tree executed — the Gradle verification metadata, Schemathesis' `lock.py`, the
+     WebP encoder's `build.py --write` — is the **Renovate follow** (`renovate-follow-derive.yml`,
+     `renovate-follow.yml`, `scripts/renovate_follow.py`), the shape the Dependabot follow had: a read-only run on the
+     pull request executes it and uploads what it wrote; a `workflow_run` job from the default branch checks that the
+     pull request is Renovate's and untouched, accepts the upload as data, and pushes one commit with the App's token
+     minted for contents alone, so `Checks` starts on it as on Renovate's own push.
+   - The rules the follow enforced stay rules, held by checks that read what the pull request wrote:
+     - `verification-metadata.xml` only gains trust (`verification_metadata_diff.py`, in `Checks` against the pull
+       request's base: a property of a change, which no history-blind guard can hold);
      - one `repo:tag` has one digest (`validate_image_pins.py`);
      - the Playwright image matches the library.
 
@@ -130,19 +141,21 @@ archived, release 44.257.9 of 2026-11-21, and `renovatebot/github-action` v46.3.
    whatever snapshot it promotes.
 
 8. **The libwebp updater moves into Renovate** (part of ADR 0127 decision 4). Renovate reads libwebp's stable `vX.Y.Z`
-   tags as a git-tags dependency and runs `build.py --write` as its post-upgrade task, which rebuilds the encoder in
-   the pinned Emscripten image. The encoder's tests then run in `Checks`, because the App's pull request starts it.
-   Trust on first use of the tag's commit stays as decision 4 has it: the pin records the commit the tag named when it
-   was first read.
+   tags as a git-tags dependency; the Renovate follow (decision 4, amended) runs `build.py --write`, which rebuilds the
+   encoder in the pinned Emscripten image, with libwebp and the Emscripten image as one pull request of their own. The
+   encoder's tests and its byte-for-byte rebuild then run in `Checks`, because the push starts it. Trust on first use of
+   the tag's commit stays as decision 4 has it: the pin records the commit `git ls-remote` names for the tag, asked
+   again by the writing job before it accepts the pin.
 
 ## Consequences
 
-- **Dependabot's version updates and the three updater workflows go.** `.github/dependabot.yml` keeps no version
-  updates. `dependabot-follow-derive.yml`, `dependabot-follow.yml`, `scripts/dependabot_follow.py` with its self-test,
-  and `webp-encoder-update.yml` are deleted once Renovate covers what each one did. The switch happens ecosystem by
-  ecosystem after a dry run, never in one step.
-- **A write-capable job with a secret now exists.** It is the first job that holds a long-lived secret able to push
-  to the repository and change workflows. What bounds it:
+- **Dependabot's version updates and the libwebp updater go.** `.github/dependabot.yml` is deleted and
+  `webp-encoder-update.yml` with it; the Dependabot follow became the Renovate follow (decision 4). The switch happened
+  after a dry run, ecosystem by ecosystem for the actions, the images and npm, each proven by Renovate's first real pull
+  request, and for Gradle and the rest in one step (cr-renovate).
+- **A write-capable job with a secret now exists, and a second one that pushes.** The Renovate job is the first job
+  that holds a long-lived secret able to push to the repository and change workflows; the Renovate follow's push reads
+  the same key, mints a token for contents alone, and runs no code of the pull request. What bounds them:
   - the App is installed on this repository alone;
   - the key is readable by one job only, which runs from the default branch, never from a pull request;
   - post-upgrade commands are allowlisted, and install scripts are off.
@@ -161,4 +174,9 @@ archived, release 44.257.9 of 2026-11-21, and `renovatebot/github-action` v46.3.
   3 removes.
 - **Rejected: the Mend-hosted app.** See decision 2.
 - **Not decided here:** the cool-down's length and the Dependency Dashboard's approval gate for majors. These are
-  tuning values for the CR's dry run, recorded where the configuration sets them.
+  tuning values, recorded where the configuration sets them (`renovate.json5`: three days, no approval gate).
+
+## Related
+
+- The policy: [`renovate.json5`](../../renovate.json5); the follow-ups: `scripts/pin_follow.py`, `scripts/renovate_follow.py`.
+- Security area of the docs site: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md)

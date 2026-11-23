@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Every repository path a workflow, Dependabot or Renovate names exists in the tree.
+"""Every repository path a workflow or Renovate names exists in the tree.
 
-**What it asserts.** Over every tracked `.github/workflows/*.y(a)ml` and `.github/dependabot.yml`, each read as YAML
+**What it asserts.** Over every tracked `.github/workflows/*.y(a)ml`, each read as YAML
 (a file that does not parse is red, never skipped):
 
   1. **Path filters.** Every pattern of an event's `paths:` / `paths-ignore:` and of a `dorny/paths-filter` step's
@@ -19,8 +19,7 @@
      repository root among them (the pnpm workspace root: `node_modules/.openapi-generator`, the generator JAR every
      installing job restores), for a line that continues below the output segment. A line under
      `~/` (the runner's home: Gradle's `~/.gradle/caches`) names no repository path, so nothing here can check it.
-  5. **Dependabot.** Every `directory:` and `directories:` entry is `/` or a tracked directory.
-  6. **Renovate.** In `renovate.json5` (read as JSON5: comments, unquoted keys and trailing commas, as Renovate reads
+  5. **Renovate.** In `renovate.json5` (read as JSON5: comments, unquoted keys and trailing commas, as Renovate reads
      it; a file that does not parse is red), every `managerFilePatterns` entry — a `/regex/` searched over the tracked
      paths, or a glob — and every `matchFileNames` and postUpgradeTask `fileFilters` glob matches at least one tracked
      file, and every `ignorePaths` entry without a glob character is tracked. A rule or a manager whose file moved
@@ -39,8 +38,9 @@ without `/**` names a file of that name, never the directory). All were removed,
 nothing. The same run was red on `codeql.yml`'s `**/*.cjs` and `**/*.tsx`, which match nothing because no such file
 exists yet — that is a language's catch-all, not a stale place, and is why rule 1 exempts a location-free pattern.
 
-Rule 6 was added with cr-renovate phase 4 (ADR 0158), with no incident: Renovate's config names fifteen places
-since phase 3, and the guard that held Dependabot's to the tree held none of them.
+Rule 5 was added with cr-renovate phase 4 (ADR 0158), with no incident: Renovate's config names fifteen places
+since phase 3, and the guard that held Dependabot's `directories:` to the tree held none of them (that rule left with
+`.github/dependabot.yml` itself, cr-renovate phase 5).
 
 **Its limit — what a green run does NOT prove.** Existence, never aptness: a filter that matches some file can still
 miss the one it was written for, a location-free pattern (rule 1) is not checked at all, and a filter list can omit a tree
@@ -68,7 +68,6 @@ except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 WORKFLOW_DIR = ".github/workflows/"
-DEPENDABOT = ".github/dependabot.yml"
 RENOVATE = "renovate.json5"
 GLOB_CHARS = re.compile(r"[*?\[{]")
 EXPRESSION = "${{"
@@ -201,17 +200,6 @@ def check_workflow(rel: str, doc: object, tree: Tree) -> int:
     return count
 
 
-def check_dependabot(doc: object, tree: Tree) -> int:
-    count = 0
-    for update in (doc or {}).get("updates", []) if isinstance(doc, dict) else []:
-        entries = ([update["directory"]] if "directory" in update else []) + list(update.get("directories", []))
-        for entry in entries:
-            count += 1
-            if not tree.is_dir(entry):
-                errors.append(f"{DEPENDABOT}: {update.get('package-ecosystem')}: `{entry}` is no tracked directory")
-    return count
-
-
 def json5(text: str) -> object:
     """The JSON5 subset renovate.json5 is written in: `//` and `/* */` comments, unquoted keys, trailing commas, and
     double-quoted strings. Anything else (a single-quoted string, a hex number) fails `json.loads`, and is red."""
@@ -296,10 +284,6 @@ def main() -> int:
     if files and not workflows:
         errors.append(f"no tracked workflow under {WORKFLOW_DIR} — re-anchor this guard")
     count = sum(check_workflow(rel, load(rel), tree) for rel in workflows)
-    if DEPENDABOT in tree.file_set:
-        count += check_dependabot(load(DEPENDABOT), tree)
-    else:
-        errors.append(f"no tracked {DEPENDABOT} — re-anchor this guard")
     if RENOVATE in tree.file_set:
         count += check_renovate(tree)
     else:
@@ -311,8 +295,7 @@ def main() -> int:
         for e in errors:
             print(f"  - {e}")
         return 1
-    print(f"workflow paths OK: {count} path(s) in {len(workflows)} workflow(s), {DEPENDABOT} and {RENOVATE} name "
-          f"tracked files")
+    print(f"workflow paths OK: {count} path(s) in {len(workflows)} workflow(s) and {RENOVATE} name tracked files")
     return 0
 
 

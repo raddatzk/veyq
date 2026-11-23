@@ -116,7 +116,7 @@ RUN ./gradlew --no-daemon quarkusBuild -x test
 # Google's distroless project packages from Adoptium's builds — and nothing else: no shell, no package manager, no
 # coreutils, no curl, no tar. `nonroot` is the variant whose default user is not root; the stage below sets its own
 # anyway. Pinned by the multi-arch index digest (amd64 + arm64, validate_image_pins.py's limits say how it was
-# checked); Dependabot's `docker` ecosystem bumps the digest of the `nonroot` tag.
+# checked); Renovate's `dockerfile` manager bumps the digest of the `nonroot` tag.
 FROM gcr.io/distroless/java25-debian13:nonroot@sha256:59bbb349c9752fc57b75744b41b1614c9dabe8bb4869523aabd5a4288f6c09a0 AS distroless-java
 
 # Everything the runtime needs a shell for happens here, on the build JDK, and travels into the runtime as files: a

@@ -1,6 +1,7 @@
 # The backend's resolved dependency graph, submitted to GitHub so Dependabot's alerts see every Gradle dependency the
-# build resolves, transitive ones included. Dependabot reads the Gradle build files on its own (dependabot.yml), but
-# what it finds there is the declared versions only; the graph this job submits is the resolved one.
+# build resolves, transitive ones included. Dependabot's alerts read the Gradle build files on their own, but what they
+# find there is the declared versions only; the graph this job submits is the resolved one. (The version updates are
+# Renovate's, ADR 0158; the alerts stay GitHub's, and Renovate opens their fixes.)
 #
 # Two jobs on purpose. Resolving the graph runs the build's scripts and every plugin they apply; submitting it needs
 # `contents: write`. So the job that runs Gradle holds a read-only token and hands the graph on as an artifact, and the

@@ -2,8 +2,11 @@
 """Offline self-test of `pin_follow.py`: each follow-up on a minimal fake tree in a temp directory, against forged
 upstream answers — and the forgeries it must refuse: one Helm checksum source that disagrees with the other two (each
 source once), workflows that pin different Helm versions, a JAR that does not match Central's `.sha1` or `.md5`,
-surfaces that run different generator versions, a PyPI release with no wheel for the file. Also: a 429 and a 503 are
-retried, and every refusal leaves the tree as it was. No network: the module's one fetch function is replaced.
+surfaces that run different generator versions, a PyPI release with no wheel for the file, a Gradle `.sha256` that the
+zip does not hash to or that is no bare 64-hex value, a wrapper properties file whose lines are missing, doubled,
+malformed or point off services.gradle.org. Also: a 429 and a 503 are retried, and every refusal leaves the tree as it
+was. No network: the module's one fetch function is replaced (the Gradle cases run a local `git init`, since the
+wrapper files are found by `git ls-files`).
 
     python3 scripts/pin_follow_selftest.py
 """
@@ -14,6 +17,8 @@ import hashlib
 import io
 import json
 import pathlib
+import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -289,6 +294,159 @@ with tempfile.TemporaryDirectory() as scratch:
     write_tree(root, {REQ: bumped.rstrip("\n") + " \\\n"})
     refuses("pypi: hash lines that never end are refused", root, Upstream({PYPI_URL: pypi_release(WHEELS)}),
             pf.follow_pypi_hashes, root, REQ, says="ending without")
+
+
+# --- 4. gradle-distribution --------------------------------------------------------------------------------------------
+
+LAUNCHER = pf.WRAPPER_PROPERTIES  # the root launcher's
+BACKEND_WRAPPER = "src/backend/" + pf.WRAPPER_PROPERTIES
+UNTRACKED_WRAPPER = "scratch/" + pf.WRAPPER_PROPERTIES
+ZIP_A, ZIP_B = b"forged gradle 9.9.1 zip", b"forged gradle 9.9.2 zip"
+SUM_A, SUM_B = hashlib.sha256(ZIP_A).hexdigest(), hashlib.sha256(ZIP_B).hexdigest()
+DIST = "https://services.gradle.org/distributions/gradle-{v}-bin.zip"
+DIST_A, DIST_B = DIST.format(v="9.9.1"), DIST.format(v="9.9.2")
+
+
+def url_line(url: str, key: str = "distributionUrl=") -> str:
+    """A `distributionUrl` line the way Gradle writes it: the colon escaped."""
+    return key + url.replace(":", "\\:")
+
+
+def properties(version: str = "9.9.1", digest: str = "", url: str = "", sum_line: str = "", extra: str = "") -> str:
+    url_line_ = url or url_line(DIST.format(v=version))
+    return ("distributionBase=GRADLE_USER_HOME\ndistributionPath=wrapper/dists\n"
+            + (sum_line or f"distributionSha256Sum={digest or sha(1)}") + "\n" + url_line_ + "\n" + extra
+            + "networkTimeout=10000\nvalidateDistributionUrl=true\nzipStoreBase=GRADLE_USER_HOME\n")
+
+
+def git_tree(root: pathlib.Path, files: dict, untracked: "dict | None" = None) -> None:
+    """A fresh git tree: `files` tracked (added to the index), `untracked` written beside them only."""
+    for path in sorted(root.iterdir()):
+        shutil.rmtree(path) if path.is_dir() else path.unlink()
+    subprocess.run(["git", "init", "-q", str(root)], check=True, capture_output=True)  # a template warning is noise
+    write_tree(root, files)
+    if files:
+        subprocess.run(["git", "-C", str(root), "add", "--", *files], check=True)
+    write_tree(root, untracked or {})
+
+
+def gradle_upstream(zip_a: bytes = ZIP_A, sha256_a: bytes = b"", zip_b: bytes = ZIP_B) -> Upstream:
+    return Upstream({DIST_A: zip_a, DIST_A + ".sha256": sha256_a or SUM_A.encode(),
+                     DIST_B: zip_b, DIST_B + ".sha256": (SUM_B + "\n").encode()})
+
+
+def tree_text(root: pathlib.Path) -> dict:
+    """The working tree's files, `.git` left out (the index moves when nothing else does)."""
+    return {p.relative_to(root).as_posix(): p.read_bytes() for p in sorted(root.rglob("*"))
+            if p.is_file() and p.relative_to(root).parts[0] != ".git"}
+
+
+def gradle_refuses(label: str, root: pathlib.Path, files: dict, upstream: Upstream, says: str) -> None:
+    git_tree(root, files)
+    pf.fetch = upstream
+    before = tree_text(root)
+    refusal = quiet(pf.follow_gradle_distribution, root)
+    check(label, refusal is not None and says in str(refusal) and tree_text(root) == before,
+          f"refusal={refusal!r}, tree unchanged={tree_text(root) == before}")
+
+
+print("gradle-distribution")
+with tempfile.TemporaryDirectory() as scratch:
+    root = pathlib.Path(scratch)
+    good = {LAUNCHER: properties("9.9.1"), BACKEND_WRAPPER: properties("9.9.2", SUM_B)}
+    git_tree(root, good, untracked={UNTRACKED_WRAPPER: "not a properties file at all\n"})
+    pf.fetch = upstream = gradle_upstream()
+    refusal = quiet(pf.follow_gradle_distribution, root)
+    after = tree_text(root)
+    check("gradle: the stale sum becomes services.gradle.org's for that file's own version",
+          refusal is None and after[LAUNCHER] == properties("9.9.1", SUM_A).encode(),
+          f"{refusal!r} {after.get(LAUNCHER)!r}")
+    check("gradle: a file whose sum is already right stays byte-identical",
+          (root / BACKEND_WRAPPER).read_bytes() == properties("9.9.2", SUM_B).encode())
+    check("gradle: an untracked wrapper file is not read (found by git ls-files, not by walking)",
+          after[UNTRACKED_WRAPPER] == b"not a properties file at all\n")
+    check("gradle: each zip was fetched once, for its hash only",
+          upstream.calls.count(DIST_A) == 1 and upstream.calls.count(DIST_B) == 1, str(upstream.calls))
+    before = tree_text(root)
+    pf.fetch = gradle_upstream()
+    refusal = None
+    with contextlib.redirect_stdout(io.StringIO()) as out:
+        try:
+            pf.follow_gradle_distribution(root)
+        except pf.Refusal as exc:
+            refusal = exc
+    check("gradle: a second run writes nothing (idempotent)",
+          refusal is None and tree_text(root) == before and "wrote" not in out.getvalue(), f"{refusal!r} {out.getvalue()}")
+    git_tree(root, {LAUNCHER: properties("9.9.1"), BACKEND_WRAPPER: properties("9.9.1", sha(2))})
+    pf.fetch = upstream = gradle_upstream()
+    refusal = quiet(pf.follow_gradle_distribution, root)
+    check("gradle: two wrappers naming one distribution share one download and both get its sum",
+          refusal is None and upstream.calls.count(DIST_A) == 1
+          and all(f"distributionSha256Sum={SUM_A}\n" in (root / rel).read_text()
+                  for rel in (LAUNCHER, BACKEND_WRAPPER)))
+
+    gradle_refuses("gradle FORGERY: the zip does not hash to services.gradle.org's .sha256", root, good,
+                   gradle_upstream(zip_a=b"other bytes"), says="disagree")
+    gradle_refuses("gradle FORGERY: a .sha256 naming a file beside the hash is refused", root, good,
+                   gradle_upstream(sha256_a=f"{SUM_A}  gradle-9.9.1-bin.zip\n".encode()), says="not exactly one 64-hex")
+    gradle_refuses("gradle FORGERY: a .sha256 with two hashes is refused", root, good,
+                   gradle_upstream(sha256_a=f"{SUM_A}\n{SUM_A}\n".encode()), says="not exactly one 64-hex")
+    gradle_refuses("gradle FORGERY: a .sha256 that is no hex is refused", root, good,
+                   gradle_upstream(sha256_a=b"<html>not found</html>"), says="not exactly one 64-hex")
+    gradle_refuses("gradle: all or nothing — a refusal for the second file leaves the first one unwritten", root,
+                   good, gradle_upstream(zip_b=b"other bytes"), says="disagree")
+    gradle_refuses("gradle: a distributionUrl off services.gradle.org is refused", root,
+                   {**good, LAUNCHER: properties(url=url_line(DIST_A.replace("services.gradle.org", "example.org")))},
+                   gradle_upstream(), says="is no https://services.gradle.org")
+    gradle_refuses("gradle: a distributionUrl over http is refused", root,
+                   {**good, LAUNCHER: properties(url=url_line(DIST_A.replace("https", "http")))},
+                   gradle_upstream(), says="is no https://services.gradle.org")
+    gradle_refuses("gradle: a distribution that is no -bin/-all zip of an X.Y[.Z] is refused", root,
+                   {**good, LAUNCHER: properties(url=url_line(DIST_A.replace("9.9.1-bin", "9.9-rc-1-src")))},
+                   gradle_upstream(), says="is no https://services.gradle.org")
+    gradle_refuses("gradle: a missing distributionUrl is refused", root,
+                   {**good, BACKEND_WRAPPER: properties(url="#")}, gradle_upstream(), says="0 `distributionUrl` lines")
+    gradle_refuses("gradle: a second distributionUrl is refused", root,
+                   {**good, BACKEND_WRAPPER: properties(extra=url_line(DIST_B) + "\n")},
+                   gradle_upstream(), says="2 `distributionUrl` lines")
+    gradle_refuses("gradle: a distributionUrl line not in `key=value` form is refused", root,
+                   {**good, LAUNCHER: properties(url=url_line(DIST_A, key="distributionUrl = "))},
+                   gradle_upstream(), says="is not `distributionUrl=<value>`")
+    gradle_refuses("gradle: a missing distributionSha256Sum is refused", root,
+                   {**good, BACKEND_WRAPPER: properties(sum_line="#")}, gradle_upstream(),
+                   says="0 `distributionSha256Sum` lines")
+    gradle_refuses("gradle: a second distributionSha256Sum is refused", root,
+                   {**good, LAUNCHER: properties(extra=f"distributionSha256Sum={sha(3)}\n")}, gradle_upstream(),
+                   says="2 `distributionSha256Sum` lines")
+    gradle_refuses("gradle: a distributionSha256Sum that is no 64-hex value is refused", root,
+                   {**good, LAUNCHER: properties(sum_line="distributionSha256Sum=nothex")}, gradle_upstream(),
+                   says="is no 64-hex")
+    gradle_refuses("gradle: a tree tracking no wrapper properties file is refused", root,
+                   {"README.md": "x\n"}, gradle_upstream(), says="no tracked")
+    pf.fetch = Upstream({})
+    with tempfile.TemporaryDirectory() as plain:  # beside `root`, not inside it: git would find root's repository
+        write_tree(pathlib.Path(plain), good)
+        check("gradle: a tree without git is refused, not walked",
+              "git ls-files" in str(quiet(pf.follow_gradle_distribution, pathlib.Path(plain))))
+
+    git_tree(root, good)
+    flaky = gradle_upstream()
+    flaky.routes[DIST_A + ".sha256"] = [429, 503, SUM_A.encode()]
+    pf.fetch = flaky
+    refusal = quiet(pf.follow_gradle_distribution, root)
+    check("gradle retry: a 429 then a 503 from services.gradle.org are retried until the sum comes",
+          refusal is None and flaky.calls.count(DIST_A + ".sha256") == 3
+          and f"distributionSha256Sum={SUM_A}\n" in (root / LAUNCHER).read_text(), repr(refusal))
+
+    git_tree(root, good)
+    pf.fetch = gradle_upstream(zip_a=b"other bytes")
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+        code = pf.main(["--root", str(root), "gradle-distribution"])
+    check("gradle cli: a refusal exits 1 and says REFUSED", code == 1 and "REFUSED" in err.getvalue(), err.getvalue())
+    pf.fetch = gradle_upstream()
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        code = pf.main(["--root", str(root), "gradle-distribution"])
+    check("gradle cli: a good run exits 0", code == 0 and SUM_A in (root / LAUNCHER).read_text())
 
 
 # --- the command line --------------------------------------------------------------------------------------------------
