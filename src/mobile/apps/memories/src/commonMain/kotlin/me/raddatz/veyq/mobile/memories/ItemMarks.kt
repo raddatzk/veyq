@@ -1,6 +1,8 @@
 package me.raddatz.veyq.mobile.memories
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.builtins.ListSerializer
 import me.raddatz.veyq.mobile.api.memories.apis.ItemFavoritesApi
 import me.raddatz.veyq.mobile.api.memories.models.ItemFavoritesEntry
@@ -29,7 +31,7 @@ import me.raddatz.veyq.mobile.words.Notice
  * writes optimistically, puts the set back where the write did not land and says why ([Toggled]): the 12,285th mark
  * (`tooMany`, the contract's 262,144 chars) or a failed save. A `409 stale_epoch` is sealed once more under the scope
  * opened again. In a personal scope there is no count (E4: only the owner marks). The listing is a kept read (ADR 0140
- * decision 5): offline the marks show as last read; nothing is marked offline (decision 7).
+ * decision 5): offline the marks show as last read, a mark made offline queued and shown set (ADR 0153 decision 5).
  */
 class ItemMarks internal constructor(
     val scopeId: String,
@@ -61,11 +63,21 @@ class ItemMarks internal constructor(
         suspend fun reopen(): Pair<ByteArray, Long>?
     }
 
-    /** The sets as last read ([loaded] false until a read succeeded). */
-    var sets: List<MemberSet> = emptyList()
-        private set
-    var loaded: Boolean = false
-        private set
+    /**
+     * What is held, swapped whole and atomically (a page's read runs on its own thread while a tap marks — inbox #1100): the
+     * sets, whether a read succeeded, and how many local changes of the own set were made ([edits]), by which a read that
+     * was in flight across one knows its own set is older than the one shown.
+     */
+    private class Held(val sets: List<MemberSet>, val loaded: Boolean, val edits: Long)
+
+    private val held = MutableStateFlow(Held(emptyList(), false, 0))
+
+    /** The sets as last read, with the own set as changed here since ([loaded] false until a read succeeded). */
+    val sets: List<MemberSet> get() = held.value.sets
+    val loaded: Boolean get() = held.value.loaded
+
+    /** The own set made anew by [change] over the sets as they stand now — one atomic step, counted as a local change. */
+    private fun edit(change: (List<MemberSet>) -> List<MemberSet>) = held.update { Held(change(it.sets), it.loaded, it.edits + 1) }
 
     /** How many members marked [mediaId]; null in a personal scope (no count, E4). */
     fun count(mediaId: String): Int? = if (personal) null else sets.count { mediaId in it.ids }
@@ -79,8 +91,16 @@ class ItemMarks internal constructor(
     /** The caller's own marks (the filter's *mine*). */
     fun mine(): Set<String> = sets.firstOrNull { it.own }?.ids.orEmpty()
 
-    /** Reads every member's set; false where the listing did not read (the toggle stays refused). */
-    suspend fun load(): Boolean {
+    /**
+     * Reads every member's set; false where the listing did not read (the toggle stays refused). [overlay] — the marks set
+     * offline and not sent yet (ADR 0153 decision 5) — is read **after** the listing and laid over the own set as read.
+     *
+     * Where the own set changed here while the read was in flight (a toggle, a mark queued offline: inbox #1100), the own
+     * set as shown is newer than the one listed and the overlay read — the read takes every other member's set and keeps
+     * the shown own set, never putting a mark just made back.
+     */
+    suspend fun load(overlay: suspend () -> Map<String, Boolean> = { emptyMap() }): Boolean {
+        val since = held.value.edits
         val entries = try {
             store.list()
         } catch (e: CancellationException) {
@@ -90,9 +110,10 @@ class ItemMarks internal constructor(
         }
         val key = store.key() ?: return false
         val selfKey = store.selfKey()
+        val read: List<MemberSet>
         try {
             var mineFound = false
-            sets = entries.map { e ->
+            read = entries.map { e ->
                 val opened = open(suite, scopeId, nodeId, key.first, key.second, e.ciphertext, e.wrappedValueKey)
                 val ids = opened?.second.orEmpty()
                 val own = !mineFound && e.self && selfKey != null && opened != null &&
@@ -100,13 +121,22 @@ class ItemMarks internal constructor(
                 if (own) mineFound = true
                 MemberSet(own, ids.toSet())
             }
-            loaded = true
-            return true
         } finally {
             selfKey?.fill(0)
             key.first.fill(0)
         }
+        val queued = overlay()
+        val shown = if (queued.isEmpty()) read else read.filter { !it.own } + MemberSet(true, withMarks(read.firstOrNull { it.own }?.ids.orEmpty(), queued))
+        held.update { h ->
+            if (h.edits == since) Held(shown, true, h.edits)
+            else Held(shown.filter { !it.own } + h.sets.filter { it.own }, true, h.edits)
+        }
+        return true
     }
+
+    /** [ids] with each of [marks] set (true) or taken away (false). */
+    private fun withMarks(ids: Set<String>, marks: Map<String, Boolean>): Set<String> =
+        ids.toMutableSet().also { m -> marks.forEach { (id, marked) -> if (marked) m += id else m -= id } }
 
     /** What a toggle came to. */
     enum class Toggled(val notice: Notice?) {
@@ -120,27 +150,30 @@ class ItemMarks internal constructor(
     /** The caller's mark on [mediaId] flipped and the whole own set written; put back where the write did not land. */
     suspend fun toggle(mediaId: String): Toggled {
         if (!loaded) return Toggled.NOT_LOADED
-        val before = sets
-        val mine = mine().toMutableSet()
-        if (!mine.remove(mediaId)) mine += mediaId
-        sets = before.filter { !it.own } + MemberSet(true, mine)
+        var before: MemberSet? = null
+        var mine: Set<String> = emptySet()
+        edit { sets ->
+            before = sets.firstOrNull { it.own }
+            mine = withMarks(before?.ids.orEmpty(), mapOf(mediaId to (before?.ids?.contains(mediaId) != true)))
+            sets.filter { !it.own } + MemberSet(true, mine)
+        }
+        // put back: the own set as it was before, every other member's as the sets hold them now (a read may have landed)
+        fun putBack() = edit { sets -> sets.filter { !it.own } + listOfNotNull(before) }
         val out = try {
             write(mine.toList())
         } catch (e: CancellationException) {
-            sets = before
+            putBack()
             throw e
         } catch (e: Exception) {
             Toggled.SAVE_FAILED
         }
-        if (out != Toggled.DONE) sets = before
+        if (out != Toggled.DONE) putBack()
         return out
     }
 
     /** The caller's own set as shown holding [mediaId] or not ([marked]): a mark made offline, waiting to be sent. */
-    internal fun setLocal(mediaId: String, marked: Boolean) {
-        val mine = mine().toMutableSet()
-        if (marked) mine += mediaId else mine -= mediaId
-        sets = sets.filter { !it.own } + MemberSet(true, mine)
+    internal fun setLocal(mediaId: String, marked: Boolean) = edit { sets ->
+        sets.filter { !it.own } + MemberSet(true, withMarks(sets.firstOrNull { it.own }?.ids.orEmpty(), mapOf(mediaId to marked)))
     }
 
     /**

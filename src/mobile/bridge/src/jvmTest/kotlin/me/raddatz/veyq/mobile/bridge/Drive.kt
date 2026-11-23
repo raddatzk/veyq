@@ -22,11 +22,25 @@ internal suspend fun Bridge<*, *>.askWithPayload(call: Call, timeout: Duration =
 internal suspend fun Bridge<*, *>.askWith(call: Call, inbound: ByteArray?, timeout: Duration = 10.seconds): Answer =
     askWithPayload(wire.encodeToString(Call.serializer(), call), timeout, inbound).also { (a, payload) -> check(payload == null) { "$a came with a payload" } }.first
 
+/**
+ * Whether no call was answered yet in this test JVM. The first one pays the JVM's cold start of the bridge — the wire's
+ * serializers, the composition's and the core's classes loaded, linked and run interpreted — which is no answer's cost:
+ * measured 2026-11-23 (`./gradlew :bridge:jvmTest`, load 7–10, a probe around `AccountFlowsDispatchTest.signedIn`) 295 ms
+ * for the JVM's first sign-in, 0 ms for each of the next four. Under a machine-wide load (inbox #1101: 12–20, six other
+ * modules' tests beside it) that cold start alone outran the 10 s budget, in whichever test ran first. So the first call
+ * waits up to [COLD_START]; every later one keeps its own budget, which stays a hang's detector for the core's answer.
+ */
+private val cold = java.util.concurrent.atomic.AtomicBoolean(true)
+
+/** The first call's budget ([cold]): a hang's limit, not a measure. */
+private val COLD_START: Duration = 60.seconds
+
 internal suspend fun Bridge<*, *>.askWithPayload(json: String, timeout: Duration = 10.seconds, inbound: ByteArray? = null): Pair<Answer, ByteArray?> {
     val answered = CompletableDeferred<Pair<String, ByteArray?>>()
     var count = 0
+    val budget = if (cold.getAndSet(false)) maxOf(timeout, COLD_START) else timeout
     call(json, inbound) { a, payload -> count++; answered.complete(a to payload) }
-    val (a, payload) = withTimeout(timeout) { answered.await() }
+    val (a, payload) = withTimeout(budget) { answered.await() }
     check(count == 1) { "answered $count times" }
     val answer = wire.decodeFromString(Answer.serializer(), a)
     check((answer is Answer.Bytes || answer is Answer.RowCover && answer.sent) == (payload != null)) { "$answer with a payload of ${payload?.size}" }

@@ -310,6 +310,17 @@ Measured 2026-11-19 on `claude/offline-refine` at `4f3b57ecd` (commands from `sr
   grep; on Windows a Pot entry. **Apple:** both builds green, nothing clicked — an ad-hoc build keeps no Keychain trust,
   so no store and nothing queues; the Mac's pass waits for the owner's signed build and the iPhone's is the owner's
   ([native-apps](../crosscutting/native-apps.md) § Open holds the list); `AppleQueuedTest` holds what Swift reads.
+- **A mark made while the marks are being read stands** (2026-11-23, inbox #1100, cr-native-test-races). Found as a red
+  under load in `QueuedOverlayTest`, it was the product's: a gallery's read launched the marks' read with the outbox's
+  marks taken *before* the listing, and `ItemMarks.load` replaced the sets whole when its listing landed — a mark queued
+  offline in between (`queueMark`, then `setLocal`) vanished until the next read; online, a listing taken before a
+  toggle's put put the landed mark back. Decisions: (1) `ItemMarks` holds its sets, whether they were read and a count of
+  the own set's local changes as **one value swapped atomically** (the page reads on `Dispatchers.Default` while a tap
+  marks from another thread); (2) a read across a local change takes every other member's set and **keeps the own set as
+  shown** — the newer one — and a failed toggle puts back only the own set; (3) the overlay of marks waiting to be sent is
+  **read after the listing**, inside `load(overlay)`, never a copy taken before it (a mark discarded from the tray
+  meanwhile no longer returns). Held by `ItemMarksTest`'s three in-flight cases, the listing held at a gate under
+  `runTest` (the schedule forced, not looped under load), each bitten.
 
 ## Alternatives considered
 

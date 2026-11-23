@@ -120,7 +120,7 @@ class BannerLiveTest {
         val p = BouncyCastlePrimitives
         val env = liveRun.env
         val dir = Files.createTempDirectory("veyq-banner-live").toFile()
-        val device = ThisDevice(liveRun.store(), SoftwareDeviceKeys(p), "live banner test", p, offlineRoot = dir.absolutePath)
+        val device = ThisDevice(liveRun.store(), SoftwareDeviceKeys(p), "live banner test", p, offlineRoot = dir.absolutePath).also { it.offlineFiles = me.raddatz.veyq.mobile.offline.SizedVolume() }
         val door = AccountDoor(p, device, client)
         var account = VeyqAccount.signIn(p, origin!!, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), device, client)
         assertEquals(VeyqAccount.TrustOutcome.REMEMBERED, account.trustThisDevice(null, StaySignedIn.LOGIN))

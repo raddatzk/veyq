@@ -1,5 +1,8 @@
 package me.raddatz.veyq.mobile.memories
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.api.memories.models.ItemFavoritesEntry
 import me.raddatz.veyq.mobile.api.memories.models.PutItemFavoritesRequest
@@ -16,7 +19,13 @@ import kotlin.test.assertTrue
  * over real seals: a server the test plays holds one sealed set per member and flags the caller's own (`self`), never naming
  * a member. Two sessions marking one medium count 2, each `mine` only for itself; a toggle before the own set is read writes
  * nothing; a personal scope has no count; a failed write puts the set back and says so; a rotation's `stale_epoch` is sealed
- * once more under the key read anew.
+ * once more under the key read anew. A read in flight across a mark made here (inbox #1100, the schedule held by a gate on
+ * the listing, never by load) keeps the mark and takes the others' sets; the offline overlay is read after the listing.
+ *
+ * Bite (one edit, seen red, then restored): `load`'s `h.edits == since` made `true` (a read lands over whatever was marked
+ * meanwhile, as before #1100) → [aReadInFlightAcrossAMarkMadeOfflineKeepsTheMark] and
+ * [aReadInFlightAcrossAToggleKeepsTheMarkTheWriteLanded] red; the overlay read before `store.list()` →
+ * [theOfflineOverlayIsReadAfterTheListing] red.
  */
 class ItemMarksTest {
     private val p = testPrimitives
@@ -24,6 +33,7 @@ class ItemMarksTest {
     private val scope = "7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c"
     private val node = "4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d"
     private val photo = "2a9b1d4a-6e8b-4c1f-8d3e-4a5b6c7c3f0e"
+    private val other = "5b6c7c3f-0e2a-4b1d-8a6e-8b2c1f2d3e4a"
 
     /** The server's sets, by member; the scope key and its epoch as both members hold them. */
     private inner class Server(var key: ByteArray = p.randomBytes(32), var epoch: Long = 3) {
@@ -37,12 +47,16 @@ class ItemMarksTest {
         /** A member's Master Key: the same member's every session tags with it. */
         private val mk = p.sha256(name.encodeToByteArray())
         var listed = true
+        /** Held, a listing taken waits on it before it answers (a read in flight, inbox #1100); null: answers at once. */
+        var gate: CompletableDeferred<Unit>? = null
         /** The scope key this device holds; a rotation's `stale_epoch` reads the server's anew ([ItemMarks.Store.reopen]). */
         var held = server.key to server.epoch
         val marks = ItemMarks(scope, node, personal, suite, p, object : ItemMarks.Store {
             override suspend fun list(): List<ItemFavoritesEntry> {
                 check(listed) { "the listing did not read" }
-                return server.sets.map { (who, r) -> ItemFavoritesEntry(who == name, r.ciphertext, r.wrappedValueKey) }
+                val taken = server.sets.map { (who, r) -> ItemFavoritesEntry(who == name, r.ciphertext, r.wrappedValueKey) }
+                gate?.await()
+                return taken
             }
             override fun key() = held.first.copyOf() to held.second
             override fun selfKey() = me.raddatz.veyq.mobile.crypto.ItemMarks(suite).selfKey(mk)
@@ -139,5 +153,62 @@ class ItemMarksTest {
         val request = ItemMarks.seal(suite, p, scope, node, server.key, server.epoch, p.randomBytes(32), many)
         assertTrue(request != null, "12,284 marks fit")
         assertNull(ItemMarks.seal(suite, p, scope, node, server.key, server.epoch, p.randomBytes(32), many + "00000000-0000-4000-8000-999999999999"))
+    }
+
+    /** inbox #1100: a gallery's read in flight while a mark is queued offline lands without putting the mark back. */
+    @Test
+    fun aReadInFlightAcrossAMarkMadeOfflineKeepsTheMark() = runTest {
+        val server = Server()
+        val ana = Member(server, "ana")
+        val ben = Member(server, "ben")
+        assertTrue(ben.marks.load())
+        ben.marks.toggle(other)
+        assertTrue(ana.marks.load())
+        val gate = CompletableDeferred<Unit>().also { ana.gate = it }
+        val read = launch { assertTrue(ana.marks.load()) }
+        runCurrent() // the listing taken, its answer held
+        ana.marks.setLocal(photo, true)
+        gate.complete(Unit)
+        read.join()
+        assertTrue(ana.marks.markedByMe(photo), "the read in flight put the mark just made back")
+        assertEquals(1, ana.marks.count(other), "control: the others' sets are the read's")
+        // a read that starts after the mark takes the own set as listed (nothing local in flight)
+        ana.gate = null
+        assertTrue(ana.marks.load())
+        assertFalse(ana.marks.markedByMe(photo), "control: never sent, so not listed")
+    }
+
+    /** The same online: a read listed before the toggle's put lands after it — the mark the write landed stays shown. */
+    @Test
+    fun aReadInFlightAcrossAToggleKeepsTheMarkTheWriteLanded() = runTest {
+        val server = Server()
+        val ana = Member(server, "ana")
+        assertTrue(ana.marks.load())
+        val gate = CompletableDeferred<Unit>().also { ana.gate = it }
+        val read = launch { ana.marks.load() }
+        runCurrent()
+        ana.gate = null
+        assertEquals(ItemMarks.Toggled.DONE, ana.marks.toggle(photo))
+        gate.complete(Unit)
+        read.join()
+        assertTrue(ana.marks.markedByMe(photo), "the stale listing put the landed mark back")
+        assertTrue(Member(server, "ana").marks.let { it.load(); it.markedByMe(photo) }, "control: the write landed")
+    }
+
+    /** The offline overlay is read after the listing — a queue changed while the listing was in flight is the one shown. */
+    @Test
+    fun theOfflineOverlayIsReadAfterTheListing() = runTest {
+        val server = Server()
+        val ana = Member(server, "ana")
+        val gate = CompletableDeferred<Unit>().also { ana.gate = it }
+        var queued = mapOf(photo to true)
+        val read = launch { assertTrue(ana.marks.load { queued }) }
+        runCurrent()
+        queued = emptyMap() // discarded from the tray while the listing was in flight
+        gate.complete(Unit)
+        read.join()
+        assertFalse(ana.marks.markedByMe(photo), "a mark discarded meanwhile shows")
+        assertTrue(ana.marks.load { mapOf(photo to true) })
+        assertTrue(ana.marks.markedByMe(photo), "control: a mark queued shows as set")
     }
 }

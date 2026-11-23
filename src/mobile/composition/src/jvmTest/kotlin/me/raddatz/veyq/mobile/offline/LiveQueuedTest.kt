@@ -73,7 +73,7 @@ class LiveQueuedTest {
         val env = accounts.env
         val p = BouncyCastlePrimitives
         val root = Files.createTempDirectory("veyq-queued-live").toFile()
-        val device = ThisDevice(liveRun.store(), SoftwareDeviceKeys(p), "live queued test", p, offlineRoot = root.absolutePath)
+        val device = ThisDevice(liveRun.store(), SoftwareDeviceKeys(p), "live queued test", p, offlineRoot = root.absolutePath).also { it.offlineFiles = me.raddatz.veyq.mobile.offline.SizedVolume() }
         var account = VeyqAccount.signIn(p, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), device, client)
         assertEquals(VeyqAccount.TrustOutcome.REMEMBERED, account.trustThisDevice(null, StaySignedIn.LOGIN))
         val tenantRef = account.defaultTenant!!

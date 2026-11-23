@@ -561,3 +561,22 @@ names were the implementation session's and are not kept.
     run in no CI job either (#1102). The job green, measured: `scripts/run_pipeline.py --job kotlin-core` at the
     workflow's commit, 3.9 min, five `jvmTest` tasks executed, every step but the wrapper JAR's check (GitHub's alone);
     `:bridge:jvmTest` alone 1.7 min, green.
+59. **2026-11-23 — #1100 was a product race** (cr-native-test-races). `QueuedOverlayTest`'s red was a gallery's marks
+    read landing over a mark queued while it was in flight; fixed in `ItemMarks` and harvested into
+    [ADR 0153](0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md)'s
+    Consequences, where the offline writes' rules live.
+60. **2026-11-23 — #1101 was the test JVM's cold start, not the flows' cost.** Measured (`./gradlew :bridge:jvmTest`,
+    load 7–10, a probe around `AccountFlowsDispatchTest.signedIn`, removed after): the class runs first in the JVM, its
+    first sign-in took 295 ms, each later one 0 ms, the whole class 2.7 s — Argon2 at the suite's one parameter set
+    (`V1.ARGON`, which `decodeKdfParams` holds every wrap to, so a test cannot lower it) and the played flows are well
+    inside the budgets, and no wait is on the wall clock but the timeout itself. The bridge runs on `Dispatchers.Default`
+    threads over real crypto, so a virtual clock does not apply. Chosen: the JVM's first bridge call (`Drive.kt`'s
+    `askWithPayload`, whichever test makes it) waits up to 60 s, every later call keeps its own 10 s — the budget stays a
+    hang's detector for an answer and stops charging class loading to it. Rejected: raising every budget (it would hide
+    a real hang for six times as long in each of ~140 tests), and a warm-up call per class (it moves the cold start, it
+    does not remove it). Not bitten by a test (it is the harness's budget, not a rule); the probe is the measurement.
+61. **2026-11-23 — The live tests that keep anything read no host volume.** Seven of `composition`'s live tests
+    (`LiveOfflineTest`, `LivePinsTest`, `LiveQueuedTest`, `BannerLiveTest`, `MusicLiveTest`, `PersonProfileLiveTest`,
+    `PlacesLiveTest`) opened their device's offline store over the host's volume, so on a machine under 5 % free each
+    keep was refused (ADR 0140 decision 8) as `UnlockForgetTest`'s was (#1085); each now sets `offlineFiles` to a
+    `SizedVolume`. Found by `grep -rn "offlineRoot" src/mobile/*/src/*Test` — no other test opens a store without one.

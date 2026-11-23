@@ -164,7 +164,7 @@ class PlacesLiveTest {
             withTimeout(60_000) { g.state.first { s -> s.tracks.any { it.mediaId == added.mediaId } } }
 
             // a device of its own pins the Memory: the track's original kept, every frame
-            val device = ThisDevice(liveRun.store(), SoftwareDeviceKeys(p), "live places pins", p, offlineRoot = dir.absolutePath)
+            val device = ThisDevice(liveRun.store(), SoftwareDeviceKeys(p), "live places pins", p, offlineRoot = dir.absolutePath).also { it.offlineFiles = me.raddatz.veyq.mobile.offline.SizedVolume() }
             val door = AccountDoor(p, device, client)
             val account = signIn("live places pins", device).also { pinned = it }
             assertEquals(VeyqAccount.TrustOutcome.REMEMBERED, account.trustThisDevice(null, StaySignedIn.LOGIN))
