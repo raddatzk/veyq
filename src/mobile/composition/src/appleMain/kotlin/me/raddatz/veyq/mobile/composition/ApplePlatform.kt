@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.composition
 
+import me.raddatz.veyq.mobile.blob.DirectoryWalk
 import kotlinx.cinterop.BetaInteropApi
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
@@ -13,7 +14,6 @@ import kotlinx.coroutines.withContext
 import me.raddatz.veyq.mobile.blob.FileUploadSource
 import me.raddatz.veyq.mobile.blob.RangeReader
 import me.raddatz.veyq.mobile.blob.UploadSource
-import me.raddatz.veyq.mobile.depot.FolderUpload
 import me.raddatz.veyq.mobile.media.Derivation
 import platform.Foundation.NSData
 import platform.Foundation.NSURL
@@ -70,17 +70,17 @@ object ApplePlatform {
      * What Swift's walk of the directory at [root] met, as the core's walk entries (the folder upload's and the drop's),
      * each file read inside the directory's security scope.
      */
-    fun found(root: NSURL, entries: List<Entry>): List<FolderUpload.Found> = entries.map { e ->
+    fun found(root: NSURL, entries: List<Entry>): List<DirectoryWalk.Found> = entries.map { e ->
         val name = e.relativePath.substringAfterLast('/')
         val kind = when (e.kind) {
-            EntryKind.FILE -> FolderUpload.Kind.FILE
-            EntryKind.DIRECTORY -> FolderUpload.Kind.DIRECTORY
-            EntryKind.LINK -> FolderUpload.Kind.LINK
-            EntryKind.UNREADABLE -> FolderUpload.Kind.UNREADABLE
-            EntryKind.OTHER -> FolderUpload.Kind.OTHER
+            EntryKind.FILE -> DirectoryWalk.Kind.FILE
+            EntryKind.DIRECTORY -> DirectoryWalk.Kind.DIRECTORY
+            EntryKind.LINK -> DirectoryWalk.Kind.LINK
+            EntryKind.UNREADABLE -> DirectoryWalk.Kind.UNREADABLE
+            EntryKind.OTHER -> DirectoryWalk.Kind.OTHER
         }
-        val source = if (kind == FolderUpload.Kind.FILE) FileUploadSource(NSURL.fileURLWithPath(e.path), root, name, e.size, e.type, e.modifiedAt) else null
-        FolderUpload.Found(e.relativePath, kind, source)
+        val source = if (kind == DirectoryWalk.Kind.FILE) FileUploadSource(NSURL.fileURLWithPath(e.path), root, name, e.size, e.type, e.modifiedAt) else null
+        DirectoryWalk.Found(e.relativePath, kind, source)
     }
 
     private fun ByteArray.toNSData(): NSData = if (isEmpty()) NSData() else usePinned { NSData.create(bytes = it.addressOf(0), length = size.toULong()) }

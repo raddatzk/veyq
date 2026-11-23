@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.depot
 
+import me.raddatz.veyq.mobile.blob.DirectoryWalk
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
@@ -26,20 +27,20 @@ object AppleDepot {
 
     /**
      * One entry Swift's walk of a picked directory met: its path below the directory, where it lies on the device, what it
-     * is ([FolderUpload.Kind]: Swift says, the core keeps — `FolderUpload.keeps`) and a file's facts.
+     * is ([DirectoryWalk.Kind]: Swift says, the core keeps — `FolderUpload.keeps`) and a file's facts.
      */
     class FolderFile(
-        val relativePath: String, val path: String, val kind: FolderUpload.Kind, val size: Long, val type: String, val modifiedAt: Long?,
+        val relativePath: String, val path: String, val kind: DirectoryWalk.Kind, val size: Long, val type: String, val modifiedAt: Long?,
     )
 
     /**
      * Depot's "Upload folder…": what Swift's walk of the directory at [root] met, as the core's walk entries
      * (`DepotUploads.uploadFolder` keeps and says them), each file read inside the directory's security scope.
      */
-    fun found(root: NSURL, files: List<FolderFile>): List<FolderUpload.Found> = files.map { f ->
+    fun found(root: NSURL, files: List<FolderFile>): List<DirectoryWalk.Found> = files.map { f ->
         val name = f.relativePath.substringAfterLast('/')
-        val source = if (f.kind == FolderUpload.Kind.FILE) FileUploadSource(NSURL.fileURLWithPath(f.path), root, name, f.size, f.type, f.modifiedAt) else null
-        FolderUpload.Found(f.relativePath, f.kind, source)
+        val source = if (f.kind == DirectoryWalk.Kind.FILE) FileUploadSource(NSURL.fileURLWithPath(f.path), root, name, f.size, f.type, f.modifiedAt) else null
+        DirectoryWalk.Found(f.relativePath, f.kind, source)
     }
 
     /** The picked file at [url] as an upload reads it, a frame at a time at any offset (a file page's replace, `FileModel.replace`). */

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.composition
 
+import me.raddatz.veyq.mobile.blob.DirectoryWalk
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.allocArrayOf
 import kotlinx.cinterop.memScoped
@@ -9,7 +10,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
-import me.raddatz.veyq.mobile.depot.FolderUpload
 import platform.Foundation.NSData
 import platform.Foundation.NSURL
 import platform.Foundation.create
@@ -53,7 +53,7 @@ class ApplePlatformTest {
         val root = NSURL.fileURLWithPath("/tmp/veyq-walk")
         val kinds = ApplePlatform.EntryKind.entries
         val found = ApplePlatform.found(root, kinds.map { ApplePlatform.Entry("d/${it.name}", "/tmp/veyq-walk/d/${it.name}", it, 1, "text/plain", null) })
-        assertEquals(listOf(FolderUpload.Kind.FILE, FolderUpload.Kind.DIRECTORY, FolderUpload.Kind.LINK, FolderUpload.Kind.UNREADABLE, FolderUpload.Kind.OTHER), found.map { it.kind })
+        assertEquals(listOf(DirectoryWalk.Kind.FILE, DirectoryWalk.Kind.DIRECTORY, DirectoryWalk.Kind.LINK, DirectoryWalk.Kind.UNREADABLE, DirectoryWalk.Kind.OTHER), found.map { it.kind })
         assertEquals("d/FILE", found[0].path)
         assertNotNull(found[0].source)
         found.drop(1).forEach { assertNull(it.source) }

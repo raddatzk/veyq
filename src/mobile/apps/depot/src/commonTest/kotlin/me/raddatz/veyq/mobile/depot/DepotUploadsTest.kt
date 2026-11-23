@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.depot
 
+import me.raddatz.veyq.mobile.blob.DirectoryWalk
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
@@ -274,8 +275,8 @@ class DepotUploadsTest {
 
     // ---- a folder ----
 
-    private fun found(path: String, kind: FolderUpload.Kind = FolderUpload.Kind.FILE) =
-        FolderUpload.Found(path, kind, if (kind == FolderUpload.Kind.FILE) source(path.substringAfterLast('/')) else null)
+    private fun found(path: String, kind: DirectoryWalk.Kind = DirectoryWalk.Kind.FILE) =
+        DirectoryWalk.Found(path, kind, if (kind == DirectoryWalk.Kind.FILE) source(path.substringAfterLast('/')) else null)
 
     @Test
     fun aFolderIsPreparedUnderItsOwnNameAndItsOutcomeSaidInDepotsWords() = runTest {
@@ -285,7 +286,7 @@ class DepotUploadsTest {
             FolderUpload.Report(FolderUpload.Outcome.READY, name, 8, "root", failedFolders = listOf("$name/sub"),
                 jobs = entries.map { e -> DepotFiles.UploadJob("s", "root", e.source, e.path, { n, _, _, _, _ -> m.door.level.upload(n) }) })
         }
-        val walk = listOf(found("a.txt"), found(".hidden"), found("sub", FolderUpload.Kind.DIRECTORY), found("ln", FolderUpload.Kind.LINK), found("locked", FolderUpload.Kind.UNREADABLE))
+        val walk = listOf(found("a.txt"), found(".hidden"), found("sub", DirectoryWalk.Kind.DIRECTORY), found("ln", DirectoryWalk.Kind.LINK), found("locked", DirectoryWalk.Kind.UNREADABLE))
         launch { m.uploads.uploadFolder("s", null, null, "/Users/me/Trip", walk) }
         runCurrent()
         assertEquals("Trip", m.uploads.current.preparing, "the directory's own name, never a word of the app's")

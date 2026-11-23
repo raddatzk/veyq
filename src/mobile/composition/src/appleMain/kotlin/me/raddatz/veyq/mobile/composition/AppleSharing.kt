@@ -74,7 +74,7 @@ object AppleSharing {
      * A READ_WRITE guest's folder upload into [level] ([me.raddatz.veyq.mobile.depot.DepotGuest.uploadFolder]), off the
      * caller's thread: what it says, each line — one that threw says the folder failed, never nothing.
      */
-    suspend fun guestUploadFolder(level: GuestLevel, path: String, found: List<me.raddatz.veyq.mobile.depot.FolderUpload.Found>): List<me.raddatz.veyq.mobile.words.Notice> =
+    suspend fun guestUploadFolder(level: GuestLevel, path: String, found: List<me.raddatz.veyq.mobile.blob.DirectoryWalk.Found>): List<me.raddatz.veyq.mobile.words.Notice> =
         withContext(Dispatchers.Default) {
             try {
                 me.raddatz.veyq.mobile.depot.DepotGuest.uploadFolder(level, null, path, found).said

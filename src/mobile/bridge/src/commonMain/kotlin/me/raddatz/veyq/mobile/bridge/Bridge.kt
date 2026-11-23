@@ -574,7 +574,7 @@ internal interface DeviceFiles {
     fun source(path: String): me.raddatz.veyq.mobile.blob.UploadSource?
 
     /** What a walk of the directory at [path] meets (core's `PickedPaths.walk`); null where it is no directory that lists. */
-    fun walk(path: String): List<me.raddatz.veyq.mobile.depot.FolderUpload.Found>?
+    fun walk(path: String): List<me.raddatz.veyq.mobile.blob.DirectoryWalk.Found>?
 
     /** No file is written: a test's composition that has none to offer. */
     object None : DeviceFiles {
@@ -582,7 +582,7 @@ internal interface DeviceFiles {
             throw UnsupportedOperationException("this composition writes no files")
         override suspend fun read(path: String, most: Int): ByteArray = throw UnsupportedOperationException("this composition reads no files")
         override fun source(path: String): me.raddatz.veyq.mobile.blob.UploadSource? = null
-        override fun walk(path: String): List<me.raddatz.veyq.mobile.depot.FolderUpload.Found>? = null
+        override fun walk(path: String): List<me.raddatz.veyq.mobile.blob.DirectoryWalk.Found>? = null
     }
 
     companion object {

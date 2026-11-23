@@ -1,10 +1,8 @@
 @file:OptIn(ExperimentalForeignApi::class)
 
-package me.raddatz.veyq.mobile.composition
+package me.raddatz.veyq.mobile.blob
 
-import me.raddatz.veyq.mobile.blob.*
 import kotlinx.cinterop.ExperimentalForeignApi
-import me.raddatz.veyq.mobile.depot.FolderUpload
 import platform.posix.fclose
 
 /**
@@ -39,32 +37,32 @@ object PickedPaths {
      * door): every entry by its path below the directory (`/`-separated) and what it is — a file with its [source], a
      * directory, a link (reported, never followed, so nothing outside the directory is reached), or an entry that did not
      * read (a directory that does not list, a file that does not open). Hidden entries are met as any other:
-     * [FolderUpload.keeps] decides. Null where [path] itself is no directory that lists.
+     * what an application keeps is its own (Depot's `FolderUpload.keeps`). Null where [path] itself is no directory that lists.
      */
-    fun walk(path: String): List<FolderUpload.Found>? {
+    fun walk(path: String): List<DirectoryWalk.Found>? {
         if (pathFacts(path)?.kind != PathKind.DIRECTORY) return null
         val root = path.trimEnd('/', '\\').ifEmpty { path }
         val top = listDirectory(root) ?: return null
-        val out = ArrayList<FolderUpload.Found>()
+        val out = ArrayList<DirectoryWalk.Found>()
         fun visit(dir: String, below: String, names: List<String>) {
             for (name in names.sorted()) {
                 val full = "$dir$pathSeparator$name"
                 val at = if (below.isEmpty()) name else "$below/$name"
                 val facts = pathFacts(full)
                 when (facts?.kind) {
-                    PathKind.FILE -> out += FolderUpload.Found(at, FolderUpload.Kind.FILE, source(full))
+                    PathKind.FILE -> out += DirectoryWalk.Found(at, DirectoryWalk.Kind.FILE, source(full))
                     PathKind.DIRECTORY -> {
                         val inner = listDirectory(full)
                         if (inner == null) {
-                            out += FolderUpload.Found(at, FolderUpload.Kind.UNREADABLE)
+                            out += DirectoryWalk.Found(at, DirectoryWalk.Kind.UNREADABLE)
                         } else {
-                            out += FolderUpload.Found(at, FolderUpload.Kind.DIRECTORY)
+                            out += DirectoryWalk.Found(at, DirectoryWalk.Kind.DIRECTORY)
                             visit(full, at, inner)
                         }
                     }
-                    PathKind.LINK -> out += FolderUpload.Found(at, FolderUpload.Kind.LINK)
-                    PathKind.OTHER -> out += FolderUpload.Found(at, FolderUpload.Kind.OTHER)
-                    null -> out += FolderUpload.Found(at, FolderUpload.Kind.UNREADABLE)
+                    PathKind.LINK -> out += DirectoryWalk.Found(at, DirectoryWalk.Kind.LINK)
+                    PathKind.OTHER -> out += DirectoryWalk.Found(at, DirectoryWalk.Kind.OTHER)
+                    null -> out += DirectoryWalk.Found(at, DirectoryWalk.Kind.UNREADABLE)
                 }
             }
         }

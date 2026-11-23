@@ -1850,7 +1850,7 @@ class DispatchTest {
     private class OpenedFiles : DeviceFiles by JvmFiles {
         val opened: MutableList<String> = java.util.Collections.synchronizedList(ArrayList())
         override fun source(path: String): me.raddatz.veyq.mobile.blob.UploadSource? { opened += path; return JvmFiles.source(path) }
-        override fun walk(path: String): List<me.raddatz.veyq.mobile.depot.FolderUpload.Found>? { opened += path; return JvmFiles.walk(path) }
+        override fun walk(path: String): List<me.raddatz.veyq.mobile.blob.DirectoryWalk.Found>? { opened += path; return JvmFiles.walk(path) }
     }
 
     /**

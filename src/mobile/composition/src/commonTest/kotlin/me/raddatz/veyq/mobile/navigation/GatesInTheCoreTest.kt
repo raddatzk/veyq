@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.navigation
 
+import me.raddatz.veyq.mobile.blob.DirectoryWalk
 import me.raddatz.veyq.mobile.media.Derivation
 import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.composition.DropOutcome
@@ -129,7 +130,7 @@ class GatesInTheCoreTest {
         val o = opened { s -> node(s, "docs", "FOLDER", name = "Docs") }
         val door = Door()
         val unpacked = ImportFixtures.cases().first { it.id == "unpacked" }.input as ImportInput.Folder
-        val found = unpacked.files.map { (path, source) -> FolderUpload.Found(path, FolderUpload.Kind.FILE, source) }
+        val found = unpacked.files.map { (path, source) -> DirectoryWalk.Found(path, DirectoryWalk.Kind.FILE, source) }
         val items = listOf(
             Dropped.File(plain("a.txt")),
             Dropped.File(CountingSource("Trip.zip", ImportFixtures.webDownload())),

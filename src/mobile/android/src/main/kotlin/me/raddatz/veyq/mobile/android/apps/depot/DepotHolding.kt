@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.android.apps.depot
 
+import me.raddatz.veyq.mobile.blob.DirectoryWalk
 import android.app.Application
 import android.provider.DocumentsContract
 import androidx.lifecycle.viewModelScope
@@ -33,7 +34,6 @@ import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.depot.DepotUploads
 import me.raddatz.veyq.mobile.depot.DropBoxPage
 import me.raddatz.veyq.mobile.depot.FileModel
-import me.raddatz.veyq.mobile.depot.FolderUpload
 import me.raddatz.veyq.mobile.depot.replaceAsking
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.session.TenantSession
@@ -165,7 +165,7 @@ internal class DepotHolding(private val model: AppModel) : Holding(), LevelUploa
     }
 
     /** What the documents provider lists of a picked directory: its shown name (if it gives one), its id, every entry below. */
-    private class TreeWalk(val shown: String?, val path: String, val found: List<FolderUpload.Found>)
+    private class TreeWalk(val shown: String?, val path: String, val found: List<DirectoryWalk.Found>)
 
     /** The directory [tree] names walked: each entry by its path there (`/`-separated) and what the provider says it is. */
     private fun treeWalk(tree: android.net.Uri): TreeWalk {
@@ -177,7 +177,7 @@ internal class DepotHolding(private val model: AppModel) : Holding(), LevelUploa
                 arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null,
             )?.use { if (it.moveToFirst()) it.getString(0) else null }
         }.getOrNull()
-        val out = ArrayList<FolderUpload.Found>()
+        val out = ArrayList<DirectoryWalk.Found>()
         fun walk(docId: String, path: String) {
             val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, docId)
             val cols = arrayOf(
@@ -192,19 +192,19 @@ internal class DepotHolding(private val model: AppModel) : Holding(), LevelUploa
                 }
             }.getOrNull()
             // a directory the provider does not list is said, never silently skipped
-            if (listed == null) { out += FolderUpload.Found(path.ifEmpty { shown ?: rootId }, FolderUpload.Kind.UNREADABLE); return }
+            if (listed == null) { out += DirectoryWalk.Found(path.ifEmpty { shown ?: rootId }, DirectoryWalk.Kind.UNREADABLE); return }
             for (row in rows) {
                 val id = row[0] as String
                 val name = row[1] as String
                 val mime = row[2] as String?
                 val at = if (path.isEmpty()) name else "$path/$name"
                 if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
-                    out += FolderUpload.Found(at, FolderUpload.Kind.DIRECTORY)
+                    out += DirectoryWalk.Found(at, DirectoryWalk.Kind.DIRECTORY)
                     walk(id, at)
                     continue
                 }
                 val uri = DocumentsContract.buildDocumentUriUsingTree(tree, id)
-                out += FolderUpload.Found(at, FolderUpload.Kind.FILE, UploadSource.of(name, row[3] as Long, mime ?: "application/octet-stream", row[4] as Long?) { from, length ->
+                out += DirectoryWalk.Found(at, DirectoryWalk.Kind.FILE, UploadSource.of(name, row[3] as Long, mime ?: "application/octet-stream", row[4] as Long?) { from, length ->
                     // opened per frame: the upload asks one frame after another and never holds the file
                     val pfd = resolver.openFileDescriptor(uri, "r") ?: throw java.io.IOException("unreadable")
                     pfd.use { d ->

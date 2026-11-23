@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.depot
 
+import me.raddatz.veyq.mobile.blob.DirectoryWalk
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -235,7 +236,7 @@ class DepotUploads(
      * as a file*; any other directory is uploaded as its tree. [label]: the level's name, where the import goes.
      */
     suspend fun screenFolder(
-        scopeId: String, parentId: String?, label: String, shownName: String?, path: String, found: List<FolderUpload.Found>, deletedName: String = "",
+        scopeId: String, parentId: String?, label: String, shownName: String?, path: String, found: List<DirectoryWalk.Found>, deletedName: String = "",
     ): Screened {
         val files = found.filter(FolderUpload::keeps)
         if (importOffered && door.online() && door.mayImport(scopeId, parentId) &&
@@ -253,7 +254,7 @@ class DepotUploads(
      * [path]) — and its files queued as one batch under the folder's name; a refusal or a folder not made said in Depot's
      * words. Runs off the caller's thread; returns once its files are queued, with how many were (0 where none went).
      */
-    suspend fun uploadFolder(scopeId: String, parentId: String?, shownName: String?, path: String, found: List<FolderUpload.Found>): Int =
+    suspend fun uploadFolder(scopeId: String, parentId: String?, shownName: String?, path: String, found: List<DirectoryWalk.Found>): Int =
         if (!door.online()) 0 else withContext(work) {
             val rootName = FolderUpload.rootName(shownName, path)
             val walked = FolderUpload.walked(found)

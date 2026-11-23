@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.depot
 
+import me.raddatz.veyq.mobile.blob.DirectoryWalk
 import me.raddatz.veyq.mobile.PlatformApi
 import kotlin.native.HiddenFromObjC
 import io.ktor.client.statement.bodyAsText
@@ -181,7 +182,7 @@ object DepotGuest {
      * land a file.
      * [shownName] and [path] name the top folder ([FolderUpload.rootName]).
      */
-    suspend fun uploadFolder(level: GuestLevel, shownName: String?, path: String, found: List<FolderUpload.Found>): FolderUploaded {
+    suspend fun uploadFolder(level: GuestLevel, shownName: String?, path: String, found: List<DirectoryWalk.Found>): FolderUploaded {
         val rootName = FolderUpload.rootName(shownName, path)
         val walked = FolderUpload.walked(found)
         val leftOut = me.raddatz.veyq.mobile.words.Notices.folderLeftOut(walked)
