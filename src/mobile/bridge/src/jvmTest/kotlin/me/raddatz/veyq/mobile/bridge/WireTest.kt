@@ -186,7 +186,7 @@ class WireTest {
             Call.PotCreateRemove(16, 0), Call.PotCreateCreate(16, ""), Call.PotCreateCreate(16, "Cleo"),
             // a QR scan
             Call.ScanOpen(ScanKind.SCHEME), Call.ScanOpen(ScanKind.KIT, "familie.example.org"),
-            Call.SessionSignInKit("/home/p/Notfall-Kit.pdf", "familie.example.org"), Call.SessionSignInKitClear, Call.ScanCamera(40, me.raddatz.veyq.mobile.qr.QrScan.Camera.RUNNING),
+            Call.SessionSignInKit("/home/p/Notfall-Kit.pdf", "familie.example.org"), Call.SessionSignInKitClear, Call.SessionSignInLocked("veyq.localhost:8080", "p@veyq.localhost", "pw"), Call.SessionSignOutEverywhere, Call.SessionLockedBack, Call.SessionForgotPassword("veyq.localhost:8080", null), Call.SessionRequestRecovery("veyq.localhost:8080", "p@veyq.localhost"), Call.SessionBackToSignIn, Call.LockedPlan, Call.RecoverPlan(sent = true), Call.ScanCamera(40, me.raddatz.veyq.mobile.qr.QrScan.Camera.RUNNING),
             Call.ScanCamera(40, me.raddatz.veyq.mobile.qr.QrScan.Camera.NONE), Call.ScanCamera(40, me.raddatz.veyq.mobile.qr.QrScan.Camera.DENIED),
             Call.ScanFrame(40, 1280, 720, 1280), Call.ScanClose(40), Call.ScanOpen(ScanKind.LINK, link = 70),
             Call.LinkShowForNewDevice("veyq.localhost#user-1"), Call.LinkScanSignInCode("veyq.localhost#user-1"),
@@ -279,7 +279,7 @@ class WireTest {
             Answer.Reader(5, 9_000_000_000, "video/mp4"), Answer.Reader(6, 0, null),
             Answer.HeaderOpened(7),
             Answer.RowPlan(listOf(HeaderShown.PlanAction(me.raddatz.veyq.mobile.navigation.HeaderAction.RENAME, Msg.NODE_RENAME)), listOf(HeaderShown.PlanAction(me.raddatz.veyq.mobile.navigation.HeaderAction.DELETE, Msg.FOLDER_DELETE))),
-            Answer.SignInPlan(me.raddatz.veyq.mobile.session.SignInEntry.entries), Answer.UnlockPlan(me.raddatz.veyq.mobile.session.UnlockEntry.entries), Answer.SecretKeyChecked(me.raddatz.veyq.mobile.crypto.SecretKeyProblem.TYPO), Answer.SecretKeyChecked(null), Answer.FileOpened(20), Answer.Saving(21), Answer.ImportOffered(60, 2, Notice(Msg.DEPOT_FOLDER_UNREADABLE, listOf("gone.txt"))), Answer.ImportOffered(61, 0), Answer.Queued(3),
+            Answer.SignInPlan(me.raddatz.veyq.mobile.session.SignInEntry.entries), Answer.UnlockPlan(me.raddatz.veyq.mobile.session.UnlockEntry.entries), Answer.LockedPlan(me.raddatz.veyq.mobile.session.LockedEntry.entries), Answer.RecoverPlan(me.raddatz.veyq.mobile.session.RecoverEntry.entries), Answer.SecretKeyChecked(me.raddatz.veyq.mobile.crypto.SecretKeyProblem.TYPO), Answer.SecretKeyChecked(null), Answer.FileOpened(20), Answer.Saving(21), Answer.ImportOffered(60, 2, Notice(Msg.DEPOT_FOLDER_UNREADABLE, listOf("gone.txt"))), Answer.ImportOffered(61, 0), Answer.Queued(3),
             Answer.QueuedOpens(me.raddatz.veyq.mobile.composition.QueuedOpen.Entry("t", "scope-1", "pot-1", "e1", "entry:e1")),
             Answer.QueuedOpens(me.raddatz.veyq.mobile.composition.QueuedOpen.Rename("t", "scope-1", "node-1", "Trip (mine)")),
             Answer.QueuedOpens(me.raddatz.veyq.mobile.composition.QueuedOpen.Place("t", "scope-1", null)),
@@ -342,6 +342,9 @@ class WireTest {
         Update.serializer() to listOf(
             Update.Session(Gate.Starting), Update.Session(Gate.NeedsApp), Update.Session(Gate.SignIn(error = Msg.SIGNIN_ERROR_CREDENTIALS, server = "veyq.localhost:8080")),
             Update.Session(Gate.SignIn()), Update.Session(Gate.SignIn(adding = true)),
+            Update.Session(Gate.SignIn(notice = Msg.LOCKED_DONE, keepsNothing = true)),
+            Update.Session(Gate.Locked("veyq.localhost:8080", "p@veyq.localhost", working = true, error = Msg.LOCKED_DONE_STILL_HERE)),
+            Update.Session(Gate.Recover("veyq.localhost:8080", "p@veyq.localhost", sent = true, error = Msg.RECOVERY_MAIL_UNAVAILABLE)),
             Update.Session(Gate.Signed("veyq.localhost#user-1", "t", offer = SessionModel.Offer("veyq.localhost#user-1", listOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN)))),
             Update.Session(Gate.Unlock(record)), Update.Session(Gate.Unlock(record.copy(method = TrustedDevice.Method.DEVICE_KEY, level = StaySignedIn.LOGIN))), Update.Session(Gate.Signed("veyq.localhost#user-1", "t", switching = true)),
             Update.Shell(ShellModel.State(shell, lists), shown), Update.Shell(null),

@@ -57,7 +57,13 @@ final class AppModel {
         case starting
         /// The full sign-in, with the Secret Key; server and email filled in where a trusted device's record knew them.
         /// `kit`: an Emergency Kit read, whose Secret Key core holds — the row says so, nothing shows the key.
-        case signIn(working: Bool, error: Msg?, adding: Bool, server: String?, email: String?, kit: SessionModelKitShown?)
+        /// `notice`: what the way here left to say that is no error; `keepsNothing`: the locked sign-in's way back, which
+        /// keeps nothing on this device (uc.account.sessions E3).
+        case signIn(working: Bool, error: Msg?, adding: Bool, server: String?, email: String?, kit: SessionModelKitShown?, notice: Msg?, keepsNothing: Bool)
+        /// Signed in without unlocking (uc.account.sessions E3, core's `Gate.Locked`): one action and the way back.
+        case locked(server: String, email: String, working: Bool, error: Msg?)
+        /// *Reset your password* (uc.account.recover-access, core's `Gate.Recover`): the link asked for; the web finishes it.
+        case recover(server: String?, email: String?, working: Bool, sent: Bool, error: Msg?)
         /// An account this device trusts: the password alone, or the person's authentication.
         case unlock(record: TrustedDevice, working: Bool, error: Msg?)
         /// In the share extension with no account this device trusts: the app signs in, not the extension (ADR 0138).
@@ -281,7 +287,14 @@ final class AppModel {
         }
         switch session.current {
         case let g as SessionModelGate.SignIn:
-            screen = .signIn(working: g.working, error: g.error, adding: g.adding, server: g.server, email: g.email, kit: g.kit)
+            screen = .signIn(
+                working: g.working, error: g.error, adding: g.adding, server: g.server, email: g.email, kit: g.kit,
+                notice: g.notice, keepsNothing: g.keepsNothing
+            )
+        case let g as SessionModelGate.Locked:
+            screen = .locked(server: g.server, email: g.email, working: g.working, error: g.error)
+        case let g as SessionModelGate.Recover:
+            screen = .recover(server: g.server, email: g.email, working: g.working, sent: g.sent, error: g.error)
         case let g as SessionModelGate.Unlock:
             screen = .unlock(record: g.record, working: g.working, error: g.error)
         case is SessionModelGate.NeedsApp:
@@ -344,6 +357,28 @@ final class AppModel {
 
     /// The Secret Key row's way back to typing: the kit's held key ends.
     func clearKit() { session.clearKit() }
+
+    /// The sign-in's *I don't have my Secret Key with me* (uc.account.sessions E3): the login alone; the gate shows the locked state.
+    func signInLocked(server: String, email: String, password: String) {
+        Task { try? await session.signInLocked(server: server, email: email, password: password) }
+    }
+
+    /// The locked state's one action, asked first by its view: every device signed out, this one included.
+    func signOutEverywhere() { Task { try? await session.signOutEverywhere() } }
+
+    /// The locked state's way back: the sign-in again, keeping nothing on this device.
+    func lockedBack() { Task { try? await session.lockedBack() } }
+
+    /// The sign-in's *Forgot your password?* with the form's server and email.
+    func forgotPassword(server: String, email: String) { session.forgotPassword(server: server, email: email) }
+
+    /// *Reset your password*'s Send: the link asked for.
+    func requestRecovery(server: String, email: String) {
+        Task { try? await session.requestRecovery(server: server, email: email) }
+    }
+
+    /// *Reset your password*'s Back.
+    func backToSignIn() { session.backToSignIn() }
 
     /// Why the sign-in's Secret Key field, as typed, holds no key (core's `SessionModel.secretKeyProblem`): a typo is said.
     func secretKeyProblem(_ text: String) -> SecretKeyProblem? { session.secretKeyProblem(text: text) }

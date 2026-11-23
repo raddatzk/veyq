@@ -859,6 +859,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 if (read) Answer.Done else Answer.Refused(Answer.Why.NO_KIT)
             }
             Call.SessionSignInKitClear -> Answer.Done.also { session.clearKit() }
+            is Call.SessionSignInLocked, Call.SessionSignOutEverywhere, Call.SessionLockedBack, is Call.SessionForgotPassword,
+            is Call.SessionRequestRecovery, Call.SessionBackToSignIn, Call.LockedPlan, is Call.RecoverPlan -> signInEntries(call, session)
             is Call.SessionForgetDevice -> {
                 val account = session.accounts.firstOrNull { it.key == call.connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
                 session.forgetDevice(account)
@@ -2630,6 +2632,22 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     /** A level's selection's calls (inbox #1049), apart from [dispatch], whose one method the JVM holds at its size limit. */
+    /**
+     * The sign-in's locked entry and *Forgot your password?* (ADR 0154 § As built: the sign-in's entries), dispatched apart:
+     * the dispatch's one method is at the JVM's size limit (L10 of the level's Select).
+     */
+    private suspend fun signInEntries(call: Call, session: me.raddatz.veyq.mobile.session.SessionModel<*, *>): Answer = when (call) {
+        is Call.SessionSignInLocked -> Answer.Done.also { session.signInLocked(call.server, call.email, call.password) }
+        Call.SessionSignOutEverywhere -> Answer.Done.also { session.signOutEverywhere() }
+        Call.SessionLockedBack -> Answer.Done.also { session.lockedBack() }
+        is Call.SessionForgotPassword -> Answer.Done.also { session.forgotPassword(call.server, call.email) }
+        is Call.SessionRequestRecovery -> Answer.Done.also { session.requestRecovery(call.server, call.email) }
+        Call.SessionBackToSignIn -> Answer.Done.also { session.backToSignIn() }
+        Call.LockedPlan -> Answer.LockedPlan(me.raddatz.veyq.mobile.session.LockedPlan.entries())
+        is Call.RecoverPlan -> Answer.RecoverPlan(me.raddatz.veyq.mobile.session.RecoverPlan.entries(call.sent))
+        else -> error("not a sign-in entry's call: $call")
+    }
+
     private suspend fun selecting(call: Call): Answer = when (call) {
         is Call.SelectStart -> tenant.value?.models?.shell?.let { it.selectStart(); Answer.Done } ?: noTenant
         is Call.SelectCancel -> tenant.value?.models?.shell?.let { it.selectCancel(); Answer.Done } ?: noTenant

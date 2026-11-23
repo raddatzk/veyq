@@ -18,17 +18,18 @@ class PlansTest {
 
     @Test
     fun theSignInSubmitsFirstThenCancelsThenTheOtherWaysIn() {
-        // owner 2026-11-20 (the CR's Q4): the web's LoginView — Submit first, then the links, the kit, Open a link
+        // owner 2026-11-20 (the CR's Q4): the web's LoginView — Submit first, then the locked entry, the links, the kit,
+        // Forgot your password?, Open a link (ADR 0154 P9)
         assertEquals(
             listOf(
-                SignInEntry.SUBMIT, SignInEntry.CANCEL, SignInEntry.LINK_SHOW, SignInEntry.LINK_SCAN, SignInEntry.KIT_OPEN,
-                SignInEntry.KIT_SCAN, SignInEntry.OPEN_LINK,
+                SignInEntry.SUBMIT, SignInEntry.CANCEL, SignInEntry.LOCKED, SignInEntry.LINK_SHOW, SignInEntry.LINK_SCAN,
+                SignInEntry.KIT_OPEN, SignInEntry.KIT_SCAN, SignInEntry.FORGOT, SignInEntry.OPEN_LINK,
             ),
             SignInPlan.entries(SessionModel.Gate.SignIn(adding = true), camera = true),
         )
         // no camera: no scan; not adding: no cancel
         assertEquals(
-            listOf(SignInEntry.SUBMIT, SignInEntry.LINK_SHOW, SignInEntry.KIT_OPEN, SignInEntry.OPEN_LINK),
+            listOf(SignInEntry.SUBMIT, SignInEntry.LOCKED, SignInEntry.LINK_SHOW, SignInEntry.KIT_OPEN, SignInEntry.FORGOT, SignInEntry.OPEN_LINK),
             SignInPlan.entries(SessionModel.Gate.SignIn(), camera = false),
         )
     }

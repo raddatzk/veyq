@@ -29,9 +29,11 @@ struct RootView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Role.bg)
-        case .signIn(let working, let error, let adding, let server, let email, let kit):
+        case .signIn(let working, let error, let adding, let server, let email, let kit, let notice, let keepsNothing):
             SignInView(
-                working: working, error: error, adding: adding, server: server, email: email, kit: kit, onCancel: model.cancelAdd,
+                working: working, error: error, adding: adding, server: server, email: email, kit: kit, notice: notice,
+                keepsNothing: keepsNothing, onCancel: model.cancelAdd,
+                onLocked: lockedEntry, onForgot: forgotEntry,
                 onKit: model.readKit(_:typedServer:), onClearKit: model.clearKit, onScanKit: model.scanKit(typedServer:),
                 onScanFromTrusted: linkEntry(model.scanFromTrusted(server:)),
                 onShowForSignIn: linkEntry(model.showForSignIn(server:)),
@@ -42,6 +44,16 @@ struct RootView: View {
             }
             // a device-linking ceremony from the sign-in's two entries (ADR 0059)
             .deviceLinkSheet(model)
+        case .locked(let server, let email, let working, let error):
+            LockedView(
+                server: server, email: email, working: working, error: error,
+                onSignOutEverywhere: { model.signOutEverywhere() }, onBack: { model.lockedBack() }
+            )
+        case .recover(let server, let email, let working, let sent, let error):
+            RecoverView(
+                server: server, email: email, working: working, sent: sent, error: error,
+                onSend: { server, email in model.requestRecovery(server: server, email: email) }, onBack: { model.backToSignIn() }
+            )
         case .unlock(let record, let working, let error):
             UnlockView(
                 record: record, working: working, error: error, inExtension: model.inExtension, onUnlock: model.unlock(password:),
@@ -67,6 +79,20 @@ struct RootView: View {
                     OfferSheet(levels: model.offer?.levels ?? [], linked: model.offer?.linked ?? false, working: model.trustWorking, onAnswer: model.answerOffer)
                 }
         }
+    }
+
+    /// The sign-in's locked entry (uc.account.sessions E3), or none in the share extension (the app signs in there).
+    private var lockedEntry: ((String, String, String) -> Void)? {
+        if model.inExtension { return nil }
+        let model = model
+        return { server, email, password in model.signInLocked(server: server, email: email, password: password) }
+    }
+
+    /// The sign-in's *Forgot your password?*, or none in the share extension.
+    private var forgotEntry: ((String, String) -> Void)? {
+        if model.inExtension { return nil }
+        let model = model
+        return { server, email in model.forgotPassword(server: server, email: email) }
     }
 
     /// A linking entry of the sign-in, or none in the share extension (the app signs in there, ADR 0132).

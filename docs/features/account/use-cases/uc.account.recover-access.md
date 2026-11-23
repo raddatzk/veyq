@@ -107,6 +107,10 @@ new one and everything is still there.
 
 ## Related
 
+- **The apps** (2026-11-23, [ADR 0154](../../../decisions/0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md)
+  § As built: the sign-in's entries): every app's sign-in offers *Forgot your password?* — steps 1–2 (`SessionModel.requestRecovery`,
+  A2 said apart); the mailed link opens the web's `/recover` page, which does steps 3–11 and then offers to open the app.
+
 - [en.account.key-model](../enablers/en.account.key-model.md) — the wrap inventory this flow reads and rewrites
 - [uc.account.unlock](uc.account.unlock.md) — the ordinary two-secret unlock this restores the actor to
 - [uc.account.trust-device](uc.account.trust-device.md) — the re-enrolment every device goes through afterwards

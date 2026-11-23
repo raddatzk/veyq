@@ -20,6 +20,8 @@ public sealed partial class MainWindow : Window
     private Watch? _manageWatch;
     private SignInView? _signIn;
     private UnlockView? _unlock;
+    private LockedView? _locked;
+    private RecoverView? _recover;
     private OfferView? _offer;
     private ManageDialog? _manage;
     private ShellView? _shell;
@@ -216,6 +218,16 @@ public sealed partial class MainWindow : Window
                 _signIn.Show(signIn);
                 Face(_signIn.Page);
                 if (!signIn.working && signIn.error is null && DevLogin.Take() is { } dev) _signIn.Dev(dev);
+                break;
+            case Gate.Locked locked:
+                _locked ??= new LockedView(this);
+                _locked.Show(locked);
+                Face(_locked.Page);
+                break;
+            case Gate.Recover recover:
+                _recover ??= new RecoverView();
+                _recover.Show(recover);
+                Face(_recover.Page);
                 break;
             case Gate.Unlock unlock:
                 _unlock ??= new UnlockView(this);

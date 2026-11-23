@@ -172,6 +172,11 @@ wrote no Emergency Kit, encoded no WebP and called none of the operations these 
   (inbox #969, built on every app 2026-11-19). An iOS kit is written through
   `fileExporter` with an in-memory document made only when the exporter asks; whether UIKit stages it in the
   container first is unmeasured (inbox #975).
+- **The sign-in's two account entries came later** (2026-11-23, [ADR 0154](0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md)
+  § As built: the sign-in's entries). The locked sign-in (uc.account.sessions E3) is the login alone, every device signed
+  out, the way back keeping nothing; *Forgot your password?* asks for the recovery link as the web does, and the mailed
+  link's page — the web's, as decision 6's confirm is — finishes the reset with the kit (inbox #1106 asks whether the app
+  ever finishes it itself).
 - **The save dialogs' recent-files records are accepted** (2026-11-19, inbox #981). After a kit saved through GTK's
   dialog, `~/.local/share/recently-used.xbel` named the kit's path (measured in the Linux pass; in the Flatpak the
   portal keeps the same record on the host), and Windows' save picker leaves a `.lnk` under `Recent` (measured in the Windows pass). Such a record

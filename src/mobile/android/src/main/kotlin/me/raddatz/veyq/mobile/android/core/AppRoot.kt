@@ -20,6 +20,8 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.FileOpen
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Password
 import androidx.compose.material.icons.outlined.QrCode2
@@ -66,7 +68,10 @@ fun AppRoot(model: AppModel) {
                 onKit = model::readKit, onClearKit = model::clearKit, onScanKit = model::scanKit, kitScan = kitScan, onCloseKitScan = model::closeKitScan,
                 onScanFromTrusted = model::scanFromTrusted, onShowForSignIn = model::showForSignIn, onOpenLink = model.guests::ask,
                 secretKeyProblem = model::secretKeyProblem,
+                onLocked = model::signInLocked, onForgot = model::forgotPassword,
             )
+            is Screen.Locked -> LockedScreen(s, onSignOutEverywhere = model::signOutEverywhere, onBack = model::lockedBack)
+            is Screen.Recover -> RecoverScreen(s, onSend = model::requestRecovery, onBack = model::backToSignIn)
             is Screen.Unlock -> UnlockScreen(s, model::unlock, model::otherAccount, onForget = model::forgetUnlocked, onOpenLink = model.guests::ask)
             is Screen.Signed -> offer?.let { OfferScreen(it, trustWorking, model::answerOffer) }
                 ?: settings?.let { SettingsScreen(it, model.settingsActions, maps, at = settingsAt, onAt = model::settingsAtSeen) }
@@ -112,6 +117,10 @@ fun SignInScreen(
     onOpenLink: (() -> Unit)? = null,
     /** Why the Secret Key as typed is none (core's, inbox #1058): a typo is said under the field as it is typed. */
     secretKeyProblem: (String) -> me.raddatz.veyq.mobile.crypto.SecretKeyProblem? = { null },
+    /** *I don't have my Secret Key with me* (uc.account.sessions E3): the server, the email and the password. */
+    onLocked: (String, String, String) -> Unit = { _, _, _ -> },
+    /** *Forgot your password?* (uc.account.recover-access): the server and the email as typed. */
+    onForgot: (String, String) -> Unit = { _, _ -> },
 ) {
     var server by rememberSaveable { mutableStateOf(state.server ?: BuildDefaults.SERVER) }
     var email by rememberSaveable { mutableStateOf(state.email.orEmpty()) }
@@ -180,6 +189,9 @@ fun SignInScreen(
             )
         }
         state.error?.let { Text(say(it), color = MaterialTheme.colorScheme.error) }
+        state.notice?.let { Text(say(it), color = role(LocalPalette.current.primary), modifier = Modifier.testTag("signin-notice")) }
+        // the locked sign-in's way back keeps nothing on this device, and the form says so (uc.account.sessions E3)
+        if (state.keepsNothing) Text(stringResource(R.string.locked_back_hint), style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
         // the ways in, every one core's plan offers and in its order (`SignInPlan`, ADR 0154 decision 2: the web's —
         // Submit first); a scan is offered while the device may have a camera. Each entry's look is Android's.
         val palette = LocalPalette.current
@@ -238,8 +250,130 @@ fun SignInScreen(
                     Text(stringResource(R.string.signin_kit_scan))
                 }
             }
+            // uc.account.sessions E3: the login alone, to sign every device out — the email and the password needed
+            me.raddatz.veyq.mobile.session.SignInEntry.LOCKED -> androidx.compose.material3.TextButton(
+                onClick = { onLocked(server, email, password) },
+                enabled = !state.working && email.isNotBlank() && password.isNotEmpty(),
+                modifier = Modifier.fillMaxWidth().testTag("signin-locked"),
+            ) {
+                androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Lock, null, Modifier.padding(end = 8.dp))
+                Text(stringResource(R.string.signin_locked))
+            }
+            me.raddatz.veyq.mobile.session.SignInEntry.FORGOT -> androidx.compose.material3.TextButton(
+                onClick = { onForgot(server, email) },
+                enabled = !state.working,
+                modifier = Modifier.fillMaxWidth().testTag("signin-forgot"),
+            ) { Text(stringResource(R.string.signin_forgot)) }
             me.raddatz.veyq.mobile.session.SignInEntry.OPEN_LINK -> onOpenLink?.let { OpenLinkButton(it) }
         }
+    }
+}
+
+/**
+ * Signed in, still locked (uc.account.sessions E3, core's `Gate.Locked`): what this state is, that this device keeps
+ * nothing, then core's entries (`LockedPlan`) — *Sign out everywhere, including here* in the error colour, asked first
+ * with the web's question, and the way back. The system's Back is the way back.
+ */
+@Composable
+fun LockedScreen(state: Screen.Locked, onSignOutEverywhere: () -> Unit, onBack: () -> Unit) {
+    var asking by rememberSaveable { mutableStateOf(false) }
+    androidx.activity.compose.BackHandler(enabled = !state.working, onBack = onBack)
+    val palette = LocalPalette.current
+    Column(
+        modifier = Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).formColumn(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Spacer(Modifier.height(32.dp))
+        Brand()
+        Spacer(Modifier.height(8.dp))
+        Text(stringResource(R.string.locked_title), style = MaterialTheme.typography.headlineSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        Text(state.email, style = MaterialTheme.typography.bodyLarge)
+        Text(stringResource(R.string.locked_note), style = MaterialTheme.typography.bodyMedium)
+        Text(stringResource(R.string.locked_scope_note), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+        state.error?.let { Text(say(it), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("locked-error")) }
+        for (entry in me.raddatz.veyq.mobile.session.LockedPlan.entries()) when (entry) {
+            me.raddatz.veyq.mobile.session.LockedEntry.SIGN_OUT_EVERYWHERE -> Button(
+                onClick = { asking = true },
+                enabled = !state.working,
+                shape = MaterialTheme.shapes.small,
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError,
+                ),
+                modifier = Modifier.fillMaxWidth().height(44.dp).testTag("locked-sign-out-everywhere"),
+            ) {
+                if (state.working) CircularProgressIndicator(Modifier.height(20.dp)) else Text(stringResource(R.string.locked_action))
+            }
+            me.raddatz.veyq.mobile.session.LockedEntry.BACK -> {
+                androidx.compose.material3.TextButton(onClick = onBack, enabled = !state.working, modifier = Modifier.fillMaxWidth().testTag("locked-back")) {
+                    androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Outlined.Key, null, Modifier.padding(end = 8.dp))
+                    Text(stringResource(R.string.locked_back))
+                }
+                Text(stringResource(R.string.locked_back_hint), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
+            }
+        }
+    }
+    if (asking) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { asking = false },
+            title = { Text(stringResource(R.string.locked_confirm_title)) },
+            text = { Text(stringResource(R.string.locked_confirm)) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { asking = false; onSignOutEverywhere() },
+                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("locked-confirm"),
+                ) { Text(stringResource(R.string.locked_action)) }
+            },
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { asking = false }) { Text(stringResource(R.string.signin_cancel)) } },
+        )
+    }
+}
+
+/**
+ * *Reset your password* (uc.account.recover-access steps 1–2, core's `Gate.Recover`): the web's intro, the server and the
+ * address, core's entries (`RecoverPlan`) — Send until the link was asked for, then Back —, the answer, that the mailed
+ * link opens the web's page which finishes the reset, and that nothing helps without the kit. The system's Back is Back.
+ */
+@Composable
+fun RecoverScreen(state: Screen.Recover, onSend: (String, String) -> Unit, onBack: () -> Unit) {
+    var server by rememberSaveable { mutableStateOf(state.server ?: BuildDefaults.SERVER) }
+    var email by rememberSaveable { mutableStateOf(state.email.orEmpty()) }
+    androidx.activity.compose.BackHandler(enabled = !state.working, onBack = onBack)
+    val palette = LocalPalette.current
+    Column(
+        modifier = Modifier.fillMaxSize().safeDrawingPadding().imePadding().verticalScroll(rememberScrollState()).formColumn(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Spacer(Modifier.height(32.dp))
+        Brand()
+        Spacer(Modifier.height(8.dp))
+        Text(stringResource(R.string.recovery_title), style = MaterialTheme.typography.headlineSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        Text(stringResource(R.string.recovery_intro), style = MaterialTheme.typography.bodyMedium)
+        OutlinedTextField(server, { server = it }, label = { Text(stringResource(R.string.signin_server)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            enabled = !state.sent, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
+        OutlinedTextField(email, { email = it }, label = { Text(stringResource(R.string.recovery_email)) }, singleLine = true,
+            modifier = Modifier.fillMaxWidth().testTag("recover-email"), enabled = !state.sent, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+        if (state.sent) {
+            Text(stringResource(R.string.recovery_sent), color = role(palette.primary), modifier = Modifier.testTag("recover-sent"))
+            Text(stringResource(R.string.recovery_on_web), style = MaterialTheme.typography.bodyMedium)
+        }
+        state.error?.let { Text(say(it), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("recover-error")) }
+        for (entry in me.raddatz.veyq.mobile.session.RecoverPlan.entries(state.sent)) when (entry) {
+            me.raddatz.veyq.mobile.session.RecoverEntry.SEND -> Button(
+                onClick = { onSend(server, email) },
+                enabled = !state.working && server.isNotBlank() && email.isNotBlank(),
+                shape = MaterialTheme.shapes.small,
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = role(palette.primary), contentColor = role(palette.onFill)),
+                modifier = Modifier.fillMaxWidth().height(44.dp).testTag("recover-send"),
+            ) {
+                if (state.working) CircularProgressIndicator(Modifier.height(20.dp)) else Text(stringResource(R.string.recovery_send))
+            }
+            me.raddatz.veyq.mobile.session.RecoverEntry.BACK ->
+                androidx.compose.material3.TextButton(onClick = onBack, enabled = !state.working, modifier = Modifier.fillMaxWidth().testTag("recover-back")) {
+                    Text(stringResource(R.string.back))
+                }
+        }
+        Text(stringResource(R.string.recovery_no_escrow), style = MaterialTheme.typography.bodySmall, color = role(palette.muted))
     }
 }
 

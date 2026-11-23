@@ -142,6 +142,27 @@ internal sealed class Call {
     @Serializable @SerialName("Session.SignInKitClear") data object SessionSignInKitClear : Call()
 
     /**
+     * The sign-in's *I don't have my Secret Key with me* (`SessionModel.signInLocked`, uc.account.sessions E3): the login
+     * alone; the gate then shows `Gate.Locked` (or the sign-in with why). [Answer.Done].
+     */
+    @Serializable @SerialName("Session.SignInLocked") data class SessionSignInLocked(val server: String, val email: String, val password: String) : Call()
+
+    /** The locked state's one action, asked first by the host (`SessionModel.signOutEverywhere`). [Answer.Done]; the gate says how it went. */
+    @Serializable @SerialName("Session.SignOutEverywhere") data object SessionSignOutEverywhere : Call()
+
+    /** The locked state's way back (`SessionModel.lockedBack`): the sign-in again, keeping nothing. [Answer.Done]. */
+    @Serializable @SerialName("Session.LockedBack") data object SessionLockedBack : Call()
+
+    /** The sign-in's *Forgot your password?* (`SessionModel.forgotPassword`) with the form's [server] and [email]. [Answer.Done]. */
+    @Serializable @SerialName("Session.ForgotPassword") data class SessionForgotPassword(val server: String?, val email: String?) : Call()
+
+    /** *Reset your password*'s Send (`SessionModel.requestRecovery`). [Answer.Done]; the gate says how it went. */
+    @Serializable @SerialName("Session.RequestRecovery") data class SessionRequestRecovery(val server: String, val email: String) : Call()
+
+    /** *Reset your password*'s Back (`SessionModel.backToSignIn`). [Answer.Done]. */
+    @Serializable @SerialName("Session.BackToSignIn") data object SessionBackToSignIn : Call()
+
+    /**
      * "Manage servers" opened: [Watched.Manage] delivers every server with its trust from now on, each tenant's spaces as
      * they read; [ManageClose] ends it (null again).
      */
@@ -502,6 +523,12 @@ internal sealed class Call {
      * whenever the gate's [adding] or the host's [camera] (whether this device may have one) changes.
      */
     @Serializable @SerialName("SignIn.Plan") data class SignInPlan(val adding: Boolean, val camera: Boolean) : Call()
+
+    /** The locked sign-in's entries (`LockedPlan.entries`): [Answer.LockedPlan]. */
+    @Serializable @SerialName("SignIn.LockedPlan") data object LockedPlan : Call()
+
+    /** *Reset your password*'s entries (`RecoverPlan.entries`), asked again when the gate's [sent] changes: [Answer.RecoverPlan]. */
+    @Serializable @SerialName("SignIn.RecoverPlan") data class RecoverPlan(val sent: Boolean) : Call()
 
     /** The unlock's entries under its account (`UnlockPlan.entries`, ADR 0154 decision 2): [Answer.UnlockPlan]. */
     @Serializable @SerialName("Unlock.Plan") data object UnlockPlan : Call()
@@ -1950,6 +1977,12 @@ internal sealed class Answer {
 
     /** The sign-in's entries in their order ([Call.SignInPlan]). */
     @Serializable @SerialName("SignInPlan") data class SignInPlan(val entries: List<me.raddatz.veyq.mobile.session.SignInEntry>) : Answer()
+
+    /** The locked sign-in's entries in their order ([Call.LockedPlan]). */
+    @Serializable @SerialName("LockedPlan") data class LockedPlan(val entries: List<me.raddatz.veyq.mobile.session.LockedEntry>) : Answer()
+
+    /** *Reset your password*'s entries in their order ([Call.RecoverPlan]). */
+    @Serializable @SerialName("RecoverPlan") data class RecoverPlan(val entries: List<me.raddatz.veyq.mobile.session.RecoverEntry>) : Answer()
 
     /**
      * A Secret Key field's text checked ([Call.SecretKeyCheck]): null where it reads as a key or a kit's token; a

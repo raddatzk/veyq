@@ -109,7 +109,7 @@ enum DevLogin {
             Task { @MainActor in
                 for _ in 0..<3000 {
                     try? await Task.sleep(for: .milliseconds(100))
-                    if case .signIn(let working, _, _, let server, _, let shown) = model.screen, !working, let shown {
+                    if case .signIn(let working, _, _, let server, _, let shown, _, _) = model.screen, !working, let shown {
                         NSLog("veyq-kit: dev kit sign-in: kit held, server from %@; signing in", "\(shown.serverFrom)")
                         model.signIn(server: shown.server ?? server ?? "", email: shown.email, password: password, secretKey: "")
                         return
@@ -122,7 +122,7 @@ enum DevLogin {
             Task { @MainActor in
                 for _ in 0..<600 {
                     try? await Task.sleep(for: .milliseconds(100))
-                    if case .signIn(_, _, _, _, _, let shown) = model.screen, let shown {
+                    if case .signIn(_, _, _, _, _, let shown, _, _) = model.screen, let shown {
                         NSLog("veyq-kit: kit held, server from %@, other server said: %@", "\(shown.serverFrom)", shown.typedServer != nil ? "true" : "false")
                         return
                     }
@@ -141,7 +141,7 @@ enum DevLogin {
                 model.readKit(URL(fileURLWithPath: kit), typedServer: "veyq.localhost:8080")
                 for _ in 0..<300 {
                     try? await Task.sleep(for: .milliseconds(100))
-                    if case .signIn(let working, let error, _, _, _, let shown) = model.screen, !working, shown != nil || error != nil {
+                    if case .signIn(let working, let error, _, _, _, let shown, _, _) = model.screen, !working, shown != nil || error != nil {
                         NSLog("veyq-kit: %@", shown.map { "kit held, server from \($0.serverFrom), other server said: \($0.typedServer != nil)" } ?? "no kit (\(String(describing: error)))")
                         return
                     }

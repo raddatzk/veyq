@@ -7074,5 +7074,92 @@
   "report_enclosing": {
     "en": "Report the folder that holds them instead",
     "de": "Stattdessen den Ordner melden, der sie enthält"
+  },
+  "signin_locked": {
+    "en": "I don’t have my Secret Key with me",
+    "de": "Ich habe meinen Secret Key nicht dabei"
+  },
+  "signin_forgot": {
+    "en": "Forgot your password?",
+    "de": "Passwort vergessen?"
+  },
+  "locked_title": {
+    "en": "Signed in, still locked",
+    "de": "Angemeldet, aber gesperrt"
+  },
+  "locked_note": {
+    "en": "You are signed in, but your memories stay locked here — opening them needs your Secret Key. One thing does not need it: you can sign every device out from here, this one included. That is what to do when a device is lost.",
+    "de": "Du bist angemeldet, deine Erinnerungen bleiben hier aber gesperrt — zum Öffnen brauchst du deinen Secret Key. Eines geht auch ohne ihn: Du kannst von hier aus jedes Gerät abmelden, dieses eingeschlossen. Genau das tust du, wenn ein Gerät weg ist."
+  },
+  "locked_action": {
+    "en": "Sign out everywhere, including here",
+    "de": "Überall abmelden, auch hier"
+  },
+  "locked_confirm_title": {
+    "en": "Sign every device out",
+    "de": "Jedes Gerät abmelden"
+  },
+  "locked_confirm": {
+    "en": "Sign every device out, this one included? Signing out cuts a device off from the server; it never reaches into the device itself. A device that was set to stay signed in loses its saved key at its next start and then needs your password AND your Secret Key — so have your Emergency Kit ready.",
+    "de": "Jedes Gerät abmelden, dieses eingeschlossen? Abmelden trennt ein Gerät vom Server; auf das Gerät selbst greift es nie durch. Ein Gerät, das angemeldet bleiben sollte, verliert beim nächsten Start seinen gespeicherten Schlüssel und braucht dann dein Passwort UND deinen Secret Key — halte also dein Notfall-Kit bereit."
+  },
+  "locked_back": {
+    "en": "I have my Secret Key after all",
+    "de": "Ich habe meinen Secret Key doch dabei"
+  },
+  "locked_back_hint": {
+    "en": "Unlock here without saving anything on this device.",
+    "de": "Hier entsperren, ohne dass etwas auf diesem Gerät gespeichert wird."
+  },
+  "locked_done": {
+    "en": "Every device was signed out, this one included.",
+    "de": "Alle Geräte wurden abgemeldet, dieses eingeschlossen."
+  },
+  "recovery_title": {
+    "en": "Reset your password",
+    "de": "Passwort zurücksetzen"
+  },
+  "recovery_intro": {
+    "en": "You need two things: a link we mail you, and the Secret Key from your Emergency Kit. Neither works alone.",
+    "de": "Du brauchst zwei Dinge: einen Link, den wir dir mailen, und den Secret Key aus deinem Notfall-Kit. Keines von beiden reicht allein."
+  },
+  "recovery_email": {
+    "en": "Your email address",
+    "de": "Deine E-Mail-Adresse"
+  },
+  "recovery_send": {
+    "en": "Send me a link",
+    "de": "Link schicken"
+  },
+  "recovery_sent": {
+    "en": "If an account exists for that address, a link is on its way. It stops working after an hour. Check spam if it does not arrive.",
+    "de": "Falls es ein Konto zu dieser Adresse gibt, ist ein Link unterwegs. Er wird nach einer Stunde ungültig. Schau auch im Spam nach."
+  },
+  "recovery_mail_unavailable": {
+    "en": "This space cannot send email yet, so no link can go out. Ask an owner of this space to set up email in its settings — your account is fine, and the reset works as soon as they have.",
+    "de": "Dieser Bereich kann noch keine E-Mails verschicken, deshalb geht kein Link raus. Bitte eine Person, der dieser Bereich gehört, E-Mail in seinen Einstellungen einzurichten — mit deinem Konto ist alles in Ordnung, und sobald E-Mail eingerichtet ist, funktioniert das Zurücksetzen."
+  },
+  "recovery_request_failed": {
+    "en": "The request did not go through. Check your connection and try again.",
+    "de": "Die Anfrage ist nicht durchgekommen. Prüfe deine Verbindung und versuch es nochmal."
+  },
+  "recovery_no_escrow": {
+    "en": "If your Emergency Kit is gone too, nothing can bring your memories back — there is no master key on our side.",
+    "de": "Ist auch dein Notfall-Kit weg, kann nichts deine Erinnerungen zurückholen — bei uns liegt kein Hauptschlüssel."
+  },
+  "locked_scope_note": {
+    "note": "the locked sign-in (uc.account.sessions E3): what this device keeps; the web's sessions.lockedScopeNote names a browser and its toggle",
+    "en": "This device keeps nothing: no saved key, and no session once you leave this screen or close the app.",
+    "de": "Dieses Gerät behält nichts: keinen gespeicherten Schlüssel und keine Sitzung, sobald du diese Ansicht verlässt oder die App schließt."
+  },
+  "locked_done_still_here": {
+    "note": "the locked sign-in: the others are signed out, this device's own sign-out did not reach the server; the action can be repeated",
+    "en": "Every other device was signed out. This device could not be signed out — try again.",
+    "de": "Alle anderen Geräte wurden abgemeldet. Dieses Gerät konnte nicht abgemeldet werden — versuch es nochmal."
+  },
+  "recovery_on_web": {
+    "note": "the app asks for the recovery link; the mailed link opens the web's page, which finishes the reset (ADR 0148 decision 6, ADR 0150 § O)",
+    "en": "The link opens in your browser, on any device. There you enter the Secret Key from your Emergency Kit and choose a new password — then sign in here with it.",
+    "de": "Der Link öffnet sich in deinem Browser, auf jedem Gerät. Dort gibst du den Secret Key aus deinem Notfall-Kit ein und wählst ein neues Passwort — damit meldest du dich dann hier an."
   }
 }

@@ -12,6 +12,7 @@ use veyq::core_ui::shell::Shell;
 use veyq::core_ui::manage::Manage;
 use veyq::core_ui::received::{Mode, ReceivedView};
 use veyq::core_ui::sign_in::{Offer, SignIn, Unlock};
+use veyq::core_ui::sign_in_entries::{Locked, Recover};
 use veyq::core_ui::theme::APP_ID;
 use veyq::core_ui::{dev_login, dev_scan, dev_settings, words};
 
@@ -37,6 +38,8 @@ struct Screens {
     status_page: adw::StatusPage,
     sign_in: Rc<SignIn>,
     unlock: Unlock,
+    locked: Rc<Locked>,
+    recover: Rc<Recover>,
     offer: Offer,
     shell: Rc<Shell>,
     manage: Rc<Manage>,
@@ -96,6 +99,14 @@ impl Screens {
                 {
                     self.sign_in.dev(dev);
                 }
+            }
+            Gate::Locked { .. } => {
+                self.locked.show(gate);
+                self.face(&self.locked.page);
+            }
+            Gate::Recover { .. } => {
+                self.recover.show(gate);
+                self.face(&self.recover.page);
             }
             Gate::Unlock { record, working, error } => {
                 self.unlock.show(gate);
@@ -165,6 +176,8 @@ fn activate(app: &adw::Application) {
         status_page,
         sign_in: SignIn::new(),
         unlock: Unlock::new(),
+        locked: Locked::new(),
+        recover: Recover::new(),
         offer,
         shell,
         manage,

@@ -1691,6 +1691,91 @@ class VeyqAccount private constructor(
             }
         }
 
+        /**
+         * The login alone (uc.account.sessions E3, the web's `LoginView.enterLocked`): the challenge answered as [signIn]
+         * answers it, and nothing after — no key material read, no wrap opened, no trust enrolled, nothing kept on [device]
+         * or anywhere on this device (the server is connected without the device, so not even its instance salt is kept).
+         * The tokens live in the returned session's memory only. Fails as [signIn] does: [SignInFailure.Reason.CREDENTIALS]
+         * on a wrong password or an unknown address, alike.
+         */
+        suspend fun signInLocked(
+            primitives: Primitives,
+            server: String,
+            email: String,
+            password: String,
+            client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
+        ): SessionModel.LockedSession {
+            val c = connect(primitives, server, client)
+            return guarded(c) {
+                login(primitives, c, email, password)
+                LockedLogin(c.base, c.tokens, c.http, c.outside, client)
+            }
+        }
+
+        /** A session of [signInLocked]: its two calls, each renewed once over the refresh token where its access token expired. */
+        private class LockedLogin(
+            private val base: String,
+            private val tokens: Tokens,
+            private val http: HttpClient,
+            private val outside: HttpClient,
+            private val client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
+        ) : SessionModel.LockedSession {
+            override suspend fun revokeOthers() = sent("revoke others") { SessionApi(base, http).revokeOtherSessionFamilies() }
+
+            override suspend fun logout() = sent("logout") { SessionApi(base, http).logout() }
+
+            override fun drop() {
+                tokens.access = ""
+                tokens.refresh = null
+                http.close()
+                outside.close()
+            }
+
+            private suspend fun sent(what: String, f: suspend () -> HttpResponse<Unit>) {
+                var r = f()
+                if (r.status == 401) {
+                    val refresh = tokens.refresh ?: throw SignInFailure(SignInFailure.Reason.SESSION_ENDED, "$what 401")
+                    val renewed = redeemOnce(base, refresh, client)
+                    tokens.access = renewed.access ?: throw SignInFailure(SignInFailure.Reason.SESSION_ENDED, "refresh ${renewed.status}")
+                    tokens.refresh = renewed.refresh
+                    r = f()
+                }
+                if (!r.success) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "$what ${r.status}")
+            }
+        }
+
+        /**
+         * The recovery link asked for [email] at [server] (uc.account.recover-access step 1, the web's `requestRecovery`):
+         * `POST /api/recovery/request`, no session, through a client of its own, closed after. 202 is
+         * [SessionModel.RecoveryAsked.SENT] — the same for every address —, a 503 [SessionModel.RecoveryAsked.MAIL_UNAVAILABLE]
+         * (the contract gives it one meaning), anything else and a server not reached [SessionModel.RecoveryAsked.FAILED].
+         */
+        suspend fun requestRecovery(
+            server: String,
+            email: String,
+            client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
+        ): SessionModel.RecoveryAsked {
+            val once = client {
+                expectSuccess = false
+                install(ContentNegotiation) { json(Json { ignoreUnknownKeys = true }) }
+            }
+            return try {
+                val r = me.raddatz.veyq.mobile.api.apis.RecoveryApi(server.trimEnd('/'), once)
+                    .requestPasswordRecovery(me.raddatz.veyq.mobile.api.models.RecoveryRequest(email))
+                when {
+                    r.success -> SessionModel.RecoveryAsked.SENT
+                    r.status == 503 -> SessionModel.RecoveryAsked.MAIL_UNAVAILABLE
+                    else -> SessionModel.RecoveryAsked.FAILED
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                SessionModel.RecoveryAsked.FAILED
+            } finally {
+                once.close()
+            }
+        }
+
         /** What [redeemOnce] was answered: the status and, on a 2xx, the two tokens. */
         internal class Redeemed(val status: Int, val access: String?, val refresh: String?)
 

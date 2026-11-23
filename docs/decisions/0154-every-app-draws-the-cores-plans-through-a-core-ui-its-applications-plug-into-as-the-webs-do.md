@@ -535,8 +535,9 @@ held for the screens' models but not around them:
     everywhere), *Forgot password* (the recovery flow) and, with a live session, *Sign out*; the apps' have Cancel while
     adding and *Open a link* (owner 2026-11-20, ADR 0154 § Consequences). The rule settles that the apps gain the first two,
     but each is an account flow the apps do not have (recovery, the locked sign-out), not a plan entry, and the account and
-    Secret Key area is another session's work in parallel. *Choice:* not moved here; a follow-up CR. The third is the
-    apps' `UnlockPlan` (a live session's own screen: *Other account*, *Forget*), no difference to align.
+    Secret Key area is another session's work in parallel. *Choice:* not moved here; a follow-up CR — built 2026-11-23
+    (As built: the sign-in's entries, below). The third is the apps' `UnlockPlan` (a live session's own screen: *Other
+    account*, *Forget*), no difference to align.
   - **P10 — Delete on a guest's own photo tile** (D14). `TileAction.DELETE` where the rights delete a guest's own media
     only and the medium is its own (`GalleryModel.deletes`), the web's `isOwnMedia` overlay; it runs `GalleryModel.trash`,
     which asks first and purges (`purging`, each platform's question). Drawn on all four. *Cost:* the apps know a guest's
@@ -652,6 +653,65 @@ held for the screens' models but not around them:
     pass ran under the machine's load); the passes are the coordinator's and the owner's: a level's Select on, rows and
     tiles turned, All, None, the count with a tab hiding some, each action's sheet over the selection (a move with a
     refusal, its one Undo; a copy; a report and above 100 its folder; the delete's question and its one Undo), Cancel.
+
+- **As built: the sign-in's entries** (2026-11-23, branch `claude/signin-entries`; P9's follow-up, inbox #1105). The web's
+  two entries on every app's sign-in, in the core: `SignInEntry.LOCKED` (*I don't have my Secret Key with me*, the web's
+  `sessions.lockedEntry`, right after Submit and Cancel) and `SignInEntry.FORGOT` (*Forgot your password?*, after the
+  kit, before *Open a link*), each opening a gate of its own — `Gate.Locked` (uc.account.sessions E3) and `Gate.Recover`
+  (uc.account.recover-access steps 1–2) — whose entries are plans too (`LockedPlan`: sign out everywhere, back;
+  `RecoverPlan`: send until sent, back). No endpoint and no field is added: the apps send what the web sends
+  (`requestLoginChallenge`, `verifyLogin`, `revokeOtherSessionFamilies`, `logout`, `requestPasswordRecovery`). The
+  decision log, kept by its implementer:
+  - **S1 — The recovery's link half stays the web's.** *Q:* the brief asked for the recovery with the kit in the core;
+    where does the mailed token reach an app? *Options:* a custom scheme or an app link carrying it; the mailed link pasted
+    into the app; the web's page finishing it. *Choice:* the app asks for the link (`SessionModel.requestRecovery`, the web's
+    `requestRecovery`, a 503 said as the web's `mail_unavailable`, every other failure as its `requestFailed`) and says that
+    the link opens in the browser, where the kit and a new password finish the reset (`recovery_on_web`); the web's page
+    then offers *Open in the veyq app* (ADR 0150 § O2). A scheme carrying a secret is ADR 0150 § O's rejection; pasting a
+    mailed link the owner rejected for the address change (ADR 0148 decision 6, 2026-11-18). So release, open and
+    complete are not ported — without a transport no ADR allows they would be dead code; whether the app finishes a reset
+    itself is the owner's (inbox #1106). *Cost:* a reset begun in the app ends in a browser.
+  - **S2 — The locked sign-in is the login alone.** `VeyqAccount.signInLocked`: `connect` without the device (not even
+    the instance salt is kept), the login, no `key-material`; a `SessionModel.LockedSession` holds the tokens in memory
+    only and renews an expired access token once over its refresh token (the locked screen can stand longer than an access
+    token lives). *Evidence:* `SignInEntriesTest.theLockedLoginReadsNoKeyAndKeepsNothingOnTheDevice` (the requests made,
+    no device write), `.anExpiredAccessTokenIsRenewedOnceAndAWrongPasswordIsRefused`.
+  - **S3 — The order is the web's.** `SessionModel.signOutEverywhere`: every other family revoked first, then this one
+    signed out; a revoke that fails stops there (`account_settings_revoke_failed`, the web's `sessions.revokeFailed`), the
+    session kept for a retry; afterwards the sign-in says `locked_done`. *Evidence:* `.theLockedSignOutRevokesTheOthersFirstThenThisOne`,
+    `.aRevokeThatFailsCutsNothingOffAndKeepsTheSessionForTheRetry`.
+  - **S4 — A sign-out of this device that fails.** The web's `lockedDoneStillHere` points at its card's own *Sign out*,
+    which the app has not; the app keeps the session and says so (`locked_done_still_here`, apart in `web.json`), the
+    action runs again (the revoke is idempotent). *Evidence:* `.aSignOutOfThisDeviceThatFailsSaysSoAndRunsAgain`.
+  - **S5 — The way back signs in anew.** The web unlocks over the session the locked entry holds; the app's sign-in is one
+    login and unlock, so `lockedBack` signs the locked session out (best effort, its tokens forgotten either way) and
+    the sign-in after it (`Gate.SignIn.keepsNothing`, the form saying `locked_back_hint`) enrols no trust and makes no
+    offer. The traces it still leaves are the web's named two in their app form: the register's device entry and family
+    join (`recordThisDevice`, the web's `noteThisDevice`) and the instance salt (`keepInstanceSalt`, public). *Evidence:*
+    `.theWayBackSignsInKeepingNothing`, `.anOrdinarySignInStillTrustsAndOffers`. *Cost:* one more login than the web's.
+  - **S6 — Words.** Eighteen twins of the web's `sessions.locked*` and `recovery.*` (`web.json`); `locked_scope_note` (the
+    web's names a browser's cookie and its toggle) and `locked_done_still_here` apart; `recovery_on_web` the app's own.
+  - **S7 — Each platform's look.** Android: text buttons under the form, the locked screen's action an error-coloured
+    button asked first in an `AlertDialog`, the system Back as each screen's Back; Apple: a grouped form per screen, the
+    action `.destructive` asked in an `.alert`; Linux: button rows in the boxed list, each screen a way-in page, the
+    action a destructive pill asked in an `AdwAlertDialog` (Cancel the default); Windows: buttons in the column, each
+    screen a page, the action critical-filled asked by `Dialogs.Confirm` (Cancel the default). The desktops reach the
+    model through the bridge's `Session.SignInLocked`, `Session.SignOutEverywhere`, `Session.LockedBack`,
+    `Session.ForgotPassword`, `Session.RequestRecovery`, `Session.BackToSignIn`, `SignIn.LockedPlan`, `SignIn.RecoverPlan`
+    (`SecretFreeSchemaTest` lists the locked sign-in's password as typed in).
+  - **S8 — The bites and the proofs.** Each restored with `/bin/cp -f` (measured 2026-11-23, seven of twelve red at
+    once): the sign-out's two calls swapped; `door.trust` on the way back's sign-in; `key-material` read after the locked
+    login; the 503 worded as a failed request. Green: `:composition:jvmTest`, `:bridge:jvmTest` (the dispatch's one method
+    hit the JVM's size limit again, so these calls go through `signInEntries`, as L10's `selecting`; the plans' wire names
+    sit under `SignIn.` so `validate_mobile_ui_direction.py` names them the platform's), `:core:jvmTest` but
+    `UnlockForgetTest`'s setup, refused by the offline store's 5 % free-space floor on this Mac's 98 %-full disk (not this
+    change: its outbox `put`), `:android:assembleDebug`, the XCFramework, `xcodegen` and the macOS build (which also needed
+    #1065's `MediaUploads.upload` given its `filed` on Apple's share pick-up — Swift sees no Kotlin default), Linux
+    `run.py build` (clippy with `-D warnings`, 101 tests, the build; its last step, the sandbox skips in the Fedora
+    container, failed on Docker's full disk; its re-run after the plans' wire names moved under `SignIn.` — two Rust variant
+    names, checked against the generated `bridge.rs` — stopped on that disk before building, owed), Windows `run.py build` (the app, the bridge's and the app's tests; its last
+    step needs the scheduled task `veyq-app-signin`, never registered), every validator. **Not clicked** on any app (no
+    device pass ran): the passes are inbox #1105's.
 
 ## Alternatives considered
 
