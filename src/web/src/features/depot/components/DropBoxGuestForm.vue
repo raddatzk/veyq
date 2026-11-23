@@ -1,18 +1,23 @@
 <script setup lang="ts">
 // The public page of a drop-box link (cr-files-application F3, ADR 0080 decision 11; what Depot's share body for
-// `DEPOT_DROPBOX`, `DropBoxShareBody`, renders on the link rooted at the drop box): a WRITE_ONLY guest names itself once (its own identity key `K_up`, `dropBox.ts`), gets its one
-// folder in the drop box, picks files and uploads them there — one core-queue job per file, the folder contributor's
-// guest job (`shareUpload.ts`) with its folder as the one key it holds. It sees nothing of the drop box or of other
-// guests (the resolve serves no node, `listShareFiles` an empty list): only what it sent in this session. Its session
-// (identity, token, `K_up`, the name it gave) stays on the device, so a reload keeps uploading into the same folder.
+// `DEPOT_DROPBOX`, `DropBoxShareBody`, renders on the link rooted at the drop box): a WRITE_ONLY guest picks files and
+// uploads them into its one folder in the drop box — one core-queue job per file, the folder contributor's guest job
+// (`shareUpload.ts`) with its folder as the one key it holds. It sees nothing of the drop box or of other guests (the
+// resolve serves no node, `listShareFiles` an empty list): only what it sent in this session. Its session (identity,
+// token, its own identity key `K_up`, `dropBox.ts`, the name it gave) stays on the device, so a reload keeps uploading
+// into the same folder.
 //
-// Inbox #385 (a): the page says whose session it is with a "Not you?" that forgets it on this device and asks for a name
-// again — a new identity; the old one's folder stays in the drop box untouched. Both the form and that line are core's one
-// guest-naming component (`core/sharing/GuestNaming.vue`, inbox #401), which asks before it forgets. The same action
-// starts over after the link stopped taking files from this guest (its folder trashed, inbox #381). The identity AND the
-// folder are made with the FIRST file, not when the guest names itself (inbox #385 (a); `ensureDropFolder` is idempotent:
-// the same folder on every later call), so a visitor who names itself and leaves leaves nothing behind on the server. Until
-// then the name lives in this page only: a reload before the first file asks for it again.
+// Its name is asked at its first pick, never before (inbox #1090, ADR 0154 decision 1: every client asks a guest's name
+// at the write): the shell's one naming dialog (`GuestAccess.requestGuest`, with this page's own identity as what the
+// name makes), so the page's body holds no name form. Declined, nothing is sent and nothing is said. The identity AND the
+// folder are made with that first pick (inbox #385 (a); `ensureDropFolder` is idempotent: the same folder on every later
+// call), so a visitor who leaves without picking leaves nothing behind on the server.
+//
+// Inbox #385 (a): once named, the page says whose session it is with a "Not you?" that forgets it on this device — the
+// next pick asks for a name again, a new identity; the old one's folder stays in the drop box untouched. That line is
+// core's one guest-naming component (`core/sharing/GuestNaming.vue`, inbox #401), which asks before it forgets, as a
+// READ_WRITE link's line does. The same action starts over after the link stopped taking files from this guest (its
+// folder trashed, inbox #381).
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
@@ -29,6 +34,7 @@ import {
 } from '../dropBox'
 import { guestFileUploadJob } from '../shareUpload'
 import GuestNaming from '../../../core/sharing/GuestNaming.vue'
+import type { GuestIdentity } from '../../../core/sharing/guestIdentity'
 import OrderNotice from '../../../core/sharing/OrderNotice.vue'
 import { shareAtOf } from '../../../core/sharing/resolvePublicShare'
 import StatementNotice from '../../moderation/statement/StatementNotice.vue'
@@ -40,13 +46,10 @@ const { t, locale } = useI18n()
 // The link as what this device keeps of it is keyed: its id and the instance that serves it (ADR 0121).
 const at = shareAtOf(props.head)
 const session = ref<DropGuestSession | null>(loadDropGuest(at))
-/** The name given before the first file: no identity exists yet (see the header). */
-const pendingName = ref<string | null>(null)
-/** Whose page this is, as the line says it: the saved session, or the name given before anything was sent. */
-const shown = computed(() => session.value ?? (pendingName.value !== null ? { displayName: pendingName.value } : null))
-/** The identity being created by the first pick, so a second pick in the meantime makes no second one. */
-let naming: Promise<DropGuestSession> | null = null
-/** The first pick is creating the identity or the folder: "Not you?" waits for it, as for a file on its way. */
+/** The first pick is asking the name, or creating the identity or the folder: a second pick in the meantime waits for it
+ *  (no second question, no second identity), and "Not you?" waits for it, as for a file on its way. */
+let preparation: Promise<DropGuestSession | null> | null = null
+/** A pick is being prepared (see {@link preparation}). */
 const preparing = ref(false)
 /** A start over after a gone link is reading the link again. */
 const restarting = ref(false)
@@ -107,44 +110,47 @@ const retryable = (item: UploadItem) =>
 /** A file of this session is still on its way: "Not you?" waits for it (it goes out under the current identity). */
 const sending = computed(() => items.value.some((f) => f.status === 'queued' || f.status === 'preparing' || f.status === 'uploading'))
 
-/** The guest names itself (core's form): only the name, kept in this page — nothing is sent before its first file. */
-async function start(name: string) {
-  error.value = null
-  pendingName.value = name
+/** What the guest's name makes when the shell's dialog asks it: its identity under its own `K_up`, kept on the device
+ *  from here on. A link gone at this call is the page's gone state (the dialog closes, said here, not there). */
+async function makeIdentity(name: string): Promise<GuestIdentity | null> {
+  try {
+    const named = await nameDropGuest(props.head, { name, pwToken: props.pwToken })
+    saveDropGuest(at, named)
+    session.value = named
+    return named
+  } catch (err) {
+    if (!(await isDropLinkGone(err))) throw err // the dialog says it and stays open
+    linkGone.value = true
+    return null // closes the dialog: the gone page says why nothing was sent
+  }
 }
 
-/** The guest's identity: the saved session, else created now under the name it gave (its own identity key, the session
- *  kept on the device from here on). */
-function identity(): Promise<DropGuestSession> {
-  if (session.value) return Promise.resolve(session.value)
-  const name = pendingName.value
-  if (name === null) return Promise.reject(new Error('no name given'))
-  naming ??= nameDropGuest(props.head, { name, pwToken: props.pwToken })
-    .then((named) => {
-      saveDropGuest(at, named)
-      session.value = named
-      pendingName.value = null
-      return named
-    })
-    .finally(() => (naming = null))
-  return naming
+/** The guest's identity and its folder for a pick: the saved session, else its name asked now (the shell's dialog) —
+ *  null where it declined, or the link is gone. */
+async function prepare(): Promise<DropGuestSession | null> {
+  if (!session.value) {
+    await props.access.requestGuest(makeIdentity)
+    if (!session.value || linkGone.value) return null // declined (nothing to say), or gone (the page says so)
+  }
+  const guest = session.value
+  // The guest's one folder: made on its first upload, the same one on every later (and after a reload); the name sent
+  // with the first call is the folder's, later calls' names are ignored by the server. A session saved before the name
+  // was kept already has its folder, so its fallback is never used.
+  const name = guest.displayName || t('depot.dropBox.guestNameFallback')
+  folder ??= await ensureDropFolder(props.head, guest, name, props.pwToken)
+  return guest
 }
 
 async function onPicked(e: Event) {
   const input = e.target as HTMLInputElement
   const files = Array.from(input.files ?? [])
   input.value = ''
-  if (!files.length || !shown.value || linkGone.value) return
+  if (!files.length || linkGone.value) return
   error.value = null
   preparing.value = true
-  let guest: DropGuestSession
+  let guest: DropGuestSession | null
   try {
-    guest = await identity()
-    // The guest's one folder: made on its first upload, the same one on every later (and after a reload); the name
-    // sent with the first call is the folder's, later calls' names are ignored by the server. A session saved before
-    // the name was kept already has its folder (it was made when the guest named itself), so its fallback is never used.
-    const name = guest.displayName || t('depot.dropBox.guestNameFallback')
-    folder ??= await ensureDropFolder(props.head, guest, name, props.pwToken)
+    guest = await (preparation ??= prepare().finally(() => (preparation = null)))
   } catch (err) {
     if (await isDropLinkGone(err)) linkGone.value = true
     else error.value = t('depot.dropBox.guestFailed')
@@ -152,6 +158,7 @@ async function onPicked(e: Event) {
   } finally {
     preparing.value = false
   }
+  if (!guest || !folder) return
   const ctx = dropGuestContext(props.head, guest, folder, props.pwToken)
   enqueue(
     files.map((file) => dropGuestJob(guestFileUploadJob({ ctx, parentId: folder!.nodeId }, file), link)),
@@ -159,7 +166,8 @@ async function onPicked(e: Event) {
   )
 }
 
-/** "Not you?" / start over: forget this device's session and ask for a name again. Nothing on the server changes.
+/** "Not you?" / start over: forget this device's session; the next pick asks for a name again. Nothing on the server
+ *  changes.
  *  "Not you?" asks first (core's `GuestNaming`) — the session is the only way back into this folder from here (inbox
  *  #395). After a gone link it does not ask: the link itself is read again first (inbox #393 (a)): a revoked or deleted
  *  one leaves the shell's "not available" page (its `reload` says so) instead of a name form for a link that takes
@@ -175,7 +183,6 @@ async function notYou() {
   }
   forgetDropGuest(at)
   session.value = null
-  pendingName.value = null
   folder = null
   error.value = null
   linkGone.value = false
@@ -189,60 +196,52 @@ async function notYou() {
     </div>
     <p>{{ t('depot.dropBox.guestHint', { name: head.name }) }}</p>
 
+    <!-- Whose session this is, once the guest named itself at its first pick (inbox #1090): "Not you?" asks first, as a
+         READ_WRITE link's line does; after a gone link it starts over without asking. Before that nothing is said here:
+         the record's notice comes with the name, in the shell's dialog. -->
     <GuestNaming
-      v-if="!shown"
-      :action="start"
-      :hint="t('depot.dropBox.guestNameHint')"
-      :error-text="() => t('depot.dropBox.guestFailed')"
+      v-if="session"
+      :current="session"
+      :forget="notYou"
+      :forget-label="linkGone ? t('depot.dropBox.guestStartOver') : undefined"
+      :ask-before-forget="!linkGone"
+      :forget-disabled="sending || preparing"
+      :forget-busy="restarting"
       :record-days="head.share.guestWriteRecordDays"
     />
-
+    <VeyqMessage v-if="linkGone" tone="error">{{ t('depot.dropBox.guestGone') }}</VeyqMessage>
+    <!-- ADR 0093 § 7: a drop page has no placeholder, so every statement of reasons a moderator's measure on this
+         guest's uploads — or on the guest, or the link — gave it is shown here, whether or not the link still lives. -->
+    <StatementNotice v-if="session" every-guest-statement />
+    <!-- TCO Art. 11: when the link went away under an upload, an authority's removal order may be why. -->
+    <OrderNotice v-if="linkGone" :share-id="shareId" :api-base="head.apiBase" />
     <template v-else>
-      <!-- "Not you?" asks only when there is something to lose: a session (the way back into its folder), not a name
-           nothing was sent under yet. -->
-      <GuestNaming
-        :current="shown"
-        :forget="notYou"
-        :forget-label="linkGone ? t('depot.dropBox.guestStartOver') : undefined"
-        :ask-before-forget="!linkGone && !!session"
-        :forget-disabled="sending || preparing"
-        :forget-busy="restarting"
-        :record-days="head.share.guestWriteRecordDays"
-      />
-      <VeyqMessage v-if="linkGone" tone="error">{{ t('depot.dropBox.guestGone') }}</VeyqMessage>
-      <!-- ADR 0093 § 7: a drop page has no placeholder, so every statement of reasons a moderator's measure on this
-           guest's uploads — or on the guest, or the link — gave it is shown here, whether or not the link still lives. -->
-      <StatementNotice v-if="session" every-guest-statement />
-      <!-- TCO Art. 11: when the link went away under an upload, an authority's removal order may be why. -->
-      <OrderNotice v-if="linkGone" :share-id="shareId" :api-base="head.apiBase" />
-      <template v-else>
-        <input ref="picker" class="dropbox-picker" type="file" multiple hidden @change="onPicked" />
-        <div>
-          <VeyqButton :label="t('depot.dropBox.guestPick')" icon="upload" @click="picker?.click()" />
-        </div>
-      </template>
-      <div v-if="items.length">
-        <h3>{{ t('depot.dropBox.guestSession') }}</h3>
-        <ul class="veyq-list">
-          <li v-for="item in items" :key="item.id" class="veyq-list-row dropbox-guest-row" :data-status="item.status">
-            <VeyqIcon :name="icon(item)" :spin="icon(item) === 'spinner'" />
-            <span class="veyq-row-main">
-              <span class="veyq-row-title" :title="item.name">{{ item.name }}</span>
-              <span class="veyq-row-subtitle dropbox-guest-detail">{{ detail(item) }}</span>
-            </span>
-            <VeyqButton
-              v-if="retryable(item)"
-              :label="t('depot.dropBox.guestRetry')"
-              :aria-label="t('depot.dropBox.guestRetryLabel', { name: item.name })"
-              size="small"
-              variant="secondary"
-              appearance="text"
-              @click="retryFile(item.id)"
-            />
-          </li>
-        </ul>
+      <input ref="picker" class="dropbox-picker" type="file" multiple hidden @change="onPicked" />
+      <div>
+        <VeyqButton :label="t('depot.dropBox.guestPick')" icon="upload" @click="picker?.click()" />
       </div>
     </template>
+    <div v-if="items.length">
+      <h3>{{ t('depot.dropBox.guestSession') }}</h3>
+      <ul class="veyq-list">
+        <li v-for="item in items" :key="item.id" class="veyq-list-row dropbox-guest-row" :data-status="item.status">
+          <VeyqIcon :name="icon(item)" :spin="icon(item) === 'spinner'" />
+          <span class="veyq-row-main">
+            <span class="veyq-row-title" :title="item.name">{{ item.name }}</span>
+            <span class="veyq-row-subtitle dropbox-guest-detail">{{ detail(item) }}</span>
+          </span>
+          <VeyqButton
+            v-if="retryable(item)"
+            :label="t('depot.dropBox.guestRetry')"
+            :aria-label="t('depot.dropBox.guestRetryLabel', { name: item.name })"
+            size="small"
+            variant="secondary"
+            appearance="text"
+            @click="retryFile(item.id)"
+          />
+        </li>
+      </ul>
+    </div>
     <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
   </section>
 </template>

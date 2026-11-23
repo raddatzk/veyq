@@ -61,8 +61,10 @@ enum DepotUi {
     }
 }
 
-/// A drop box's WRITE_ONLY link (the web's `DropBoxShareBody`): the guest names itself — the record's notice before —, then
-/// sends files, each into its own folder; what it sent while the link is open here is listed, nothing else of the drop box.
+/// A drop box's WRITE_ONLY link (the web's `DropBoxShareBody`): the guest picks files at once, each sent into its own
+/// folder; a guest not named yet is asked its name at that upload by the core (`GuestDropBox.uploadAsking`, its sheet the
+/// link's `AskedNaming`, the record's notice in it; #1090: no form in the page). Named, "You are here as …" with *Not you?*;
+/// what it sent while the link is open here is listed, nothing else of the drop box.
 private struct GuestDropBoxView: View {
     @Bindable var model: AppModel
     let held: GuestHeld
@@ -81,25 +83,26 @@ private struct GuestDropBoxView: View {
             if let named = held.guest.value {
                 NotYou(session: named) { drop.forget() }
                 RecordNotice(days: days, origin: origin, guestId: named.identityId)
-                PrimaryButton(title: say(.shareDropboxPick)) { picking = true }.accessibilityIdentifier("guest-drop-pick")
-                let mine = (queue?.value.batches ?? []).filter { $0.label == drop.node.name }.flatMap { $0.items }
-                let names = (sent?.value as? [String]) ?? []
-                if !names.isEmpty || !mine.isEmpty {
-                    Text(say(.shareDropboxSession)).font(.headline).padding(.top, 8)
-                    ForEach(mine, id: \.id) { item in Text(joinedLine([item.name, status(item)])) }
-                    ForEach(names.filter { n in !mine.contains { $0.name == n } }, id: \.self) { n in
-                        Text(n).accessibilityIdentifier("guest-drop-sent")
-                    }
-                }
-            } else {
-                InlineNaming(hint: say(.shareDropboxNameHint), days: days, origin: origin) { name in
-                    (try? await AppleSharing.shared.nameDrop(drop: drop, displayName: name))?.boolValue ?? false
+            }
+            PrimaryButton(title: say(.shareDropboxPick)) { picking = true }.accessibilityIdentifier("guest-drop-pick")
+            let mine = (queue?.value.batches ?? []).filter { $0.label == drop.node.name }.flatMap { $0.items }
+            let names = (sent?.value as? [String]) ?? []
+            if !names.isEmpty || !mine.isEmpty {
+                Text(say(.shareDropboxSession)).font(.headline).padding(.top, 8)
+                ForEach(mine, id: \.id) { item in Text(joinedLine([item.name, status(item)])) }
+                ForEach(names.filter { n in !mine.contains { $0.name == n } }, id: \.self) { n in
+                    Text(n).accessibilityIdentifier("guest-drop-sent")
                 }
             }
         }
         .fileImporter(isPresented: $picking, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result, !urls.isEmpty else { return }
-            _ = drop.upload(sources: urls.compactMap(model.guestSource))
+            let sources = urls.compactMap(model.guestSource)
+            Task {
+                // a guest not named yet is asked its name first (the core's `uploadAsking`); declined, nothing is queued or said
+                let queued = (try? await drop.uploadAsking(sources: sources))?.queued ?? 0
+                if queued == 0 { sources.forEach { $0.close() } }
+            }
         }
         .onAppear {
             sent = CoreState({ (drop.sent.value as? NSArray) ?? [] }) { changed in ApplePlatform.shared.watch(flow: drop.sent) { @Sendable _ in changed() } }

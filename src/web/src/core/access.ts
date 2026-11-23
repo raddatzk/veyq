@@ -84,8 +84,13 @@ export interface GuestAccess {
    *  lost a race (`guestTreeContext`). */
   readonly fragmentKey: string
   /** The guest's identity for this link, asking the visitor's name first when it has none; null: the visitor declined.
-   *  The ONE naming flow of the page (core's), so no view asks for a name itself. */
-  requestGuest(): Promise<GuestIdentity | null>
+   *  The ONE naming flow of the page (core's), so no view asks for a name itself — asked at the write, never before
+   *  (ADR 0154 decision 1, inbox #1090). `make`: what the name makes, where a WRITE_ONLY link's page makes its own
+   *  identity (an uploader's own `K_up`: Depot's drop page, Memories' uploader) and keeps it as it needs; given, the
+   *  dialog asks whatever the device holds (the page asks only when it has no session it can write with), and resolves
+   *  with what `make` made (null: it made none — the dialog closes, the page says why). Absent: the link's own identity
+   *  under the share root's key, the device's session first. */
+  requestGuest(make?: (name: string) => Promise<GuestIdentity | null>): Promise<GuestIdentity | null>
   /** Re-resolve the link after a guest's write, so what it created lists with its key and name; resolves once `head`
    *  has been replaced (the shell's). */
   reload(): Promise<void>

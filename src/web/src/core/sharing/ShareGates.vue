@@ -108,7 +108,8 @@ const g = props.gates
       :forget="g.forgetGuest"
       :record-days="g.head.value.share.guestWriteRecordDays"
     />
-    <!-- Core's page of the link's tree (the member's views), or a WRITE_ONLY link's drop page (its naming too). -->
+    <!-- Core's page of the link's tree (the member's views), or a WRITE_ONLY link's drop page (its own "You are here as …"
+         line; its name asked at the write through the dialog below, inbox #1090). -->
     <component
       :is="g.body.value"
       :share-id="shareId"

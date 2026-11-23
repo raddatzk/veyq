@@ -215,8 +215,9 @@ object MemoriesGuest {
 
 /**
  * A Memory's or a chapter's page for the guest of its WRITE_ONLY link (ADR 0150 decision 5; the web's `MemoryShareBody`):
- * the guest names itself — a fresh `K_up` wrapped to the root's drop public key, its session in the credential store —
- * and each photo or video it adds is sealed under `K_up` into the link's root; it sees nothing of the Memory, only what it
+ * the guest is asked its name at its first upload ([uploadAsking], the core's one naming flow; never by a form of the
+ * page's, #1090) — a fresh `K_up` wrapped to the root's drop public key, its session in the credential store — and each
+ * photo or video it adds is sealed under `K_up` into the link's root; it sees nothing of the Memory, only what it
  * sent in this visit, and removes its own.
  */
 class GuestUploader internal constructor(private val access: GuestAccess, val node: NodeAt) {
@@ -232,9 +233,7 @@ class GuestUploader internal constructor(private val access: GuestAccess, val no
     /** Whether the platform's tiers and the upload queue are at hand (else nothing is offered). */
     val offered: Boolean get() = access.queue != null && access.deriver != null
 
-    /** Name the uploader from the page's own form (the phones', the web's): through the core's one naming flow. */
-    suspend fun name(displayName: String): Boolean = access.naming.name(displayName).let { it.problem == null && it.notice == null }
-
+    /** *Not you?*: this device's session forgotten; the next upload asks a name again. */
     fun forget() = access.forgetGuest()
 
     /** [sources] queued into the link's root; how many were (none before the guest named itself). */

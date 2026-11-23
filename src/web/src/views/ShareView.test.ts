@@ -60,7 +60,12 @@ function mountShareView() {
   return mount(ShareView, {
     global: {
       plugins: [realI18n()],
-      stubs: { MediaGrid: true, OptimisticTile: true },
+      // The dialog teleports; rendered in place so a test reads the shell's naming dialog.
+      stubs: {
+        MediaGrid: true,
+        OptimisticTile: true,
+        VeyqDialog: { props: ['visible', 'header'], template: '<div v-if="visible" class="dialog-stub"><h1 class="header">{{ header }}</h1><slot /></div>' },
+      },
     },
   })
 }
@@ -177,10 +182,10 @@ describe('ShareView — accountless terms gate', () => {
   })
 })
 
-// The gate order password -> terms -> name -> content (the name pre-screen is the drop page's first screen). This is the
-// only place the terms gate and the name gate meet, so it is where swapping them in the shell goes red.
-describe('ShareView — terms come before the name pre-screen', () => {
-  it('a not-yet-accepted uploader sees the terms first and the name screen only after accepting', async () => {
+// The gate order password -> terms -> content; an unnamed uploader's name is asked at its first pick (inbox #1090), so
+// no name screen sits between the terms and the drop page any more.
+describe('ShareView — terms come before the drop page', () => {
+  it('a not-yet-accepted, unnamed uploader sees the terms first and the drop page — no name screen — after accepting', async () => {
     localStorage.clear()
     serve(dropShare())
     vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsRevision: 1, operatorSection: OPERATOR_SECTION, terms: { en: '## Rules' } })
@@ -188,36 +193,46 @@ describe('ShareView — terms come before the name pre-screen', () => {
     await flushPromises()
 
     expect(wrapper.find('.share-terms-card').exists()).toBe(true)
-    expect(wrapper.find('.share-name-card:not(.share-terms-card)').exists()).toBe(false) // name screen withheld
+    expect(wrapper.find('.share-view-header').exists()).toBe(false) // the drop page withheld
 
     await wrapper.find('.share-terms-card .share-name-submit').trigger('click')
     await flushPromises()
 
     expect(wrapper.find('.share-terms-card').exists()).toBe(false)
-    expect(wrapper.find('.share-name-card').exists()).toBe(true) // now the name screen
+    expect(wrapper.find('.share-view-header').exists()).toBe(true) // now the drop page
+    expect(wrapper.find('.guest-naming-input').exists(), 'no name form in it').toBe(false)
   })
 })
 
-// The drop page's name pre-screen tells a guest who reads the name it types (ADR 0030 point 8): the Memory's members, and
-// no other link holder — which is what the resolve serves, so the page must not promise "everyone" either. (A
-// contributor names itself in the shell's dialog, whose hint says the same: `ShareView.naming.test.ts`.)
+// The name an uploader is asked at its first pick tells it who reads the name it types (ADR 0030 point 8): the people the
+// Memory belongs to, and no other link holder — which is what the resolve serves, so neither the dialog nor the page may
+// promise "everyone". The dialog is the shell's one (inbox #1090), whose hint a contributor reads too
+// (`ShareView.naming.test.ts`).
 describe('ShareView — who sees a guest name', () => {
   beforeEach(() => {
     localStorage.clear()
     vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: {} })
   })
 
-  it("the uploader's name screen says only the Memory's members see the name", async () => {
+  it("the uploader's name, asked at its first pick, says only the people this belongs to see it", async () => {
     serve(dropShare())
     const wrapper = mountShareView()
     await flushPromises()
+    const input = wrapper.find('input[type="file"]')
+    Object.defineProperty(input.element, 'files', { value: [new File(['x'], 'a.jpg', { type: 'image/jpeg' })], configurable: true })
+    await input.trigger('change')
+    await flushPromises()
 
-    const card = wrapper.find('.share-name-card')
-    expect(card.exists()).toBe(true) // the gate itself, so the text checks below cannot pass on an empty page
-    expect(card.text()).toContain(t('share.nameVisibility'))
-    // the same page serves a chapter's link: its words name no Memory (#399) — only the title (the link's name) may
-    expect(card.text().replace(card.find('h1').text(), ''), 'no Memory wording on a chapter link').not.toMatch(/memory/i)
-    expect(card.text()).not.toContain('everyone')
+    const dialog = wrapper.find('.dialog-stub.guest-naming')
+    expect(dialog.exists()).toBe(true) // the dialog itself, so the text checks below cannot pass on an empty page
+    expect(dialog.text()).toContain(t('share.guest.nameHint'))
+    expect(dialog.text()).not.toContain('everyone')
+    // the same page serves a chapter's link: neither the dialog nor the page's words name a Memory (#399) — only the
+    // title (the link's name) may
+    expect(dialog.text(), 'no Memory wording on a chapter link').not.toMatch(/memory/i)
+    const page = wrapper.find('.share-view-header').text().replace(wrapper.find('.gallery-title').text(), '')
+    expect(page, 'no Memory wording on a chapter link').not.toMatch(/memory/i)
+    expect(wrapper.find('.share-uploader-intro').text()).not.toMatch(/memory|everyone/i)
   })
 })
 
@@ -230,19 +245,19 @@ describe('ShareView — a chapter share', () => {
     vi.mocked(fetchShareTerms).mockReset().mockResolvedValue({ tenantId: TENANT, termsRevision: 0, operatorSection: OPERATOR_SECTION, terms: {} })
   })
 
-  it('an uploader link rooted at a CHAPTER reaches the drop\'s name screen', async () => {
+  it('an uploader link rooted at a CHAPTER reaches the drop page', async () => {
     const access: ShareAccess = { kind: 'drop', nodeId: 'chapter-1', dropPublicKey: new Uint8Array(), rootEpoch: 0 }
     serve({ ...dropShare(), memoryName: 'Day 1', access }, CHAPTER_KIND)
     const wrapper = mountShareView()
     await flushPromises()
     expect(wrapper.find('.share-view-unavailable').exists()).toBe(false)
-    expect(wrapper.find('.share-name-card').exists()).toBe(true)
+    expect(wrapper.find('.share-view-header .gallery-title').text()).toBe('Day 1')
   })
 })
 
-// A Memory link's uploader names itself with core's one form (inbox #401 S2) and has the "Not you?" Depot's drop box had —
-// the drop page's own line (a contributor's is the shell's: `ShareView.memory.test.ts`). It asks first, then forgets the
-// session and shows the name screen again.
+// A Memory link's uploader, once named, has core's one line with its "Not you?" (inbox #401 S2) — the drop page's own line
+// (a contributor's is the shell's: `ShareView.memory.test.ts`). It asks first, then forgets the session; the next pick
+// asks a name again (inbox #1090), so no name screen comes back.
 describe('ShareView — a Memory drop: core\'s naming form and its "Not you?"', () => {
   beforeEach(() => {
     if (confirmRequest.value) settleConfirm(false)
@@ -266,7 +281,9 @@ describe('ShareView — a Memory drop: core\'s naming form and its "Not you?"', 
     dialog.click(t('share.guest.notYouAccept'))
     await flushPromises()
     expect(loadGuestSession(SHARE_ID)).toBeNull()
-    expect(wrapper.find('.share-name-card').exists()).toBe(true)
+    expect(wrapper.find('.guest-naming-identity').exists(), 'no line once forgotten').toBe(false)
+    expect(wrapper.find('.guest-naming-input').exists(), 'no name form either').toBe(false)
+    expect(wrapper.find('.share-add-button').exists(), 'the drop stays').toBe(true)
   })
 })
 

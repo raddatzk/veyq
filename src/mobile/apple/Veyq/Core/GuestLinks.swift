@@ -682,9 +682,10 @@ private struct GuestLine: View {
     }
 }
 
-/// The name a write asks of a READ_WRITE link's guest not named yet (core's one naming flow, `GuestAccess.naming`; the
-/// web's `requestGuest`): shown while the core asks (`asking`), its save core's (`name`: a problem keeps it open, a notice
-/// is said once it closed), its cancel the write declined (`decline`).
+/// The name a write asks of a link's guest not named yet — a READ_WRITE link's, and a WRITE_ONLY page's at its upload
+/// (#1090) — (core's one naming flow, `GuestAccess.naming`; the web's `requestGuest`): shown while the core asks
+/// (`asking`), its save core's (`name`: a problem keeps it open, a notice is said once it closed), its cancel the write
+/// declined (`decline`).
 struct AskedNaming: ViewModifier {
     let access: GuestAccess
     /// False while a sheet above this view asks instead (an entry editor's save, `EntryEditorSheet`).
@@ -825,39 +826,6 @@ private struct NamingSheet: View {
         #if os(macOS)
         .frame(minWidth: 460, minHeight: 380)
         #endif
-    }
-}
-
-/// A drop page's naming in its body (the web's drop forms): the field, its hint, the record's notice, *Continue*.
-struct InlineNaming: View {
-    let hint: String
-    let days: Int?
-    let origin: String
-    let onName: (String) async -> Bool
-    @State private var name = ""
-    @State private var working = false
-    @State private var failed = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TextField(say(.shareYourName), text: $name, prompt: Text(say(.shareYourNamePlaceholder)))
-                .textFieldStyle(.roundedBorder)
-                .onChange(of: name) { failed = false }
-                .accessibilityIdentifier("guest-name-field")
-            Text(hint).font(.footnote).foregroundStyle(Role.muted)
-            RecordNotice(days: days, origin: origin)
-            if failed { Text(say(.shareJoinFailed)).foregroundStyle(Role.danger) }
-            PrimaryButton(title: say(.shareJoin), working: working) {
-                working = true
-                let typed = name.trimmingCharacters(in: .whitespaces)
-                Task {
-                    failed = !(await onName(typed))
-                    working = false
-                }
-            }
-            .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty || working)
-            .accessibilityIdentifier("guest-name-continue")
-        }
     }
 }
 

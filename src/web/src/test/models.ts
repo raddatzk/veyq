@@ -20,7 +20,6 @@ import type { MemberNameAddress } from '../features/account/profile/memberName'
 import { memberAccess, memberTreeSource, type GuestAccess, type MemberAccess, type TreeSource } from '../core/access'
 import type { ShareRole } from '../api/generated/sharing'
 import type { PublicShareHead } from '../core/sharing/resolvePublicShare'
-import type { GuestIdentity } from '../core/sharing/guestIdentity'
 import { guestAccess } from '../core/sharing/guestAccess'
 import { memoryRights, type MemoryRights } from '../features/memories/rights'
 import { EXPECTED_MAJOR } from '../shared/state/capabilities'
@@ -126,7 +125,12 @@ export const guestAccessOf = (role: string, o: Partial<Omit<GuestAccess, 'mode' 
  *  passes its own) — and a re-resolve that does nothing unless the test passes one. */
 export const guestAccessFor = (
   head: PublicShareHead,
-  o: { pwToken?: string; fragmentKey?: string; requestGuest?: () => Promise<GuestIdentity | null>; reload?: () => Promise<void> } = {},
+  o: {
+    pwToken?: string
+    fragmentKey?: string
+    requestGuest?: GuestAccess['requestGuest']
+    reload?: () => Promise<void>
+  } = {},
 ): GuestAccess => guestAccess({
   head, pwToken: o.pwToken, fragmentKey: o.fragmentKey ?? 'frag',
   requestGuest: o.requestGuest ?? (() => new Promise(() => {})), reload: o.reload ?? (async () => {}),

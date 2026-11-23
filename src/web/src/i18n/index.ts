@@ -2252,7 +2252,6 @@ const en = {
       guestIdCopied: 'Copied',
     },
     // ADR 0030 point 8: no share link is served a guest's name — only the Memory's members read it
-    nameVisibility: 'Only the people this belongs to see your name.',
     yourName: 'Your name',
     yourNamePlaceholder: 'e.g. Grandma',
     join: 'Continue',
@@ -2260,7 +2259,7 @@ const en = {
     addPhotos: 'Add photos',
     // uploader drop-box (cr-0102, ADR 0031) — write-only, session-only own-view
     uploaderBadge: 'Add photos only · visible in this session',
-    uploaderIntro: 'You can add your own photos here. You won’t see what is already here or what others added. First, tell us your name.',
+    uploaderIntro: 'You can add your own photos here. You won’t see what is already here or what others added.',
     uploaderEphemeralWarning: 'The photos you add stay visible to you here only until you reload or leave this page — after that they’re gone from your view (but kept for the owner).',
     uploaderSessionNote: 'These photos are visible only to you, and only in this session — a reload clears them from view. You can delete your own here while they’re shown.',
     uploaderEmpty: 'No photos in this session. Photos you add appear here and stay visible until you reload — after that they’re gone from your view, but saved for the owner.',
@@ -4417,7 +4416,6 @@ const de: typeof en = {
       copyGuestId: 'Kopieren',
       guestIdCopied: 'Kopiert',
     },
-    nameVisibility: 'Deinen Namen sehen nur die Personen, denen das hier gehört.',
     yourName: 'Dein Name',
     yourNamePlaceholder: 'z. B. Oma',
     join: 'Weiter',
@@ -4425,7 +4423,7 @@ const de: typeof en = {
     addPhotos: 'Fotos hinzufügen',
     // uploader drop-box (cr-0102, ADR 0031) — schreibgeschützt für andere, eigene Ansicht nur diese Sitzung
     uploaderBadge: 'Nur Fotos hinzufügen · sichtbar in dieser Sitzung',
-    uploaderIntro: 'Du kannst hier eigene Fotos hinzufügen. Was schon hier ist und was andere hinzugefügt haben, siehst du nicht. Sag uns zuerst deinen Namen.',
+    uploaderIntro: 'Du kannst hier eigene Fotos hinzufügen. Was schon hier ist und was andere hinzugefügt haben, siehst du nicht.',
     uploaderEphemeralWarning: 'Die Fotos, die du hinzufügst, sind für dich nur hier sichtbar — bis du die Seite neu lädst oder verlässt. Danach sind sie aus deiner Ansicht verschwunden (aber für die Person gespeichert, der die Erinnerung gehört).',
     uploaderSessionNote: 'Diese Fotos sind nur für dich sichtbar und nur in dieser Sitzung — ein Neuladen entfernt sie aus der Ansicht. Solange sie angezeigt werden, kannst du eigene hier löschen.',
     uploaderEmpty: 'Keine Fotos in dieser Sitzung. Hinzugefügte Fotos erscheinen hier und bleiben bis zum Neuladen sichtbar — danach sind sie aus deiner Ansicht verschwunden, aber für die Person gespeichert, der die Erinnerung gehört.',

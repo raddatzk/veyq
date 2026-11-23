@@ -6,11 +6,14 @@
 // way: this is the one guest-only page of Memories (ADR 0079 Consequences, inbox #401). A `READ` or `READ_WRITE` link of
 // a Memory or chapter gets the member's `MemoryDetail` through core's page instead (`core/sharing/ShareTreePage.vue`).
 //
-// What it holds: the name pre-screen (core's one naming form, `GuestNaming`, with the uploader's ephemerality warning and
-// the curator's note), then the drop — "Add photos", the in-flight and settled tiles of THIS session (the member
-// gallery's `OptimisticTile`, laid out by the shared `MediaGrid`), each settled one deletable while this session holds
-// its media id, and the page's own "Not you?". Session-only by design (ADR 0031 §5): after a reload the queue is empty
-// and the page says so. Operator-blind: every upload seals on the device under the guest's own key.
+// What it holds: the drop — "Add photos", the in-flight and settled tiles of THIS session (the member gallery's
+// `OptimisticTile`, laid out by the shared `MediaGrid`), each settled one deletable while this session holds its media
+// id — and, before the guest named itself, what the page is and the uploader's ephemerality warning; after, the page's
+// own "You are here as …" with its "Not you?". The guest's name is asked at its first pick, never before (inbox #1090, ADR
+// 0154 decision 1): the shell's one naming dialog (`GuestAccess.requestGuest`, with the uploader's own identity as what
+// the name makes, ADR 0031 point 7); declined, nothing is sent and nothing is said. Session-only by design (ADR 0031 §5):
+// after a reload the queue is empty and the page says so. Operator-blind: every upload seals on the device under the
+// guest's own key.
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
@@ -24,7 +27,7 @@ import {
 } from '../share'
 import { pickLocaleText, shareAtOf, shareRootEpoch, type PublicShareHead } from '../../../core/sharing/resolvePublicShare'
 import { apiBaseOf } from '../../../core/sharing/shareAt'
-import { forgetGuestSession, saveGuestSession, useGuestSession } from '../../../core/sharing/guestIdentity'
+import { forgetGuestSession, saveGuestSession, useGuestSession, type GuestIdentity } from '../../../core/sharing/guestIdentity'
 import type { GuestAccess } from '../../../core/access'
 import GuestNaming from '../../../core/sharing/GuestNaming.vue'
 import StatementNotice from '../../moderation/statement/StatementNotice.vue'
@@ -79,19 +82,19 @@ watch(
 )
 
 // The named session, persisted per link so a reload keeps the name (it never leaves the device): the platform's
-// (`core/sharing/guestIdentity.ts`), reactive — read before the first render (no name-gate flash) and gone at once when
-// "Not you?" forgets it.
+// (`core/sharing/guestIdentity.ts`), reactive — gone at once when "Not you?" forgets it.
 const session = useGuestSession<ContributorSession>(at)
-// The key this session's uploads seal under — the uploader's own identity key.
+// The key this session's uploads seal under — the uploader's own identity key. None: the next pick asks the name — also
+// for a session saved without its own key, which has nothing to seal with.
 const sealKey = computed(() => (session.value && keyAccess.value ? sessionSealKey(session.value, keyAccess.value) : null))
-// The name pre-screen until the visitor has named itself — and again for a session saved without its own key, which
-// has nothing to seal with.
-const needsName = computed(() => !!keyAccess.value && !sealKey.value)
-/** The pre-screen's naming (core's `GuestNaming` renders the form): the identity, its name kept on the device. */
-async function submitName(name: string) {
+/** What the guest's name makes when the shell's dialog asks it at a pick: the uploader's identity, its name kept on the
+ *  device. */
+async function makeUploader(name: string): Promise<GuestIdentity> {
   if (!keyAccess.value) throw new Error('share_not_open')
   const created = await createContributorIdentity(at, props.head.scopeId, keyAccess.value, name, props.fragmentKey, props.pwToken)
-  saveGuestSession(at, { ...created, displayName: name })
+  const named = { ...created, displayName: name }
+  saveGuestSession(at, named)
+  return named
 }
 /** "Not you?" (the drop page's own line): forget this device's session — the next visitor names itself afresh. What
  *  was sent stays with the owner. */
@@ -117,9 +120,11 @@ function onFilesPicked() {
   const input = fileInput.value
   if (!input) return
   cancelPickWindow?.() // a fresh pick supersedes whatever the previous window was still waiting for
-  cancelPickWindow = collectPickedFiles(input, enqueueBatch)
+  cancelPickWindow = collectPickedFiles(input, (picked) => void enqueueBatch(picked))
 }
-function enqueueBatch(picked: File[]) {
+async function enqueueBatch(picked: File[]) {
+  // A guest not named yet is asked its name now, at the write (the shell's one dialog); declined, nothing is sent.
+  if (!sealKey.value && !(await props.access.requestGuest(makeUploader))) return
   const s = session.value
   const key = sealKey.value
   if (!s || !key) return
@@ -169,23 +174,7 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
 </script>
 
 <template>
-  <!-- The mandatory display-name pre-screen before the first photo (ADR 0031) -->
-  <div v-if="needsName" class="share-view-state share-name-gate">
-    <div class="veyq-surface share-name-card">
-      <h1>{{ head.name }}</h1>
-      <p class="share-name-intro">{{ t('share.uploaderIntro') }}</p>
-      <div v-if="renderedNote" class="share-note markdown-body" v-safe-html="renderedNote"></div>
-      <!-- warning #1 of 4 (ADR 0031 §5): the session-only ephemerality, up front before the first upload -->
-      <p class="share-uploader-warning">
-        <VeyqIcon name="info-circle" />
-        <span>{{ t('share.uploaderEphemeralWarning') }}</span>
-      </p>
-      <!-- core's one naming form; who reads the name: the Memory's members, never another link holder (ADR 0030 point 8) -->
-      <GuestNaming :action="submitName" :hint="t('share.nameVisibility')" :record-days="head.share.guestWriteRecordDays" />
-    </div>
-  </div>
-
-  <template v-else-if="keyAccess">
+  <template v-if="keyAccess">
     <header class="gallery-header share-view-header">
       <div class="gallery-header-copy">
         <h1 class="gallery-title">{{ head.name }}</h1>
@@ -213,6 +202,16 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
     </header>
 
     <div v-if="renderedNote" class="share-note markdown-body" v-safe-html="renderedNote"></div>
+
+    <!-- Before the guest named itself: what the page is and — warning #1 of 4 (ADR 0031 §5) — the session-only
+         ephemerality, up front before the first upload; its name is asked at that upload (the shell's dialog). -->
+    <template v-if="!session">
+      <p class="share-uploader-intro">{{ t('share.uploaderIntro') }}</p>
+      <p class="share-uploader-warning">
+        <VeyqIcon name="info-circle" />
+        <span>{{ t('share.uploaderEphemeralWarning') }}</span>
+      </p>
+    </template>
 
     <!-- ADR 0093 § 7: a drop page has no placeholder, so every statement of reasons a moderator's measure on this guest's
          uploads gave it is shown here. -->
@@ -250,7 +249,7 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
 <style scoped src="../../../shared/ui/shareGate.css"></style>
 
 <style scoped>
-/* The drop page. The state/card look (name pre-screen) comes from the shared gate sheet above; the grid
+/* The drop page. The shared gate sheet above brings its error line; the grid
    (.media-grid) and the tiles come from the GLOBAL design-source stylesheets via the shared components. */
 .share-view-header {
   display: flex;
@@ -290,7 +289,7 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
 .share-view-badge .veyq-icon {
   font-size: 0.85rem;
 }
-/* The uploader's ephemerality warning in the name pre-screen + the persistent session note above the grid. */
+/* The uploader's ephemerality warning before its first upload + the persistent session note above the grid. */
 .share-uploader-warning,
 .share-uploader-note {
   display: flex;
@@ -305,15 +304,20 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
   font-size: 0.85rem;
   line-height: 1.4;
 }
-.share-uploader-note {
+.share-uploader-note,
+.share-uploader-warning {
   margin-bottom: 1rem;
+}
+.share-uploader-intro {
+  margin: 0 0 0.5rem;
+  color: var(--app-muted);
 }
 .share-uploader-warning .veyq-icon,
 .share-uploader-note .veyq-icon {
   margin-top: 0.1rem;
   color: var(--app-warning-text);
 }
-/* cr-0115: the curator note — a card banner under the header / the instruction in the name pre-screen. The inner
+/* cr-0115: the curator note — a card banner under the header. The inner
    elements come from the safe markdown renderer via v-safe-html, so they need :deep. */
 .share-note {
   margin: 0 0 1.15rem;
@@ -324,9 +328,6 @@ onBeforeUnmount(() => cancelPickWindow?.()) // the E3 re-read window owns its te
   color: var(--app-text);
   font-size: 0.95rem;
   line-height: 1.55;
-}
-.share-name-card .share-note {
-  margin: 0.1rem 0 0.3rem;
 }
 .share-note :deep(p) {
   margin: 0 0 0.55rem;

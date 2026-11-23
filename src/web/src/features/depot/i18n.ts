@@ -179,7 +179,6 @@ const en = {
       close: 'Close',
       guestTitle: 'Send files',
       guestHint: 'Your files go to {name}. You cannot see what others sent, and you cannot see your files again here after you leave.',
-      guestNameHint: 'The owner sees your files under this name.',
       guestStartOver: 'Start over under a new name',
       // The folder's name when a session saved before names were kept sends its first file (its folder exists already).
       guestNameFallback: 'Guest',
@@ -347,7 +346,6 @@ const de: typeof en = {
       close: 'Schließen',
       guestTitle: 'Dateien senden',
       guestHint: 'Deine Dateien gehen an {name}. Was andere gesendet haben, siehst du nicht, und deine eigenen Dateien siehst du hier nach dem Verlassen nicht mehr.',
-      guestNameHint: 'Unter diesem Namen sieht die Person, die den Link geteilt hat, deine Dateien.',
       guestStartOver: 'Mit neuem Namen neu beginnen',
       guestNameFallback: 'Gast',
       guestPick: 'Dateien auswählen',
