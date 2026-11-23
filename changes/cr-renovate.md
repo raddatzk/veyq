@@ -257,7 +257,7 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
     eclipse-temurin's new digest (`docker buildx imagetools inspect`: an OCI index carrying linux/amd64 and
     linux/arm64/v8), and `Checks`, `Trust chain`, `CodeQL` and the release-note check started on their own; all 32
     went green (merged).
-  - [ ] **5c npm**, both workspaces, with pnpm (`packageManager` and the global installs' regex manager) and the
+  - [x] **5c npm**, both workspaces, with pnpm (`packageManager` and the global installs' regex manager) and the
     Playwright image, one `playwright` group with `@playwright/test`; `dependabot.yml` loses both npm entries, and
     `dependabot_follow.py` its Playwright follow with the image-site helpers and the registry client, leaving the Gradle
     follow alone. Renovate updates `pnpm-lock.yaml` itself: phase 2's dry run on GitHub (run 45169620214) ran `pnpm
@@ -265,7 +265,9 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
     `renovate/npm-minor-and-patch`, which passed pnpm's supply-chain policies and wrote one lockfile. Measured on the
     branch's tree: a lookup proposes `renovate/npm-minor-and-patch`, `renovate/pnpm` (12.22.0 at all eight sites) and
     `renovate/postcss-nested-9.x` (the site's override), and holds only Emscripten and the fuzzer's Python image among
-    the images; the `pins` extract is still 304 pins. Open: the first real npm pull request.
+    the images; the `pins` extract is still 304 pins. On GitHub, after #68: the dispatch (run 45235243109) opened #71
+    (pnpm 12.22.0 at every site, both lockfiles written by Renovate's pnpm) and #72 (the site's postcss-nested
+    override, a major of its own); `Checks` started on both by itself, and all 38 and 8 checks went green.
   - [ ] **5d gradle** and **5e the rest**, one pull request with phase 6 (owner 2026-11-23: one pull request per
     feature). Built:
     - The gradleWrapper measurement, read in the pinned image's `lib/modules/manager/gradle-wrapper/artifacts.js`:
@@ -292,7 +294,16 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
       with the root wrapper 9.9.0 → 9.9.2, `openapi-generator` 7.27.0, `pyyaml-6.x`, `schemathesis-4.x`, `webp-encoder`
       with Emscripten 7.0.1, `images`, `npm-minor-and-patch`, `pnpm`, `postcss-nested-9.x`, the MariaDB driver's major)
       and no dependency is disabled; the `pins` extract: `300 pins in 41 files, every one reached by Renovate`.
-    Open until after the merge: each ecosystem's first real pull request (Gradle with the follow's metadata commit,
+    After the merge (#70), the dispatch (run 45245170891) rebased #71 off the deleted `webp-encoder-update.yml` and
+    opened #73–#77. Measured on them: `gradle-distribution` wrote 9.9.2's `971fcd71…c76b` into the root wrapper (#74),
+    services.gradle.org's `.sha256`; `openapi-generator-jar` wrote 7.27.0's `db9c4b73…` (#76); the Renovate follow
+    pushed `tests/fuzz/requirements.txt` onto #75 as `veyq-renovate[bot]`, and its own commit started the derive again,
+    which skipped. Three derives were red: #74's root launcher step, because a cold home that fetched nothing has no
+    module cache and the listing refused it (fixed: the root step lists an empty home as no module); #77's on Maven
+    Central's 429 while resolving buildSrc (a rerun); #76's on 149 backend tests the 7.27.0 generator breaks (a real
+    red pull request, left to a person). Still open: the follow's metadata commit on a Gradle pull request, the
+    encoder's rebuild, PyYAML, Helm when it moves.
+    Open until after the merge, as written then: each ecosystem's first real pull request (Gradle with the follow's metadata commit,
     the follow's push starting `Checks`, the generator, Helm when it moves, PyYAML, Schemathesis with the lock, the
     encoder with its rebuild), and the owner's switch of Dependabot's security pull requests (below).
 - [x] **6 docs** (in the 5d/5e pull request): `infra/README.md`, `release-and-deployment.md` (the *Decided, not

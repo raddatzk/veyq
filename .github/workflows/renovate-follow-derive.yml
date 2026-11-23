@@ -87,13 +87,18 @@ jobs:
             > "$RUNNER_TEMP/derived/gradle/backend/cold-cache.json"
 
       # The root launcher resolves Gradle's own kotlin-dsl for its build scripts and nothing else (it includes no
-      # surface's build, infra/README.md § The launcher), so `help` is the whole of what it fetches.
+      # surface's build, infra/README.md § The launcher), so `help` is the whole of what it fetches — and on a cold home
+      # that can be nothing at all: the distribution brings what it needs, and Gradle 9.9.2 created no module cache
+      # (renovate/gradle-minor-and-patch, 2026-11-23). An empty cold home is a listing of no module, so the directory the
+      # listing reads is created when Gradle did not; the backend's step keeps refusing an empty home, which there would
+      # mean Gradle moved its cache.
       - name: Write the root launcher's verification metadata from a cold Gradle home
         if: steps.needs.outputs.gradle_root == 'true'
         env:
           GRADLE_USER_HOME: ${{ runner.temp }}/gradle-cold-home-root
         run: |
           ./gradlew --no-daemon --write-verification-metadata sha256 help
+          mkdir -p "$GRADLE_USER_HOME/caches/modules-2/files-2.1"
           mkdir -p "$RUNNER_TEMP/derived/gradle/root"
           cp gradle/verification-metadata.xml "$RUNNER_TEMP/derived/gradle/root/verification-metadata.xml"
           python3 scripts/renovate_follow.py gradle-listing --gradle-home "$GRADLE_USER_HOME" \
