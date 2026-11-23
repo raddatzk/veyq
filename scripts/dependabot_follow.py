@@ -3,20 +3,17 @@
 
 Run by `.github/workflows/dependabot-follow-derive.yml` (read-only) and `.github/workflows/dependabot-follow.yml`
 (the one job that writes, and only to the Dependabot branch); `.github/dependabot.yml`'s header says how the two fit.
-Every pull request Dependabot opened on 2026-11-12 needed the same mechanical follow by hand. These are the three:
+Every pull request Dependabot opened on 2026-11-12 needed the same mechanical follow by hand. Of the three follows, the
+images one is gone: the images moved to Renovate, whose regex managers write the chart's values and the image constants
+in the same pull request as the compose files and Dockerfiles (cr-renovate phase 5b). Two remain, until their
+ecosystems move too, and this file goes with the last (phase 5d):
 
-  1. **images** — an image pin Dependabot does not reach. One repository is pinned under one tag and one `repo:tag`
-     under one digest (`validate_image_pins.py`), but Dependabot writes only the compose files and Dockerfiles its
-     `docker` and `docker-compose` entries name; the chart's values, the backup tool's `*_IMAGE` constants and
-     `measure_volume.py`'s `PROBE_IMAGE` stay behind (PR #20/#23: rclone; PR #15: mailpit). The bump is read from the
-     files Dependabot reaches (derived from `.github/dependabot.yml`, never listed here) and written to every other
-     image site of the same repository — the three site shapes `validate_image_pins.py` reads, and nothing else.
-  2. **playwright** — `@playwright/test` moved (the npm `playwright` group); the image `mcr.microsoft.com/playwright`
+  1. **playwright** — `@playwright/test` moved (the npm `playwright` group); the image `mcr.microsoft.com/playwright`
      must run the same version (`validate_image_pins.py`'s last check; PR #19/#22). The new tag keeps the old suffix
      (`-noble`), its multi-arch INDEX digest is read from MCR's registry API — anonymous, no token — and is taken only
      when the body hashes to the `Docker-Content-Digest` the registry named, is an image index, and carries
      linux/amd64 and linux/arm64.
-  3. **gradle** — a Gradle bump regenerates `src/backend/gradle/verification-metadata.xml` by the cold-home recipe of
+  2. **gradle** — a Gradle bump regenerates `src/backend/gradle/verification-metadata.xml` by the cold-home recipe of
      `src/backend/CLAUDE.md` (PR #16). That run executes the bumped build, so it happens in the read-only workflow;
      what it wrote comes here as an artifact, as DATA, and is accepted only when it is an append: the
      `<configuration>` unchanged, every component already committed still there with exactly its committed
@@ -26,18 +23,14 @@ Every pull request Dependabot opened on 2026-11-12 needed the same mechanical fo
 third-party text), no changelog, no commit message. The gate reads the pull request's author, head and base refs and
 SHAs, and its commits' author logins; everything else is the tree's files and the registry's bytes.
 
-**What makes it refuse** (exit 1, nothing written), each a case in `dependabot_follow_selftest.py`: an image pin in a
-file Dependabot does not reach that changed to anything but what a reached file now says (a forged pin, or a hand
-edit nobody can tell from one); two different new pins for one repository, or a reached site of a bumped repository
-left on another pin; a Playwright version that is not one exact `X.Y.Z`; a registry answer that is no index, lacks an
-architecture, or whose body is not the digest it was served under; a Playwright pin this tool already wrote that MCR
+**What makes it refuse** (exit 1, nothing written), each a case in `dependabot_follow_selftest.py`: a Playwright
+version that is not one exact `X.Y.Z`; a registry answer that is no index, lacks an architecture, or whose body is not the digest it was served under; a Playwright pin this tool already wrote that MCR
 no longer serves under that tag; a written metadata file with a DOCTYPE, another `<configuration>`, a committed
 component missing, or a committed checksum changed. A pull request whose branch carries a commit by anyone but
 Dependabot or this workflow is left alone (`gate` answers `follow=false`): a person has taken it over.
 
-**Its limits — what a green run does NOT prove.** It trusts what Dependabot wrote at the sites it reaches — exactly
-the trust the pull request already asks the reviewer for — and does not check that an image digest from Docker Hub
-or GHCR is a multi-arch index (only MCR's is resolved here). A new Gradle component's checksum is trusted on first
+**Its limits — what a green run does NOT prove.** It trusts what Dependabot wrote — exactly the trust the pull request
+already asks the reviewer for. A new Gradle component's checksum is trusted on first
 write, as in the hand recipe. The recipe's `quarkusDev` pass after a Quarkus bump is not run (it needs a database
 and a store); a dependency the bump drops without replacing it is not pruned (no new version of it was written, so
 nothing tells it apart from one only `quarkusDev` resolves); a Gradle wrapper bump's `scripts/gradle_wrapper_jar.sha256`
@@ -46,7 +39,7 @@ is not followed. The checks a person approves after the push are what prove the 
     python3 scripts/dependabot_follow.py gate --repo OWNER/NAME --pr N --head-sha SHA
     python3 scripts/dependabot_follow.py gradle-needed --tree DIR --base SHA
     python3 scripts/dependabot_follow.py gradle-listing --gradle-home DIR
-    python3 scripts/dependabot_follow.py follow --tree DIR --config DEPENDABOT_YML --base SHA --derived DIR --message FILE
+    python3 scripts/dependabot_follow.py follow --tree DIR --base SHA --derived DIR --message FILE
 """
 from __future__ import annotations  # `str | None` below — the repo's scripts run on Python 3.9
 
@@ -73,8 +66,6 @@ FROM_SITE = re.compile(r"^(\s*FROM\s+(?:--\S+\s+)*)(\S+)", re.IGNORECASE)
 COPY_SITE = re.compile(r"^(\s*COPY\s+.*--from=)(\S+)", re.IGNORECASE)
 PY_SITE = re.compile(r"""^([A-Z][A-Z0-9_]*IMAGE\s*=\s*["'])([^"']+)""")
 DOCKERFILE_NAME = re.compile(r"(?:.+\.)?(?:Dockerfile|Containerfile)(?:\..+)?")
-# dependabot-core's docker-compose fetcher (FILENAME_REGEX, read on main 2e9740c, 2026-11-12, dependabot.yml says so).
-COMPOSE_NAME = re.compile(r"(?:docker-)?compose(?:-\w+)?(?:\.\w+)?\.ya?ml")
 
 PLAYWRIGHT_REPO = "mcr.microsoft.com/playwright"
 PLAYWRIGHT_PACKAGE = "@playwright/test"
@@ -159,77 +150,6 @@ def rewrite(text: str, replacements: dict[int, list[tuple[int, int, str]]]) -> s
             line = line[:start] + new + line[end:]
         lines[number] = line
     return "".join(lines)
-
-
-def reachable_files(config: dict, tracked: Iterable[str]) -> set[str]:
-    """The files Dependabot writes image pins into: its `docker` and `docker-compose` entries' directories, read the way
-    its fetchers read them (one directory each, not recursive). Derived from the config, never listed."""
-    reached: set[str] = set()
-    tracked = list(tracked)
-    for entry in config.get("updates") or []:
-        ecosystem = entry.get("package-ecosystem")
-        if ecosystem not in ("docker", "docker-compose"):
-            continue
-        names = DOCKERFILE_NAME if ecosystem == "docker" else COMPOSE_NAME
-        directories = list(entry.get("directories") or []) + ([entry["directory"]] if entry.get("directory") else [])
-        for directory in directories:
-            prefix = str(directory).strip("/")
-            for rel in tracked:
-                parent, _, name = rel.rpartition("/")
-                if parent == prefix and names.fullmatch(name):
-                    reached.add(rel)
-    if not reached:
-        raise Refusal("the Dependabot config names no docker or docker-compose directory with a file in it — "
-                      "which pins Dependabot wrote cannot be told from the ones it did not")
-    return reached
-
-
-def follow_images(head: dict[str, str], base_of: dict[str, str | None], reached: set[str]) -> dict[str, str]:
-    """`head`: every image-site file of the pull request's tree. `base_of`: the base's text of each file the pull
-    request changed (None when it added it). Returns the files to write."""
-    def refs(rel: str, text: str | None) -> set[str]:
-        return {s.ref for s in sites(rel, text)}
-
-    def repo_of(ref: str) -> str:
-        return PINNED.match(ref).group("repo")
-
-    # The bump: what Dependabot wrote at the sites it reaches.
-    written: dict[str, set[str]] = {}
-    for rel in sorted(base_of):
-        if rel in reached and rel in head:
-            for ref in refs(rel, head[rel]) - refs(rel, base_of[rel]):
-                written.setdefault(repo_of(ref), set()).add(ref)
-    bump: dict[str, str] = {}
-    for repo, new in sorted(written.items()):
-        if len(new) != 1:
-            raise Refusal(f"`{repo}` was moved to {len(new)} different pins ({', '.join(sorted(new))}) at the sites "
-                          f"Dependabot reaches — which one the rest should follow is a person's call")
-        bump[repo] = next(iter(new))
-    for rel in sorted(reached & head.keys()):
-        for site in sites(rel, head[rel]):
-            if site.repo in bump and site.ref != bump[site.repo]:
-                raise Refusal(f"{rel}:{site.line + 1} still pins `{site.ref}` although Dependabot moved `{site.repo}` "
-                              f"to `{bump[site.repo]}` elsewhere — a site it reaches and did not move is not this "
-                              f"tool's to move")
-
-    # A forgery, or a hand edit: a pin changed where Dependabot never writes, to anything but the bump.
-    for rel in sorted(base_of):
-        if rel in reached or rel not in head:
-            continue
-        for ref in sorted(refs(rel, head[rel]) - refs(rel, base_of[rel])):
-            if bump.get(repo_of(ref)) != ref:
-                raise Refusal(f"{rel} pins `{ref}`, which this pull request changed in a file Dependabot does not "
-                              f"write, and no file it does write says so — not followed, a person reads this one")
-
-    out: dict[str, str] = {}
-    for rel in sorted(head.keys() - reached):
-        replacements: dict[int, list[tuple[int, int, str]]] = {}
-        for site in sites(rel, head[rel]):
-            if site.repo in bump and site.ref != bump[site.repo]:
-                replacements.setdefault(site.line, []).append((site.start, site.end, bump[site.repo]))
-        if replacements:
-            out[rel] = rewrite(head[rel], replacements)
-    return out
 
 
 # --- Playwright -------------------------------------------------------------------------------------------------------
@@ -452,14 +372,8 @@ def gradle_needed(changed: Iterable[str]) -> bool:
     return any(GRADLE_INPUT.match(rel) for rel in changed)
 
 
-def follow(tree: pathlib.Path, config_path: pathlib.Path, base: str, derived: pathlib.Path | None,
+def follow(tree: pathlib.Path, base: str, derived: pathlib.Path | None,
            fetch: Fetch = http_fetch) -> tuple[dict[str, str], list[str]]:
-    try:
-        import yaml
-    except ModuleNotFoundError:
-        raise Refusal("PyYAML is required (pip install --require-hashes --only-binary :all: "
-                      "-r scripts/requirements-release.txt)") from None
-    config = yaml.safe_load(config_path.read_text()) or {}
     tracked = [p for p in git(tree, "ls-files", "-z").split("\0") if p]
     changed = changed_files(tree, base)
     base_of = {rel: base_text(tree, base, rel) for rel in changed}
@@ -468,12 +382,7 @@ def follow(tree: pathlib.Path, config_path: pathlib.Path, base: str, derived: pa
     out: dict[str, str] = {}
     notes: list[str] = []
 
-    images = follow_images(head, base_of, reachable_files(config, tracked))
-    for rel, text in images.items():
-        notes.append(f"image pins followed in {rel}")
-    out.update(images)
-
-    playwright = follow_playwright({**head, **out}, base_of, fetch)
+    playwright = follow_playwright(head, base_of, fetch)
     for rel in playwright:
         notes.append(f"Playwright image moved to {PLAYWRIGHT_PACKAGE}'s version in {rel}")
     out.update(playwright)
@@ -555,7 +464,6 @@ def main(argv: list[str]) -> int:
     p.add_argument("--gradle-home", required=True, type=pathlib.Path)
     p = sub.add_parser("follow")
     p.add_argument("--tree", required=True, type=pathlib.Path)
-    p.add_argument("--config", required=True, type=pathlib.Path)
     p.add_argument("--base", required=True)
     p.add_argument("--derived", type=pathlib.Path)
     p.add_argument("--message", required=True, type=pathlib.Path)
@@ -569,7 +477,7 @@ def main(argv: list[str]) -> int:
         elif args.command == "gradle-listing":
             print(json.dumps(cold_listing(args.gradle_home), indent=0))
         else:
-            out, notes = follow(args.tree, args.config, args.base, args.derived)
+            out, notes = follow(args.tree, args.base, args.derived)
             for rel, text in sorted(out.items()):
                 (args.tree / rel).write_text(text)
             if notes:

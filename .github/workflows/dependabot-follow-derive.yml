@@ -9,7 +9,7 @@ name: Dependabot follow (derive)
 # of src/backend/CLAUDE.md — the bumped build, its plugins, its tests — so the verification metadata is written from
 # what a clean build fetches, and lists what that cold Gradle home downloaded. Both files are uploaded as an artifact;
 # dependabot-follow.yml reads them as data and writes nothing it has not checked. On any other pull request it uploads
-# only the record that there was nothing to derive. The image and Playwright follows need nothing executed and are
+# only the record that there was nothing to derive. The Playwright follow needs nothing executed and is
 # done in dependabot-follow.yml alone.
 #
 # It never reads the pull request's title or body: Dependabot copies upstream release notes into them.

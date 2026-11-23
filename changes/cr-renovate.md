@@ -237,18 +237,27 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
   and `dependabot_follow*.py` are gone.
 
   Progress:
-  - [ ] **5a actions.** Renovate writes (no `RENOVATE_DRY_RUN`); the last rules of renovate.json5 hold every other
+  - [x] **5a actions.** Renovate writes (no `RENOVATE_DRY_RUN`); the last rules of renovate.json5 hold every other
     manager off, and `node`/`java-jdk` too (decision log); `dependabot.yml` loses its `github-actions` entry. No follow
     code served actions. Measured on the branch's tree with the pinned image: a lookup run enables only
     `renovate/actions` (cosign v3.1.4 in publish.yml and release.yml, Renovate 44.258.1), 174 dependencies `disabled`;
-    an extract run as `pins` makes it is still `304 pins in 42 files, every one reached by Renovate`. Open: the first
-    real `renovate/actions` pull request starts `Checks` by itself and goes green.
-  - [ ] **5b docker and compose**, with the chart, the image constants and the Playwright image; the images follow
-    leaves `dependabot_follow.py`.
-  - [ ] **5c npm**, with pnpm; the Playwright follow leaves.
+    an extract run as `pins` makes it is still `304 pins in 42 files, every one reached by Renovate`. On GitHub, after
+    #63: the first dispatch (run 45197394644) was green and opened nothing; its log had the push refused, "refusing to
+    allow a GitHub App to create or update workflow … without `workflows` permission" (the App had not been granted
+    it; the owner set it). The next dispatch (run 45198639207) opened #65, `chore(deps): update actions`: cosign v3.1.4
+    at its four sites and Renovate 44.258.1 with its digest. `Checks`, `Trust chain` and `CodeQL` started on their own,
+    the release-note check passed on the `UPDATERS` exemption, and all 31 checks went green; merged.
+  - [ ] **5b docker and compose**, with the chart's values and the image constants (their regex managers), and the
+    runtimes (`node`, `java-jdk`: the images', setup-node's, setup-java's and the version catalog's). Dependabot keeps
+    only the Emscripten image; the images follow leaves `dependabot_follow.py` (with its `--config`). Held to later
+    steps, each by name: the Playwright image (5c, with `@playwright/test`), Emscripten (5e, `build.py --write`), the
+    fuzzer's Python image (5e, `lock.py`; it had no updater before this CR either). Measured on the branch's tree: a
+    lookup proposes `renovate/images` (eclipse-temurin's digest), and holds exactly those three images; the `pins`
+    extract is still 304 pins, every one reached. Open: the first real `renovate/images` pull request.
+  - [ ] **5c npm**, with pnpm and the Playwright image; the Playwright follow leaves.
   - [ ] **5d gradle**: the gradleWrapper measurement, the metadata follow, then the follow workflows go.
   - [ ] **5e the rest**: Helm, PyYAML, the OpenAPI generator, Schemathesis with `lock.py`, libwebp and Emscripten with
-    `build.py --write`; `webp-encoder-update.yml` goes; security updates move.
+    `build.py --write` and the fuzzer's Python image; `webp-encoder-update.yml` goes; security updates move.
 - [ ] **6 docs.**
   - `infra/README.md` § Cutting a release: no pin bump, and the Helm paragraph goes.
   - `docs/crosscutting/release-and-deployment.md`: the pin paragraph names Renovate, and the *Decided, not built*
@@ -328,6 +337,13 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
 - **2026-11-23, phase 5.** `node-version` and `java-version` are the github-actions manager's, but their majors are one
   group with the images' `node`/`eclipse-temurin` (phase 2), so they stay held until the docker step: enabled alone
   they could open a runtime major the images do not follow.
+
+- **2026-11-23, phase 5.** A Renovate run whose branch push fails is green: Renovate logs the refusal at DEBUG and
+  exits 0 (run 45197394644, the missing `workflows` permission). Nothing showed it but reading the log. Making such a
+  run red is not built yet; it is the owner's call whether it belongs to this CR.
+- **2026-11-23, phase 5.** An image is held back by name, in the last rules, when what moves with it is not written
+  in its step yet, rather than splitting a manager: the manager moves whole, the exceptions are listed with the step
+  that takes them.
 
 ## Definition of done
 
