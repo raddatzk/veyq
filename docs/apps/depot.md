@@ -227,13 +227,20 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
   bitmap enlarged. No canvas holds more than 4096 × 4096 pixels or 8192 px on a side (the ratio is lowered past it), and
   as the tile is the view's size, not the zoom's, a huge SVG at 16× holds no more than the view (measured: the hostile set
   at 1×, 4× and 16× — nothing ran or was fetched, the device ratio kept at every zoom, the cap held at dpr 3 in full screen).
-- **On the apps an SVG is the platform's** (inbox #1059; ADR 0155 § The file facts' slice holds the threat model). The core
-  decides it as an image only where a platform proved it draws one with nothing in it run or fetched
-  (`FileView.svgAsImage`): **Linux** draws it — GTK decodes it through glycin's sandboxed librsvg, which runs no script and
-  resolves no URL but `data:` (`file_page.rs`' hostile-file test, in the Fedora container: no connection, an external file
-  entity not expanded). **Android, iOS/macOS and Windows show it as its text**: Android has no SVG decoder of its own, Apple
-  no public one for arbitrary data, and Windows' candidates (WinUI's `SvgImageSource`, WebView2 in image mode) have no
-  hostile-file test yet. Each is a follow-up: a renderer and its proof.
+- **On the apps an SVG is drawn as on the web** (inbox #1059; ADR 0155 § The file facts' slice D9, D15). The core decides
+  it as an image only where the platform's start says it draws one with nothing in it run or fetched
+  (`FileView.svgAsImage`; every app now), and refuses one holding a `foreignObject` before any renderer sees it
+  (`SvgView.refused`: by its markup, character references undone, anything unreadable refused — the apps' form of the
+  web's taint gate), said as not shown here with the download. **Android, iOS/macOS and Windows** show it in their
+  system web view's image mode — the core's page (`SvgView.document`) holds the SVG only as its `<img>` under a policy that
+  loads nothing else; the page's script is off, the page and the picture are served from memory under a host or scheme
+  that resolves nowhere, every other request and every navigation refused (Android's `WebView`, Apple's `WKWebView`,
+  WebView2 on the PDF viewer's hardened browser). The zoom (the web's nine steps, ×1–×16, and the platform's pinch) lays the
+  picture out again, so the engine paints its vectors anew and only the tiles in view. **Linux** keeps glycin's
+  sandboxed librsvg and draws it again at each step's size × the screen's scale, within 4096 × 4096 pixels
+  (`File.SvgRaster`: a large picture far zoomed is coarser there, as no region is rendered). The proofs: Linux's
+  hostile-file test (`file_page.rs`) and WebKit's measured on macOS; Windows' `SvgWebTest`, Linux's zoom test, Android's on
+  a device and a committed Apple one are owed (inbox #1110).
 - **Memory.** Per-kind caps above; a file of another kind is read no further than its first chunk. Images and text are
   collected chunk by chunk (four frames in flight) into one `Blob`/string.
 - **A PDF is drawn inline by pdf.js, not by the browser's viewer** (owner decision 2026-10-12). The browser's own viewer
