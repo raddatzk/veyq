@@ -116,7 +116,7 @@ describe('CopyNodesDialog: the summary, before anything is written', () => {
     }))
     await mountDialog([byId('reisen')])
     expect(text('copy-summary')).toBe(t('node.copy.summary', { nodes: 3, size: '2 kB', target: 'Familie' }, 3))
-    expect(listed('copy-left-out')).toEqual([t('node.copy.leftOutLine', { name: 'Lissabon', reason: t('words.left_out_not_copyable') })])
+    expect(listed('copy-left-out')).toEqual([t('words.left_out_line', ['Lissabon', t('words.left_out_not_copyable')])])
     expect(listed('copy-losses')).toEqual([t('node.copy.lossAlways'), t('node.copy.lossFolderCover'), t('depot.dropBox.copyLoss')])
     expect(listed('copy-losses')).not.toContain(t('memory.copyLoss'))
   })
@@ -162,7 +162,7 @@ describe('CopyNodesDialog: the copy', () => {
     await goTo('Archiv')
     await click(submit())
     expect(p.run).toHaveBeenCalledWith(expect.objectContaining({ scopeId: 'scope-1', epochs, parent: { id: 'archiv', key: expect.any(Uint8Array), epoch: 2, scopeEpoch: 0 } }))
-    expect(toast.success).toHaveBeenCalledWith(t('node.copy.copied', { name: 'Reisen', to: 'Archiv' }))
+    expect(toast.success).toHaveBeenCalledWith(t('words.copy_done', ['Reisen', 'Archiv']))
     expect(w.emitted('copied')).toEqual([[{ nodeIds: ['new1'], to: 'archiv' }]])
     expect(w.emitted('close')).toBeTruthy()
   })
@@ -177,7 +177,7 @@ describe('CopyNodesDialog: the copy', () => {
     await mountDialog([byId('reisen')])
     await click(submit())
     expect(p.run).toHaveBeenCalledWith(expect.objectContaining({ parent: null }))
-    expect(toast.success).toHaveBeenCalledWith(t('node.copy.copied', { name: 'Reisen (2)', to: 'Familie' }))
+    expect(toast.success).toHaveBeenCalledWith(t('words.copy_done', ['Reisen (2)', 'Familie']))
   })
 
   it('a stop part-way says N of M and that what was created is in the trash; the dialog stays', async () => {

@@ -125,7 +125,7 @@ describe('the drop box share dialog', () => {
     expect(rows[0].text()).toContain('https://x/s/1#k=a')
     expect(rows[0].find('.dropbox-link-off').text()).toBe(t('depot.dropBox.shareOff'))
     expect(rows[0].find(`button[aria-label="${t('depot.dropBox.shareRevoke')}"]`).exists()).toBe(false)
-    expect(rows[1].text()).toContain(t('depot.dropBox.shareReissueHint'))
+    expect(rows[1].text()).toContain(t('words.share_reissue_hint'))
     expect(rows[1].find(`button[aria-label="${t('depot.dropBox.shareReactivate')}"]`).exists()).toBe(false)
     await rows[0].find(`button[aria-label="${t('depot.dropBox.shareReactivate')}"]`).trigger('click')
     await flushPromises()

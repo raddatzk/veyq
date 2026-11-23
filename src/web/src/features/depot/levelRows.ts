@@ -398,7 +398,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
       await source.download(key, node.id, blob, node.name)
     } catch (e) {
       if (e instanceof SaveTooLarge) toast.error(t('depot.downloadTooLarge'))
-      else if (!isSaveCancelled(e)) toast.error(t('depot.downloadFailed'))
+      else if (!isSaveCancelled(e)) toast.error(t('words.download_failed', [node.name]))
     } finally {
       downloading.value = null
     }

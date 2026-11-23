@@ -49,10 +49,31 @@ describe('ExportSubtreeDialog: Download as a ZIP', () => {
     expect(vi.mocked(prepareExport).mock.calls[0][0]).toMatchObject({ rootId: 'n1', access, tree })
     expect(vi.mocked(prepareExport).mock.calls[0][0]).not.toHaveProperty('options')
     expect(body().querySelector('[data-testid="export-summary"]')?.textContent).toContain('4')
-    expect(body().querySelector('[data-testid="export-skipped"]')?.textContent).toContain('Box')
+    expect(body().querySelector('[data-testid="export-skipped"]')?.textContent).toContain('Box (not supported)')
     // no warning, no location choice (ADR 0082 decision 4)
     expect(body().querySelector('input[type="checkbox"]')).toBeNull()
     expect(body().querySelector('[role="alert"]')).toBeNull()
+  })
+
+  // inbox #1173: each count in its own plural form, so one item never reads as many, and no raw `|` form separator
+  it.each([
+    ['en', 1, 1, '1 item, 1 file, '],
+    ['en', 4, 3, '4 items, 3 files, '],
+    ['de', 1, 1, '1 Eintrag, 1 Datei, '],
+    ['de', 4, 3, '4 Einträge, 3 Dateien, '],
+  ] as const)('the summary counts in %s: %i item(s), %i file(s)', async (lang, nodes, payloads, start) => {
+    vi.mocked(prepareExport).mockResolvedValue(prepared({ nodes, payloads }))
+    const plugin = realI18n()
+    plugin.global.locale.value = lang
+    try {
+      mount(ExportSubtreeDialog, { props: { node, access: memberAccessOf({ epochs: epochsOf(new Uint8Array(32)) }), tree, displayName: 'Trip' }, global: { plugins: [plugin] }, attachTo: document.body })
+      await flushPromises()
+      const text = body().querySelector('[data-testid="export-summary"]')?.textContent ?? ''
+      expect(text.startsWith(start)).toBe(true)
+      expect(text).not.toContain('|')
+    } finally {
+      plugin.global.locale.value = 'en'
+    }
   })
 
   it('"Save as ZIP…" opens the save target FIRST with the safe name and the archive\'s own length, then writes into it and closes', async () => {

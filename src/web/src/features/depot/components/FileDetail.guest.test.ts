@@ -274,7 +274,7 @@ describe('the guest of a single-file link sees the member\'s file view', () => {
     vi.mocked(downloadFile).mockRejectedValueOnce(new Error('boom'))
     await downloadButton(w).trigger('click')
     await flushPromises()
-    expect(toastError.mock.calls).toEqual([[t('depot.downloadFailed')]])
+    expect(toastError.mock.calls).toEqual([['“Report.pdf” could not be downloaded. Please try again.']])
   })
 
   // Owner decision 2026-10-14: the replace stays on the opened file (the one way a single-file READ_WRITE link writes), as a

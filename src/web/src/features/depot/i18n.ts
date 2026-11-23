@@ -112,7 +112,6 @@ const en = {
     },
     // Core's trash, on a trashed file that holds no content (inbox #391): what a restore brings back.
     trashEmpty: 'No content — its upload did not finish. Restoring brings back an empty file you can upload into.',
-    downloadFailed: 'The file could not be downloaded. Please try again.',
     downloadTooLarge: 'This file is too large to download in this browser.',
     dismiss: 'Dismiss',
     // A picked file whose name a sibling of another kind holds (inbox #400): not sent; `{reason}` is core's
@@ -167,7 +166,6 @@ const en = {
       // Switching off asks first and can be undone (inbox #394), as on a folder's links.
       shareRevokeConfirm: 'Switch this link off? Nobody can send files with it until you switch it back on. What guests already sent stays in the drop box.',
       shareReactivate: 'Switch on again',
-      shareReissueHint: 'This link cannot be switched back on: someone who has left this space may still hold it. Create a new link instead.',
       shareOff: 'Off',
       close: 'Close',
       guestTitle: 'Send files',
@@ -283,7 +281,6 @@ const de: typeof en = {
       reissueWarning: 'Dadurch entsteht ein neuer Link, und der alte wird gelöscht. Gib den neuen Link weiter.',
     },
     trashEmpty: 'Ohne Inhalt — das Hochladen wurde nicht abgeschlossen. Wiederherstellen bringt eine leere Datei zurück, in die du hochladen kannst.',
-    downloadFailed: 'Die Datei konnte nicht heruntergeladen werden. Bitte versuche es erneut.',
     downloadTooLarge: 'Diese Datei ist zu groß, um sie in diesem Browser herunterzuladen.',
     dismiss: 'Ausblenden',
     nameTakenBy: '„{name}“ wurde nicht hochgeladen. {reason}',
@@ -326,7 +323,6 @@ const de: typeof en = {
       shareDeleteConfirm: 'Diesen Link endgültig löschen? Niemand kann damit noch Dateien einwerfen. Was Gäste schon eingeworfen haben, bleibt im Briefkasten.',
       shareRevokeConfirm: 'Diesen Link ausschalten? Niemand kann damit Dateien einwerfen, bis du ihn wieder einschaltest. Was Gäste schon eingeworfen haben, bleibt im Briefkasten.',
       shareReactivate: 'Wieder einschalten',
-      shareReissueHint: 'Dieser Link lässt sich nicht wieder einschalten: Jemand, der diesen Bereich verlassen hat, könnte ihn noch haben. Erstelle stattdessen einen neuen Link.',
       shareOff: 'Aus',
       close: 'Schließen',
       guestTitle: 'Dateien senden',

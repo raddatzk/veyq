@@ -503,6 +503,50 @@ Decision log (question, choice and why, evidence, cost):
   offer (`import_imported` ~ `export.imported`, `left_out_line` ~ `node.copy.leftOutLine`, `left_out_unsupported` ~
   `node.copy.reason.unsupported_kind`) stay the web's: moving the first changes what a user reads (the owner's copy
   call), the second are inbox #1171's to pair first.
+- *A summary's counts (inbox #1173, 2026-11-23):* a download's and an import's summary took their counts in one form
+  ("1 items", "1 Einträge"). The import's summary is a plural on both sides (`import_summary` `one`/`other` ~
+  `export.importSummary` `one | other`, still twins); the apps needed no call-site change, since the core's
+  `Notice(Msg.IMPORT_SUMMARY, nodes, …)` already passes the count first, which every platform's generated words choose
+  the form by. The web passes `plan.nodes` as the plural count. A download's summary (web only — the apps' download has
+  none) is built from two counted parts, `export.itemCount` and `export.fileCount` (`summary: '{items}, {files},
+  {size}'`) rather than one plural of two counts, which vue-i18n's one choice per message cannot express. Pairing:
+  `export.fileCount` twins `dropbox_guest_files` (Datei/Dateien, the same count); `export.itemCount` is `apart` from
+  `memory_items`, since a download counts entries (Eintrag) and a Memory its items (Objekt). User-visible: only the
+  singular forms are new (en "1 item, 2 kB, will be added to …", de "1 Eintrag, 2 kB, wird zu … hinzugefügt"; "1 item,
+  1 file, …", "1 Eintrag, 1 Datei, …"); the plural forms read as before. Note: vue-i18n also takes a named `n` or
+  `count` as the plural choice implicitly, so the tests bite on the catalog's forms, not only on the call's count.
+- *The short notice words (inbox #1171, 2026-11-23):* the three the pairing could not offer (two words or fewer) are
+  decided. Twins, so the web reads them from `words` and its copies are deleted: `import_imported` (was
+  `export.imported`), `left_out_line` (was `node.copy.leftOutLine`) and `left_out_unsupported` (was
+  `export.reason.unsupported_kind` and `node.copy.reason.unsupported_kind` / `unknown_application` / `newer_content`, which
+  all said "not supported"); the copy and download dialogs' reason tables point there. Each was equal in both languages
+  before the move, so no text a user reads changed. Apart: `left_out_line` from `node.deleteMany.reason` and
+  `node.move.many.reason` — the same "“name”: reason" shape, but a selection's node that was not deleted or moved,
+  which the apps say with their own `select_reason` (raised by `SelectionTrash` and `MoveSheet`, not a notices table, so
+  it cannot be read); those two now twin `select_reason`, held equal. `words.json`'s notes on `import_imported` and
+  `import_imported_left_out` no longer name deleted web keys. Eager set (`vite build`, the entry and its modulepreloads,
+  gzip -9): 659,430 B before, 659,361 B after, **−69 B gz** (three words added to `read`, six web keys deleted in
+  both languages).
+- *The notice words worded apart (inbox #1172; the owner's copy decision 2026-11-23, "as proposed"):* one wording per
+  pair, then the web reads it from `words`. The apps take the web's wording for `copy_done` (en “{1}” copied to “{2}”.,
+  de „{1}“ nach „{2}“ kopiert.; was “{1}” is copied to “{2}”. / „{1}“ ist nach „{2}“ kopiert.), `create_pot_failed`
+  (The Pot could not be created. Please try again. / Die Kasse konnte nicht angelegt werden. Bitte versuche es erneut.;
+  was The Pot was not created. … / Die Kasse wurde nicht erstellt. …) and `share_reissue_hint`'s ending (… Create a new
+  link instead. / … Erstelle stattdessen einen neuen Link.; was Renew it instead. / Erneuere ihn stattdessen.). The web
+  takes the apps' `download_failed`, which names the file (“{1}” could not be downloaded. Please try again. / „{1}“
+  konnte nicht heruntergeladen werden. Bitte versuche es noch einmal.; was The file could not be downloaded. Please try
+  again. / Die Datei konnte nicht heruntergeladen werden. Bitte versuche es erneut.) — Depot's row and file view pass the
+  node's name. These four join `read`; the web's `node.copy.copied`, `expenses.create.failed`,
+  `depot.dropBox.shareReissueHint` and `depot.downloadFailed` are deleted. `create_pot_people_failed` ~
+  `expenses.create.peopleFailed` is `apart` by decision (the apps add a Pot's people in its settings, the web on its
+  page). **Not moved, for the owner:** `upload_name_taken` ~ `memory.slugTaken`. The web says `memory.slugTaken` only
+  where a Memory is created or renamed (`MemoryNodeDialog.vue`), and there the apps say `memory_slug_taken` (raised by
+  `MemoryCreate`), which already twins it word for word ("A folder or Memory with a similar name already exists here.");
+  the apps' `upload_name_taken` is an upload's refusal, which the web words inside `depot.upload…slug_taken` ("“{name}”
+  was not uploaded: a folder, Memory or file …"). Moving the Memory dialog to `upload_name_taken` would change what it
+  says and break its true twin, so it stays; the question left (inbox #1180) is whether a Memory's name conflict should also name
+  files (then `memory_slug_taken` and `memory.slugTaken` change together). Eager set (measured as above): 659,361 B
+  before, 659,380 B after, **+19 B gz**.
 
 ## Alternatives considered
 
