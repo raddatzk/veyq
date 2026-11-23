@@ -14,7 +14,9 @@
   `@veyq/core-js/navigation`, § The rights and plans' slice — 1.90×); its fourth (2026-11-22: a content sniff, a download name
   and an archive name, `@veyq/core-js/files`, § The file facts' slice — 1.93×; inbox #1059 decided per app); its fifth (2026-11-23: an image's size, a
   video's size and capture time and a photo's tags, `@veyq/core-js/media`, § The media headers' slice — 2.73×; the ExifReader
-  library gone). Decision 7.3 and 8 are not built: Expenses' move is parked, half built on
+  library gone); its sixth (2026-11-23: the export archive's ZIP, its length and the manifest's check, `@veyq/core-js/export`,
+  § The export archive's slice — 1.90×); its seventh and last (2026-11-23: the music order and fades, `@veyq/core-js/audio`,
+  § The music order and fades' slice — 1.56×), so decision 7.2's list is built. Decision 7.3 and 8 are not built: Expenses' move is parked, half built on
   branch `claude/p2-impl`; the owner (2026-11-22) counts the platform code its façade needs against the platform module's
   running budget and retired the search-alone budget (§ Consequences)
 - Date: 2026-11-20
@@ -154,7 +156,8 @@ Measured before the decision (2026-11-20):
       6. **the export archive** — the ZIP, its CRC and manifest (5,726 B gz): lazy, streamed, and a wrong byte loses data —
          **built**, § The export archive's slice (5,608 B gz deleted; measured eager, not lazy; the digest worker keeps its
          CRC-32);
-      7. **the music order and fades** (859 B gz).
+      7. **the music order and fades** (859 B gz) — **built**, § The music order and fades' slice (864 B gz deleted; measured
+         eager, its rules in `main`; the last of this list, which is built).
 
       Not slices: the **formats** move with the slice or application that owns each (money with Expenses) — alone they
       miss R by a measured factor (ADR 0154 § Consequences: 7.1×); **notices** wait until the web and the apps read one
@@ -165,7 +168,8 @@ Measured before the decision (2026-11-20):
       its TypeScript eager already, so the question did not arise: § The file facts' slice, D2; slice 5 turned ~10 KB gz eager
       and took a 45 KB gz lazy library out: § The media headers' slice, D2; slice 6 measured its TypeScript eager already, and
       a module of its own would not have spared the one lazy user, a worker, the standard library's floor: § The export
-      archive's slice, D2) — and the
+      archive's slice, D2; slice 7 measured its TypeScript eager already, and a module of its own would have paid that floor
+      for 864 B gz of rules: § The music order and fades' slice, D2) — and the
       package's size check becomes one running bound on that file: the split's measured search alone plus R × each moved
       slice's deleted TypeScript (a slice the owner granted another ratio carries it, named with the owner's date, on its row
       of `src/packages/core-js/src/slice.test.ts`; R stays the rule). Platform code an application's façade needs (Expenses'
@@ -922,6 +926,87 @@ Measured before the decision (2026-11-20):
     `scratchpad/ea/eager.py` over `vite build`'s `dist` at `7a75535d2` and after; the time rows by `scratchpad/ea/bench/bench.mjs`
     (the deleted files from git against the web's adapters over the shipped module, both bundled by esbuild; the archives
     and every answer compared first); delivery by `scratchpad/ea/repro.py`.
+
+- **The music order and fades' slice** (decision 7.2's seventh and last, built 2026-11-23, branch `claude/music-fades-slice`).
+  The order a music queue plays in (`audio/PlayOrder`: shuffled and endless, a round never starting with the track that
+  ended the one before, previous restarting after 3 s, a dropped track leaving every round, the platform's unbiased draw
+  `randomIntOf`) and where and how long a crossfade runs (`audio/Fades`: 5 s, 1 s on a press, a third of a short track, what
+  is left after a seek) were the core's already, ports of the web's (ADR 0142 decision 1); they are now every client's one
+  rule, the web drawing them through `@veyq/core-js/audio` (`jsMain/…/audio/web/`) from its player, and `order.ts` and
+  `fades.ts` are gone with their tests. `contracts/platform/audio/v1-vectors.json` holds every side — 10 draws from scripted
+  words, 21 queues under scripted randomness (790 draws, each with the `n` it must be asked with; 1,012 steps of `current`,
+  `next`, `peek`, `previous`, `drop`, `size`) and 14 spans' fades — (`MusicVectorsTest`, the writer; the package's
+  `audio.test.ts`; the web's `music.vectors.test.ts`). Its gate (each number against `31947d000`):
+
+  | Criterion | Measured | Bound |
+  |---|---|---|
+  | size: the platform module, every entry | 65,831 → 67,178 B gz; own code 1,347 = 1.56× the 864 B gz deleted | 77,502 + 3.0 × 864 = 80,094 |
+  | size: the eager set | +557 B gz (657,486 → 658,043: the Kotlin in the `review` chunk +1,212, `main` −576 for the order and the fades it no longer carries) | 2,592 at R |
+  | size: any lazy chunk | +24 B gz at most (`MemoryDetailHost`) | ≤ 1,024 |
+  | time (Node 22, the player's calls, median of 15 after 3 warm-ups, three runs) | a queue of 1,000 tracks started and played through three rounds, peeking before each step, 0.82–0.89× (≤ 0.29 ms); of 10,000 tracks 0.75–0.77× (≤ 2.8 ms; 4.2× before the optimisation round, D6); 1,000 tracks dropped one by one 1.26–1.31× (≤ 10.5 ms); the four fades over 10,000 spans 1.02–1.05× (≤ 0.21 ms); every answer identical | ≤ 2.5× and ≤ 100 ms |
+  | delivery | three `--no-daemon --rerun-tasks :composition:jsPackage` builds from a removed `dist/`, one digest (`c4bc8abe…`); `verify:csp`, `verify:license-sources` green (51 packages, each with its source) | identical |
+  | tests | the deleted `order.test.ts` and `fades.test.ts` each assertion a vector case (Fisher–Yates over always-0 and always-(n−1) draws, a round's permutation and its edge over 60 seeded rounds of 2–5 tracks, a start track, a single track, previous at 2 s and 4 s, peek, drop and the empty queue; the song, the short and the tiny track and the seek), the 1,000-round edge also over the platform's own randomness in the web's test, the core's `OrderTest` and `FadesTest` kept (the latter now the apps' `Long` clock); bitten — a third read as a quarter, a round's swap partner drawn without its `1 +` (D7) | — |
+  | behaviour | the web's tests pass with the player's and the bar's unchanged (591 files, 7,961 tests); a browser pass of a Memory's music (a queue started, next and previous, a crossfade, a seek into the fade) and the apps' music passes are owed (inbox #1160) | identical |
+
+  The slice's decision log, kept by its implementer (question, options, choice and why, evidence, cost):
+  - **D1 — The slice's set: the two rule files whole; the player stays.** *Q:* what TypeScript leaves? *Choice:* `order.ts`
+    (`PlayOrder`, `nextRound`, `shuffled`, `cryptoRandomInt`, the 3 s constant) and `fades.ts` (the four fades, the two
+    constants), with no adapter left behind: the player asks the façade for each step and fade. `player.ts` stays — its
+    decks, timers and gain ramps are what a browser does, and the core's twin of it (`audio/MusicPlayer`) is a model with
+    flows, decision 8's gate (inbox #1161). *Evidence:* measured, `node scratchpad/mf/measure-ts.mjs <worktree>
+    scratchpad/mf/old` (each set's exports bundled alone with esbuild, every other import external, minified, gzip -9; the
+    old files from `31947d000`): `order.ts` 1,572 B min / 711 B gz, `fades.ts` 342 / 228, **together 1,905 B min / 864 B gz**
+    (ADR 0155's row said 859).
+  - **D2 — Lazy or eager, and a module of its own — or left where it is?** *Q:* the standing question, sharpest for the
+    smallest slice. *Evidence:* measured on the production build at `31947d000` (`vite build` under Node 22,
+    `scratchpad/mf/eager.py`; the player located by its MediaSession action names in the minified chunks): the player, the
+    order and the fades sat in `main` — eager, the bar is the shell's. A module of its own would pay the standard library's
+    floor for 864 B gz of rules (17,551 B gz for one export of its file alone, remembered from § The export archive's slice
+    D2). Left in TypeScript, the eager set would have stayed 557 B gz smaller (measured: +557 after). *Choice:* the platform
+    module, inside R: two implementations of this rule had already answered apart (D4), which is what decision 1 removes,
+    and the cost is the smallest any slice measured. *Cost:* 557 B gz eager.
+  - **D3 — The entry is `@veyq/core-js/audio`.** `jsMain/…/audio/web/`, the core area's name, read by the web's direction
+    guard as core's; its code the module file, its types `dist/audio.d.mts`. The order is state kept across calls, so it
+    crosses as an opaque handle (`PlayOrderHandle`), read by `playOrderCurrent`, `…Next`, `…Peek`, `…Previous` (a
+    `{ restart, id }`), `…Drop`, `…Size`; the randomness stays the caller's `(n) => number` — the player's `env.random`, by
+    default the façade's `cryptoRandomInt` (`randomIntOf` over noble's `randomBytes`, built per call so the module keeps no
+    top-level initializer). A span is the web's own `{ startMs, endMs }` (`SpanShape`), an unknown end `Infinity`.
+  - **D4 — Where the core and the web answered apart, the web's answer won** (ADR 0154's rule; each a vector case): the
+    fades run on `Double`s — a third of a span is not rounded (a 7,000 ms track fades over 2,333.33 ms, the core said 2,333),
+    a file's duration in seconds times 1000 is fractional, an unknown end is infinite (the core said `Long.MAX_VALUE − 5000`
+    for where it fades out); `previous` reads a fractional position (3,000.5 ms is more than 3 s: the core's `Long`
+    truncated it to 3,000 and went back); the draw reads a word's four bytes little-endian, as the web's `Uint32Array` does
+    (the core read them big-endian: equally uniform, but not one rule). The apps' player keeps its `Long` clock through
+    `Span`, whose four functions answer the `Double` rule truncated toward zero, an infinite answer `Span.UNKNOWN_END`
+    (`FadesTest`). *Evidence:* `:core:jvmTest --tests '*MusicVectorsTest*'` green and the file rewritten by the core byte for
+    byte (`VEYQ_WRITE_VECTORS=1`). *Cost:* an app's fade-out point of a short track can move by a millisecond; its draws
+    read another word from the same bytes.
+  - **D5 — The randomness is part of the contract.** *Q:* the order is random; what can a vector hold? *Choice:* a case
+    scripts every draw as `[n, value]`, and a client fails the case where it asks another `n`, makes a draw the case does
+    not list or leaves one unmade — so Fisher–Yates' call order (from the end, `random(i + 1)`) and the edge swap's
+    `1 + random(n − 1)` are held, not only the outcome's properties; the draw itself is held by scripted words through
+    `crypto.getRandomValues` (the package's and the web's tests spy on it). The draw's domain is a queue's length: `n` up to
+    2^31 − 1 (a Kotlin `Int`), where the web's took any number up to 2^32.
+  - **D6 — The optimisation round: a round read forward.** *Evidence:* the first build took each track with
+    `removeAt(0)`, which on JavaScript moves the whole round every step — 10,000 tracks through three rounds 4.21–4.26× the
+    web's `shift()` (14.4 against 3.4 ms; inside 100 ms, outside 2.5×). *Choice:* the round is read from a head index and
+    rebuilt only by a drop, by a loop: `subList` pulled 364 B gz of the standard library's list views (measured, the slice
+    check). After: 0.75–0.77×. No `Long` and no `Regex` on the path (the draw on `Double`s, exact below 2^53).
+  - **D7 — A wrong rule is caught everywhere, bitten:** a short track's fade a quarter instead of a third (`Fades.kt`
+    `length / 4`) turned the core's `MusicVectorsTest` `fades` red (7 cases), the package's `audio.test.ts` (7 of 46) and the
+    web's `music.vectors.test.ts` (7 of 46); a round's swap partner drawn without its `1 +` (a round may start with the
+    track that ended the last) the core's `order` red (10 cases), the package's (10 of 46) and the web's (11 of 46: the
+    1,000-round test over the platform's own randomness too). Each restored with `/bin/cp -f` from a copy, the tree clean after.
+  - **D8 — The gate** (Node 22.23.4, macOS arm64, Kotlin 2.4.21; the machine at a load of ~5–6 from other applications, no
+    other agent): the size rows by the package's `slice.test.ts` (`pnpm run check` in `src/packages/core-js`) and
+    `scratchpad/mf/eager.py` over `vite build`'s `dist` at `31947d000` and after; the time rows by
+    `scratchpad/mf/bench/bench.mjs` (the deleted files from `31947d000` against the shipped module, both bundled by esbuild,
+    the same seeded randomness on both sides; every answer compared first); delivery by `scratchpad/mf/repro.py`.
+  - **Decision 7.2's list is built.** Seven slices moved the platform's rules the web and the apps both answered — the node
+    tree, the share links, the rights and plans, the file facts, the media headers, the export archive, the music order and
+    fades —, the platform module from the search's 27,943 to 67,178 B gz against a running budget of 80,094. What the list names as no slice
+    (the formats, the notices, the slug folding, the URL fragment rules) stays as it says; next is decision 7.3, Expenses
+    first, whose move is parked below.
 
 - **Expenses' move is parked, not merged** ([cr-web-expenses-on-the-core](../../changes/cr-web-expenses-on-the-core.md)),
   on branch `claude/p2-impl`: the vectors (`c76d3212f`), the JSON seam and Expenses' pure homes (`c5793db14`), the
