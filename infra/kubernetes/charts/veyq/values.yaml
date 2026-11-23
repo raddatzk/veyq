@@ -338,7 +338,7 @@ secrets:
 mariadb:
   # false = an operator-managed database (ADR 0064's escape hatch); then set externalDatabase below.
   enabled: true
-  image: mariadb:12.3@sha256:d46e102fa8b9b72bfcdeb56f9dd538742092119dc8b11f31fe662605cd234cd9
+  image: mariadb:12.3@sha256:4aaf88b3106382c8c18e49f0cec60267be618fc22f858c4503afb2a2555afed3
   persistence:
     size: 10Gi
     storageClass: ""
