@@ -17,8 +17,10 @@
 // changes it). *Open a link* (ADR 0150 decision 4): a received link opened as its guest, no sign-in needed (ReceivedView).
 //
 // Which of these entries the form offers and in which order is the core's (SignIn.Plan, ADR 0154 decision 2, owner
-// 2026-11-20: the web's — Sign in first, Cancel while adding an account, the device links, the kit, Open a link last),
-// asked again when adding or the camera changes; every entry is drawn, in its order, under the fields.
+// 2026-11-20: the web's — Sign in first, Cancel while adding an account, *I don't have my Secret Key with me*, the device
+// links, the kit, *Forgot your password?*, Open a link last), asked again when adding or the camera changes; every entry
+// is drawn, in its order, under the fields. The locked sign-in and the password reset are pages of their own
+// (SignInEntriesViews.cs, ADR 0154 P9).
 
 namespace Veyq.Core;
 
@@ -54,6 +56,12 @@ internal sealed class SignInView
     private readonly Button _linkShow;
     /// <summary>*Open a link*: a link someone sent, opened as its guest without signing in (ReceivedView).</summary>
     private readonly Button _openLink;
+    /// <summary>*I don't have my Secret Key with me* (uc.account.sessions E3) and *Forgot your password?* (uc.account.recover-access).</summary>
+    private readonly Button _locked;
+    private readonly Button _forgot;
+    /// <summary>What the way here left to say that is no error, and the locked sign-in's way back keeping nothing.</summary>
+    private readonly TextBlock _notice;
+    private readonly TextBlock _keepsNothing;
     /// <summary>The kit's server replaced a different one the form held: said, never refused.</summary>
     private readonly TextBlock _otherServer;
     /// <summary>The Secret Key's typo, said as it is typed (<see cref="SecretKeyTypo"/>).</summary>
@@ -93,6 +101,15 @@ internal sealed class SignInView
         var openLink = Field(new Button { Content = Words.LinkOpen(), HorizontalAlignment = HorizontalAlignment.Stretch }, "open-link");
         openLink.Click += (_, _) => ReceivedView.OpenLink(_window);
         _openLink = openLink;
+        // the locked sign-in: the login alone, with the email and the password typed (the core refuses blanks)
+        _locked = Field(new Button { Content = Words.SigninLocked(), HorizontalAlignment = HorizontalAlignment.Stretch }, "signin-locked");
+        _locked.Click += (_, _) => Act.Send(new Call.SessionSignInLocked { server = _server.Text.Trim(), email = _email.Text.Trim(), password = _password.Password });
+        _forgot = Field(new Button { Content = Words.SigninForgot(), HorizontalAlignment = HorizontalAlignment.Stretch }, "signin-forgot");
+        _forgot.Click += (_, _) => Act.Send(new Call.SessionForgotPassword { server = _server.Text.Trim(), email = _email.Text.Trim() });
+        _notice = Field(new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed }, "signin-notice");
+        _notice.Foreground = (Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
+        _keepsNothing = Field(new TextBlock { Text = Words.LockedBackHint(), TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed }, "signin-keeps-nothing");
+        _keepsNothing.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
         _otherServer = Field(new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed }, "signin-kit-other-server");
         _otherServer.Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
         _typo = SecretKeyTypo.Watch(_secretKey, "signin-secret-key-typo");
@@ -125,7 +142,7 @@ internal sealed class SignInView
         AutomationProperties.SetAutomationId(_heading, "signin-title");
         AutomationProperties.SetHeadingLevel(_heading, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level1);
         var column = new StackPanel { Spacing = 16, MaxWidth = 420, Padding = new Thickness(24), VerticalAlignment = VerticalAlignment.Center };
-        foreach (var child in new UIElement[] { _heading, _server, _email, _password, _secretKey, _typo, _kitHeld, _otherServer, _error, _entries, _working }) column.Children.Add(child);
+        foreach (var child in new UIElement[] { _heading, _server, _email, _password, _secretKey, _typo, _kitHeld, _otherServer, _keepsNothing, _error, _notice, _entries, _working }) column.Children.Add(child);
         // a width-capped column straight in a ScrollViewer sat off centre once the window was resized (measured): the
         // ScrollViewer's child stretches, the column centres in it
         var stretch = new Grid();
@@ -172,6 +189,8 @@ internal sealed class SignInView
         SignInEntry.LinkScan => _linkScan,
         SignInEntry.KitOpen => _openKit,
         SignInEntry.KitScan => _scanKit,
+        SignInEntry.Locked => _locked,
+        SignInEntry.Forgot => _forgot,
         SignInEntry.OpenLink => _openLink,
     };
 
@@ -323,6 +342,18 @@ internal sealed class SignInView
         _openKit.IsEnabled = !gate.working;
         _linkScan.IsEnabled = !gate.working;
         _linkShow.IsEnabled = !gate.working;
+        _locked.IsEnabled = !gate.working;
+        _forgot.IsEnabled = !gate.working;
+        _keepsNothing.Visibility = gate.keepsNothing ? Visibility.Visible : Visibility.Collapsed;
+        if (gate.notice is { } notice)
+        {
+            _notice.Text = Said.Key(notice);
+            _notice.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            _notice.Visibility = Visibility.Collapsed;
+        }
         _heading.Text = gate.adding ? Words.SigninAddTitle() : Words.SigninTitle();
         _adding = gate.adding;
         Plan();

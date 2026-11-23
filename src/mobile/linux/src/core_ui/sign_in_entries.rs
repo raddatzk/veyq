@@ -2,7 +2,7 @@
 //! as the sign-in is: the locked sign-in ([Locked], `Gate.Locked`, uc.account.sessions E3) — signed in without unlocking,
 //! one action, every device signed out, asked first in an `AdwAlertDialog`, and the way back — and *Reset your password*
 //! ([Recover], `Gate.Recover`, uc.account.recover-access steps 1–2) — the link asked for; the mailed link opens the web's
-//! page, which finishes the reset. The entries under each are the core's (`Locked.Plan`, `Recover.Plan`), drawn whole and
+//! page, which finishes the reset. The entries under each are the core's (`SignIn.LockedPlan`, `SignIn.RecoverPlan`), drawn whole and
 //! in their order. The core decides what each press means and answers with the next gate.
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -90,14 +90,14 @@ impl Locked {
         ask.present(self.page.root().as_ref());
     }
 
-    /// The core's entries (`Locked.Plan`), asked once: the plan has no input.
+    /// The core's entries (`SignIn.LockedPlan`), asked once: the plan has no input.
     fn ask_plan(self: &Rc<Self>) {
         if self.drawn.replace(true) {
             return;
         }
         let w = Rc::downgrade(self);
         glib::spawn_future_local(async move {
-            match bridge::call(&Call::LockedPlan).await.map(|(a, _)| a) {
+            match bridge::call(&Call::SignInLockedPlan).await.map(|(a, _)| a) {
                 Ok(Answer::LockedPlan { entries }) => {
                     let Some(s) = w.upgrade() else { return };
                     for entry in entries {
@@ -110,7 +110,7 @@ impl Locked {
                         }
                     }
                 }
-                other => eprintln!("veyq: Locked.Plan answered {other:?}"),
+                other => eprintln!("veyq: SignIn.LockedPlan answered {other:?}"),
             }
         });
     }
@@ -214,14 +214,14 @@ impl Recover {
         s
     }
 
-    /// The core's entries for [sent] (`Recover.Plan`), drawn once answered.
+    /// The core's entries for [sent] (`SignIn.RecoverPlan`), drawn once answered.
     fn ask_plan(self: &Rc<Self>, sent: bool) {
         if self.asked.replace(Some(sent)) == Some(sent) {
             return;
         }
         let w = Rc::downgrade(self);
         glib::spawn_future_local(async move {
-            match bridge::call(&Call::RecoverPlan { sent }).await.map(|(a, _)| a) {
+            match bridge::call(&Call::SignInRecoverPlan { sent }).await.map(|(a, _)| a) {
                 Ok(Answer::RecoverPlan { entries }) => {
                     let Some(s) = w.upgrade() else { return };
                     while let Some(child) = s.entries.first_child() {
@@ -234,7 +234,7 @@ impl Recover {
                         }
                     }
                 }
-                other => eprintln!("veyq: Recover.Plan answered {other:?}"),
+                other => eprintln!("veyq: SignIn.RecoverPlan answered {other:?}"),
             }
         });
     }

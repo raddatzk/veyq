@@ -525,10 +525,10 @@ internal sealed class Call {
     @Serializable @SerialName("SignIn.Plan") data class SignInPlan(val adding: Boolean, val camera: Boolean) : Call()
 
     /** The locked sign-in's entries (`LockedPlan.entries`): [Answer.LockedPlan]. */
-    @Serializable @SerialName("Locked.Plan") data object LockedPlan : Call()
+    @Serializable @SerialName("SignIn.LockedPlan") data object LockedPlan : Call()
 
     /** *Reset your password*'s entries (`RecoverPlan.entries`), asked again when the gate's [sent] changes: [Answer.RecoverPlan]. */
-    @Serializable @SerialName("Recover.Plan") data class RecoverPlan(val sent: Boolean) : Call()
+    @Serializable @SerialName("SignIn.RecoverPlan") data class RecoverPlan(val sent: Boolean) : Call()
 
     /** The unlock's entries under its account (`UnlockPlan.entries`, ADR 0154 decision 2): [Answer.UnlockPlan]. */
     @Serializable @SerialName("Unlock.Plan") data object UnlockPlan : Call()
