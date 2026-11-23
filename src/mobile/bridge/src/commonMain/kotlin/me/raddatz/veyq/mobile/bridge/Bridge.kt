@@ -976,82 +976,15 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.SearchMore -> searches[call.search]?.model?.more().done(Answer.Why.NO_SUCH_SEARCH)
             is Call.SearchOpenResult -> searches[call.search]?.model?.open(call.index).done(Answer.Why.NO_SUCH_SEARCH)
             is Call.SearchClose -> searches[call.search]?.model?.close().done(Answer.Why.NO_SUCH_SEARCH)
-            is Call.PotOpen -> tenant.value?.models?.pot?.let { make ->
-                val id = ids.incrementAndFetch()
-                val pot = make()
-                pots.put(id, pot)
-                scope.launch { pot.open(call.ref) }
-                Answer.PotOpened(id)
-            } ?: noTenant
-            is Call.PotRefresh -> pots[call.pot]?.refresh().done(Answer.Why.NO_SUCH_POT)
-            is Call.PotRecord -> pots[call.pot]?.let { pot -> Answer.Said(if (pot.record(call.rows)) null else pot.refusal()) } ?: noPot
-            is Call.PotRestore -> pots[call.pot]?.let { pot -> Answer.Said(if (pot.restore(call.entry)) null else pot.refusal()) } ?: noPot
-            is Call.PotHistory -> pots[call.pot]?.let { pot ->
-                val view = pot.current?.view ?: return noPot
-                val rows = view.history(call.entry).takeIf { it.isNotEmpty() } ?: return Answer.Refused(Answer.Why.NO_SUCH_ENTRY)
-                Answer.EntryHistory(
-                    rows.map { HistoryShown(view.historyLine(it), it.writer, it.at) },
-                    view.deletedEntries.any { it.id == call.entry }, pot.restorable(call.entry), view.purgeAfter(call.entry),
-                )
-            } ?: noPot
-            is Call.PotClose -> pots.remove(call.pot)?.close().also {
-                editors.removeIf { it.pot == call.pot }.forEach { it.model.close() }
-                settings.removeIf { it.pot == call.pot }
-            }.done(Answer.Why.NO_SUCH_POT)
-            is Call.PotSettingsOpen -> pots[call.pot]?.settings()?.let { model ->
-                val id = ids.incrementAndFetch()
-                settings.put(id, HeldSettings(call.pot, model))
-                Answer.PotSettingsOpened(id)
-            } ?: noPot
-            is Call.PotSettingsClose -> settings.remove(call.settings)?.model?.clear().done(Answer.Why.NO_SUCH_SETTINGS)
-            is Call.PotSettingsCurrency -> stored(call.settings) { it.setBaseCurrency(call.code) }
-            is Call.PotSettingsAddCategory -> stored(call.settings) { it.addCategory(call.name) }
-            is Call.PotSettingsRenameCategory -> stored(call.settings) { it.renameCategory(call.category, call.name) }
-            is Call.PotSettingsAddPerson -> stored(call.settings) { it.addPerson(call.name) }
-            is Call.PotSettingsAddMember -> stored(call.settings) { it.addMember(call.userId) }
-            is Call.PotSettingsRename -> stored(call.settings) { it.rename(call.person, call.name) }
-            is Call.PotSettingsToggle -> stored(call.settings) { it.toggleActive(call.person) }
-            is Call.PotSettingsAskErase -> settings[call.settings]?.model?.askErase(call.person).done(Answer.Why.NO_SUCH_SETTINGS)
-            is Call.PotSettingsErase -> stored(call.settings) { it.erase() }
-            is Call.PotSettingsCancelAsk -> settings[call.settings]?.model?.cancelAsk().done(Answer.Why.NO_SUCH_SETTINGS)
-            is Call.PotCreateOpen -> tenant.value?.models?.createPot?.let { make ->
-                val sheet = make(call.language) ?: return noTenant
-                val id = ids.incrementAndFetch()
-                creates.put(id, HeldCreate(sheet))
-                Answer.PotCreateOpened(id)
-            } ?: noTenant
-            is Call.PotCreateClose -> creates.remove(call.create)?.sheet?.close().done(Answer.Why.NO_SUCH_CREATE)
-            is Call.PotCreateName -> named(call)
-            is Call.PotCreateSpace -> creates[call.create]?.sheet?.space(call.scopeId).done(Answer.Why.NO_SUCH_CREATE)
-            is Call.PotCreateCurrency -> creates[call.create]?.sheet?.currency(call.code).done(Answer.Why.NO_SUCH_CREATE)
-            is Call.PotCreateAddTyped -> creates[call.create]?.let { Answer.Stored(it.sheet.addTyped(call.name), null) } ?: noCreate
-            is Call.PotCreateAddMember -> creates[call.create]?.sheet?.addMember(call.userId).done(Answer.Why.NO_SUCH_CREATE)
-            is Call.PotCreateRemove -> creates[call.create]?.sheet?.remove(call.index).done(Answer.Why.NO_SUCH_CREATE)
-            is Call.PotCreateCreate -> creates[call.create]?.let { c ->
-                val created = c.sheet.create(c.name.value, call.typed)
-                Answer.Stored(created, c.sheet.current.notice)
-            } ?: noCreate
-            is Call.EditorOpen -> pots[call.pot]?.let { pot ->
-                val separator = call.separator.firstOrNull() ?: '.'
-                val model = pot.editor(call.entry, separator) ?: return Answer.Refused(Answer.Why.NO_SUCH_ENTRY)
-                val id = ids.incrementAndFetch()
-                editors.put(id, HeldEditor(call.pot, model, separator))
-                Answer.EditorOpened(id)
-            } ?: noPot
-            is Call.EditorChange -> edit(call)
-            is Call.EditorSave -> editors[call.editor]?.model?.save()?.let { Answer.EditorSaved(it.done, it.notice) } ?: noEditor
-            is Call.EditorAskDelete -> editors[call.editor]?.model?.askDelete().done(Answer.Why.NO_SUCH_EDITOR)
-            is Call.EditorDelete -> editors[call.editor]?.model?.let { e -> e.delete().let { Answer.EditorSaved(it, if (it) null else e.current.notice) } } ?: noEditor
-            is Call.EditorCancelAsk -> editors[call.editor]?.model?.cancelAsk().done(Answer.Why.NO_SUCH_EDITOR)
-            is Call.EditorClose -> editors.remove(call.editor)?.model?.close().done(Answer.Why.NO_SUCH_EDITOR)
-            is Call.EditorOpenHeld -> pots[call.pot]?.let { pot ->
-                val separator = call.separator.firstOrNull() ?: '.'
-                val model = pot.heldEditor(call.write, separator) ?: return Answer.Refused(Answer.Why.NO_SUCH_ENTRY)
-                val id = ids.incrementAndFetch()
-                editors.put(id, HeldEditor(call.pot, model, separator))
-                Answer.EditorOpened(id)
-            } ?: noPot
-            is Call.EditorDiscardMine -> editors[call.editor]?.model?.let { e -> Answer.EditorSaved(e.discardMine(), null) } ?: noEditor
+            is Call.PotOpen, is Call.PotRefresh, is Call.PotRecord, is Call.PotRestore,
+            is Call.PotHistory, is Call.PotClose, is Call.PotSettingsOpen, is Call.PotSettingsClose,
+            is Call.PotSettingsCurrency, is Call.PotSettingsAddCategory, is Call.PotSettingsRenameCategory, is Call.PotSettingsAddPerson,
+            is Call.PotSettingsAddMember, is Call.PotSettingsRename, is Call.PotSettingsToggle, is Call.PotSettingsAskErase,
+            is Call.PotSettingsErase, is Call.PotSettingsCancelAsk, is Call.PotCreateOpen, is Call.PotCreateClose,
+            is Call.PotCreateName, is Call.PotCreateSpace, is Call.PotCreateCurrency, is Call.PotCreateAddTyped,
+            is Call.PotCreateAddMember, is Call.PotCreateRemove, is Call.PotCreateCreate, is Call.EditorOpen,
+            is Call.EditorChange, is Call.EditorSave, is Call.EditorAskDelete, is Call.EditorDelete,
+            is Call.EditorCancelAsk, is Call.EditorClose, is Call.EditorOpenHeld, is Call.EditorDiscardMine -> expenses(call)
             is Call.QueuedDiscard -> queuedDoor?.let { q -> if (q.discard(call.write)) Answer.Done else noQueued } ?: noTenant
             is Call.QueuedOpen -> queuedDoor?.let { q -> q.opens(call.write)?.let(Answer::QueuedOpens) ?: noQueued } ?: noTenant
             is Call.QueuedCopyName -> queuedDoor?.let { q -> q.copyName(call.write, call.index)?.let { (name, type) -> Answer.QueuedCopyName(name, type) } ?: noQueued } ?: noTenant
@@ -1875,6 +1808,92 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      * names (or the tenant open now), held by id; each other call is one line onto that model. The typed secrets arrive
      * here and go straight into the model, which zeroes what it was handed; nothing of them comes back.
      */
+    /**
+     * A Pot's, its settings', its create sheet's and its entry editors' calls (Expenses): their own method, so `dispatch`
+     * stays under the JVM's 64 KB per method, as [selecting] and [signInEntries] are.
+     */
+    private suspend fun expenses(call: Call): Answer {
+        return when (call) {
+            is Call.PotOpen -> tenant.value?.models?.pot?.let { make ->
+                val id = ids.incrementAndFetch()
+                val pot = make()
+                pots.put(id, pot)
+                scope.launch { pot.open(call.ref) }
+                Answer.PotOpened(id)
+            } ?: noTenant
+            is Call.PotRefresh -> pots[call.pot]?.refresh().done(Answer.Why.NO_SUCH_POT)
+            is Call.PotRecord -> pots[call.pot]?.let { pot -> Answer.Said(if (pot.record(call.rows)) null else pot.refusal()) } ?: noPot
+            is Call.PotRestore -> pots[call.pot]?.let { pot -> Answer.Said(if (pot.restore(call.entry)) null else pot.refusal()) } ?: noPot
+            is Call.PotHistory -> pots[call.pot]?.let { pot ->
+                val view = pot.current?.view ?: return noPot
+                val rows = view.history(call.entry).takeIf { it.isNotEmpty() } ?: return Answer.Refused(Answer.Why.NO_SUCH_ENTRY)
+                Answer.EntryHistory(
+                    rows.map { HistoryShown(view.historyLine(it), it.writer, it.at) },
+                    view.deletedEntries.any { it.id == call.entry }, pot.restorable(call.entry), view.purgeAfter(call.entry),
+                )
+            } ?: noPot
+            is Call.PotClose -> pots.remove(call.pot)?.close().also {
+                editors.removeIf { it.pot == call.pot }.forEach { it.model.close() }
+                settings.removeIf { it.pot == call.pot }
+            }.done(Answer.Why.NO_SUCH_POT)
+            is Call.PotSettingsOpen -> pots[call.pot]?.settings()?.let { model ->
+                val id = ids.incrementAndFetch()
+                settings.put(id, HeldSettings(call.pot, model))
+                Answer.PotSettingsOpened(id)
+            } ?: noPot
+            is Call.PotSettingsClose -> settings.remove(call.settings)?.model?.clear().done(Answer.Why.NO_SUCH_SETTINGS)
+            is Call.PotSettingsCurrency -> stored(call.settings) { it.setBaseCurrency(call.code) }
+            is Call.PotSettingsAddCategory -> stored(call.settings) { it.addCategory(call.name) }
+            is Call.PotSettingsRenameCategory -> stored(call.settings) { it.renameCategory(call.category, call.name) }
+            is Call.PotSettingsAddPerson -> stored(call.settings) { it.addPerson(call.name) }
+            is Call.PotSettingsAddMember -> stored(call.settings) { it.addMember(call.userId) }
+            is Call.PotSettingsRename -> stored(call.settings) { it.rename(call.person, call.name) }
+            is Call.PotSettingsToggle -> stored(call.settings) { it.toggleActive(call.person) }
+            is Call.PotSettingsAskErase -> settings[call.settings]?.model?.askErase(call.person).done(Answer.Why.NO_SUCH_SETTINGS)
+            is Call.PotSettingsErase -> stored(call.settings) { it.erase() }
+            is Call.PotSettingsCancelAsk -> settings[call.settings]?.model?.cancelAsk().done(Answer.Why.NO_SUCH_SETTINGS)
+            is Call.PotCreateOpen -> tenant.value?.models?.createPot?.let { make ->
+                val sheet = make(call.language) ?: return noTenant
+                val id = ids.incrementAndFetch()
+                creates.put(id, HeldCreate(sheet))
+                Answer.PotCreateOpened(id)
+            } ?: noTenant
+            is Call.PotCreateClose -> creates.remove(call.create)?.sheet?.close().done(Answer.Why.NO_SUCH_CREATE)
+            is Call.PotCreateName -> named(call)
+            is Call.PotCreateSpace -> creates[call.create]?.sheet?.space(call.scopeId).done(Answer.Why.NO_SUCH_CREATE)
+            is Call.PotCreateCurrency -> creates[call.create]?.sheet?.currency(call.code).done(Answer.Why.NO_SUCH_CREATE)
+            is Call.PotCreateAddTyped -> creates[call.create]?.let { Answer.Stored(it.sheet.addTyped(call.name), null) } ?: noCreate
+            is Call.PotCreateAddMember -> creates[call.create]?.sheet?.addMember(call.userId).done(Answer.Why.NO_SUCH_CREATE)
+            is Call.PotCreateRemove -> creates[call.create]?.sheet?.remove(call.index).done(Answer.Why.NO_SUCH_CREATE)
+            is Call.PotCreateCreate -> creates[call.create]?.let { c ->
+                val created = c.sheet.create(c.name.value, call.typed)
+                Answer.Stored(created, c.sheet.current.notice)
+            } ?: noCreate
+            is Call.EditorOpen -> pots[call.pot]?.let { pot ->
+                val separator = call.separator.firstOrNull() ?: '.'
+                val model = pot.editor(call.entry, separator) ?: return Answer.Refused(Answer.Why.NO_SUCH_ENTRY)
+                val id = ids.incrementAndFetch()
+                editors.put(id, HeldEditor(call.pot, model, separator))
+                Answer.EditorOpened(id)
+            } ?: noPot
+            is Call.EditorChange -> edit(call)
+            is Call.EditorSave -> editors[call.editor]?.model?.save()?.let { Answer.EditorSaved(it.done, it.notice) } ?: noEditor
+            is Call.EditorAskDelete -> editors[call.editor]?.model?.askDelete().done(Answer.Why.NO_SUCH_EDITOR)
+            is Call.EditorDelete -> editors[call.editor]?.model?.let { e -> e.delete().let { Answer.EditorSaved(it, if (it) null else e.current.notice) } } ?: noEditor
+            is Call.EditorCancelAsk -> editors[call.editor]?.model?.cancelAsk().done(Answer.Why.NO_SUCH_EDITOR)
+            is Call.EditorClose -> editors.remove(call.editor)?.model?.close().done(Answer.Why.NO_SUCH_EDITOR)
+            is Call.EditorOpenHeld -> pots[call.pot]?.let { pot ->
+                val separator = call.separator.firstOrNull() ?: '.'
+                val model = pot.heldEditor(call.write, separator) ?: return Answer.Refused(Answer.Why.NO_SUCH_ENTRY)
+                val id = ids.incrementAndFetch()
+                editors.put(id, HeldEditor(call.pot, model, separator))
+                Answer.EditorOpened(id)
+            } ?: noPot
+            is Call.EditorDiscardMine -> editors[call.editor]?.model?.let { e -> Answer.EditorSaved(e.discardMine(), null) } ?: noEditor
+            else -> error("not an Expenses call: $call")
+        }
+    }
+
     private suspend fun accountFlow(call: Call, parts: Composition<A, T>, payload: (ByteArray) -> Unit): Answer {
         val session = parts.session
         fun flows(connection: String): AccountFlows? {
