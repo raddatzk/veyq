@@ -9,8 +9,8 @@
 // absent, and ALWAYS hashes the file against scripts/openapi_generator_jar.sha256, including when it was already
 // there. Anything else fails closed; it never deletes a mismatching file (it is the evidence).
 //
-// Node, not Python (the repo rule), because it runs inside `pnpm install`'s `prepare` in the node:22-bookworm-slim
-// builder stages, which carry no python3 (measured 2026-09-27: `command -v python3` → nothing).
+// Node, not Python (the repo rule), because it runs inside `pnpm install`'s `prepare` in the node:<major>-bookworm-slim
+// builder stages, which carry no python3 (measured 2026-09-27 on node:22: `command -v python3` → nothing).
 
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync } from "node:fs";

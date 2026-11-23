@@ -102,7 +102,7 @@ updates:
       - dependency-name: "typescript"
         update-types:
           - "version-update:semver-major"
-      # CI runs Node 22 (`node-version: "22"` in checks.yml); the types follow the runtime, not the newest Node. Lifted
+      # CI runs Node 26 (`node-version: "26"` in checks.yml); the types follow the runtime, not the newest Node. Lifted
       # together with that runtime bump, by hand in the same commit.
       - dependency-name: "@types/node"
         update-types:
