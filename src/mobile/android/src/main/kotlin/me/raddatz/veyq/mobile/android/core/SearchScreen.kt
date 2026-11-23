@@ -87,7 +87,7 @@ import me.raddatz.veyq.mobile.search.SearchModel
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun SearchScreen(model: AppModel, onClose: () -> Unit) {
+internal fun SearchScreen(model: AppModel, onClose: () -> Unit, banner: @Composable () -> Unit = {}) {
     val search = model.searchModel.collectAsStateWithLifecycle().value ?: return
     val shown by search.state.collectAsStateWithLifecycle()
     // the field's own text, so typing never waits on the model; the model is told every change
@@ -102,7 +102,7 @@ internal fun SearchScreen(model: AppModel, onClose: () -> Unit) {
     LaunchedEffect(search) { runCatching { focus.requestFocus() } }
     val keyboard = LocalSoftwareKeyboardController.current
 
-    SearchBar(
+    SearchPage(
         inputField = {
             SearchBarDefaults.InputField(
                 query = query,
@@ -134,7 +134,7 @@ internal fun SearchScreen(model: AppModel, onClose: () -> Unit) {
         },
         expanded = expanded,
         onExpandedChange = { expanded = it },
-        modifier = Modifier.fillMaxWidth(),
+        banner = banner,
     ) {
         Column {
             // what a screen reader hears (the web's role=status, aria-live=polite): one polite live region, never drawn —
@@ -237,6 +237,25 @@ private fun ResultRow(r: ResultShown, onOpen: () -> Unit) {
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         modifier = Modifier.clickableRow(onClick = onOpen),
     )
+}
+
+/**
+ * Material 3's full-screen `SearchBar` with the shell's offline [banner] first on its page, under the field: the search
+ * covers the top app bar and the strip under it (`ShellTopBar`), so the lasting state of the screen moves here (inbox #961).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SearchPage(
+    inputField: @Composable () -> Unit,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    banner: @Composable () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    SearchBar(inputField = inputField, expanded = expanded, onExpandedChange = onExpandedChange, modifier = Modifier.fillMaxWidth()) {
+        banner()
+        content()
+    }
 }
 
 /** A name in parts as one string, the matched parts bold. */
