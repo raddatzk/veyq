@@ -136,14 +136,29 @@ held for the screens' models but not around them:
   who sent in its own body, so widening it would draw *Not you?* twice; the phones' WRITE_ONLY pages keep the web's drop
   form (name, then pick), its save now `naming.name`, so the identity is still the core's — whether they should ask at the
   write as the desktops' do is the owner's (#1090); `GalleryModel.uploadAsking` closes the picked sources on a decline,
-  since no queue holds them and its callers never closed on a zero; a declined naming on the desktops still toasts
-  "failed" (`Received.Upload` answers `NOT_TAKEN`, as a level's upload did before) — #1091, rather than the bridge reading
-  the session to tell the two apart. Tests: `GuestDoorsTest` (an unnamed guest's gallery offers Add and asks at the upload,
+  since no queue holds them and its callers never closed on a zero; a declined naming on the desktops toasted "failed"
+  (`Received.Upload` answered `NOT_TAKEN`, as a level's upload did before) until #1091 typed the answer (below), rather
+  than the bridge reading the session to tell the two apart. Tests: `GuestDoorsTest` (an unnamed guest's gallery offers Add and asks at the upload,
   declined nothing sent and the pick closed; a drop box's guest asked at its upload and named as an uploader, no identity on
   a decline; a Memory's uploader named through the naming), `ReceivedBridgeTest` (the drop box's upload asked, declined and
   named over the bridge; an unnamed guest gallery's `Memory.Upload` asked and declined). **Owed passes:** a guest's
   *Add photos* and a drop box's and a Memory uploader's upload asked at the write on Linux and Windows, the phones' guest
   gallery's *Add photos* unnamed on Android and Apple — none clicked in this change.
+- **As built, a declined naming says nothing** (2026-11-23, #1091). Every upload that asks a guest's name first answers
+  `AskedUpload` (core `sharing`): the files queued, or none — `declined` where the guest declined (or its name was not
+  taken, which the naming said itself), else refused. `GuestLevel`, `GuestDropBox`, `GuestUploader` and
+  `GalleryModel.uploadAsking` answer it (`AskedUpload.unnamed(access)` reads `GuestNaming.request()`'s null: declined on
+  a link that writes, refused on a READ one; the gallery reads `Door.named() == false` as declined, reached only where
+  `takesUploads` holds). The bridge answers a decline `NOT_CHOSEN`, as `Received.Replace` does — `Received.Upload`
+  and `Memory.Upload` both, the latter having said every declined photo was "no photo or video" (`memory_not_media`) —
+  and a refusal `NOT_TAKEN`; Linux's `received.rs` and Windows' `ReceivedView.PickAndUpload` are quiet on `NOT_CHOSEN`,
+  as a declined move is (`NodeMove.Outcome.DECLINED`, #1063); Android and Apple, which said nothing on a zero, read
+  `.queued`. Decided on the way: a value (`queued`, `declined`) over an enum, since every caller needs the count; Replace
+  keeps its Boolean, the bridge answering both cases `NOT_CHOSEN` already. Tests: `GuestDoorsTest` (a level's, a gallery's,
+  a drop box's and a Memory uploader's decline `DECLINED`; a READ guest's level and gallery and an uploader with nothing
+  to send `REFUSED`, never asked), `ReceivedBridgeTest` (the drop box's declined upload and the guest gallery's declined
+  `Memory.Upload` `NOT_CHOSEN`; a READ guest's upload `NOT_TAKEN`). **Owed passes:** a declined naming at an upload on
+  Linux and Windows says nothing — not clicked in this change.
 - **The passes (decision 1).** Each a throwaway, erased after. New Folder with a taken name kept the dialog open with the
   word under the field on Android, Linux and Windows. Android: a READ_WRITE link opened unnamed offered *Replace…* on a
   file and asked the name at the write, then uploaded. **Not run:** every drop on every app — Android needs a window to
