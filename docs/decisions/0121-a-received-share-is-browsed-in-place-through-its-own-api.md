@@ -172,8 +172,8 @@ proxy through this instance would make it learn what each member reads.
   the discovery of decision 4 as a veyq of this major is embedded. Then: (1) this client parses responses that server
   shapes — and seals, since it holds the link's key — and draws them with the rules every peer's content meets (the
   decrypted bytes decide the kind, text as text, no markup; a PDF through pdf.js within `PDF_MAX_PAGES` and its pixel
-  caps, `shared/pdf/pdfOptions.ts`; the image and video header parsers' own bounds, `shared/image/imageHeader.ts`,
-  `videoHeader.ts`). No byte cap of the client's own bounds a JSON answer or a chunk: the generated clients read a whole
+  caps, `shared/pdf/pdfOptions.ts`; the image and video header parsers' own bounds, the core's
+  `media/ImageHeader.kt` and `media/VideoHeader.kt` since ADR 0155's media headers' slice). No byte cap of the client's own bounds a JSON answer or a chunk: the generated clients read a whole
   body, the chunk reader a whole frame (`core/blob/readScheduler.ts`), so a hostile server can exhaust the tab's memory —
   a denial of service to that page, nothing more. (2) It follows the presigned URLs that server hands out to any `https`
   host: a `GET` with no credentials, its answer carrying nothing of this instance — tracking, not data. (3) That server

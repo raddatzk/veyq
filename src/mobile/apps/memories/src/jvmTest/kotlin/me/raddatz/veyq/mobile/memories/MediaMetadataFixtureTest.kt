@@ -14,7 +14,7 @@ import kotlin.test.assertNull
 /**
  * What a photo's and a video's upload seals from its bytes, over the web's own fixtures (`features/memories/__fixtures__`,
  * `shared/image/__fixtures__`, made by `scripts/make_exif_fixture.py`), held to exactly what the web's
- * `readExif.fixture.test.ts` and `videoHeader.test.ts` expect of them: the parity of the two readers.
+ * `readExif.fixture.test.ts` and `contracts/platform/media/v1-vectors.json` expect of them: the parity of the two readers.
  */
 class MediaMetadataFixtureTest {
     private val root = File(System.getProperty("veyq.repoRoot"))

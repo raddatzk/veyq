@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Generate the EXIF/XMP/GPS fixture photos the web suite parses with the REAL EXIF reader (`ExifReader`).
+"""Generate the EXIF/XMP/GPS fixture photos the suites parse with the REAL EXIF reader (the core's `media/ExifReader.kt`).
 
 Why generated fixtures and not real photos: a third-party photo carries a licence question and someone's
 metadata; a generated one is reproducible, auditable byte for byte, and carries exactly the tags the client
 claims to read — which is the point. The suite mocks the reader seam (`shared/image/exifTags.ts`) everywhere
-else, so it proves our *mapping* and never that the library yields a tag from the bytes. These files close that gap.
+else, so it proves our *mapping* and never that the reader yields a tag from the bytes. These files close that gap.
 
 **No third-party import, deliberately.** Pillow/piexif would make this shorter and would also make the fixtures
 un-regenerable on a machine without them. Everything below is the container specs written out around ONE TIFF

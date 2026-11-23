@@ -31,7 +31,8 @@ may exist are listed in the CSP (`trusted-types`).
    does not compile, and which refuses a string at run time in every browser — where the browser has Trusted Types the
    value is the policy's `TrustedHTML`, elsewhere a wrapper only that module can make. `v-html` is not used
    (`vue/no-v-html`). The policy has one more purpose behind a token only the module holds: parsing a photo's XMP block
-   as XML into a document that is never part of the page (`parseInertXml`, handed to the EXIF library), because a
+   as XML into a document that is never part of the page (`parseInertXml`, handed to the EXIF library; since ADR 0155's
+   media headers' slice the core reads XMP by hand and the door parses a GPX track), because a
    `DOMParser` is an HTML sink too.
 3. **A `default` policy carries the libraries, and passes only what is listed.** The browser consults `default` for
    a plain string that reaches a sink, which is what code that cannot be pointed at `veyq` does. It passes exactly

@@ -1,7 +1,7 @@
 // MPL-2.0 §3.2(a): a copy in executable form tells its recipient where the source is. Run AFTER `vite build`: fail if
-// dist/third-party-licenses.txt is missing, if any package heading in it lacks the `Source:` line vite.config.ts's
-// licenseSourcesPlugin adds, or if ExifReader - the bundle's MPL-2.0 package, the reason the line exists - is not
-// listed with its source. A Vite upgrade that renames the file, reorders the plugin or changes the heading shape
+// dist/third-party-licenses.txt is missing, or if any package heading in it lacks the `Source:` line vite.config.ts's
+// licenseSourcesPlugin adds (ExifReader, the MPL-2.0 package the line was first added for, left the bundle with ADR 0155's
+// media headers' slice; the line stays for every package). A Vite upgrade that renames the file, reorders the plugin or changes the heading shape
 // turns this red instead of shipping a notice without sources.
 //
 // Bite (snapshot-and-restore, never `git checkout`): drop `licenseSourcesPlugin()` from vite.config.ts's plugin list,
@@ -84,9 +84,6 @@ if (existsSync(join(DIST, 'assets', `pdfjs-${PDFJS_VERSION}`, 'decoders'))) {
     const entry = text.slice(found[0].index, all.find((m) => m.index > found[0].index)?.index ?? text.length)
     if (!entry.includes(readFileSync(join(PDFJS, 'wasm', file), 'utf8').trim())) failures.push(`"${heading}" does not carry the notice's text`)
   }
-}
-if (!/^## exifreader - \S+ \(MPL-2\.0\)\n\nSource: \S+\nRepository: https:\/\/github\.com\/mattiasw\/ExifReader$/m.test(text)) {
-  failures.push('ExifReader (MPL-2.0) is not listed with its Source and Repository lines')
 }
 
 if (failures.length) {

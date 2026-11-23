@@ -1,8 +1,8 @@
 // @vitest-environment happy-dom
-// uc.memory.upload — what `media.ts` seals from a photo, over the REAL EXIF reader (inbox #799). Every other suite here
-// mocks `shared/image/exifTags`, which proves the mapping against a record a test wrote and never against one the
-// library produced; `shared/image/exifTags.test.ts` pins the reader's tags, and this file the whole chain from the
-// file's bytes to the two sealed tiers' contents.
+// uc.memory.upload — what `media.ts` seals from a photo, over the REAL EXIF reader (inbox #799; the core's since ADR 0155's
+// media headers' slice, `@veyq/core-js/media`). Every other suite here mocks `shared/image/exifTags`, which proves the
+// mapping against a record a test wrote and never against one the reader produced; `shared/image/media.vectors.test.ts`
+// pins the reader's tags, and this file the whole chain from the file's bytes to the two sealed tiers' contents.
 //
 // **It is also the parity proof of the reader swap.** Every expectation below is what the client produced under
 // `exifr` (captured 2026-10-30 from the same fixtures, before the swap) — except where exifr read nothing: a WebP (it
@@ -13,9 +13,6 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath, URL as FileURL } from 'node:url'
 import { prepareMedia, readCaptureTime, type MediaDeriver, type MediaExif } from './media'
-import { qualifiedAttrNodeNames } from '../../test/attrNodeName'
-
-qualifiedAttrNodeNames() // XMP's attribute-form properties, as a browser parses them
 
 const blobOf = (name: string) =>
   new Blob([readFileSync(fileURLToPath(new FileURL(`./__fixtures__/${name}`, import.meta.url))) as BlobPart])

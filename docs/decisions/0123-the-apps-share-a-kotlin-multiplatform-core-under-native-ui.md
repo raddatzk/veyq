@@ -453,7 +453,8 @@ implementation exists but what holds it to the first.
   A member's upload is core's (`memories/MediaUpload.kt`, the web's `addMedia`), byte for byte the web's records: the
   type (given, else the extension's, else sniffed), the original's SHA-256 in its sealed meta, the metadata read from the
   bytes in core — `media/ExifReader.kt` (EXIF, XMP, IPTC from a JPEG, TIFF, PNG, WebP, HEIC, AVIF: the tags the web's
-  ExifReader seam names) and `media/VideoHeader.kt` (an MP4's or a QuickTime file's capture time and display size), mapped
+  `exifTags.ts` names, which since ADR 0155's media headers' slice draws them from this reader) and `media/VideoHeader.kt`
+  (an MP4's or a QuickTime file's capture time, its display size and a WebM's or Matroska file's), mapped
   onto the listed and the EXIF tier by `memories/MediaMetadata.kt` as `media.ts` maps them, an EXIF date read as the
   device's wall clock as the web reads it —, one start request for the original and the two JPEG tiers each under its
   own key wrapped bound to the medium, the frames sent direct to the store, one `media-batch` completion, at the node's

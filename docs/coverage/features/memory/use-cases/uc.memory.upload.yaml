@@ -307,9 +307,8 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/shared/image/imageHeader.test.ts
+          - src/shared/image/media.vectors.test.ts
           - src/shared/image/mediaDeriver.test.ts
-          - src/shared/image/videoHeader.test.ts
           - src/shared/image/mediaDeriver.videoProbe.test.ts
     gaps:
       - surface: web

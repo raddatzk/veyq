@@ -7,7 +7,8 @@
 //   first, a small safe subset) over what it is given, so the only markup a page shows comes out of that renderer.
 //   `markdownHtml` is its door, and `vSafeHtml` the one directive that writes it into an element. The policy has one
 //   other purpose, behind a token only this module holds: `parseInertXml`, an XML parse into a document that is never
-//   part of the page (the XMP block of a photo, read by the EXIF library) - a DOMParser sink too under Trusted Types.
+//   part of the page (a GPX track's; a photo's XMP block was the first, until the core's reader scanned it by hand, ADR 0155's
+//   media headers' slice) - a DOMParser sink too under Trusted Types.
 // - `default`, which the browser consults for a plain string that reaches a sink from code that cannot be pointed at
 //   `veyq`: the libraries. It passes an EXACT list of fixed markup (Leaflet's own literals, `LIBRARY_MARKUP`) and the
 //   app's own same-origin scripts as worker and service-worker URLs (`isOwnScript`) - each worker the build starts
