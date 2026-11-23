@@ -63,7 +63,14 @@ class PlayedShare(
     val children = mutableListOf<JsonObject>()
 
     /** Every request the guest sent, in order. */
-    val requests = mutableListOf<Recorded>()
+    // Copy-on-write: the client records from its own threads (a re-read after a write settles on Dispatchers.Default)
+    // while a test searches the list; a plain ArrayList threw ConcurrentModificationException there (GuestMoveTest).
+    @OptIn(kotlin.concurrent.atomics.ExperimentalAtomicApi::class)
+    private val recorded = kotlin.concurrent.atomics.AtomicReference<List<Recorded>>(emptyList())
+
+    /** Every request the server saw so far, in order: a snapshot, safe to search while the client still sends. */
+    @OptIn(kotlin.concurrent.atomics.ExperimentalAtomicApi::class)
+    val requests: List<Recorded> get() = recorded.load()
 
     /** Further routes a test plays; the first non-null answer wins. */
     val routes = mutableListOf<suspend MockRequestHandleScope.(HttpRequestData, Recorded) -> HttpResponseData?>()
@@ -94,7 +101,8 @@ class PlayedShare(
             r.headers.entries().joinToString("\n") { (k, v) -> "$k: ${v.joinToString(",")}" },
             runCatching { r.body.toByteArray() }.getOrDefault(ByteArray(0)),
         )
-        requests += rec
+        @OptIn(kotlin.concurrent.atomics.ExperimentalAtomicApi::class)
+        while (true) { val now = recorded.load(); if (recorded.compareAndSet(now, now + rec)) break }
         val path = r.url.encodedPath
         val base = "/api/shares/$shareId"
         routes.firstNotNullOfOrNull { it(r, rec) } ?: when {
