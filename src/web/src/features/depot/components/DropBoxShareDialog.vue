@@ -215,7 +215,7 @@ async function copy(text: string, id: string) {
             <span class="veyq-row-title">{{ row.link ?? row.share.shareId }}</span>
             <span v-if="!row.share.enabled" class="veyq-row-subtitle">
               <span class="veyq-badge muted dropbox-link-off">{{ t('depot.dropBox.shareOff') }}</span>
-              <template v-if="row.share.reissueRequired"> {{ t('depot.dropBox.shareReissueHint') }}</template>
+              <template v-if="row.share.reissueRequired"> {{ t('words.share_reissue_hint') }}</template>
             </span>
             <!-- inbox #457: why a guest gets no link, and for a missed requirement the fix on this same link. No renew:
                  a link older than the lifetime is replaced by a new one from the form below. -->
@@ -316,7 +316,7 @@ async function copy(text: string, id: string) {
         />
         <small class="veyq-form-copy">{{ t('share.expiryRequiredByRule', { days: rules.maxDays }) }}</small>
       </template>
-      <VeyqMessage v-if="reissueRefused" tone="warn">{{ t('depot.dropBox.shareReissueHint') }}</VeyqMessage>
+      <VeyqMessage v-if="reissueRefused" tone="warn">{{ t('words.share_reissue_hint') }}</VeyqMessage>
       <VeyqMessage v-else-if="failed" tone="error">{{ t('words.node_save_failed') }}</VeyqMessage>
       <div class="veyq-dialog-action-row">
         <VeyqButton :label="t('depot.dropBox.close')" variant="secondary" appearance="outlined" @click="emit('close')" />

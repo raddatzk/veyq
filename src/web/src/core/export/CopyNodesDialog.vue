@@ -152,7 +152,7 @@ async function submit() {
     // The copies by the names they were given (`Name (2)` beside an original of the name).
     const copied = result.nodeIds.map((id) => treeStore.nodes.find((n) => n.id === id)?.name).filter((n): n is string => !!n)
     const done = copied.length === 1
-      ? t('node.copy.copied', { name: copied[0], to: destinationName(to) })
+      ? t('words.copy_done', [copied[0], destinationName(to)])
       : t('words.copy_many_copied', [result.nodeIds.length, destinationName(to)])
     const left = ready.leftOut.map((x) => x.name)
     toast.success(left.length > 0 ? `${done} ${t('node.copy.copiedLeftOut', { names: joinList(locale.value, left) })}` : done)

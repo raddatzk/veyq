@@ -187,7 +187,7 @@ test(
     const download = await started
     expect(new URL(download.url()).pathname).toMatch(/^\/__download\/.+/)
     expect(await download.failure(), 'the browser marks the download failed').not.toBeNull()
-    await expect(toast(page, 'The file could not be downloaded. Please try again.')).toBeVisible()
+    await expect(toast(page, `“${fileName}” could not be downloaded. Please try again.`)).toBeVisible()
     expect(fetched, 'the store was reached, then cut off').toBeGreaterThan(6)
     await page.unrouteAll({ behavior: 'wait' })
   },

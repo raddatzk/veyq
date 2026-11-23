@@ -1316,8 +1316,8 @@
     "de": "Prüfe den Namen und die Personen: je 1 bis 100 Zeichen."
   },
   "create_pot_failed": {
-    "en": "The Pot was not created. Please try again.",
-    "de": "Die Kasse wurde nicht erstellt. Bitte versuche es erneut."
+    "en": "The Pot could not be created. Please try again.",
+    "de": "Die Kasse konnte nicht angelegt werden. Bitte versuche es erneut."
   },
   "ed_new_title": {
     "en": "Add entry",
@@ -2641,8 +2641,8 @@
     "apple_en": "Switch On Again"
   },
   "share_reissue_hint": {
-    "en": "This link cannot be switched back on: someone who has left this space may still hold it. Renew it instead.",
-    "de": "Dieser Link lässt sich nicht wieder einschalten: Jemand, der diesen Bereich verlassen hat, könnte ihn noch haben. Erneuere ihn stattdessen."
+    "en": "This link cannot be switched back on: someone who has left this space may still hold it. Create a new link instead.",
+    "de": "Dieser Link lässt sich nicht wieder einschalten: Jemand, der diesen Bereich verlassen hat, könnte ihn noch haben. Erstelle stattdessen einen neuen Link."
   },
   "share_renew": {
     "en": "Renew link",
@@ -2791,8 +2791,8 @@
     "de": "Das Cover einer Kasse."
   },
   "copy_done": {
-    "en": "“{1}” is copied to “{2}”.",
-    "de": "„{1}“ ist nach „{2}“ kopiert."
+    "en": "“{1}” copied to “{2}”.",
+    "de": "„{1}“ nach „{2}“ kopiert."
   },
   "copy_failed": {
     "en": "The copy did not go through. Nothing was left behind; please try again.",

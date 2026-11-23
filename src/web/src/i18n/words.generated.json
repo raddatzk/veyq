@@ -1,7 +1,9 @@
 {
   "en": {
+    "copy_done": "“{0}” copied to “{1}”.",
     "copy_many_copied": "{0} copied to “{1}”.",
     "copy_nothing": "Nothing here can be copied by this version of veyq.",
+    "create_pot_failed": "The Pot could not be created. Please try again.",
     "delete_many_moved": "{0} item moved to the trash. | {0} items moved to the trash.",
     "delete_refused_failed": "Deleting didn’t work. Please try again.",
     "delete_refused_gone": "It is no longer there.",
@@ -13,6 +15,7 @@
     "depot_replace_anyway": "Replace anyway",
     "depot_replace_confirm": "Replace “{0}”? A file with this name is already here: its content is replaced by the file you picked. The old content cannot be restored: there is no version history.",
     "depot_replace_title": "Replace file",
+    "download_failed": "“{0}” could not be downloaded. Please try again.",
     "ed_blocked": "Blocked by the operator: this Pot or entry takes no changes. Nothing was saved.",
     "ed_save_failed": "The change was not saved. Please try again.",
     "ed_stale": "Someone else changed this entry. Here is their version; save again to put yours on top.",
@@ -68,6 +71,7 @@
     "share_closed_rekeying": "The link is switched off. What is below it gets a new lock, so the old link opens nothing that comes later either.",
     "share_failed": "That didn’t work — please try again.",
     "share_gone": "This link was already renewed or deleted — the list now shows the current links.",
+    "share_reissue_hint": "This link cannot be switched back on: someone who has left this space may still hold it. Create a new link instead.",
     "share_requirement_refused": "This space now requires a password or an end date on every link. Add what is missing and try again.",
     "trash_moved": "“{0}” moved to the trash.",
     "trash_undo_failed": "“{0}” could not be restored. You can restore it from the trash.",
@@ -81,8 +85,10 @@
     "upload_status_uploading": "Uploading…"
   },
   "de": {
+    "copy_done": "„{0}“ nach „{1}“ kopiert.",
     "copy_many_copied": "{0} nach „{1}“ kopiert.",
     "copy_nothing": "Hier kann diese Version von veyq nichts kopieren.",
+    "create_pot_failed": "Die Kasse konnte nicht angelegt werden. Bitte versuche es erneut.",
     "delete_many_moved": "{0} Eintrag liegt jetzt im Papierkorb. | {0} Einträge liegen jetzt im Papierkorb.",
     "delete_refused_failed": "Das Löschen hat nicht geklappt. Bitte versuche es erneut.",
     "delete_refused_gone": "Es ist nicht mehr da.",
@@ -94,6 +100,7 @@
     "depot_replace_anyway": "Trotzdem ersetzen",
     "depot_replace_confirm": "„{0}“ ersetzen? Eine Datei mit diesem Namen liegt schon hier: Ihr Inhalt wird durch die gewählte Datei ersetzt. Der alte Inhalt lässt sich nicht wiederherstellen: Es gibt keinen Versionsverlauf.",
     "depot_replace_title": "Datei ersetzen",
+    "download_failed": "„{0}“ konnte nicht heruntergeladen werden. Bitte versuche es noch einmal.",
     "ed_blocked": "Von der Betreiberseite gesperrt: Diese Kasse oder dieser Eintrag nimmt keine Änderungen an. Nichts wurde gespeichert.",
     "ed_save_failed": "Die Änderung wurde nicht gespeichert. Bitte versuche es erneut.",
     "ed_stale": "Jemand anderes hat diesen Eintrag geändert. Hier ist die neue Fassung; speichere erneut, um deine darüberzulegen.",
@@ -149,6 +156,7 @@
     "share_closed_rekeying": "Der Link ist abgeschaltet. Was darunter liegt, bekommt ein neues Schloss, damit der alte Link auch künftig nichts mehr öffnet.",
     "share_failed": "Das hat nicht geklappt — bitte erneut versuchen.",
     "share_gone": "Dieser Link wurde bereits erneuert oder gelöscht — die Liste zeigt jetzt die aktuellen Links.",
+    "share_reissue_hint": "Dieser Link lässt sich nicht wieder einschalten: Jemand, der diesen Bereich verlassen hat, könnte ihn noch haben. Erstelle stattdessen einen neuen Link.",
     "share_requirement_refused": "Dieser Bereich verlangt jetzt für jeden Link ein Passwort oder ein Enddatum. Ergänze, was fehlt, und versuche es erneut.",
     "trash_moved": "„{0}“ liegt jetzt im Papierkorb.",
     "trash_undo_failed": "„{0}“ konnte nicht wiederhergestellt werden. Du kannst es aus dem Papierkorb wiederherstellen.",

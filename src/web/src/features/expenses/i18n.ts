@@ -37,7 +37,6 @@ const en = {
       entry: 'New Pot',
       title: 'New Pot',
       currencyHint: 'Every balance is in this currency. It is fixed once the first entry is saved.',
-      failed: 'The Pot could not be created. Please try again.',
       peopleFailed: 'The Pot was created, but its people were not added. Add them on its page.',
     },
     tabs: {
@@ -274,7 +273,6 @@ const de: typeof en = {
       entry: 'Neue Kasse',
       title: 'Neue Kasse',
       currencyHint: 'Alle Salden sind in dieser Währung. Sie steht fest, sobald der erste Eintrag gespeichert ist.',
-      failed: 'Die Kasse konnte nicht angelegt werden. Bitte versuche es erneut.',
       peopleFailed: 'Die Kasse ist angelegt, ihre Personen aber nicht. Füge sie auf ihrer Seite hinzu.',
     },
     tabs: {

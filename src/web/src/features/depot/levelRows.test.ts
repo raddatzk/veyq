@@ -619,7 +619,7 @@ describe('Depot rows', () => {
     expect(await outcome(new SaveTooLarge(2 ** 33))).toEqual([t('depot.downloadTooLarge')])
     expect(await outcome(new SaveCancelled())).toEqual([])
     expect(await outcome(new DOMException('cancelled', 'AbortError'))).toEqual([])
-    expect(await outcome(new Error('chunk_get_failed:500'))).toEqual([t('depot.downloadFailed')])
+    expect(await outcome(new Error('chunk_get_failed:500'))).toEqual(['“notes.txt” could not be downloaded. Please try again.'])
   })
 
   // Owner 2026-11-02: a file's delete is core's default (`standardRowActions.ts`) - the page's door asks the kind's question
