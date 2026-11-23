@@ -1,5 +1,5 @@
 // Core's audio player (en.platform.audio-player, ADR 0135 decisions 6-8): ONE queue at a time, played shuffled
-// (`order.ts`), endlessly, crossfading at the tracks' trimmed edges (`fades.ts`), with the MediaSession's metadata and
+// (the platform's order, `@veyq/core-js/audio`), endlessly, crossfading at the tracks' trimmed edges (its fades), with the MediaSession's metadata and
 // actions so the lock screen and the media keys work. An application hands over a queue of tracks; each track's `open()`
 // is the application's - it resolves to a playable URL (a service-worker stream handle, or a whole-file `blob:`) and a
 // `release()` - so **the player is handed URLs, never a key**. Every source it opened is released when it is stopped, and
@@ -20,8 +20,15 @@
 // becomes the active deck, paused, and only the end starts it - as the core's `MusicPlayer` does. A listener's pause holds
 // it the same way, and only a play starts it then.
 import { shallowRef, type ShallowRef } from 'vue'
-import { PlayOrder, cryptoRandomInt, type RandomInt } from './order'
-import { fadeLengthAt, fadeOutAtMs, pressFadeMs, type Span } from './fades'
+import {
+  cryptoRandomInt, fadeLengthAt, fadeOutAtMs, playOrder, playOrderCurrent, playOrderDrop, playOrderNext, playOrderPeek,
+  playOrderPrevious, playOrderSize, pressFadeMs, type PlayOrderHandle, type SpanShape,
+} from '@veyq/core-js/audio'
+
+/** A uniformly random integer in `[0, n)`: the order's randomness, handed in (ADR 0135 decision 6). */
+type RandomInt = (n: number) => number
+/** The span that plays, in milliseconds of the file: from the end of the leading silence to the start of the trailing one. */
+type Span = SpanShape
 
 /** A track as an application hands it over. Without a span, the whole file plays. */
 export type PlayerTrack = {
@@ -144,7 +151,7 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
   const decks: [Deck, Deck] = [deckOf(), deckOf()]
   let active = 0
   let queue: PlayerQueue | null = null
-  let order: PlayOrder | null = null
+  let order: PlayOrderHandle | null = null
   /** Bumped by every new queue, stop and track start: an `await` that comes back to another generation lets go. */
   let generation = 0
   let failures = 0
@@ -278,12 +285,12 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
     return loading
   }
 
-  function trackOf(id: string | null): PlayerTrack | null {
+  function trackOf(id: string | null | undefined): PlayerTrack | null {
     return id === null ? null : queue?.tracks.find((t) => t.id === id) ?? null
   }
 
   /** Bring `id` in on the idle deck, fading the playing one out over `fadeMs`; skip it where it does not play. */
-  async function bringIn(id: string | null, fadeMs: number): Promise<void> {
+  async function bringIn(id: string | null | undefined, fadeMs: number): Promise<void> {
     const track = trackOf(id)
     if (!track || !queue || !order) return endQueue()
     const gen = ++generation
@@ -340,9 +347,9 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
   function skip(id: string): Promise<void> | void {
     if (!order) return
     failures++
-    order.drop(id)
-    if (order.size === 0 || failures > (queue?.tracks.length ?? 0)) return endQueue('unplayable')
-    return bringIn(order.next(), 0)
+    playOrderDrop(order, id)
+    if (playOrderSize(order) === 0 || failures > (queue?.tracks.length ?? 0)) return endQueue('unplayable')
+    return bringIn(playOrderNext(order), 0)
   }
 
   function endQueue(why?: 'unplayable'): void {
@@ -394,7 +401,7 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
     if (pos >= fadeAt - OPEN_AHEAD_MS) prepareNext()
     if (pos >= fadeAt) {
       deck.leaving = true
-      void bringIn(order.next(), deck.gain ? fadeLengthAt(span, pos) : 0)
+      void bringIn(playOrderNext(order), deck.gain ? fadeLengthAt(span, pos) : 0)
     }
   }
 
@@ -402,7 +409,7 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
   function prepareNext(): void {
     const idle = decks[1 - active]
     if (idle.preparedId || idle.source || !order) return
-    const track = trackOf(order.peek())
+    const track = trackOf(playOrderPeek(order))
     if (!track) return
     idle.preparedId = track.id
     // a failed preparation is met again where the fade awaits it, and skipped there
@@ -418,7 +425,7 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
     deck.el.addEventListener('ended', () => {
       if (deck === decks[active] && deck.track && !deck.leaving && order) {
         deck.leaving = true
-        void bringIn(order.next(), 0)
+        void bringIn(playOrderNext(order), 0)
       }
     })
   }
@@ -480,13 +487,13 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
       const replacing = queue !== null && !!decks[active].source
       const fade = replacing ? pressFadeMs(decks[active].span) : pressFadeMs({ startMs: 0, endMs: Infinity })
       queue = next
-      order = new PlayOrder(ids, env.random, next.startId)
+      order = playOrder(ids, env.random, next.startId ?? null)
       failures = 0
       // the idle deck may hold a prepared track of the old queue
       const idle = decks[1 - active]
       if (idle.source) clear(idle)
       bindSession()
-      void bringIn(order.current(), fade)
+      void bringIn(playOrderCurrent(order), fade)
     },
     stop() {
       interruption = 0
@@ -516,14 +523,14 @@ export function createAudioPlayer(env: PlayerEnv): AudioPlayer {
       if (!order) return
       paused = false // a track change plays, as it did before the pause held loads
       decks[active].leaving = true
-      void bringIn(order.next(), pressFadeMs(decks[active].span))
+      void bringIn(playOrderNext(order), pressFadeMs(decks[active].span))
     },
     previous() {
       wakeContext()
       if (!order) return
       const deck = decks[active]
       const into = deck.el.currentTime * 1000 - deck.span.startMs
-      const step = order.previous(into)
+      const step = playOrderPrevious(order, into)
       if (step.restart) return player.seek(0)
       paused = false // a track change plays, as it did before the pause held loads
       deck.leaving = true

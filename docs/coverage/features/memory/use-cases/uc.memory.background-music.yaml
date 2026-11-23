@@ -57,7 +57,7 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/core/audio/order.test.ts
+          - src/core/audio/music.vectors.test.ts
           - src/features/memories/music/musicQueue.test.ts
           - src/features/memories/components/MemoryDetail.music.test.ts
   - id: crossfade-at-trimmed-edges
@@ -65,7 +65,7 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/core/audio/fades.test.ts
+          - src/core/audio/music.vectors.test.ts
           - src/core/audio/player.test.ts
   - id: player-in-core-plays-across-pages
     text: Core's player draws its bar below the signed-in shell's footer and the share page's while a queue is loaded — title, previous, play/pause, next, a draggable progress bar over the trimmed span, close — and keeps playing across pages and spaces; a new queue replaces the playing one; the MediaSession carries the title and the actions; core is handed URLs, never a key, and at most two sources are open; a lock unmounts the bar and releases every source; `app.footerBar` and `onSessionEnding` no longer exist.
