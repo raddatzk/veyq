@@ -12,7 +12,7 @@ quarkus = "3.40.1.1"
 # The next three are above the Quarkus BOM's own versions on purpose, each for a published advisory: the root build lifts
 # the BOM's constraint to them (build.gradle.kts `liftedAboveBom` says why and when each goes).
 opentelemetry = "1.67.0"
-mariadb-jdbc = "3.5.11"
+mariadb-jdbc = "4.0.0"
 # Also the floor `buildSrc` holds its own classpath to (buildSrc/build.gradle.kts).
 guava = "33.7.2-jre"
 
