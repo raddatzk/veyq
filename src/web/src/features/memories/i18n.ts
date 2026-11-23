@@ -302,6 +302,8 @@ const en = {
       dropCopy: 'Drop photos or videos here',
       // A drop onto another uploader's bucket (inbox #1065): an upload is filed within its uploader's own root only.
       dropNotOwn: 'Your uploads go into your own buckets. Choose one of yours to drop photos or videos into it.',
+      // What a drop leaves out (inbox #1081): counted as every app's drop counts it (`memory_not_media`, its twin).
+      dropNotMedia: '{count} file was not added: only photos and videos go into a Memory. | {count} files were not added: only photos and videos go into a Memory.',
       saveFailed: 'Could not save the bucket.',
       moveFailed: 'Could not move the media.',
     },
@@ -686,6 +688,7 @@ const de: typeof en = {
       dropTitle: 'In „{bucket}“ hochladen',
       dropCopy: 'Fotos oder Videos hier ablegen',
       dropNotOwn: 'Deine Uploads landen in deinen eigenen Buckets. Wähle eines davon, um Fotos oder Videos dort abzulegen.',
+      dropNotMedia: '{count} Datei wurde nicht hinzugefügt: In eine Erinnerung kommen nur Fotos und Videos. | {count} Dateien wurden nicht hinzugefügt: In eine Erinnerung kommen nur Fotos und Videos.',
       saveFailed: 'Bucket konnte nicht gespeichert werden.',
       moveFailed: 'Medien konnten nicht verschoben werden.',
     },

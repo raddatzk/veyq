@@ -24,6 +24,7 @@ import me.raddatz.veyq.mobile.crypto.unb64
 import me.raddatz.veyq.mobile.crypto.utf8
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.session.OpenNode
+import me.raddatz.veyq.mobile.sharing.AskedUpload
 import me.raddatz.veyq.mobile.sharing.GuestAccess
 import me.raddatz.veyq.mobile.sharing.GuestDoor
 import me.raddatz.veyq.mobile.sharing.GuestLevel
@@ -307,13 +308,13 @@ class GuestDropBox internal constructor(private val access: GuestAccess, val nod
 
     /**
      * [sources] queued as [upload] does, a guest not named yet asked its name first through the core's one naming flow
-     * ([GuestAccess.naming], ADR 0154 decision 1: an uploader's own `K_up`); declined, none is queued (and each is the
-     * caller's to close).
+     * ([GuestAccess.naming], ADR 0154 decision 1: an uploader's own `K_up`); declined or refused ([AskedUpload], #1091),
+     * none is queued (and each is the caller's to close).
      */
-    suspend fun uploadAsking(sources: List<UploadSource>): Int {
-        if (access.queue == null || sources.isEmpty()) return 0
-        access.naming.request() ?: return 0
-        return upload(sources)
+    suspend fun uploadAsking(sources: List<UploadSource>): AskedUpload {
+        if (access.queue == null || sources.isEmpty()) return AskedUpload.REFUSED
+        access.naming.request() ?: return AskedUpload.unnamed(access)
+        return AskedUpload(upload(sources))
     }
 
     /** One file sent now (a test's, and the queue's job): its own node in the guest's folder, its content, completed. */

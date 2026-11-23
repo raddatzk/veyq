@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
+import me.raddatz.veyq.mobile.sharing.AskedUpload
 import me.raddatz.veyq.mobile.PlatformApi
 import kotlin.native.HiddenFromObjC
 import me.raddatz.veyq.mobile.audio.PageMusic
@@ -924,16 +925,18 @@ class GalleryModel(
 
     /**
      * The picked [sources] added as [upload] does, whoever writes asked first where the door says (a link's guest not named
-     * yet, [Door.named]); how many were queued — declined, none, and each source is closed here. Every app's *Add photos*
-     * and drop go through it, so no app reads a guest's session to offer one (#1044).
+     * yet, [Door.named]); how many were queued ([AskedUpload]) — declined, none, and each source is closed here (#1091: a
+     * decline is told from a refusal, which is said). Every app's *Add photos* and drop go through it, so no app reads a
+     * guest's session to offer one (#1044).
      */
-    suspend fun uploadAsking(sources: List<UploadSource>): Int {
-        if (!takesUploads || sources.isEmpty()) return 0
+    suspend fun uploadAsking(sources: List<UploadSource>): AskedUpload {
+        if (!takesUploads || sources.isEmpty()) return AskedUpload.REFUSED
+        // `takesUploads` holds: a door that writes did not get its writer's name — the guest declined (a member's is always named)
         if (!door.named()) {
             sources.forEach { runCatching { it.close() } }
-            return 0
+            return AskedUpload.DECLINED
         }
-        return upload(sources)
+        return AskedUpload(upload(sources))
     }
 
     /** Whether this page takes an upload now: the rights let whoever looks upload, online or queued offline. */

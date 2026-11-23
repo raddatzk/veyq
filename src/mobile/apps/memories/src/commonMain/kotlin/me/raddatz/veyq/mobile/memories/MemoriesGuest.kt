@@ -23,6 +23,7 @@ import me.raddatz.veyq.mobile.crypto.unb64
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.session.OpenNode
+import me.raddatz.veyq.mobile.sharing.AskedUpload
 import me.raddatz.veyq.mobile.sharing.GuestAccess
 import me.raddatz.veyq.mobile.sharing.GuestDoor
 import me.raddatz.veyq.mobile.sharing.GuestPage
@@ -247,13 +248,13 @@ class GuestUploader internal constructor(private val access: GuestAccess, val no
 
     /**
      * [sources] queued as [upload] does, a guest not named yet asked its name first through the core's one naming flow
-     * ([GuestAccess.naming], ADR 0154 decision 1: an uploader's own `K_up`); declined, none is queued (and each is the
-     * caller's to close).
+     * ([GuestAccess.naming], ADR 0154 decision 1: an uploader's own `K_up`); declined or refused ([AskedUpload], #1091),
+     * none is queued (and each is the caller's to close).
      */
-    suspend fun uploadAsking(sources: List<UploadSource>): Int {
-        if (!offered || sources.isEmpty()) return 0
-        access.naming.request() ?: return 0
-        return upload(sources)
+    suspend fun uploadAsking(sources: List<UploadSource>): AskedUpload {
+        if (!offered || sources.isEmpty()) return AskedUpload.REFUSED
+        access.naming.request() ?: return AskedUpload.unnamed(access)
+        return AskedUpload(upload(sources))
     }
 
     /** One medium sent now under the guest's `K_up` (the queue's job, a test's). */

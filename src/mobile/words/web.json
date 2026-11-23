@@ -385,6 +385,7 @@
     "memory_meta_unreadable": ["memory.meta.unreadable"],
     "memory_moved_to_trash": ["memory.trash.movedToTrash"],
     "memory_no_detail": ["media.noDetail"],
+    "memory_not_media": ["memory.buckets.dropNotMedia"],
     "memory_participants_add": ["memory.participants.add"],
     "memory_participants_dialog_hint": ["memory.participants.dialogHint"],
     "memory_participants_dialog_title": ["memory.participants.dialogTitle"],

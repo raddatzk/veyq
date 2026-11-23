@@ -415,8 +415,9 @@ defineExpose({ focusItem: (id: string) => grid.value?.focusItem(id), reload: () 
 // --- upload / drag-drop into the active bucket ------------------------------
 
 // The dropped files themselves go into the bucket shown (inbox #1065: the drop used to open the picker and lose both). The
-// photos and videos are kept as the picker keeps them (`isSupportedMediaFile`, Safari's empty types too); a drop onto
-// another uploader's bucket is refused and said, nothing uploaded.
+// photos and videos are kept as the picker keeps them (`isSupportedMediaFile`, Safari's empty types too) and the rest is
+// said by count, as every app's drop says it (inbox #1081); a drop onto another uploader's bucket is refused and said,
+// nothing uploaded.
 function onDrop(event: DragEvent) {
   dropActive.value = false
   const b = activeBucket.value
@@ -425,7 +426,10 @@ function onDrop(event: DragEvent) {
     toast.error(t('memory.buckets.dropNotOwn'))
     return
   }
-  const files = Array.from(event.dataTransfer?.files ?? []).filter(isSupportedMediaFile)
+  const dropped = Array.from(event.dataTransfer?.files ?? [])
+  const files = dropped.filter(isSupportedMediaFile)
+  const left = dropped.length - files.length
+  if (left > 0) toast.error(t('memory.buckets.dropNotMedia', { count: left }, left))
   if (files.length) emit('dropFiles', files, uploadTarget(b))
 }
 

@@ -56,7 +56,10 @@ model, [en.memory.buckets](../features/memory/enablers/en.memory.buckets.md); th
    filed by the organizer's own move once each medium is in; the primary, virtual or not, needs none. Only the caller's
    own root takes one (a move never crosses owners, point 6): the Beiträge view's upload and a drop onto it are offered
    there alone, and a drop onto another uploader's bucket is refused and said. The dropped files themselves are uploaded,
-   never the picker opened; what is no photo or video is left out. Offline a sub-bucket takes none (the move is a write,
+   never the picker opened; what is no photo or video is left out and said by count — "n files were not added: only
+   photos and videos go into a Memory", the apps' `memory_not_media` (`MediaUploads.notTaken`) and the web's
+   `memory.buckets.dropNotMedia` one twin in `src/mobile/words/web.json` (inbox #1081: the web had left them out unsaid;
+   `MemoryBuckets.test.ts` holds the count and the silence of a drop of photos alone). Offline a sub-bucket takes none (the move is a write,
    ADR 0140 decision 7); the primary still queues (ADR 0153). One behaviour on the web (`MemoryBuckets.vue`
    `dropFiles`, `MemoryDetail.vue` `enqueueBatch`) and in the apps (`Contributions.intake`/`upload`, ADR 0154 decision 1's
    `DropTarget.Bucket`).

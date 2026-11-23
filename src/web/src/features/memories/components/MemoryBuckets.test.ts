@@ -454,13 +454,23 @@ describe('MemoryBuckets — a drop goes into the bucket it landed on (inbox #106
     ])
   })
 
-  it("hands the dropped photos and videos up with the caller's sub-bucket, never the picker, the rest left out", async () => {
+  it("hands the dropped photos and videos up with the caller's sub-bucket, never the picker, the rest left out and counted", async () => {
     const w = mountBuckets([])
     await flushPromises()
     await selectBucket(w, 's-me')
     await drop(w, [photo, text, heic])
     expect(w.emitted('uploadBucket'), 'the picker is not opened').toBeUndefined()
     expect(w.emitted('dropFiles')).toEqual([[[photo, heic], 's-me']])
+    // every app's drop says the same of what it leaves out (inbox #1081, `memory_not_media`)
+    expect(toastError.mock.calls.map(([line]) => line)).toEqual(['1 file was not added: only photos and videos go into a Memory.'])
+  })
+
+  it('says nothing of a drop that is photos and videos alone', async () => {
+    const w = mountBuckets([])
+    await flushPromises()
+    await selectBucket(w, 's-me')
+    await drop(w, [photo, heic])
+    expect(toastError).not.toHaveBeenCalled()
   })
 
   it("files a drop onto the caller's own primary as an upload with no move", async () => {
@@ -486,12 +496,13 @@ describe('MemoryBuckets — a drop goes into the bucket it landed on (inbox #106
     expect(w.find(`.bucket-picker .bucket-action-button[aria-label="${t('memory.buckets.upload')}"]`).exists(), 'control').toBe(true)
   })
 
-  it('takes nothing from a drop without a photo or video', async () => {
+  it('takes nothing from a drop without a photo or video, and says how many it left out', async () => {
     const w = mountBuckets([])
     await flushPromises()
     await selectBucket(w, 's-me')
-    await drop(w, [text])
+    await drop(w, [text, new File(['y'], 'list.pdf', { type: 'application/pdf' })])
     expect(w.emitted('dropFiles')).toBeUndefined()
+    expect(toastError.mock.calls.map(([line]) => line)).toEqual(['2 files were not added: only photos and videos go into a Memory.'])
   })
 })
 

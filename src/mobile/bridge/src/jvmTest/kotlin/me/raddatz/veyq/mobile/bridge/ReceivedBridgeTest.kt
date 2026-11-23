@@ -174,7 +174,8 @@ class ReceivedBridgeTest {
         val declined = async { b.ask(Call.ReceivedUpload(opened.received, listOf(file.path))) }
         w.untilJson { j -> shown(j)?.takeIf { it.naming } }
         assertEquals(Answer.Done, b.ask(Call.ReceivedNamingDecline(opened.received)))
-        assertIs<Answer.Refused>(declined.await(), "a file was sent before the guest named itself")
+        // declined, `NOT_CHOSEN` as Received.Replace answers it: the hosts say nothing, never "failed" (#1091)
+        assertEquals(Answer.Refused(Answer.Why.NOT_CHOSEN), declined.await(), "a declined naming answered as a failed upload")
         val sending = async { b.ask(Call.ReceivedUpload(opened.received, listOf(file.path))) }
         w.untilJson { j -> shown(j)?.takeIf { it.naming } }
         assertEquals(Answer.Named(null, null, false, false), b.ask(Call.ReceivedNamingSave(opened.received, "Ben")))
@@ -183,6 +184,24 @@ class ReceivedBridgeTest {
         val sent = w.untilJson { j -> shown(j)?.takeIf { it.page?.sent?.isNotEmpty() == true } }
         assertEquals(listOf(file.name), sent.page!!.sent)
         share.assertNoKeyInAnyRequest()
+        b.shutdown()
+    }
+
+    /**
+     * #1091: a guest's upload the core refuses (a READ link's level, never asked a name) is `NOT_TAKEN` — the hosts' "failed" —,
+     * told apart from a declined naming's `NOT_CHOSEN`.
+     */
+    @Test
+    fun aReadGuestsUploadIsRefusedNotDeclined() = runBlocking {
+        val share = PlayedShare(p, role = "READ")
+        val b = bridge(share)
+        val opened = assertIs<Answer.ReceivedOpened>(b.ask(Call.ReceivedOpen(share.link)))
+        val w = b.watching(Watched.Received(opened.received))
+        fun shown(j: kotlinx.serialization.json.JsonElement) = (wire.decodeFromJsonElement(Update.serializer(), j) as Update.Received).shown
+        w.untilJson { j -> shown(j)?.takeIf { it.page?.kind == ReceivedPageKind.LEVEL } }
+        val file = kotlin.io.path.createTempFile("read", ".txt").toFile().apply { writeText("x"); deleteOnExit() }
+        assertEquals(Answer.Refused(Answer.Why.NOT_TAKEN), b.ask(Call.ReceivedUpload(opened.received, listOf(file.path))))
+        b.ask(Call.ReceivedClose(opened.received))
         b.shutdown()
     }
 
@@ -211,7 +230,8 @@ class ReceivedBridgeTest {
         val adding = async { b.ask(Call.MemoryUpload(gallery, listOf(photo.path))) }
         w.untilJson { j -> shown(j)?.takeIf { it.naming } }
         assertEquals(Answer.Done, b.ask(Call.ReceivedNamingDecline(opened.received)))
-        assertEquals(0, assertIs<Answer.Queued>(adding.await()).count, "a photo was queued before the guest named itself")
+        // declined: nothing queued and nothing said — never "1 file was not added: only photos and videos" (#1091)
+        assertEquals(Answer.Refused(Answer.Why.NOT_CHOSEN), adding.await(), "a declined naming's photo was queued or said as no photo")
         val folder = kotlin.io.path.createTempDirectory("Reise").toFile().apply { deleteOnExit() }
         val dropped = assertIs<Answer.Dropped>(
             b.ask(Call.Drop(DropOn.Gallery(gallery), listOf(DropItem.Folder(folder.path), DropItem.NotLocal("away.jpg")), "")),
