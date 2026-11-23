@@ -58,6 +58,8 @@ import kotlin.time.Duration.Companion.minutes
  * The folder is trashed and purged and every device taken off the account however the case ends; the store is wiped.
  */
 class LivePinsTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val liveRun = LiveRun()
 
     @AfterTest

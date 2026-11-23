@@ -37,6 +37,8 @@ import me.raddatz.veyq.mobile.session.LiveRun
  * The Memory is trashed and purged however it ends. Reported skipped without `VEYQ_LIVE`.
  */
 class MemoryActionsLiveTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
     private val liveRun = LiveRun()
 

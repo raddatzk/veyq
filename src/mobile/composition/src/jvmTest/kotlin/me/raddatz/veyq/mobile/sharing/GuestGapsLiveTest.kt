@@ -49,6 +49,8 @@ import kotlin.time.Duration.Companion.minutes
  *   opens the link on its own page.
  */
 class GuestGapsLiveTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val runs = mutableMapOf<String, LiveRun>()
 
     @AfterTest

@@ -26,6 +26,8 @@ import me.raddatz.veyq.mobile.session.LiveRun
  * `VEYQ_LIVE_SUBTREE=<root folder name>`: see the block. Its own class: the live Pot test's one method outgrew the JVM's.
  */
 class SubtreeRekeyLiveTest {
+    init { me.raddatz.veyq.mobile.TestApplications.install(ExpensesKinds) }
+
     /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
     private val liveRun = LiveRun()
 

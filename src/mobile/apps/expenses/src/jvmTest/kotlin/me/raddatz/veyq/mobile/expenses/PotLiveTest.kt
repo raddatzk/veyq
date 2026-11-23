@@ -26,6 +26,8 @@ import me.raddatz.veyq.mobile.session.LiveRun
  * web then shows, the proof that both clients read and write one format — and checks it counts.
  */
 class PotLiveTest {
+    init { me.raddatz.veyq.mobile.TestApplications.install(ExpensesKinds) }
+
     /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
     private val liveRun = LiveRun()
 

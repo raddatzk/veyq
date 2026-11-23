@@ -36,6 +36,8 @@ import kotlin.test.assertTrue
  * device taken off the account however the case ends.
  */
 class CurationLiveTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val liveRun = LiveRun()
 
     @AfterTest

@@ -23,6 +23,8 @@ import me.raddatz.veyq.mobile.session.LiveRun
  * it stays, for the web's header and rows (the blue half with the disc), else it is removed again.
  */
 class CoverCropLiveTest {
+    init { me.raddatz.veyq.mobile.TestApplications.install(ExpensesKinds) }
+
     /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
     private val liveRun = LiveRun()
 

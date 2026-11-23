@@ -26,6 +26,8 @@ import kotlin.time.Duration.Companion.minutes
  * into it, and the owner reads the bucket by its name and the photo in it. Everything stays in the throwaway, erased with it.
  */
 class MarksLiveTest {
+    init { me.raddatz.veyq.mobile.TestApplications.install(MemoriesKinds) }
+
     /** Each account's devices taken off that account of the throwaway (never the seeded principal's `.run/.env`). */
     private val runs = mutableMapOf<String, LiveRun>()
 

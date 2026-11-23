@@ -48,6 +48,8 @@ import kotlin.test.assertTrue
  * account however the case ends; no device trust is enrolled.
  */
 class SearchLiveTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val liveRun = LiveRun()
 
     @AfterTest
