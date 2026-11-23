@@ -245,7 +245,7 @@ impl Inner {
             FileViewKind::Text => self.replace(&text_view(s.text.as_deref().unwrap_or_default(), s.truncated.as_ref().map(said::notice))),
             FileViewKind::Image if s.media_type.as_deref() == Some(SVG) => {
                 self.replace(&spinner(&words::file_opening()));
-                self.load(|inner, bytes, scale| SvgZoom::show(inner, bytes, scale));
+                self.load(SvgZoom::show);
             }
             FileViewKind::Image => {
                 self.replace(&spinner(&words::file_opening()));
