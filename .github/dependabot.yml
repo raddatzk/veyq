@@ -7,7 +7,7 @@ version: 2
 #
 # BEING REPLACED by the self-hosted Renovate (ADR 0158; changes/cr-renovate.md phase 5), one ecosystem at a time: an
 # ecosystem's entry leaves this file in the same change that lets Renovate propose for it (renovate.json5's last rules
-# hold off the rest). Moved so far: github-actions. The security updates Dependabot's alerts open stay until the end.
+# hold off the rest). Moved so far: github-actions; docker and docker-compose, but for the Emscripten image below. The security updates Dependabot's alerts open stay until the end.
 #
 # A major update never shares a pull request with minor and patch ones (owner, 2026-11-07): its first run grouped
 # typescript 6→7, @types/node 22→26, vitest 4→5 and Stryker 9→10 with forty minor bumps into one red PR (#4), so none
@@ -20,46 +20,27 @@ version: 2
 # `include: "scope"` follows it with the dependency type, `deps` or `deps-dev` — so a PR touching only dev
 # dependencies reads `chore(deps-dev): …`, every other `chore(deps): …`. A colon is added after a prefix ending in a
 # letter.
-# The `images` group carries no `commit-message`: the docs say only that a multi-ecosystem group takes "assignees,
-# labels, or other configuration options" — whether `commit-message` is one of them, and whether a member may carry it
-# instead, they leave unsaid, and a key Dependabot refuses stops every update in this file (the header's first read).
 #
-# THE FOLLOW. Three kinds of pull request from this file are red until something Dependabot does not write follows the
-# bump (every one of 2026-11-12's needed it: PR #15, #16, #19/#22, #20/#23). Two workflows do it on the pull request
+# THE FOLLOW. Two kinds of pull request from this file are red until something Dependabot does not write follows the
+# bump (every one of 2026-11-12's needed it: PR #15, #16, #19/#22, #20/#23; the third kind, images, moved to Renovate,
+# which writes every image site in one pull request). Two workflows do it on the pull request
 # itself, deterministically — scripts/dependabot_follow.py, no language model: Dependabot copies upstream release notes
 # into each pull request's body, third-party text, and an agent that read it while holding a write token would be a
 # prompt-injection path into this repository's supply chain. Nothing reads that body or any changelog.
-#   1. images: a pin a `docker`/`docker-compose` entry moved is written to every other image site of the same repository
-#      — the chart's values, the backup tool's `*_IMAGE` constants, measure_volume.py's `PROBE_IMAGE` (the comments
-#      below name each). Which files Dependabot writes is read from THIS file's `directories:`.
-#   2. playwright: a `playwright` group bump moves lane L1's `mcr.microsoft.com/playwright` image to the same version,
+#   1. playwright: a `playwright` group bump moves lane L1's `mcr.microsoft.com/playwright` image to the same version,
 #      at the multi-arch index digest MCR serves (checked: the body hashes to it, it is an index, amd64 and arm64).
-#   3. gradle: a `gradle` bump regenerates src/backend/gradle/verification-metadata.xml by the cold-home recipe of
+#   2. gradle: a `gradle` bump regenerates src/backend/gradle/verification-metadata.xml by the cold-home recipe of
 #      src/backend/CLAUDE.md and prunes only the versions the bump replaced that the cold Gradle home no longer fetches.
 # How: `dependabot-follow-derive.yml` runs on Dependabot's pull requests with a read-only token and executes what must
 # be executed (the bumped Gradle build), uploading what it wrote as an artifact. `dependabot-follow.yml` starts on its
 # completion via `workflow_run` — so its file, actions and script are always the default branch's, never the pull
-# request's — checks that the pull request is Dependabot's and that no person pushed to it, re-derives the image and
-# Playwright follows itself, accepts the metadata only as an append (no committed checksum changed, no trust rule
+# request's — checks that the pull request is Dependabot's and that no person pushed to it, re-derives the Playwright
+# follow itself, accepts the metadata only as an append (no committed checksum changed, no trust rule
 # changed), and pushes one commit, fast-forward, to the `dependabot/…` branch and nowhere else. It never merges. Its push
 # creates Checks runs that wait for a person's approval (GitHub's rule for GITHUB_TOKEN pushes), which is the review
-# step anyway. What it refuses — a pin changed where Dependabot never writes, two pins for one repository, a registry
-# body that is not its digest, a metadata "write" that changes a committed checksum — is red there and stays a person's
-# job, as is everything the script's docstring lists under its limits (a Quarkus bump's `quarkusDev` pass among them).
+# step anyway. What it refuses — a registry body that is not its digest, a metadata "write" that changes a committed
+# checksum — is red there and stays a person's job, as is everything the script's docstring lists under its limits (a Quarkus bump's `quarkusDev` pass among them).
 # Its forgery cases are scripts/dependabot_follow_selftest.py, which checks.yml's `guards` job runs.
-
-multi-ecosystem-groups:
-  # Third-party image pins (ADR 0057 §6). Every image is pinned `repo:tag@sha256:<index digest>`, so a new tag or a
-  # re-pushed one reaches this repository only as one of these PRs — the explicit bump the pin trades silent
-  # patches for. One `repo:tag` carries one digest everywhere (scripts/validate_image_pins.py), so a bump that
-  # reaches only some of its sites is red until the rest follow. That is why this stays ONE group across ecosystems,
-  # majors included.
-  images:
-    schedule:
-      interval: "weekly"
-      day: "saturday"
-      time: "06:00"
-      timezone: "Europe/Berlin"
 
 updates:
   # The pnpm workspace's one lockfile is at the root (src/web/, src/admin-web/, src/packages/crypto/ and tests/e2e/ are its
@@ -74,7 +55,8 @@ updates:
   # spelled out): the minor/patch group is one PR, and each major beside it is one more — a limit of 1 would let a
   # single stuck major block the group.
   # `@playwright/test` has a group of its own: its bump is red until lane L1's browser image follows — THE FOLLOW
-  # above writes it (scripts/validate_image_pins.py; the docker-compose entry below holds the image's version), and inside the
+  # above writes it (scripts/validate_image_pins.py; no updater proposes the image alone: renovate.json5 holds it until
+# the npm step of cr-renovate moves the two together), and inside the
   # minor/patch group it held every other bump back (PR #19, 2026-11-12). Listed first and excluded from the group below,
   # so it lands in this one whichever rule Dependabot applies to a dependency two groups match.
   - package-ecosystem: "npm"
@@ -174,121 +156,18 @@ updates:
     ignore:
       - dependency-name: "org.openapitools:openapi-generator"
 
-  # `docker` reads the files named Dockerfile/Containerfile in each directory (not recursively): each image's beside
-  # the code it ships — the app image's in src/backend/, the admin image's in src/admin-web/, the tools image's in
-  # src/tools/ — and the WebP encoder's toolchain in src/web/webp-encoder/ (ADR 0127), never published: its Emscripten
-  # digest is kept current here like every pin, and a bump writes new encoder bytes, so that pull request is red at
-  # Checks' `webp-encoder` job until `build.py --write` is run on its branch (src/web/webp-encoder/README.md).
+  # Only the WebP encoder's toolchain is still Dependabot's among the images (cr-renovate phase 5b moved the rest to
+  # Renovate): its Emscripten digest writes new encoder bytes, so that pull request is red at Checks' `webp-encoder` job
+  # until `build.py --write` is run on its branch (src/web/webp-encoder/README.md). Renovate takes it in phase 5e, with
+  # that rebuild as its follow-up. Never published (ADR 0127).
   - package-ecosystem: "docker"
-    directories:
-      - "/src/backend"
-      - "/src/admin-web"
-      - "/src/tools"
-      - "/src/web/webp-encoder"
-    patterns:
-      - "*"
-    multi-ecosystem-group: "images"
-    # Every rule here keeps a base on its LTS line (owner 2026-11-07: "only LTS"); PR #11 proposed node 25 and ubuntu
-    # 26.04 beside the bumps that were taken. A Docker tag is read as a version and a suffix (dependabot-core main,
-    # 2026-11-07: docker/lib/dependabot/docker/tag.rb `VERSION_WITH_SFX`, version.rb `Version.new`), so `22-bookworm-slim`
-    # is version 22 with suffix `-bookworm-slim`, `1.30-alpine` is 1.30, `24.04` is 24.04, and only a tag of the same
-    # suffix is proposed. Whether a member of a multi-ecosystem group may carry `ignore` is unproven, as the compose
-    # entry below says; the first run after this edit shows it.
-    ignore:
-      # src/tools/Dockerfile copies the client from the server's own image (`FROM mariadb:…`): the same LTS bound as the
-      # compose entry below, or this entry proposes the rolling releases the compose one holds back.
-      - dependency-name: "mariadb"
-        versions:
-          - ">= 12.4"
-      # The web build stages (src/backend/ and src/admin-web/Dockerfile) on Node's LTS lines, which are the even
-      # majors; an odd major is never LTS and is out of support six months after its release (nodejs.org/dist/index.json,
-      # 2026-11-07: 22 Jod, 24 Krypton and 26 Lithium are LTS, 23 and 25 are not, 27 is in alpha). A range per odd
-      # major, the next one included before its tag exists. The next EVEN major is still proposed, and with these rules
-      # it is what arrives (26-bookworm-slim is tagged): it is not taken in the group. The owner decides when Node
-      # moves, and it then moves in one commit with `node-version` in the workflows and with `@types/node`, whose
-      # major the npm entry above ignores for that reason.
-      - dependency-name: "node"
-        versions:
-          - ">= 23, < 24"
-          - ">= 25, < 26"
-          - ">= 27, < 28"
-      # The admin image on nginx's STABLE branch, the even minor (src/admin-web/Dockerfile says why: a mainline tag
-      # stops receiving builds once the next mainline opens). PR #11 proposed 1.31, which is mainline (measured
-      # 2026-11-07: `nginxinc/nginx-unprivileged:1.31-alpine` is `mainline-alpine`'s index, `1.30-alpine` is
-      # `stable-alpine`'s). The next stable minor, 1.32, is still proposed; 1.30's own digest moves still arrive.
-      - dependency-name: "nginxinc/nginx-unprivileged"
-        versions:
-          - ">= 1.31, < 1.32"
-          - ">= 1.33, < 1.34"
-          - ">= 1.35, < 1.36"
-      # The tools image's base follows the MariaDB image's base BY HAND, never on its own: src/tools/Dockerfile copies
-      # the `mariadb` client out of `mariadb:12.3`, which is Ubuntu 24.04 (noble), and the C library must match (its
-      # comment says so, measured with `ldd`). Everything after 24.04 is held, the interim 24.10, 25.04 and 25.10 tags
-      # included (they exist on Docker Hub, 2026-11-07, and 24.10 sorts above 24.04); 24.04's own digest moves still
-      # arrive. Lifted, and moved, together with the MariaDB pin whose base moves.
-      - dependency-name: "ubuntu"
-        versions:
-          - ">= 24.05"
-
-  # `docker-compose` matches `(docker-)?compose(-\w+)?(.<suffix>)?.ya?ml`, so both infra/docker/docker-compose.yml
-  # and the release recipe infra/docker/docker-compose.prod.yml, and lane L1's overlay
-  # tests/e2e/stack/docker-compose.e2e.yml (read from dependabot-core main 2e9740c, 2026-11-12: the fetcher's
-  # `FILENAME_REGEX` takes `.e2e` as the suffix). The overlay is read since 2026-11-12, after PR #15 moved mailpit in the
-  # dev compose file and left the overlay's pin behind. Its images are pebble (its own), mailpit (the dev compose
-  # file's; both directories' bumps arrive together in this group's pull request — seen in PR #20, 2026-11-12, which
-  # moved mailpit v1.33.0 → v1.33.1 in infra/docker/ and tests/e2e/stack/ at once) and Playwright (held below). The overlay writes
-  # no image as a YAML anchor: the parser resolves one (`aliases: true`), the updater's `image:` pattern does not, and
-  # its "Expected content to change!" would fail the update.
-  # MariaDB on its LTS line only (owner 2026-11-07: "only LTS makes sense"): 12.3 is the LTS, and the releases after
-  # it are rolling ones (13.0's community support ends with 2026), so nothing from 12.4 on is proposed. 12.3's own
-  # digest moves still arrive. The next LTS is moved to by hand, the bound below with it — a database major is a
-  # migration step of its own, never one bump in a group. Whether a member of a multi-ecosystem group may carry
-  # `ignore` the docs leave unsaid (remembered from the options reference: `ignore` is a per-entry key); the first run
-  # after this edit proves it was accepted.
-  - package-ecosystem: "docker-compose"
-    directories:
-      - "/infra/docker"
-      - "/tests/e2e/stack"
-    patterns:
-      - "*"
-    multi-ecosystem-group: "images"
-    ignore:
-      - dependency-name: "mariadb"
-        versions:
-          - ">= 12.4"
-      # Held on v2.0.0 until the move is done by hand (owner 2026-11-07): from v2.1 a fresh node answers the admin API
-      # 500 "Layout not ready" (the e2e harness reads only 503), from v2.5 its cold /health answers 503, so the chart's
-      # probes never let it become ready, and v2.5 cannot be downgraded (veyqctl rollback would start the old store on
-      # migrated metadata). Measured on throwaway containers on 2026-11-07. Lifted with that move.
-      - dependency-name: "dxflrs/garage"
-        versions:
-          - ">= 2.1"
-      # The image carries the browser `@playwright/test` drives, so the two move as one version
-      # (scripts/validate_image_pins.py). The library proposes the move (the root npm entry's `playwright` group); the
-      # image's tag and index digest follow it in that pull request (THE FOLLOW, header). Proposed here as well, the move would
-      # arrive twice — once in each group, each red until the other lands — and hold this group's other images back.
-      # A same-tag digest move still arrives under this rule (it is no version update): PR #23, 2026-11-12, proposed
-      # "Updates `playwright` from v1.64.1-noble to v1.64.1-noble", MCR's re-pushed index, at both of the overlay's sites.
-      # The name is the image's WITHOUT its registry: this rule first said `mcr.microsoft.com/playwright`, matched
-      # nothing, and PR #20 (2026-11-12) proposed "Updates `playwright` from v1.64.1-noble to v1.65.0-noble" — the
-      # parser's `image` capture, the registry being its own group (docker_compose/file_parser.rb, IMAGE_REGEX).
-      - dependency-name: "playwright"
-        update-types:
-          - "version-update:semver-major"
-          - "version-update:semver-minor"
-          - "version-update:semver-patch"
-
-  # Reached by no ecosystem: the chart's mariadb and garage pins (infra/kubernetes/charts/veyq/values.yaml). There was
-  # a `helm` entry, and it could never update them: Dependabot's helm updater skips every digest-pinned image on
-  # purpose ("digest-pinned images resolve by digest, so a tag-only bump would silently keep the old image",
-  # helm/lib/dependabot/helm/file_updater/image_updater.rb, read on main 2026-11-07), then fails "Expected content to
-  # change!" — red on every run since 2026-11-05. The `images` group's pull request never appeared either (the compose
-  # job logged "created"), most likely because of that failure — inferred, not shown. Removed 2026-11-07. Each pin shares its `repo:tag` with
-  # the compose files, so the group's pull request is red at validate_image_pins.py until the chart's line follows in
-  # that same pull request (THE FOLLOW, header, writes it).
-  # Reached by no ecosystem either: the backup tool's `*_IMAGE` constants in src/tools/instance_backup.py. Each shares
-  # its repository with a pin an ecosystem does reach — mariadb with the compose files, rclone with src/tools/Dockerfile's
-  # `FROM rclone/rclone:…` — so a bump there turns validate_image_pins.py red (one repository, one tag; one `repo:tag`,
-  # one digest) until the constant follows in that same pull request (PR #11: rclone 1.75.0 → 1.75.2; THE FOLLOW writes
-  # it). The same holds for scripts/measure_volume.py's `PROBE_IMAGE`, the release recipe's busybox, which no ecosystem
-  # reads (PR #11 left it behind).
+    directory: "/src/web/webp-encoder"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
+      time: "06:00"
+      timezone: "Europe/Berlin"
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: "chore"
+      include: "scope"

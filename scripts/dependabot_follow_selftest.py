@@ -43,93 +43,22 @@ def d(n: int) -> str:
     return "sha256:" + f"{n:064x}"
 
 
-# --- images -----------------------------------------------------------------------------------------------------------
+# The images follow is gone (cr-renovate phase 5b): the images are Renovate's, and an image bump is no longer followed.
+# The end-to-end case below holds that an image bump on a Dependabot branch writes nothing.
 
-CONFIG = {"updates": [
-    {"package-ecosystem": "docker", "directories": ["/src/tools"]},
-    {"package-ecosystem": "docker-compose", "directories": ["/infra/docker", "/tests/e2e/stack"]},
-    {"package-ecosystem": "npm", "directory": "/"},
-]}
-TRACKED = ["src/tools/Dockerfile", "src/tools/instance_backup.py", "infra/docker/docker-compose.yml",
-           "infra/docker/docker-compose.prod.yml", "tests/e2e/stack/docker-compose.e2e.yml",
-           "infra/kubernetes/charts/veyq/values.yaml", "src/tools/sub/Dockerfile", "infra/docker/notes.yml"]
-REACHED = df.reachable_files(CONFIG, TRACKED)
-check("reachable: Dockerfiles and compose files of the named directories",
-      REACHED == {"src/tools/Dockerfile", "infra/docker/docker-compose.yml", "infra/docker/docker-compose.prod.yml",
-                  "tests/e2e/stack/docker-compose.e2e.yml"}, str(sorted(REACHED)))
-refuses("reachable: a config naming no image directory is refused", df.reachable_files, {"updates": []}, TRACKED)
-
-OLD, NEW, FORGED = f"rclone/rclone:1.75.0@{d(1)}", f"rclone/rclone:1.75.2@{d(2)}", f"rclone/rclone:1.75.2@{d(666)}"
+OLD, NEW = f"rclone/rclone:1.75.0@{d(1)}", f"rclone/rclone:1.75.2@{d(2)}"
 DB = f"mariadb:12.3@{d(3)}"
 
 
-def tree(dockerfile_rclone: str, constant: str, chart_db: str = DB) -> dict[str, str]:
+def tree(dockerfile_rclone: str, constant: str) -> dict[str, str]:
     return {
         "src/tools/Dockerfile": f"FROM {DB} AS mariadb-client\nFROM {dockerfile_rclone} AS rclone\n",
-        "src/tools/instance_backup.py": f'RCLONE_IMAGE = "{constant}"\nDB_IMAGE = "{DB}"\n# see {OLD}\n',
-        "infra/kubernetes/charts/veyq/values.yaml": f"database:\n  image: {chart_db}\n",
+        "src/tools/instance_backup.py": f'RCLONE_IMAGE = "{constant}"\nDB_IMAGE = "{DB}"\n',
     }
 
 
 base = tree(OLD, OLD)
 head = tree(NEW, OLD)
-out = df.follow_images(head, {"src/tools/Dockerfile": base["src/tools/Dockerfile"]}, REACHED)
-check("images: the backup tool's constant follows the Dockerfile's bump",
-      out == {"src/tools/instance_backup.py": f'RCLONE_IMAGE = "{NEW}"\nDB_IMAGE = "{DB}"\n# see {OLD}\n'}, str(out))
-# (the comment line is no site: only the constant moves, and the mariadb constant beside it stays)
-
-already = tree(NEW, NEW)
-check("images: a branch this tool already followed is left alone",
-      df.follow_images(already, {r: base[r] for r in ("src/tools/Dockerfile", "src/tools/instance_backup.py")},
-                       REACHED) == {})
-check("images: no bump, nothing written", df.follow_images(base, {}, REACHED) == {})
-
-# Forgery 1: a pin moved only where Dependabot never writes.
-forged_chart = tree(OLD, OLD, chart_db=f"mariadb:12.3@{d(666)}")
-refuses("images FORGERY: a chart pin changed while no reached file moved",
-        df.follow_images, forged_chart,
-        {"infra/kubernetes/charts/veyq/values.yaml": base["infra/kubernetes/charts/veyq/values.yaml"]}, REACHED)
-# Forgery 2: Dependabot's bump plus an unreached site set to another digest of the same tag.
-refuses("images FORGERY: an unreached site moved to another digest than the bump's",
-        df.follow_images, tree(NEW, FORGED),
-        {r: base[r] for r in ("src/tools/Dockerfile", "src/tools/instance_backup.py")}, REACHED)
-# Ambiguous: two reached files, two different new pins of one repository.
-two = dict(head, **{"infra/docker/docker-compose.yml": f"services:\n  r:\n    image: {FORGED}\n"})
-refuses("images: two different new pins of one repository are refused", df.follow_images, two,
-        {"src/tools/Dockerfile": base["src/tools/Dockerfile"],
-         "infra/docker/docker-compose.yml": f"services:\n  r:\n    image: {OLD}\n"}, REACHED)
-# A reached site Dependabot left on the old pin.
-left = dict(head, **{"infra/docker/docker-compose.yml": f"services:\n  r:\n    image: {OLD}\n"})
-refuses("images: a reached site left on the old pin is refused", df.follow_images, left,
-        {"src/tools/Dockerfile": base["src/tools/Dockerfile"]}, REACHED)
-
-# The real tree: PR #23's shape (rclone moved in src/tools/Dockerfile) against today's files and today's config.
-try:
-    import yaml
-
-    real_config = yaml.safe_load((ROOT / ".github/dependabot.yml").read_text())
-    listed = subprocess.run(["git", "-C", str(ROOT), "ls-files", "-z"], capture_output=True, text=True)
-    real_tracked = ([p for p in listed.stdout.split("\0") if p] if listed.returncode == 0 else
-                    [p.relative_to(ROOT).as_posix() for p in ROOT.rglob("*") if p.is_file() and ".git" not in p.parts])
-    real_reached = df.reachable_files(real_config, real_tracked)
-    for rel in ("src/tools/Dockerfile", "infra/docker/docker-compose.yml", "tests/e2e/stack/docker-compose.e2e.yml"):
-        check(f"real config: {rel} is a file Dependabot writes", rel in real_reached)
-    for rel in ("src/tools/instance_backup.py", "infra/kubernetes/charts/veyq/values.yaml", "scripts/measure_volume.py"):
-        check(f"real config: {rel} is no file Dependabot writes", rel not in real_reached)
-    real_head = {rel: (ROOT / rel).read_text() for rel in ("src/tools/Dockerfile", "src/tools/instance_backup.py",
-                                                           "src/web/webp-encoder/libwebp.pin")}
-    current = next(s.ref for s in df.sites("src/tools/Dockerfile", real_head["src/tools/Dockerfile"])
-                   if s.repo == "rclone/rclone")
-    bumped_ref = f"rclone/rclone:9.9.9@{d(99)}"
-    real_base = {"src/tools/Dockerfile": real_head["src/tools/Dockerfile"]}
-    real_head["src/tools/Dockerfile"] = real_head["src/tools/Dockerfile"].replace(current, bumped_ref)
-    real_out = df.follow_images(real_head, real_base, real_reached)
-    check("real tree: an rclone bump in the tools Dockerfile moves RCLONE_IMAGE and nothing else",
-          set(real_out) == {"src/tools/instance_backup.py"}
-          and real_out["src/tools/instance_backup.py"]
-          == real_head["src/tools/instance_backup.py"].replace(current, bumped_ref), str(sorted(real_out)))
-except ModuleNotFoundError:
-    failures.append("PyYAML is required for the real-config cases (pip install pyyaml)")
 
 
 # --- Playwright -------------------------------------------------------------------------------------------------------
@@ -289,8 +218,6 @@ def run_git(cwd: pathlib.Path, *args: str) -> str:
 with tempfile.TemporaryDirectory() as scratch:
     work = pathlib.Path(scratch) / "tree"
     work.mkdir()
-    (work / ".github").mkdir()
-    (work / ".github/dependabot.yml").write_text(json.dumps(CONFIG))  # JSON is YAML
     for rel, text in base.items():
         (work / rel).parent.mkdir(parents=True, exist_ok=True)
         (work / rel).write_text(text)
@@ -302,24 +229,14 @@ with tempfile.TemporaryDirectory() as scratch:
     run_git(work, "commit", "--quiet", "-am", "bump")
     message = pathlib.Path(scratch) / "message.txt"
     cli = [sys.executable, str(pathlib.Path(__file__).resolve().parent / "dependabot_follow.py")]
-    ran = subprocess.run(cli + ["follow", "--tree", str(work), "--config", str(work / ".github/dependabot.yml"),
-                                "--base", base_sha, "--message", str(message)], capture_output=True, text=True)
+    ran = subprocess.run(cli + ["follow", "--tree", str(work), "--base", base_sha, "--message", str(message)],
+                         capture_output=True, text=True)
     check("end to end: the follow exits 0", ran.returncode == 0, ran.stderr)
-    check("end to end: the constant is rewritten in the tree",
-          f'RCLONE_IMAGE = "{NEW}"' in (work / "src/tools/instance_backup.py").read_text())
-    check("end to end: the only change is that file",
-          run_git(work, "status", "--porcelain") == "M src/tools/instance_backup.py", run_git(work, "status", "--porcelain"))
-    check("end to end: a commit message names it", message.is_file() and "instance_backup.py" in message.read_text())
+    check("end to end: an image bump is no longer followed — nothing is written, no message",
+          run_git(work, "status", "--porcelain") == "" and not message.exists() and "nothing to follow" in ran.stdout,
+          run_git(work, "status", "--porcelain") + ran.stdout)
     needed = subprocess.run(cli + ["gradle-needed", "--tree", str(work), "--base", base_sha], capture_output=True, text=True)
     check("end to end: an image bump needs no Gradle derive", needed.stdout.strip() == "needed=false", needed.stdout)
-    run_git(work, "checkout", "--quiet", "--", ".")
-    (work / "infra/kubernetes/charts/veyq/values.yaml").write_text(forged_chart["infra/kubernetes/charts/veyq/values.yaml"])
-    run_git(work, "commit", "--quiet", "-am", "forged")
-    ran = subprocess.run(cli + ["follow", "--tree", str(work), "--config", str(work / ".github/dependabot.yml"),
-                                "--base", base_sha, "--message", str(message)], capture_output=True, text=True)
-    check("end to end FORGERY: a chart pin no reached file explains exits 1 and writes nothing",
-          ran.returncode == 1 and run_git(work, "status", "--porcelain") == "", ran.stderr)
-
 
 if failures:
     print(f"DEPENDABOT FOLLOW SELF-TEST FAILED ({len(failures)} of {checks}):")

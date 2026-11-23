@@ -99,8 +99,7 @@ jobs:
         run: |
           base=$(git -C pr merge-base "origin/$BASE_REF" HEAD)
           "$RUNNER_TEMP/venv/bin/python" tool/scripts/dependabot_follow.py follow --tree pr \
-            --config tool/.github/dependabot.yml --base "$base" --derived "$RUNNER_TEMP/derived" \
-            --message "$RUNNER_TEMP/message.txt"
+            --base "$base" --derived "$RUNNER_TEMP/derived" --message "$RUNNER_TEMP/message.txt"
 
       - name: Push the follow to the Dependabot branch
         if: steps.gate.outputs.follow == 'true'
