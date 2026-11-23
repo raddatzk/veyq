@@ -7,6 +7,7 @@ sources:
   - docs/decisions/0090-end-to-end-tests-boot-the-release-candidate.md
   - docs/decisions/0040-coverage-gaps-and-http-not-a-surface.md
   - docs/decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md
+  - docs/decisions/0158-every-pin-has-an-updater-a-self-hosted-renovate-proposes-each-bump-with-what-moves-with-it.md
   - docs/ai/README.md
   - docs/architecture/README.md
 ---
@@ -204,7 +205,9 @@ triggers.
 The jobs that are no stage carry a budget too, so that none runs on GitHub's 360-minute default: reading the version
 5 min, the pipeline's gate (`green`) 5, Publish's finding of the Checks run 5, the snapshot's publish 15, its tag 5, its release draft 5 and the staging retention 10, a release's check and promote 15 each, its publish 10 and its channels
 and refusal 5 each, a path-filter job 5, CodeQL's analysis 30, the docs site's check 10 and its deploy 5,
-the dependency graph's resolve 15 and its submit 5, a pull request's release-note check 5. A budget no
+the dependency graph's resolve 15 and its submit 5, a pull request's release-note check 5, Renovate's weekly run 30,
+its follow's read-only derive 90 (a cold Gradle build with the mutation run, as the backend's recipe asks) and its push
+10. A budget no
 run has measured is an estimate until the first CI run replaces it.
 
 Per commit in CI, the longest path — the surface checks, or the image build and then the lanes — is *estimated* at
@@ -212,7 +215,10 @@ Per commit in CI, the longest path — the surface checks, or the image build an
 CodeQL's static analysis (`codeql.yml`), the docs site's build (`site.yml`) and the backend's resolved dependency
 graph, submitted on every push to `main` so Dependabot's alerts reach the transitive Gradle dependencies
 (`dependency-submission.yml`), and that every pull request carries a release note, from which the weekly release
-draft is gathered (`release-note.yml`).
+draft is gathered (`release-note.yml`). Nor is the pins' updater a stage: a self-hosted Renovate (`renovate.yml`) proposes
+every pin's bump on Saturday, and the Renovate follow (`renovate-follow-derive.yml`, `renovate-follow.yml`) writes onto
+its pull request what only the bumped build can write; each such pull request then runs every stage above, like any
+other.
 
 ### One command runs the pipeline locally
 

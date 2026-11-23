@@ -1,9 +1,9 @@
 name: Renovate
 
 # The self-hosted Renovate of ADR 0158, as a GitHub App of its own (decision 3), so that its pull requests start
-# `Checks` like a person's. Built in stages by changes/cr-renovate.md. Since phase 5 Renovate writes: its branches, its
-# pull requests and the Dependency Dashboard issue. It proposes only for the ecosystems already moved from Dependabot;
-# renovate.json5 holds the others off by one rule, which shrinks with each move (the CR's phase 5 has the order).
+# `Checks` like a person's. Built by changes/cr-renovate.md: Renovate writes its branches, its pull requests and the
+# Dependency Dashboard issue, for every pin in the tree; Dependabot proposes nothing any more. What a bump needs the
+# bumped tree executed for is written by the Renovate follow (.github/workflows/renovate-follow*.yml), never here.
 #
 # Two configurations, kept apart. renovate.json5 at the repository root is the version policy: which updates, grouped
 # how, held back why. It names no forge, so it runs unchanged on another. The `env:` of the Renovate step below is the
@@ -19,8 +19,9 @@ name: Renovate
 # the action appends to ghcr.io/renovatebot/renovate.
 on:
   schedule:
-    # Saturday 05:00 UTC: Dependabot's 06:00 Europe/Berlin in winter, one hour before it in summer (cron reads UTC), so
-    # Renovate and Dependabot, while both still run, read the same registries on the same morning.
+    # Saturday 05:00 UTC (cron reads UTC; Dependabot's slot was 06:00 Europe/Berlin, owner 2026-11-07), so its pull
+    # requests and their Checks runs are ready on Saturday, and what is merged over the weekend is in the snapshot
+    # publish.yml cuts on Monday at 03:17 UTC.
     - cron: "0 5 * * 6"
   workflow_dispatch:
 
@@ -70,7 +71,7 @@ jobs:
           RENOVATE_ONBOARDING: "false"
           RENOVATE_REQUIRE_CONFIG: required
           LOG_LEVEL: debug
-          # The only commands a postUpgradeTask may run (renovate.json5): pin_follow.py's three follow-ups, exactly. A
+          # The only commands a postUpgradeTask may run (renovate.json5): pin_follow.py's four follow-ups, exactly. A
           # repository script from the default branch, run in Renovate's container; dependencies' install scripts stay
           # off (Renovate's default for a self-hosted run, `allowScripts` unset).
-          RENOVATE_ALLOWED_COMMANDS: '["^python3 scripts/pin_follow\\.py helm$", "^python3 scripts/pin_follow\\.py openapi-generator-jar$", "^python3 scripts/pin_follow\\.py pypi-hashes scripts/requirements-release\\.txt$"]'
+          RENOVATE_ALLOWED_COMMANDS: '["^python3 scripts/pin_follow\\.py helm$", "^python3 scripts/pin_follow\\.py openapi-generator-jar$", "^python3 scripts/pin_follow\\.py pypi-hashes scripts/requirements-release\\.txt$", "^python3 scripts/pin_follow\\.py gradle-distribution$"]'

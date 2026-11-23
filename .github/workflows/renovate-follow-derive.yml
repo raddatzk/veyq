@@ -1,0 +1,135 @@
+name: Renovate follow (derive)
+
+# The read-only half of the Renovate follow (scripts/renovate_follow.py, whose docstring says what it follows and why
+# without a language model; ADR 0158 decision 4). It runs on Renovate's own pull requests and holds nothing that
+# writes: `contents: read`, no secret, the checkout's credentials not kept.
+#
+# It is the half that EXECUTES the bump, which Renovate's job never does (it holds the App's token). On a pull request
+# that moves a Gradle build input it runs the cold-home recipe of src/backend/CLAUDE.md for that build — the bumped
+# build, its plugins, its tests — so the verification metadata is written from what a clean build fetches, and lists
+# what that cold Gradle home downloaded. On one that moves libwebp's tag or the Emscripten image it rebuilds the WebP
+# encoder with `build.py --write`; on a Schemathesis bump it re-runs tests/fuzz/lock.py in the fuzzer's base image.
+# What it wrote is uploaded as an artifact; renovate-follow.yml reads it as data and writes nothing it has not checked.
+#
+# It never reads the pull request's title or body: Renovate copies upstream release notes into them.
+on:
+  pull_request:
+    branches:
+      - main
+      - "release/**"
+
+concurrency:
+  group: renovate-follow-derive-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  derive:
+    name: Derive what the bump needs (read-only)
+    if: >-
+      github.event.pull_request.user.login == 'veyq-renovate[bot]'
+      && startsWith(github.event.pull_request.head.ref, 'renovate/')
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    # The cold-home write runs `help check quarkusBuild pitest` from an empty Gradle home: the backend job's cold
+    # `check` alone is sized at 30 minutes (checks.yml), mutation.yml's `pitest` at 30 more.
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Check out the pull request's head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The follow's own commit is the head after it pushed: its push starts this run again, and nothing is left to
+      # derive (the derived files are the committed ones), so the cold build is not run twice.
+      - name: What does the bump need?
+        id: needs
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/derived"
+          if [ "$(git log -1 --format=%s HEAD)" = "chore(deps): follow the bump where Renovate does not write" ]; then
+            echo "the head is the follow's own commit: nothing to derive"
+            printf 'gradle_backend=false\ngradle_root=false\nwebp=false\nfuzz=false\n' | tee -a "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          base=$(git merge-base "$BASE_SHA" HEAD)
+          python3 scripts/renovate_follow.py needs --tree . --base "$base" | tee -a "$GITHUB_OUTPUT"
+
+      # No `cache: gradle`: the empty Gradle home is the point of the recipe (a warm cache hides what a cold one fetches).
+      - name: Set up Java
+        if: steps.needs.outputs.gradle_backend == 'true' || steps.needs.outputs.gradle_root == 'true'
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - name: Validate the Gradle wrapper JARs
+        if: steps.needs.outputs.gradle_backend == 'true' || steps.needs.outputs.gradle_root == 'true'
+        uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+
+      - name: Write the backend's verification metadata from a cold Gradle home
+        if: steps.needs.outputs.gradle_backend == 'true'
+        working-directory: src/backend
+        env:
+          GRADLE_USER_HOME: ${{ runner.temp }}/gradle-cold-home-backend
+        run: |
+          ./gradlew --no-daemon --write-verification-metadata sha256 help check quarkusBuild pitest
+          mkdir -p "$RUNNER_TEMP/derived/gradle/backend"
+          cp gradle/verification-metadata.xml "$RUNNER_TEMP/derived/gradle/backend/verification-metadata.xml"
+          python3 ../../scripts/renovate_follow.py gradle-listing --gradle-home "$GRADLE_USER_HOME" \
+            > "$RUNNER_TEMP/derived/gradle/backend/cold-cache.json"
+
+      # The root launcher resolves Gradle's own kotlin-dsl for its build scripts and nothing else (it includes no
+      # surface's build, infra/README.md § The launcher), so `help` is the whole of what it fetches.
+      - name: Write the root launcher's verification metadata from a cold Gradle home
+        if: steps.needs.outputs.gradle_root == 'true'
+        env:
+          GRADLE_USER_HOME: ${{ runner.temp }}/gradle-cold-home-root
+        run: |
+          ./gradlew --no-daemon --write-verification-metadata sha256 help
+          mkdir -p "$RUNNER_TEMP/derived/gradle/root"
+          cp gradle/verification-metadata.xml "$RUNNER_TEMP/derived/gradle/root/verification-metadata.xml"
+          python3 scripts/renovate_follow.py gradle-listing --gradle-home "$GRADLE_USER_HOME" \
+            > "$RUNNER_TEMP/derived/gradle/root/cold-cache.json"
+
+      # libwebp's tag moves alone in the pin (Renovate's git-tags manager); its commit is upstream's answer for that tag,
+      # which renovate-follow.yml asks again before it accepts the pin build.py writes.
+      - name: Rebuild the WebP encoder
+        if: steps.needs.outputs.webp == 'true'
+        run: |
+          tag=$(sed -n 's/^tag //p' src/web/webp-encoder/libwebp.pin)
+          commit=$(python3 scripts/renovate_follow.py libwebp-commit --tag "$tag" | sed -n 's/^commit=//p')
+          python3 src/web/webp-encoder/build.py --tag "$tag" --commit "$commit" --write
+          mkdir -p "$RUNNER_TEMP/derived/webp/wasm"
+          cd src/web/webp-encoder
+          cp libwebp.pin COPYING PATENTS "$RUNNER_TEMP/derived/webp/"
+          cp wasm/webp_encoder.wasm wasm/webp_encoder.mjs "$RUNNER_TEMP/derived/webp/wasm/"
+
+      # tests/fuzz/lock.py runs in the fuzzer's own base image (its docstring), the Dockerfile's FROM, digest included.
+      - name: Re-lock the fuzzer's requirements
+        if: steps.needs.outputs.fuzz == 'true'
+        run: |
+          image=$(sed -n 's/^FROM \([^ ]*\).*/\1/p' tests/fuzz/Dockerfile)
+          docker run --rm -v "$PWD/tests/fuzz:/work" --entrypoint python "$image" /work/lock.py
+          mkdir -p "$RUNNER_TEMP/derived/fuzz"
+          cp tests/fuzz/requirements.txt "$RUNNER_TEMP/derived/fuzz/requirements.txt"
+
+      - name: Record what was derived
+        env:
+          NEEDS: ${{ toJSON(steps.needs.outputs) }}
+        run: printf '%s\n' "$NEEDS" > "$RUNNER_TEMP/derived/derived.json"
+
+      - name: Upload what was derived
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: renovate-follow
+          path: ${{ runner.temp }}/derived
+          retention-days: 3
+          if-no-files-found: error

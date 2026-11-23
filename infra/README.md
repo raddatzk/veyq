@@ -204,7 +204,7 @@ decided — is [`docs/crosscutting/release-and-deployment.md`](../docs/crosscutt
 section keeps the commands.
 
 **A snapshot is published weekly, or when you ask for one** ([ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
-decision 5, amended 2026-11-07). Every push to `main` or `release/<major>.x` and every pull request (Dependabot's
+decision 5, amended 2026-11-07). Every push to `main` or `release/<major>.x` and every pull request (Renovate's
 included) runs **Checks** (`.github/workflows/checks.yml`) — the one pipeline per commit, every stage listed once in the
 stage map of [How veyq is tested](../site/src/content/docs/security/how-veyq-is-tested.md#where-and-when-each-stage-runs)
 — and **publishes nothing**; a push to `main` or `release/<major>.x` also **stages** the images (`build-<sha>-<arch>`,
@@ -261,8 +261,9 @@ gh workflow run publish.yml --ref main               # the tip's snapshot now, a
 - **The packages must be pullable.** The first publish creates `veyq`, `veyq-admin`, `veyq-tools` and `charts/veyq` under the
   owner's GHCR packages. Make all four public, or every operator needs registry credentials — and the chart has no
   `imagePullSecrets` value, so public is the state it supports.
-- **Bumping a pin is part of cutting a release** (ADR 0057 §6), Helm's included: `HELM_VERSION` and `HELM_SHA256`
-  at the top of `checks.yml` and `publish.yml` (and `release.yml`; one value, held equal), checked against the published `.sha256sum` and the GitHub release notes.
+- **Bumping a pin is no part of cutting a release** (ADR 0158 decision 7): Renovate proposes every pin's bump on
+  Saturday with what moves with it (`.github/workflows/renovate.yml`, `renovate.json5`), and what is merged by Monday is
+  in that week's snapshot. A pull request of Renovate's that stays red is read like any other.
 
 **A release promotes a snapshot** (ADR 0091 decision 5, `.github/workflows/release.yml`). Nothing is built: the
 images every lane tested get the release's names and a second signature, from `release.yml` — the identity Verify a
@@ -274,8 +275,8 @@ per release:
 1. **GitHub → Releases → read the draft.** Every Publish on `main` that made a snapshot (the Monday schedule, or a
    dispatch) also writes the draft (`publish.yml` › `release-draft`, cr-release-draft-from-publish): `veyq
    <major>.<minor>` on `snapshot-<major>.<minor>`, its **notes** gathered from the `## Release note` section of every
-   pull request merged since the last release — **What is new**, **Fixed**, Dependabot's bumps in one line under
-   **Under the hood**, a pull request without a usable note under **Needs a note**, and **What an operator must act
+   pull request merged since the last release — **What is new**, **Fixed**, the updaters' bumps (Renovate's, and
+   Dependabot's before it) in one line under **Under the hood**, a pull request without a usable note under **Needs a note**, and **What an operator must act
    on** (*Nothing.* unless a note says otherwise). Read it, edit what needs it (a lede line, a note to fix), **Save
    draft** (never *Publish*). A missing note can instead be written in its pull request: **Actions → Publish → Run
    workflow** on `main` then rewrites the untouched draft of the snapshot already made, publishing nothing. Release

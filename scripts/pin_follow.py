@@ -23,12 +23,24 @@ on the repository's Python 3.9. No language model anywhere, and no release-note 
      `Name==version \\` block's `--hash=sha256:` lines become exactly the set PyPI's JSON metadata publishes for that
      version's manylinux x86_64 and aarch64 wheels (no package downloaded), ordered by Python version. The header's
      `Name X.Y` and `on <date>` move with it.
+  4. **gradle-distribution** — `distributionSha256Sum` in every tracked `gradle/wrapper/gradle-wrapper.properties`
+     (found by name over `git ls-files`: the root launcher's and `src/backend/`'s today). Renovate's gradle-wrapper
+     manager moves only `distributionUrl`: it would regenerate the wrapper by running the repository's Gradle, which
+     `renovate.yml` deliberately does not allow in the job holding the App token (`gradleWrapper` is not among its
+     `allowedUnsafeExecutions`) — so the old sum would stay and the wrapper refuse the new download. The SHA-256 of
+     the distribution `distributionUrl` names is obtained two ways and taken only when both agree: services.gradle.org's
+     `<url>.sha256` and the hash of the zip itself (streamed, never kept). The wrapper JAR is left alone on purpose: a
+     newer distribution runs under an older JAR (`src/backend/` runs 9.9.2 under 9.9.0's), and
+     `scripts/gradle_wrapper_jar.sha256` pins the JAR that is there.
 
 **What makes it refuse** (exit 1, nothing written), each a case in `pin_follow_selftest.py`: the three workflows name
 different Helm versions, or one names none or two; the three Helm checksum sources disagree, or one is missing, or
 the release is a draft or a prerelease; the three surfaces name different generator versions; the JAR does not match
 Central's `.sha1` or `.md5`; a requirements block whose version PyPI publishes no such wheel for, a yanked version, or a
-line in the file that is no hashed requirement. An upstream answering 429 or 5xx is retried with backoff (Maven
+line in the file that is no hashed requirement; no tracked wrapper properties file, one whose `distributionUrl` or
+`distributionSha256Sum` line is missing, malformed or there twice, a `distributionUrl` that is no
+`https://services.gradle.org/distributions/gradle-<X.Y[.Z]>-(bin|all).zip`, a `.sha256` that is not exactly one
+64-hex value, or a zip that does not hash to it. An upstream answering 429 or 5xx is retried with backoff (Maven
 Central rate-limits CI) before it counts as a refusal.
 
 **Its limits — what a green run does NOT prove.** All three Helm sources are served by the Helm project; they agree
@@ -37,11 +49,15 @@ the tarball's gpg signature is not checked. The JAR's `.asc` continuity check th
 NOT done here (no gpg in Renovate's container): the new line is trust-on-first-write, checked only against Central's
 own `.sha1`/`.md5`, and the header's record of how the previous line was obtained is not rewritten. The PyPI hashes are
 PyPI's word for its own files, exactly as the requirements file's header says. Prose in a header beyond the version
-and the date (which CPython versions the wheels cover, say) is not rewritten.
+and the date (which CPython versions the wheels cover, say) is not rewritten. Both Gradle sources are
+services.gradle.org's: their agreement proves the zip's bytes match the sum published beside them, not that Gradle's
+server is honest (the distribution's signature is not checked); and the wrapper JAR is not refreshed — a release that
+needs a newer JAR is a hand-made change.
 
     python3 scripts/pin_follow.py [--root DIR] helm
     python3 scripts/pin_follow.py [--root DIR] openapi-generator-jar
     python3 scripts/pin_follow.py [--root DIR] pypi-hashes FILE
+    python3 scripts/pin_follow.py [--root DIR] gradle-distribution
 
 `--root` (default: this repository) is the tree to read and write; FILE is relative to it.
 """
@@ -55,6 +71,7 @@ import json
 import os
 import pathlib
 import re
+import subprocess
 import sys
 import time
 import urllib.error
@@ -66,7 +83,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import repo_layout  # noqa: E402
 
 USER_AGENT = "veyq-pin-follow"
-MAX_BODY = 4 * 1024 * 1024  # a checksum file, a release, a PyPI JSON — never more; the tarball and the JAR are hashed
+MAX_BODY = 4 * 1024 * 1024  # a checksum file, a release, a PyPI JSON — never more; tarball, JAR and zip are hashed
 ATTEMPTS = 5
 MAX_DELAY = 60
 
@@ -469,6 +486,79 @@ def follow_pypi_hashes(root: pathlib.Path, rel: str) -> None:
     write_all(root, {rel: "\n".join(header + out[header_end:]) + "\n"})
 
 
+# --- 4. gradle-distribution --------------------------------------------------------------------------------------------
+
+WRAPPER_PROPERTIES = "gradle/wrapper/gradle-wrapper.properties"
+GRADLE_DISTRIBUTION = re.compile(
+    r"https://services\.gradle\.org/distributions/gradle-\d+\.\d+(?:\.\d+)?-(?:bin|all)\.zip")
+SHA256_BODY = re.compile(rb"[0-9a-f]{64}\n?")
+
+
+def tracked_wrapper_properties(root: pathlib.Path) -> "list[str]":
+    """Every tracked `gradle/wrapper/gradle-wrapper.properties`, found by `git ls-files` — never a hand list."""
+    try:
+        out = subprocess.run(["git", "-C", str(root), "ls-files", "-z"], check=True, capture_output=True).stdout
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise Refusal(f"`git ls-files` failed under {root}, so no wrapper properties file can be found") from exc
+    found = sorted(rel for rel in out.decode("utf-8", "surrogateescape").split("\0")
+                   if rel == WRAPPER_PROPERTIES or rel.endswith("/" + WRAPPER_PROPERTIES))
+    if not found:
+        raise Refusal(f"no tracked {WRAPPER_PROPERTIES} under {root} — nothing to follow, so a wrong tree")
+    return found
+
+
+def property_line(text: str, key: str, rel: str) -> re.Match:
+    """The one `key=value` line; a second line for the same key (in any spacing or separator) is refused."""
+    lines = re.findall(rf"^[ \t]*{key}[ \t]*[=:]", text, re.MULTILINE)
+    if len(lines) != 1:
+        raise Refusal(f"{rel} has {len(lines)} `{key}` lines, not one")
+    found = re.search(rf"^{key}=(?P<value>[^\r\n]*)$", text, re.MULTILINE)
+    if not found:
+        raise Refusal(f"{rel}'s `{key}` line is not `{key}=<value>`")
+    return found
+
+
+def distribution_url(text: str, rel: str) -> str:
+    url = property_line(text, "distributionUrl", rel).group("value").replace("\\:", ":")
+    if not GRADLE_DISTRIBUTION.fullmatch(url):
+        raise Refusal(f"{rel}'s distributionUrl `{url}` is no "
+                      f"https://services.gradle.org/distributions/gradle-<X.Y[.Z]>-(bin|all).zip")
+    return url
+
+
+def distribution_sum(url: str) -> str:
+    """The SHA-256 of the zip at `url`: services.gradle.org's `.sha256`, and the zip's own hash — both, agreeing."""
+    name = url.rsplit("/", 1)[1]
+    body = get_ok(url + ".sha256", "services.gradle.org's .sha256").body
+    if not SHA256_BODY.fullmatch(body):
+        raise Refusal(f"{name}.sha256 is not exactly one 64-hex SHA-256: {body[:120]!r}")
+    published = body.decode("ascii").strip()
+    hashed = get_ok(url, "the Gradle distribution", digests=("sha256",)).digests["sha256"]
+    if published != hashed:
+        raise Refusal(f"the two SHA-256 sources for {name} disagree — services.gradle.org's .sha256: {published}, "
+                      f"the zip itself: {hashed}")
+    return published
+
+
+def follow_gradle_distribution(root: pathlib.Path) -> None:
+    texts = {rel: read(root, rel) for rel in tracked_wrapper_properties(root)}
+    urls: dict[str, str] = {}
+    for rel, text in texts.items():  # every file is read whole before anything is fetched
+        urls[rel] = distribution_url(text, rel)
+        current = property_line(text, "distributionSha256Sum", rel).group("value")
+        if not HEX64.fullmatch(current):
+            raise Refusal(f"{rel}'s distributionSha256Sum `{current}` is no 64-hex SHA-256")
+    sums: dict[str, str] = {}
+    for url in sorted(set(urls.values())):  # one download per distribution, however many wrappers name it
+        sums[url] = distribution_sum(url)
+        print(f"{url.rsplit('/', 1)[1]}: {sums[url]} (services.gradle.org's .sha256 and the zip agree)")
+    new: dict[str, str] = {}
+    for rel, text in texts.items():
+        line = property_line(text, "distributionSha256Sum", rel)
+        new[rel] = text[:line.start("value")] + sums[urls[rel]] + text[line.end("value"):]
+    write_all(root, new)
+
+
 # --- command line ------------------------------------------------------------------------------------------------------
 
 def main(argv: "Iterable[str] | None" = None) -> int:
@@ -480,6 +570,7 @@ def main(argv: "Iterable[str] | None" = None) -> int:
     sub.add_parser("openapi-generator-jar", help="the generator JAR's line in scripts/openapi_generator_jar.sha256")
     pypi = sub.add_parser("pypi-hashes", help="a hashed requirements file's wheel hashes")
     pypi.add_argument("file", help="the requirements file, relative to --root")
+    sub.add_parser("gradle-distribution", help="distributionSha256Sum in every tracked gradle-wrapper.properties")
     args = parser.parse_args(list(argv) if argv is not None else None)
     root = args.root.resolve()
     try:
@@ -487,6 +578,8 @@ def main(argv: "Iterable[str] | None" = None) -> int:
             follow_helm(root)
         elif args.command == "openapi-generator-jar":
             follow_generator_jar(root)
+        elif args.command == "gradle-distribution":
+            follow_gradle_distribution(root)
         else:
             follow_pypi_hashes(root, args.file)
     except Refusal as refusal:

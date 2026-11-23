@@ -266,10 +266,39 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
     branch's tree: a lookup proposes `renovate/npm-minor-and-patch`, `renovate/pnpm` (12.22.0 at all eight sites) and
     `renovate/postcss-nested-9.x` (the site's override), and holds only Emscripten and the fuzzer's Python image among
     the images; the `pins` extract is still 304 pins. Open: the first real npm pull request.
-  - [ ] **5d gradle**: the gradleWrapper measurement, the metadata follow, then the follow workflows go.
-  - [ ] **5e the rest**: Helm, PyYAML, the OpenAPI generator, Schemathesis with `lock.py`, libwebp and Emscripten with
-    `build.py --write` and the fuzzer's Python image; `webp-encoder-update.yml` goes; security updates move.
-- [ ] **6 docs.**
+  - [ ] **5d gradle** and **5e the rest**, one pull request with phase 6 (owner 2026-11-23: one pull request per
+    feature). Built:
+    - The gradleWrapper measurement, read in the pinned image's `lib/modules/manager/gradle-wrapper/artifacts.js`:
+      without `gradleWrapper` in `allowedUnsafeExecutions`, `updateArtifacts` returns null ("Not allowed to execute
+      gradle"), so a wrapper bump moves `distributionUrl` alone. `pin_follow.py gradle-distribution` (a
+      `postUpgradeTask` of the gradle-wrapper manager) writes `distributionSha256Sum` from services.gradle.org's
+      `.sha256` and the zip's own hash, required equal; the JAR stays. Its self-test: 56 checks, bitten seven ways
+      (agreement, the `.sha256` body, the URL's shape, all-or-nothing, a duplicate line, the sum's form, tracked files
+      only). Live, on a throwaway tree with the launcher at 9.9.1: it wrote `d8a18a7a…ba228`, which is
+      services.gradle.org's `.sha256` for 9.9.1.
+    - The Renovate follow (`renovate-follow-derive.yml`, `renovate-follow.yml`, `scripts/renovate_follow.py`), moved
+      from the Dependabot follow with its history: the Gradle metadata of both builds (src/backend and the root
+      launcher), the WebP encoder's `build.py --write`, the fuzzer's `lock.py`; the writing job pushes with the App's
+      token minted for `contents: write` alone. Its self-test: 50 checks, bitten ten ways (the libwebp commit, image
+      and path checks, the lock's line check, the gate's author and commit-author checks, the skip of its own commit,
+      the root build's input set); the path bite first stayed green, because the forged file did not exist and another
+      check refused it, so the case now forges an existing file. On the real tree: the committed requirements.txt and
+      encoder files are accepted as written, and `git ls-remote` names `4fa21912…` for v1.6.0, the pin's commit.
+    - renovate.json5 holds no ecosystem off: every manager proposes; the WebP encoder's two inputs are a group of
+      their own; the fuzzer's Python image is held to 3.13 (`lock.py` hashes `cp313` wheels); `vulnerabilityAlerts`
+      is on. `.github/dependabot.yml` and `webp-encoder-update.yml` are deleted, and `validate_workflow_paths.py` loses
+      its Dependabot rule.
+    - Measured on the branch's tree with the pinned image: a lookup proposes ten branches (`gradle-minor-and-patch`
+      with the root wrapper 9.9.0 → 9.9.2, `openapi-generator` 7.27.0, `pyyaml-6.x`, `schemathesis-4.x`, `webp-encoder`
+      with Emscripten 7.0.1, `images`, `npm-minor-and-patch`, `pnpm`, `postcss-nested-9.x`, the MariaDB driver's major)
+      and no dependency is disabled; the `pins` extract: `300 pins in 41 files, every one reached by Renovate`.
+    Open until after the merge: each ecosystem's first real pull request (Gradle with the follow's metadata commit,
+    the follow's push starting `Checks`, the generator, Helm when it moves, PyYAML, Schemathesis with the lock, the
+    encoder with its rebuild), and the owner's switch of Dependabot's security pull requests (below).
+- [x] **6 docs** (in the 5d/5e pull request): `infra/README.md`, `release-and-deployment.md` (the *Decided, not
+  built* entry is gone), the site's *How veyq is tested* (the budgets, the updater beside the stages, ADR 0158 among
+  its sources), ADR 0158 `Built: yes` with decisions 4 and 8 amended to what was built, ADR 0057 and 0127 marked built,
+  the cool-down's comment; every file that still said Dependabot proposes something now names Renovate.
   - `infra/README.md` § Cutting a release: no pin bump, and the Helm paragraph goes.
   - `docs/crosscutting/release-and-deployment.md`: the pin paragraph names Renovate, and the *Decided, not built*
     entry goes.
@@ -355,6 +384,23 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
 - **2026-11-23, phase 5.** An image is held back by name, in the last rules, when what moves with it is not written
   in its step yet, rather than splitting a manager: the manager moves whole, the exceptions are listed with the step
   that takes them.
+
+- **2026-11-23, phase 5.** A follow-up that needs the bumped tree executed is the Renovate follow's, not a
+  `postUpgradeTask`: Renovate's Gradle artifacts run the repository's Gradle in the job holding the App's key, and its
+  container has no Docker for `lock.py` or `build.py`. The follow keeps the Dependabot follow's shape (a read-only
+  derive, a `workflow_run` writer from the default branch) and pushes with the App's token minted for contents alone,
+  so `Checks` starts without an approval. Its commit is authored as the App's bot: the gate still sees a branch only
+  Renovate wrote, and Renovate still rebases it.
+- **2026-11-23, phase 5.** The root launcher's metadata is followed too: Dependabot never reached the root wrapper,
+  Renovate does, and Gradle 9.9.0's move changed that file (59a8423c0).
+- **2026-11-23, phase 5.** libwebp and Emscripten are one pull request of their own, so a rebuild never holds back the
+  images group; the fuzzer's Python image stays on 3.13 by `allowedVersions`, since `lock.py`'s wheel filter names
+  `cp313`.
+- **2026-11-23, phase 5.** Dependabot's security pull requests are switched off in the repository's settings, an
+  owner step; Renovate's `vulnerabilityAlerts` defaults (read in the pinned image: no cool-down, no group, immediate)
+  are what ADR 0158 decision 6 asks for, so the config only turns it on.
+- **2026-11-23, phase 5.** 5d, 5e and phase 6 are one pull request (owner: one pull request per feature); the proofs
+  that need Renovate on `main` follow the merge and go into the closing change.
 
 ## Definition of done
 

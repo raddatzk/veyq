@@ -158,9 +158,14 @@ writes the mirror layout `veyqctl` reads (`releases.json`, `<tag>/…`), which l
 **A release pins what it runs and what it is built from** (ADR 0057 § 6): third-party images by digest, written
 `repo:tag@sha256:…` (`validate_image_pins.py`); Dockerfile bases by their index digest; the OpenAPI generator JAR, the
 Gradle wrapper and distribution by SHA-256, the backend's dependencies by Gradle verification; the actions by commit
-SHA (`validate_action_pins.py`); Helm by its tarball's SHA-256. Dependabot's `docker`, `docker-compose` and
-`github-actions` ecosystems propose bumps ([`.github/dependabot.yml`](../../.github/dependabot.yml), which names the pins
-no ecosystem reaches — Helm's among them); bumping a pin is part of cutting a release.
+SHA (`validate_action_pins.py`); Helm by its tarball's SHA-256. **Every pin has an updater**
+([ADR 0158](../decisions/0158-every-pin-has-an-updater-a-self-hosted-renovate-proposes-each-bump-with-what-moves-with-it.md)):
+a self-hosted Renovate, acting as a GitHub App of this repository (`.github/workflows/renovate.yml`,
+[`renovate.json5`](../../renovate.json5)), proposes every pin's bump weekly in a pull request that carries what moves with
+it — a SHA-256 or hashes from published bytes (`scripts/pin_follow.py`), a lockfile, and, where the bumped tree must be
+executed, the verification metadata, the rebuilt WebP encoder or the fuzzer's lock, pushed by the Renovate follow
+(`renovate-follow*.yml`, `scripts/renovate_follow.py`). `Checks`' `pins` job is red on a pin Renovate does not extract.
+Bumping a pin is no part of cutting a release.
 
 ## The two deployment targets
 
@@ -335,10 +340,5 @@ check is logged and retried with a back-off, and blocks nothing.
   Copier from a verified release, which `init` offers in an empty repository. Built: the template and its checks in
   `github.com/raddatzk/veyq-server` (cr-veyq-server-template), and `init`'s server path, self-tested against
   stand-ins (cr-veyqctl-server-path phase 3). Not yet: veyq-server's first release, and a run on a real server.
-- **Every pin has an updater** ([ADR 0158](../decisions/0158-every-pin-has-an-updater-a-self-hosted-renovate-proposes-each-bump-with-what-moves-with-it.md)): a self-hosted Renovate, acting as
-  a GitHub App of this repository, proposes every pin's bump with what moves with it (a SHA-256, a lockfile, the
-  verification metadata, a rebuild) in one pull request that starts `Checks`; a check is red on a pin it does not
-  extract; bumping a pin is no longer part of cutting a release. Until it is built, Dependabot and its follow workflows
-  propose what they reach and the rest is bumped by hand (cr-renovate).
 - **L3's archive holding the major entry** (ADR 0085 decision 10, inbox #461): the major entry's backup in the
   archive lane L3 restores.
