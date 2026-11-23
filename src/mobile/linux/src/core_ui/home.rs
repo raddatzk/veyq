@@ -368,11 +368,16 @@ fn queued_row(q: &QueuedItem) -> adw::ActionRow {
     let row = adw::ActionRow::builder().title(glib_escape(&said::notice(&q.title))).subtitle(glib_escape(&said::notice(&q.said))).build();
     row.add_prefix(&gtk::Image::from_icon_name("document-send-symbolic"));
     row.add_css_class("dim-label");
-    // a Memory made offline opens its page before it is sent (core's `QueuedItem.page`, #1040)
+    // a Memory made offline opens its page before it is sent (core's `QueuedItem.page`, #1040), a folder made offline is
+    // entered (core's `QueuedItem.folder`, #1095)
     if let Some(page) = q.page.clone() {
         row.set_activatable(true);
         row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
         row.connect_activated(move |_| bridge::send(Call::ShellOpen { r#ref: page.clone() }));
+    } else if let Some(folder) = q.folder.clone() {
+        row.set_activatable(true);
+        row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+        row.connect_activated(move |_| bridge::send(Call::ShellEnter { folder: folder.clone() }));
     }
     row
 }

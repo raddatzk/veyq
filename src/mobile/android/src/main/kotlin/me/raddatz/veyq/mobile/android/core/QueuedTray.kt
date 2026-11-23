@@ -143,17 +143,23 @@ private fun QueuedRow(item: QueuedItem, onDiscard: () -> Unit, onOpen: () -> Uni
 /**
  * A level's node made offline and not sent yet (core's `ShellModel.queuedHere`): its name as core words it, marked with
  * core's line — *Waiting to send*, or why it is held or refused. A Memory made offline opens its page ([onOpen] with core's
- * `QueuedItem.page`, #1040).
+ * `QueuedItem.page`, #1040), a folder made offline is entered ([onEnter] with core's `QueuedItem.folder`, #1095).
  */
 @Composable
-internal fun QueuedLevelRow(item: QueuedItem, onOpen: (me.raddatz.veyq.mobile.navigation.ObjectRef) -> Unit = {}) {
+internal fun QueuedLevelRow(
+    item: QueuedItem,
+    onOpen: (me.raddatz.veyq.mobile.navigation.ObjectRef) -> Unit = {},
+    onEnter: (me.raddatz.veyq.mobile.navigation.FolderRef) -> Unit = {},
+) {
     val waiting = item.state == QueuedWrite.State.WAITING
     ListItem(
         headlineContent = { Text(say(item.title), maxLines = 1, overflow = TextOverflow.Ellipsis) },
         supportingContent = { Text(say(item.said), color = if (waiting) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.error) },
         leadingContent = { Icon(if (waiting) Icons.Outlined.CloudUpload else Icons.Outlined.ErrorOutline, null) },
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.background),
-        modifier = Modifier.testTag("queued-level-row").let { m -> item.page?.let { p -> m.clickableRow { onOpen(p) } } ?: m },
+        modifier = Modifier.testTag("queued-level-row").let { m ->
+            item.page?.let { p -> m.clickableRow { onOpen(p) } } ?: item.folder?.let { f -> m.clickableRow { onEnter(f) } } ?: m
+        },
     )
 }
 

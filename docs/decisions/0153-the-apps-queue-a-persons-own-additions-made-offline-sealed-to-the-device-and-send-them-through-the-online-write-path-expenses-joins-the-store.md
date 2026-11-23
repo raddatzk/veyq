@@ -285,13 +285,31 @@ Measured 2026-11-19 on `claude/offline-refine` at `4f3b57ecd` (commands from `sr
   (`QueuedNodes`). A Memory's chapters include those made in it offline (the door's scope nodes carry them), each with
   core's line under its name (`GalleryModel.State.chapterSaid`; the bridge's `GalleryShown.chaptersUnsent`) and opening
   in turn. Drawn on Android, Apple, Linux and Windows: the level's row opens the page, a chapter made offline says
-  *Waiting to send*. **Left:** a folder made offline is not entered (#1095) and a Depot file made offline opens nothing
+  *Waiting to send*. **Left:** a folder made offline was not entered (#1095; built since, the next bullet) and a Depot file made offline opens nothing
   (its content is on this device, sealed; a refused one has *Save a copy*); between a reconnect and its create's send a
   page of a node made offline still shows offline, and a write made on it in those seconds takes the online path and is
   refused (the node is not there yet); a gallery open while the tray changes its writes shows the change at its next
   read, as for a trash and a mark before. Tests: `QueuedOverlayTest` (`a_capture_time_set_offline_reorders_the_gallery_in_place`,
   `a_rename_made_offline_shows_in_its_level_and_on_its_open_page`, `a_memory_made_offline_opens_and_takes_media_and_a_chapter`,
   each bitten). No app clicked: the passes are #1040's row.
+- **As built, a folder made offline entered** (2026-11-23, #1095). The level's row carries it (`QueuedItem.folder`, a
+  `FolderRef` for a `FOLDER_CREATE` not refused) and enters it through `ShellModel.enter`; Home's level of it is the
+  tree's children of it — none — beside what is queued under it (`queuedAt`), so the level shows exactly what waits there
+  and asks the server nothing. Its New and uploads queue as any level's offline, each waiting for its create
+  (`QueuedWrite.after`) and sent after it, under it; a folder made in it is entered in turn. `ShellModel` keeps the
+  folders, Memories and chapters made offline and not refused (`madeUnsent`, from the outbox watch #1040 added): a rename
+  or a trash of a folder on Home's path is relocated over the tree with them (`treeWithUnsent`), so the path takes the new
+  name or leaves; a path folder neither listed nor waiting any more — discarded from the tray with what waited in it,
+  refused at its send — is left for the nearest level still there (`leaveUnsent`), the tree read anew first, since a
+  create just sent leaves the outbox before the lists are read again and Home stays in a folder that became the
+  server's; the tray names such a folder or Memory as the place what is made in it goes. **Online, a folder not sent yet
+  offers no New and takes no upload** (held, or before a reconnect's send reaches it): a create online would name a parent
+  the server does not hold; queuing online too was left — decision 3 has no online queue, and the window is seconds or a
+  hold the person resolves through its *Open*. Drawn on Android, Apple, Linux and Windows: a queued folder's row enters
+  it. Tests: `QueuedOverlayTest` (`a_folder_made_offline_is_entered_and_takes_a_folder_a_memory_and_a_file`,
+  `a_folder_made_offline_is_sent_before_what_waits_in_it_and_home_stays_in_it`,
+  `a_held_folder_made_offline_offers_nothing_online_and_a_refused_one_is_left`, seven mutations each seen red). No app
+  clicked: the passes are #1095's row.
 - **The passes (decisions 1–5).** Each a throwaway with a member, erased after. **Android** (2026-11-20, a throwaway API 36
   AVD in airplane mode, deleted after; the member on the web): offline a folder and a Memory made, an entry with a receipt
   added and another edited, two photos added to a kept Memory — rows, tiles and entries *Waiting to send* / *Not sent*,

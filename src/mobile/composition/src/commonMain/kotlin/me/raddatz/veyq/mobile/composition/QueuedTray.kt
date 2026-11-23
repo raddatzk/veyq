@@ -23,7 +23,8 @@ import me.raddatz.veyq.mobile.words.Notice
  * ([title]: a kind's word with the name the person gave, never more of its content), where it is ([state]) with the line
  * under it ([said]: *Waiting to send*, or why it is held or refused), and what it offers: *Discard* always, *Open* for a
  * held one ([opens]), *Save a copy* for a refused one carrying a file ([copies], how many files it carries) — and, for a
- * Memory or a chapter made offline that is not refused, the page it opens as before it is sent ([page], #1040).
+ * Memory or a chapter made offline that is not refused, the page it opens as before it is sent ([page], #1040), and for a
+ * folder made offline that is not refused, the level it enters ([folder], #1095).
  */
 @Serializable
 @SerialName("QueuedItem")
@@ -47,6 +48,12 @@ data class QueuedItem(
      * Null for every other write.
      */
     val page: me.raddatz.veyq.mobile.navigation.ObjectRef? = null,
+    /**
+     * A folder made offline, not refused: the folder its level's row enters (`ShellModel.enter`) — a level empty but for
+     * what waits to go into it, whose New and uploads queue into it and are sent after it (ADR 0153 decision 5, #1095).
+     * Null for every other write.
+     */
+    val folder: me.raddatz.veyq.mobile.navigation.FolderRef? = null,
 )
 
 /**
@@ -173,12 +180,17 @@ object QueuedShown {
         write.id, Queued.of(write.op) ?: Queued.NODE_TRASH, write.tenant, write.scope, write.node, where, title(write), write.state, said(write),
         opens = write.state == QueuedWrite.State.HELD, copies = if (write.state == QueuedWrite.State.REFUSED) carried(write).size else 0, at = write.at,
         page = if (write.op == Queued.MEMORY_CREATE.name && write.state != QueuedWrite.State.REFUSED) madeNode(write).asObject() else null,
+        folder = if (write.op == Queued.FOLDER_CREATE.name && write.state != QueuedWrite.State.REFUSED) madeNode(write).let { me.raddatz.veyq.mobile.navigation.FolderRef(it.nodeId, it.name) } else null,
     )
 
-    /** Memory or chapter create [write] as the node it will be: its id the write's, its parent, kind and name the person's. */
+    /**
+     * Folder, Memory or chapter create [write] as the node it will be: its id the write's, its parent, kind and name the
+     * person's (a folder's intent names no kind: [me.raddatz.veyq.mobile.offline.QueuedNodes.FolderIntent]).
+     */
     internal fun madeNode(write: QueuedWrite): me.raddatz.veyq.mobile.navigation.NodeRef {
         fun field(k: String) = (write.intent[k] as? JsonPrimitive)?.contentOrNull
-        return me.raddatz.veyq.mobile.navigation.NodeRef(write.scope, write.id, field("parent"), field("kind") ?: "MEMORY", field("name").orEmpty())
+        val kind = if (write.op == Queued.FOLDER_CREATE.name) me.raddatz.veyq.mobile.navigation.NodeRef.FOLDER else field("kind") ?: "MEMORY"
+        return me.raddatz.veyq.mobile.navigation.NodeRef(write.scope, write.id, field("parent"), kind, field("name").orEmpty())
     }
 
     /** The files [write] carries that a person would save: a medium's original (never its tiers), a file, each receipt. */
