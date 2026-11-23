@@ -78,6 +78,14 @@ jobs:
         with:
           node-version: "22"
 
+      # The OpenAPI generator JAR, cached and verified as checks.yml's `frontend` says.
+      - name: Restore the OpenAPI generator JAR
+        if: steps.branch.outputs.open == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.openapi-generator
+          key: openapi-generator-jar-${{ hashFiles('scripts/openapi_generator_jar.sha256', 'src/web/openapitools.json', 'src/admin-web/openapitools.json') }}
+
       # pnpm at exactly the version package.json pins (validate_pnpm_installs_gated.py), and the gated install every
       # other job of this lockfile runs, without the registry check `frontend` alone makes.
       - name: Install dependencies

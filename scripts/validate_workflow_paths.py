@@ -15,7 +15,9 @@
      `cache-dependency-path:`, is a tracked file.
   4. **Cache paths.** Every line of an `actions/cache` step's `path:` names a tracked file, or lies under a tracked
      directory directly followed by a build-output segment (`build`, `reports`, `dist`, `node_modules`, `.gradle`):
-     a cache holds output, which no tree tracks, so its anchor is the project directory that writes it. A line under
+     a cache holds output, which no tree tracks, so its anchor is the project directory that writes it — the
+     repository root among them (the pnpm workspace root: `node_modules/.openapi-generator`, the generator JAR every
+     installing job restores), for a line that continues below the output segment. A line under
      `~/` (the runner's home: Gradle's `~/.gradle/caches`) names no repository path, so nothing here can check it.
   5. **Dependabot.** Every `directory:` and `directories:` entry is `/` or a tracked directory.
   A value carrying a `${{ … }}` expression is resolved by the runner, not here, and is skipped.
@@ -133,7 +135,10 @@ class Tree:
         for n in range(len(parts) - 1, 0, -1):
             if "/".join(parts[:n]) in self.dirs:
                 return parts[n] in OUTPUT_SEGMENTS
-        return False
+        # The repository root is a project directory too (the pnpm workspace's: its `package.json`, and the one
+        # `node_modules` every workspace package installs into), so a path nothing deeper anchors is judged by its
+        # first segment. Only when it continues below that segment: a bare `node_modules` would cache the whole install.
+        return len(parts) > 1 and parts[0] in OUTPUT_SEGMENTS
 
 
 def names_a_place(pattern: str) -> bool:
