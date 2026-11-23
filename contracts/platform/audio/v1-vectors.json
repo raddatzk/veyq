@@ -1,0 +1,7994 @@
+{
+  "format": "veyq-music-order-v1",
+  "about": "The music player's order and fades (ADR 0135 decisions 6 and 7, ADR 0142 decision 1; ADR 0155 decision 7.2, the seventh slice). `randomInt`: the platform's unbiased draw in [0, n) from 32-bit words (the web's `crypto.getRandomValues` into a Uint32Array: a word is its four bytes little-endian), a word at or past the largest multiple of n below 2^32 drawn again; `expected` the value and how many words it took. `order`: a queue (`ids`, `startId`) under scripted randomness - `draws` lists every call in order as [n, value], and a client must ask exactly those n - then each `steps` op (`current`, `next`, `peek`, `previous` at `positionMs` into the track, `drop` an id, `size`) and its answer (`previous`: {restart: true} or {restart: false, id}; `drop`: null). `fades`: a span (`startMs`, `endMs`; an `endMs` of null is an unknown end, Infinity) and its fades in milliseconds of the file - an answer of null is Infinity - `fadeLengthAt` at each of `positionsMs`. Numbers are JavaScript's doubles.",
+  "facts": {
+    "fadeMs": 5000,
+    "pressFadeMs": 1000,
+    "previousRestartsAfterMs": 3000
+  },
+  "randomInt": [
+    {
+      "rule": "n = 0 draws nothing and answers 0",
+      "n": 0,
+      "words": [],
+      "expected": {
+        "value": 0,
+        "drawn": 0
+      }
+    },
+    {
+      "rule": "n = 1 draws nothing and answers 0",
+      "n": 1,
+      "words": [],
+      "expected": {
+        "value": 0,
+        "drawn": 0
+      }
+    },
+    {
+      "rule": "a word below the limit: its remainder",
+      "n": 2,
+      "words": [
+        7
+      ],
+      "expected": {
+        "value": 1,
+        "drawn": 1
+      }
+    },
+    {
+      "rule": "the top word lies past the largest multiple of 3: drawn again",
+      "n": 3,
+      "words": [
+        4294967295,
+        5
+      ],
+      "expected": {
+        "value": 2,
+        "drawn": 2
+      }
+    },
+    {
+      "rule": "the last word below the limit of 3 is kept",
+      "n": 3,
+      "words": [
+        4294967294
+      ],
+      "expected": {
+        "value": 2,
+        "drawn": 1
+      }
+    },
+    {
+      "rule": "a word whose bytes differ: read little-endian",
+      "n": 1000,
+      "words": [
+        16909060
+      ],
+      "expected": {
+        "value": 60,
+        "drawn": 1
+      }
+    },
+    {
+      "rule": "n = 2^31 - 1, the largest a queue can be: the two top words are drawn again",
+      "n": 2147483647,
+      "words": [
+        4294967294,
+        4294967295,
+        4294967293
+      ],
+      "expected": {
+        "value": 2147483646,
+        "drawn": 3
+      }
+    },
+    {
+      "rule": "n = 2^30 + 1: three quarters of the words are kept",
+      "n": 1073741825,
+      "words": [
+        3221225475,
+        4275878552,
+        3221225474
+      ],
+      "expected": {
+        "value": 1073741824,
+        "drawn": 3
+      }
+    },
+    {
+      "rule": "n = 7, several rejections in a row",
+      "n": 7,
+      "words": [
+        4294967292,
+        4294967293,
+        4294967295,
+        4294967291
+      ],
+      "expected": {
+        "value": 6,
+        "drawn": 4
+      }
+    },
+    {
+      "rule": "zero is a word like any other",
+      "n": 5,
+      "words": [
+        0
+      ],
+      "expected": {
+        "value": 0,
+        "drawn": 1
+      }
+    }
+  ],
+  "order": [
+    {
+      "rule": "Fisher-Yates by the draws handed in: always 0",
+      "ids": [
+        "a",
+        "b",
+        "c"
+      ],
+      "draws": [
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "steps": [
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        }
+      ],
+      "expected": [
+        "b",
+        "c",
+        "a",
+        "b",
+        "c",
+        "a"
+      ]
+    },
+    {
+      "rule": "Fisher-Yates by the draws handed in: always n - 1 keeps the order",
+      "ids": [
+        "a",
+        "b",
+        "c"
+      ],
+      "draws": [
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ]
+      ],
+      "steps": [
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        }
+      ],
+      "expected": [
+        "a",
+        "b",
+        "c",
+        "a",
+        "b",
+        "c",
+        "a",
+        "b",
+        "c"
+      ]
+    },
+    {
+      "rule": "a round that would start with the track that ended the last one swaps it with a later one",
+      "ids": [
+        "a",
+        "b"
+      ],
+      "draws": [
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "steps": [
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        }
+      ],
+      "expected": [
+        "a",
+        "b",
+        "a"
+      ]
+    },
+    {
+      "rule": "the swap draws its partner among the rest of the round",
+      "ids": [
+        "a",
+        "b",
+        "c",
+        "d"
+      ],
+      "draws": [
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "steps": [
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        }
+      ],
+      "expected": [
+        "a",
+        "b",
+        "c",
+        "d",
+        "a"
+      ]
+    },
+    {
+      "rule": "2 tracks, 60 rounds: each a permutation, none starting with the last one played",
+      "ids": [
+        "t0",
+        "t1"
+      ],
+      "draws": [
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          1,
+          0
+        ]
+      ],
+      "steps": [
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        }
+      ],
+      "expected": [
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t1"
+      ]
+    },
+    {
+      "rule": "3 tracks, 60 rounds: each a permutation, none starting with the last one played",
+      "ids": [
+        "t0",
+        "t1",
+        "t2"
+      ],
+      "draws": [
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ]
+      ],
+      "steps": [
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        }
+      ],
+      "expected": [
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t2",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t1",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t0",
+        "t1",
+        "t2",
+        "t1",
+        "t2",
+        "t0",
+        "t1",
+        "t2",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t1",
+        "t2",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t0",
+        "t1",
+        "t2",
+        "t0",
+        "t1",
+        "t2",
+        "t0",
+        "t1",
+        "t2",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t2",
+        "t0",
+        "t1",
+        "t2",
+        "t1",
+        "t2",
+        "t0",
+        "t2",
+        "t0",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t2",
+        "t0",
+        "t2",
+        "t1",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t1",
+        "t2",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t2",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t2",
+        "t0",
+        "t2",
+        "t1",
+        "t2",
+        "t0",
+        "t1",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t1",
+        "t2",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t2",
+        "t0",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t2",
+        "t0",
+        "t2",
+        "t0",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t0",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t1",
+        "t2",
+        "t0",
+        "t2",
+        "t0",
+        "t1",
+        "t2"
+      ]
+    },
+    {
+      "rule": "4 tracks, 60 rounds: each a permutation, none starting with the last one played",
+      "ids": [
+        "t0",
+        "t1",
+        "t2",
+        "t3"
+      ],
+      "draws": [
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "steps": [
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        }
+      ],
+      "expected": [
+        "t2",
+        "t3",
+        "t0",
+        "t3",
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t0",
+        "t1",
+        "t2",
+        "t1",
+        "t2",
+        "t0",
+        "t3",
+        "t0",
+        "t3",
+        "t2",
+        "t1",
+        "t3",
+        "t0",
+        "t1",
+        "t2",
+        "t0",
+        "t2",
+        "t3",
+        "t1",
+        "t3",
+        "t1",
+        "t2",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t3",
+        "t1",
+        "t2",
+        "t0",
+        "t3",
+        "t1",
+        "t3",
+        "t0",
+        "t2",
+        "t1",
+        "t2",
+        "t3",
+        "t0",
+        "t3",
+        "t1",
+        "t2",
+        "t0",
+        "t3",
+        "t2",
+        "t0",
+        "t1",
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t0",
+        "t3",
+        "t2",
+        "t1",
+        "t2",
+        "t0",
+        "t1",
+        "t3",
+        "t2",
+        "t1",
+        "t0",
+        "t3",
+        "t2",
+        "t3",
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t0",
+        "t1",
+        "t3",
+        "t0",
+        "t1",
+        "t2",
+        "t1",
+        "t3",
+        "t2",
+        "t0",
+        "t1",
+        "t0",
+        "t3",
+        "t2",
+        "t1",
+        "t2",
+        "t3",
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t0",
+        "t1",
+        "t3",
+        "t0",
+        "t2",
+        "t3",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t2",
+        "t0",
+        "t3",
+        "t1",
+        "t2",
+        "t3",
+        "t0",
+        "t2",
+        "t3",
+        "t0",
+        "t1",
+        "t3",
+        "t2",
+        "t1",
+        "t0",
+        "t3",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t3",
+        "t0",
+        "t1",
+        "t0",
+        "t2",
+        "t3",
+        "t1",
+        "t3",
+        "t1",
+        "t0",
+        "t2",
+        "t0",
+        "t2",
+        "t3",
+        "t1",
+        "t0",
+        "t1",
+        "t3",
+        "t2",
+        "t1",
+        "t3",
+        "t0",
+        "t2",
+        "t3",
+        "t1",
+        "t2",
+        "t0",
+        "t3",
+        "t2",
+        "t0",
+        "t1",
+        "t0",
+        "t3",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t3",
+        "t1",
+        "t0",
+        "t1",
+        "t3",
+        "t2",
+        "t3",
+        "t0",
+        "t1",
+        "t2",
+        "t0",
+        "t2",
+        "t3",
+        "t1",
+        "t2",
+        "t0",
+        "t1",
+        "t3",
+        "t2",
+        "t0",
+        "t1",
+        "t3",
+        "t1",
+        "t3",
+        "t2",
+        "t0",
+        "t3",
+        "t2",
+        "t0",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t3",
+        "t2",
+        "t0",
+        "t3",
+        "t1",
+        "t0",
+        "t2",
+        "t1",
+        "t3",
+        "t1",
+        "t3",
+        "t2",
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t0",
+        "t3",
+        "t0",
+        "t2",
+        "t1",
+        "t3",
+        "t2",
+        "t1",
+        "t0",
+        "t3",
+        "t2",
+        "t0",
+        "t1",
+        "t3",
+        "t1",
+        "t2",
+        "t0",
+        "t3",
+        "t1",
+        "t0",
+        "t2",
+        "t0",
+        "t1",
+        "t3",
+        "t2",
+        "t1"
+      ]
+    },
+    {
+      "rule": "5 tracks, 60 rounds: each a permutation, none starting with the last one played",
+      "ids": [
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t4"
+      ],
+      "draws": [
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ]
+      ],
+      "steps": [
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        }
+      ],
+      "expected": [
+        "t3",
+        "t1",
+        "t4",
+        "t2",
+        "t4",
+        "t2",
+        "t0",
+        "t1",
+        "t3",
+        "t4",
+        "t0",
+        "t2",
+        "t1",
+        "t3",
+        "t4",
+        "t2",
+        "t0",
+        "t3",
+        "t1",
+        "t0",
+        "t4",
+        "t3",
+        "t1",
+        "t2",
+        "t4",
+        "t2",
+        "t3",
+        "t0",
+        "t1",
+        "t4",
+        "t2",
+        "t3",
+        "t1",
+        "t0",
+        "t2",
+        "t4",
+        "t0",
+        "t3",
+        "t1",
+        "t2",
+        "t4",
+        "t1",
+        "t3",
+        "t0",
+        "t4",
+        "t2",
+        "t3",
+        "t1",
+        "t0",
+        "t3",
+        "t4",
+        "t1",
+        "t2",
+        "t0",
+        "t1",
+        "t3",
+        "t4",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t4",
+        "t3",
+        "t2",
+        "t1",
+        "t3",
+        "t0",
+        "t4",
+        "t2",
+        "t1",
+        "t2",
+        "t3",
+        "t4",
+        "t0",
+        "t4",
+        "t3",
+        "t2",
+        "t0",
+        "t1",
+        "t2",
+        "t1",
+        "t3",
+        "t0",
+        "t4",
+        "t2",
+        "t0",
+        "t4",
+        "t3",
+        "t1",
+        "t4",
+        "t0",
+        "t3",
+        "t2",
+        "t1",
+        "t4",
+        "t2",
+        "t1",
+        "t3",
+        "t0",
+        "t4",
+        "t3",
+        "t2",
+        "t1",
+        "t0",
+        "t4",
+        "t2",
+        "t3",
+        "t1",
+        "t0",
+        "t4",
+        "t2",
+        "t1",
+        "t3",
+        "t0",
+        "t4",
+        "t2",
+        "t0",
+        "t3",
+        "t1",
+        "t3",
+        "t1",
+        "t4",
+        "t2",
+        "t0",
+        "t4",
+        "t3",
+        "t1",
+        "t0",
+        "t2",
+        "t3",
+        "t2",
+        "t0",
+        "t4",
+        "t1",
+        "t3",
+        "t4",
+        "t0",
+        "t2",
+        "t1",
+        "t0",
+        "t4",
+        "t2",
+        "t3",
+        "t1",
+        "t3",
+        "t4",
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t2",
+        "t4",
+        "t0",
+        "t1",
+        "t0",
+        "t2",
+        "t4",
+        "t3",
+        "t1",
+        "t4",
+        "t3",
+        "t0",
+        "t1",
+        "t2",
+        "t1",
+        "t0",
+        "t2",
+        "t4",
+        "t3",
+        "t2",
+        "t1",
+        "t0",
+        "t4",
+        "t3",
+        "t1",
+        "t4",
+        "t2",
+        "t0",
+        "t3",
+        "t2",
+        "t0",
+        "t1",
+        "t3",
+        "t4",
+        "t2",
+        "t0",
+        "t4",
+        "t1",
+        "t3",
+        "t1",
+        "t2",
+        "t0",
+        "t3",
+        "t4",
+        "t0",
+        "t1",
+        "t3",
+        "t4",
+        "t2",
+        "t0",
+        "t3",
+        "t4",
+        "t1",
+        "t2",
+        "t3",
+        "t0",
+        "t2",
+        "t4",
+        "t1",
+        "t3",
+        "t0",
+        "t4",
+        "t2",
+        "t1",
+        "t4",
+        "t1",
+        "t2",
+        "t3",
+        "t0",
+        "t3",
+        "t4",
+        "t2",
+        "t0",
+        "t1",
+        "t4",
+        "t1",
+        "t3",
+        "t2",
+        "t0",
+        "t4",
+        "t2",
+        "t0",
+        "t3",
+        "t1",
+        "t2",
+        "t1",
+        "t3",
+        "t4",
+        "t0",
+        "t3",
+        "t4",
+        "t0",
+        "t1",
+        "t2",
+        "t0",
+        "t4",
+        "t2",
+        "t3",
+        "t1",
+        "t2",
+        "t0",
+        "t1",
+        "t3",
+        "t4",
+        "t3",
+        "t4",
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t2",
+        "t4",
+        "t1",
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t0",
+        "t4",
+        "t1",
+        "t2",
+        "t4",
+        "t0",
+        "t3",
+        "t1",
+        "t3",
+        "t0",
+        "t2",
+        "t4",
+        "t1",
+        "t0",
+        "t4",
+        "t3",
+        "t2",
+        "t0",
+        "t1",
+        "t3",
+        "t2",
+        "t4",
+        "t3",
+        "t4",
+        "t1",
+        "t0",
+        "t2",
+        "t4",
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t0"
+      ]
+    },
+    {
+      "rule": "seven tracks over three rounds",
+      "ids": [
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t4",
+        "t5",
+        "t6"
+      ],
+      "draws": [
+        [
+          7,
+          2
+        ],
+        [
+          6,
+          0
+        ],
+        [
+          5,
+          3
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          7,
+          6
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          7,
+          3
+        ],
+        [
+          6,
+          4
+        ],
+        [
+          5,
+          2
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          7,
+          2
+        ],
+        [
+          6,
+          3
+        ],
+        [
+          5,
+          4
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "steps": [
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "size"
+        }
+      ],
+      "expected": [
+        "t6",
+        "t4",
+        "t5",
+        "t1",
+        "t3",
+        "t0",
+        "t2",
+        "t3",
+        "t1",
+        "t2",
+        "t5",
+        "t0",
+        "t4",
+        "t6",
+        "t1",
+        "t5",
+        "t6",
+        "t0",
+        "t2",
+        "t4",
+        "t3",
+        "t1",
+        7
+      ]
+    },
+    {
+      "rule": "a start track plays first, the rest of its round shuffled",
+      "ids": [
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t4"
+      ],
+      "startId": "t3",
+      "draws": [
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          3
+        ]
+      ],
+      "steps": [
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        }
+      ],
+      "expected": [
+        "t3",
+        "t0",
+        "t1",
+        "t4",
+        "t2",
+        "t0",
+        "t4",
+        "t3",
+        "t1",
+        "t2"
+      ]
+    },
+    {
+      "rule": "a start track the queue does not hold is no start track",
+      "ids": [
+        "t0",
+        "t1",
+        "t2",
+        "t3"
+      ],
+      "startId": "zz",
+      "draws": [
+        [
+          4,
+          1
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "steps": [
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        }
+      ],
+      "expected": [
+        "t3",
+        "t0",
+        "t2",
+        "t1",
+        "t2"
+      ]
+    },
+    {
+      "rule": "a queue holds an id once, in its first place",
+      "ids": [
+        "a",
+        "b",
+        "a",
+        "c",
+        "b"
+      ],
+      "draws": [
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "steps": [
+        {
+          "op": "size"
+        },
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        }
+      ],
+      "expected": [
+        3,
+        "a",
+        "b",
+        "c",
+        "b",
+        "c",
+        "a"
+      ]
+    },
+    {
+      "rule": "a single track plays again and again, drawing nothing",
+      "ids": [
+        "only"
+      ],
+      "draws": [],
+      "steps": [
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "previous",
+          "positionMs": 0
+        },
+        {
+          "op": "size"
+        }
+      ],
+      "expected": [
+        "only",
+        "only",
+        "only",
+        "only",
+        {
+          "restart": false,
+          "id": "only"
+        },
+        1
+      ]
+    },
+    {
+      "rule": "an empty queue plays nothing",
+      "ids": [],
+      "draws": [],
+      "steps": [
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "peek"
+        },
+        {
+          "op": "previous",
+          "positionMs": 0
+        },
+        {
+          "op": "size"
+        }
+      ],
+      "expected": [
+        null,
+        null,
+        null,
+        {
+          "restart": true
+        },
+        0
+      ]
+    },
+    {
+      "rule": "previous: more than 3 s in restarts, 3 s or less goes back, nothing before the first restarts, next goes forward again",
+      "ids": [
+        "t0",
+        "t1",
+        "t2",
+        "t3"
+      ],
+      "draws": [
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          4,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          3,
+          0
+        ]
+      ],
+      "steps": [
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "previous",
+          "positionMs": 4000
+        },
+        {
+          "op": "current"
+        },
+        {
+          "op": "previous",
+          "positionMs": 3000.5
+        },
+        {
+          "op": "previous",
+          "positionMs": 3000
+        },
+        {
+          "op": "current"
+        },
+        {
+          "op": "previous",
+          "positionMs": 2000
+        },
+        {
+          "op": "current"
+        },
+        {
+          "op": "previous",
+          "positionMs": 0
+        },
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "previous",
+          "positionMs": -50
+        },
+        {
+          "op": "current"
+        }
+      ],
+      "expected": [
+        "t1",
+        "t3",
+        "t2",
+        {
+          "restart": true
+        },
+        "t2",
+        {
+          "restart": true
+        },
+        {
+          "restart": false,
+          "id": "t3"
+        },
+        "t3",
+        {
+          "restart": false,
+          "id": "t1"
+        },
+        "t1",
+        {
+          "restart": true
+        },
+        "t1",
+        "t3",
+        "t2",
+        "t0",
+        "t1",
+        {
+          "restart": false,
+          "id": "t0"
+        },
+        "t0"
+      ]
+    },
+    {
+      "rule": "peek fixes the next track without going there; next then goes to it",
+      "ids": [
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t4"
+      ],
+      "draws": [
+        [
+          5,
+          1
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          5,
+          0
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ]
+      ],
+      "steps": [
+        {
+          "op": "current"
+        },
+        {
+          "op": "peek"
+        },
+        {
+          "op": "peek"
+        },
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "peek"
+        },
+        {
+          "op": "previous",
+          "positionMs": 1000
+        },
+        {
+          "op": "peek"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "peek"
+        },
+        {
+          "op": "next"
+        }
+      ],
+      "expected": [
+        "t3",
+        "t2",
+        "t2",
+        "t3",
+        "t2",
+        "t4",
+        {
+          "restart": false,
+          "id": "t3"
+        },
+        "t2",
+        "t2",
+        "t4",
+        "t0",
+        "t1",
+        "t3",
+        "t1",
+        "t2",
+        "t2"
+      ]
+    },
+    {
+      "rule": "a dropped track leaves every round and the history; the queue empties when none is left",
+      "ids": [
+        "a",
+        "b",
+        "c"
+      ],
+      "draws": [
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "steps": [
+        {
+          "op": "current"
+        },
+        {
+          "op": "drop",
+          "id": "b"
+        },
+        {
+          "op": "current"
+        },
+        {
+          "op": "size"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "drop",
+          "id": "a"
+        },
+        {
+          "op": "drop",
+          "id": "b"
+        },
+        {
+          "op": "drop",
+          "id": "c"
+        },
+        {
+          "op": "size"
+        },
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "peek"
+        }
+      ],
+      "expected": [
+        "c",
+        null,
+        "c",
+        2,
+        "a",
+        "c",
+        "a",
+        "c",
+        null,
+        null,
+        null,
+        0,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "rule": "dropping a track played before keeps the one playing; an unknown id changes nothing",
+      "ids": [
+        "t0",
+        "t1",
+        "t2",
+        "t3",
+        "t4"
+      ],
+      "draws": [
+        [
+          5,
+          4
+        ],
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          0
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          4,
+          2
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          2,
+          1
+        ]
+      ],
+      "steps": [
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "drop",
+          "id": "nope"
+        },
+        {
+          "op": "size"
+        },
+        {
+          "op": "current"
+        },
+        {
+          "op": "drop",
+          "id": "t2"
+        },
+        {
+          "op": "current"
+        },
+        {
+          "op": "size"
+        },
+        {
+          "op": "previous",
+          "positionMs": 0
+        },
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        }
+      ],
+      "expected": [
+        "t2",
+        "t1",
+        "t3",
+        null,
+        5,
+        "t3",
+        null,
+        "t3",
+        4,
+        {
+          "restart": false,
+          "id": "t1"
+        },
+        "t1",
+        "t3",
+        "t0",
+        "t4",
+        "t0",
+        "t4",
+        "t1"
+      ]
+    },
+    {
+      "rule": "dropping the track playing goes back to the one before it",
+      "ids": [
+        "t0",
+        "t1",
+        "t2",
+        "t3"
+      ],
+      "draws": [
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          2,
+          1
+        ]
+      ],
+      "steps": [
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "drop",
+          "id": "t3"
+        },
+        {
+          "op": "current"
+        },
+        {
+          "op": "size"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        }
+      ],
+      "expected": [
+        "t1",
+        "t3",
+        null,
+        "t1",
+        3,
+        "t2",
+        "t0",
+        "t2"
+      ]
+    },
+    {
+      "rule": "dropping a peeked track takes it out of the history ahead",
+      "ids": [
+        "t0",
+        "t1",
+        "t2",
+        "t3"
+      ],
+      "draws": [
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          1
+        ]
+      ],
+      "steps": [
+        {
+          "op": "current"
+        },
+        {
+          "op": "peek"
+        },
+        {
+          "op": "drop",
+          "id": "t0"
+        },
+        {
+          "op": "drop",
+          "id": "t1"
+        },
+        {
+          "op": "drop",
+          "id": "t2"
+        },
+        {
+          "op": "drop",
+          "id": "t3"
+        },
+        {
+          "op": "peek"
+        },
+        {
+          "op": "current"
+        }
+      ],
+      "expected": [
+        "t3",
+        "t1",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    {
+      "rule": "after going back, a dropped track ahead is skipped going forward",
+      "ids": [
+        "t0",
+        "t1",
+        "t2",
+        "t3"
+      ],
+      "draws": [
+        [
+          4,
+          0
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          0
+        ]
+      ],
+      "steps": [
+        {
+          "op": "current"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "previous",
+          "positionMs": 0
+        },
+        {
+          "op": "previous",
+          "positionMs": 0
+        },
+        {
+          "op": "current"
+        },
+        {
+          "op": "drop",
+          "id": "t1"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "next"
+        },
+        {
+          "op": "size"
+        }
+      ],
+      "expected": [
+        "t1",
+        "t3",
+        "t2",
+        {
+          "restart": false,
+          "id": "t3"
+        },
+        {
+          "restart": false,
+          "id": "t1"
+        },
+        "t1",
+        null,
+        "t3",
+        "t2",
+        "t0",
+        3
+      ]
+    }
+  ],
+  "fades": [
+    {
+      "rule": "a song fades out over 5 s at its trimmed end; a press over 1 s; a seek into the window shortens the fade",
+      "span": {
+        "startMs": 400,
+        "endMs": 180400
+      },
+      "positionsMs": [
+        178400,
+        175400,
+        175400.5,
+        100000,
+        180400,
+        190000,
+        0
+      ],
+      "expected": {
+        "autoFadeMs": 5000,
+        "pressFadeMs": 1000,
+        "fadeOutAtMs": 175400,
+        "fadeLengthAt": [
+          2000,
+          5000,
+          4999.5,
+          5000,
+          0,
+          0,
+          5000
+        ]
+      }
+    },
+    {
+      "rule": "a track shorter than two fades fades over a third of its span",
+      "span": {
+        "startMs": 1000,
+        "endMs": 7000
+      },
+      "positionsMs": [
+        5000,
+        6000,
+        0
+      ],
+      "expected": {
+        "autoFadeMs": 2000,
+        "pressFadeMs": 1000,
+        "fadeOutAtMs": 5000,
+        "fadeLengthAt": [
+          2000,
+          1000,
+          2000
+        ]
+      }
+    },
+    {
+      "rule": "a third of a span that does not divide by three is not rounded",
+      "span": {
+        "startMs": 0,
+        "endMs": 7000
+      },
+      "positionsMs": [
+        4666,
+        4667,
+        6999.5
+      ],
+      "expected": {
+        "autoFadeMs": 2333.3333333333335,
+        "pressFadeMs": 1000,
+        "fadeOutAtMs": 4666.666666666666,
+        "fadeLengthAt": [
+          2333.3333333333335,
+          2333,
+          0.5
+        ]
+      }
+    },
+    {
+      "rule": "a tiny track: a press no longer than its own fade",
+      "span": {
+        "startMs": 0,
+        "endMs": 1500
+      },
+      "positionsMs": [
+        1000,
+        1499
+      ],
+      "expected": {
+        "autoFadeMs": 500,
+        "pressFadeMs": 500,
+        "fadeOutAtMs": 1000,
+        "fadeLengthAt": [
+          500,
+          1
+        ]
+      }
+    },
+    {
+      "rule": "exactly two fades long: the whole 5 s",
+      "span": {
+        "startMs": 0,
+        "endMs": 10000
+      },
+      "positionsMs": [
+        5000,
+        7500
+      ],
+      "expected": {
+        "autoFadeMs": 5000,
+        "pressFadeMs": 1000,
+        "fadeOutAtMs": 5000,
+        "fadeLengthAt": [
+          5000,
+          2500
+        ]
+      }
+    },
+    {
+      "rule": "just under two fades: a third",
+      "span": {
+        "startMs": 0,
+        "endMs": 9999
+      },
+      "positionsMs": [
+        6666,
+        9000
+      ],
+      "expected": {
+        "autoFadeMs": 3333,
+        "pressFadeMs": 1000,
+        "fadeOutAtMs": 6666,
+        "fadeLengthAt": [
+          3333,
+          999
+        ]
+      }
+    },
+    {
+      "rule": "a press over a span of 3 s less a millisecond is a third of it",
+      "span": {
+        "startMs": 0,
+        "endMs": 2999
+      },
+      "positionsMs": [
+        2000
+      ],
+      "expected": {
+        "autoFadeMs": 999.6666666666666,
+        "pressFadeMs": 999.6666666666666,
+        "fadeOutAtMs": 1999.3333333333335,
+        "fadeLengthAt": [
+          999
+        ]
+      }
+    },
+    {
+      "rule": "fractional edges, as a file's duration in seconds times 1000 gives them",
+      "span": {
+        "startMs": 12.5,
+        "endMs": 9000.25
+      },
+      "positionsMs": [
+        6000.125,
+        9000.25,
+        3
+      ],
+      "expected": {
+        "autoFadeMs": 2995.9166666666665,
+        "pressFadeMs": 1000,
+        "fadeOutAtMs": 6004.333333333334,
+        "fadeLengthAt": [
+          2995.9166666666665,
+          0,
+          2995.9166666666665
+        ]
+      }
+    },
+    {
+      "rule": "a millisecond long",
+      "span": {
+        "startMs": 0,
+        "endMs": 1
+      },
+      "positionsMs": [
+        0,
+        0.5
+      ],
+      "expected": {
+        "autoFadeMs": 0.3333333333333333,
+        "pressFadeMs": 0.3333333333333333,
+        "fadeOutAtMs": 0.6666666666666667,
+        "fadeLengthAt": [
+          0.3333333333333333,
+          0.3333333333333333
+        ]
+      }
+    },
+    {
+      "rule": "an unknown end: the whole fade, never reached",
+      "span": {
+        "startMs": 0,
+        "endMs": null
+      },
+      "positionsMs": [
+        0,
+        1000000000000
+      ],
+      "expected": {
+        "autoFadeMs": 5000,
+        "pressFadeMs": 1000,
+        "fadeOutAtMs": null,
+        "fadeLengthAt": [
+          5000,
+          5000
+        ]
+      }
+    },
+    {
+      "rule": "an unknown end after a leading silence",
+      "span": {
+        "startMs": 300,
+        "endMs": null
+      },
+      "positionsMs": [
+        300
+      ],
+      "expected": {
+        "autoFadeMs": 5000,
+        "pressFadeMs": 1000,
+        "fadeOutAtMs": null,
+        "fadeLengthAt": [
+          5000
+        ]
+      }
+    },
+    {
+      "rule": "an empty span fades over nothing",
+      "span": {
+        "startMs": 500,
+        "endMs": 500
+      },
+      "positionsMs": [
+        0,
+        500,
+        600
+      ],
+      "expected": {
+        "autoFadeMs": 0,
+        "pressFadeMs": 0,
+        "fadeOutAtMs": 500,
+        "fadeLengthAt": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "rule": "an inverted span is empty",
+      "span": {
+        "startMs": 800,
+        "endMs": 200
+      },
+      "positionsMs": [
+        0,
+        200,
+        900
+      ],
+      "expected": {
+        "autoFadeMs": 0,
+        "pressFadeMs": 0,
+        "fadeOutAtMs": 200,
+        "fadeLengthAt": [
+          0,
+          0,
+          0
+        ]
+      }
+    },
+    {
+      "rule": "a long recording",
+      "span": {
+        "startMs": 0,
+        "endMs": 10800000
+      },
+      "positionsMs": [
+        10798766
+      ],
+      "expected": {
+        "autoFadeMs": 5000,
+        "pressFadeMs": 1000,
+        "fadeOutAtMs": 10795000,
+        "fadeLengthAt": [
+          1234
+        ]
+      }
+    }
+  ]
+}
