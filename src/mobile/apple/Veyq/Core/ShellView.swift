@@ -30,6 +30,8 @@ struct ShellView: View {
         .environment(\.takesShare, model.takesShare)
         // A file dragged onto the app — a screenshot's thumbnail, a photo, any file from another app (ADR 0138 decision 9).
         .onDrop(of: IncomingFiles.accepted, isTargeted: nil) { providers in
+            // no target of its own took it (a level, a row, a gallery): the debug trace says so (#1039)
+            AppModel.dropLog("drop onto the shell: \(providers.map(\.registeredTypeIdentifiers))")
             Task { model.receiveDrop(await IncomingFiles.read(providers)) }
             return true
         }
