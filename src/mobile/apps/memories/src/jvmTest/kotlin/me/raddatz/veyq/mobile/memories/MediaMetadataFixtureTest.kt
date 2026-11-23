@@ -14,7 +14,7 @@ import kotlin.test.assertNull
 /**
  * What a photo's and a video's upload seals from its bytes, over the web's own fixtures (`features/memories/__fixtures__`,
  * `shared/image/__fixtures__`, made by `scripts/make_exif_fixture.py`), held to exactly what the web's
- * `readExif.fixture.test.ts` and `videoHeader.test.ts` expect of them: the parity of the two readers.
+ * `readExif.fixture.test.ts` and `contracts/platform/media/v1-vectors.json` expect of them: the parity of the two readers.
  */
 class MediaMetadataFixtureTest {
     private val root = File(System.getProperty("veyq.repoRoot"))
@@ -100,7 +100,8 @@ class MediaMetadataFixtureTest {
         for (none in listOf("landscape.mp4", "clip.webm", "clip.mkv")) assertNull(VideoHeader.captureTime(clip(none), NOW), none)
         assertEquals(64 to 36, VideoHeader.size(clip("landscape.mp4"))?.let { it.width to it.height })
         assertEquals(36 to 64, VideoHeader.size(clip("portrait-moov-at-end.mov"))?.let { it.width to it.height }, "a quarter turn swaps")
-        assertNull(VideoHeader.size(clip("clip.webm")), "Matroska's size is the platform's")
+        assertEquals(64 to 36, VideoHeader.size(clip("clip.webm"))?.let { it.width to it.height }, "a WebM's size, as the web reads it")
+        assertEquals(64 to 36, VideoHeader.size(clip("clip.mkv"))?.let { it.width to it.height }, "a Matroska file's")
     }
 
     @Test

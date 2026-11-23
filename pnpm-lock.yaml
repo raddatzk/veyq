@@ -339,9 +339,6 @@ importers:
       '@veyq/crypto':
         specifier: workspace:*
         version: link:../packages/crypto
-      exifreader:
-        specifier: ^4.54.0
-        version: 4.54.0
       jspdf:
         specifier: ^4.2.1
         version: 4.2.1
@@ -1729,10 +1726,6 @@ packages:
     peerDependencies:
       vue: ^3.5.0
 
-  '@xmldom/xmldom@0.9.12':
-    resolution: {integrity: sha512-5AXjrcMClTryPe9LgZrygpB1lj7s0S9E0+W+AHaVKAVyHanafK86iPSvG5xHVSp/jC+VH1UXu0TAEmY279xH7A==}
-    engines: {node: '>=14.6'}
-
   abbrev@5.0.0:
     resolution: {integrity: sha512-/XrFJgzQQQHpti1raDJC6m4ws6aNktmjBlhk8Fdlk7LwCEuDoieEJJY9OFHjfiFJFFRM2tK+Ky/IsfbbmlMu1w==}
     engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
@@ -2177,10 +2170,6 @@ packages:
   execa@9.6.1:
     resolution: {integrity: sha512-9Be3ZoN4LmYR90tUoVu2te2BsbzHfhJyfEiAVfz7N5/zv+jduIfLrV2xdQXOHbaD6KgpGdO9PRPM1Y4Q9QkPkA==}
     engines: {node: ^18.19.0 || >=20.5.0}
-
-  exifreader@4.54.0:
-    resolution: {integrity: sha512-7mJXhbDMwLnuRtBaId8dIR5S8Hhvz3R1Qjvo3MIXtwFGRr+vbYdVVjbyfQ5F1FsBKVjog6aKx+hcf8yqNHxJUg==}
-    hasBin: true
 
   expect-type@1.4.0:
     resolution: {integrity: sha512-KfYbmpRm0VbLjEvVa9yGwCi9GI34xvi7A/HXYWQO65CSD2u3MczUJSuwXKFIxlGsgBQizV9q5J9NHj4VG0n+pA==}
@@ -4810,9 +4799,6 @@ snapshots:
     dependencies:
       vue: 3.5.44(typescript@6.0.3)
 
-  '@xmldom/xmldom@0.9.12':
-    optional: true
-
   abbrev@5.0.0: {}
 
   acorn-jsx@5.3.2(acorn@8.17.0):
@@ -5293,10 +5279,6 @@ snapshots:
       signal-exit: 4.1.0
       strip-final-newline: 4.0.0
       yoctocolors: 2.1.2
-
-  exifreader@4.54.0:
-    optionalDependencies:
-      '@xmldom/xmldom': 0.9.12
 
   expect-type@1.4.0: {}
 

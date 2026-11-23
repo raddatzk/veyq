@@ -106,8 +106,8 @@ function vueWithoutPassThroughPolicyPlugin(): Plugin {
 }
 
 // Vite's `build.license` file names each bundled package, its version and its licence text, but not where its source is.
-// MPL-2.0 §3.2(a) asks exactly that of a copy in executable form - ExifReader is MPL-2.0 and ships minified - so this
-// plugin adds, under every package's heading, its published source at that version on npm (the tarball that was bundled,
+// MPL-2.0 §3.2(a) asks exactly that of a copy in executable form of a file-level copyleft package (ExifReader was one, until
+// ADR 0155's media headers' slice replaced it by the core's reader), so this plugin adds, under every package's heading, its published source at that version on npm (the tarball that was bundled,
 // file for file) and its repository when it names one. Every package rather than only MPL: the line costs nothing, and a
 // later file-level copyleft dependency is covered without anyone remembering this. `verify:license-sources` checks dist.
 const LICENSE_FILE = 'third-party-licenses.txt'

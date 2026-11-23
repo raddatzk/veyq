@@ -143,7 +143,8 @@ first import of `main.ts`). Why this shape and not another is [ADR 0117](../deci
 
 - **`veyq`** is the sanitizer: its `createHTML` runs `renderMarkdown`. A template shows markup only as
   `markdownHtml(text)` through `v-safe-html`, which takes no string (by type, and at run time in every browser).
-  Its second purpose, `parseInertXml`, parses a photo's XMP into a document of its own for the EXIF library.
+  Its second purpose, `parseInertXml`, parses an XML file — a GPX track — into a document of its own (a photo's XMP
+  was its first, until the Kotlin core's reader scanned it by hand: ADR 0155, the media headers' slice).
 - **`default`** answers for code that cannot name `veyq`: it passes the exact fixed markup in `LIBRARY_MARKUP` and, as
   a script URL, only a same-origin file under `assets/` or `sw.js`; anything else is refused.
 - **Vue's `vue` policy** (a pass-through Vue writes `v-html` with) is compiled out of the build, and `verify:csp`
@@ -156,7 +157,7 @@ The sinks, measured in the built bundle and the source on 2026-11-05 (`grep` of 
 | Where | Sink | How it passes |
 |---|---|---|
 | Our templates: share notes, terms, the operator section, the privacy notice | `innerHTML` | `markdownHtml` → `v-safe-html` (`veyq`) |
-| `exifTags.ts` → ExifReader's XMP parse | `DOMParser.parseFromString` | `parseInertXml` handed as its `domParser` (`veyq`) |
+| `track/gpx.ts`'s GPX parse | `DOMParser.parseFromString` | `parseInertXml` (`veyq`) |
 | Our four workers (digest, frames, listing opener, media deriver), `@veyq/crypto`'s Argon2 worker, pdf.js' worker | `new Worker(url)` | `default`'s script-URL rule |
 | The media service worker | `serviceWorker.register('/sw.js')` | `default`'s script-URL rule |
 | Leaflet: the inline-SVG probe at load, the zoom buttons | `innerHTML` of a fixed literal | `default`'s `LIBRARY_MARKUP` |

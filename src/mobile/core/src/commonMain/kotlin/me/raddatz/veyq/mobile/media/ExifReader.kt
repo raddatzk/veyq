@@ -1,13 +1,17 @@
 package me.raddatz.veyq.mobile.media
 
+import me.raddatz.veyq.mobile.search.JsText
+import kotlin.coroutines.cancellation.CancellationException
+import kotlin.math.min
+
 /** A file read at any offset: its size, and its bytes `[from, from + length)` — fewer only at its end. */
 class ByteSource(val size: Long, val read: suspend (from: Long, length: Int) -> ByteArray)
 
 /**
- * A photo's metadata tags, read on the device from its bytes (the web's `shared/image/exifTags.ts` [ExifTags], which reads
- * them through ExifReader): the tags by their standard names, each already undone — a rational is a number, an ASCII tag a
- * string (the first of several), a date epoch ms read in the device's zone ([localWallClock]), the GPS position signed
- * decimal degrees (both or neither). A tag the file does not carry, or carries unreadably, is null.
+ * A photo's metadata tags, read on the device from its bytes: the tags by their standard names, each already undone — a
+ * rational is a number, an ASCII tag a string (the first of several), a date epoch ms read in the device's zone
+ * ([localWallClockMs]), the GPS position signed decimal degrees (both or neither). A tag the file does not carry, or
+ * carries unreadably, is null. The web reads the same through `@veyq/core-js/media` under the web's own names.
  */
 class ExifTags internal constructor() {
     var make: String? = null; internal set
@@ -19,14 +23,17 @@ class ExifTags internal constructor() {
     var copyright: String? = null; internal set
     var rating: Double? = null; internal set
     var imageDescription: String? = null; internal set
-    var dateTime: Long? = null; internal set
+    /** `DateTime`, when the file was last changed, epoch ms (as every date here: the wall clock in the device's zone). */
+    var dateTimeMs: Double? = null; internal set
     var imageWidth: Double? = null; internal set
     var imageLength: Double? = null; internal set
     var exposureTime: Double? = null; internal set
     var fNumber: Double? = null; internal set
     var isoSpeedRatings: Double? = null; internal set
-    var dateTimeOriginal: Long? = null; internal set
-    var dateTimeDigitized: Long? = null; internal set
+    /** When the picture was taken. */
+    var dateTimeOriginalMs: Double? = null; internal set
+    /** When it was digitised — for a camera, the same moment. */
+    var dateTimeDigitizedMs: Double? = null; internal set
     var exposureBiasValue: Double? = null; internal set
     /** The raw bitfield: bit 0 is "fired". */
     var flash: Double? = null; internal set
@@ -43,198 +50,254 @@ class ExifTags internal constructor() {
     var gpsHPositioningError: Double? = null; internal set
     var latitude: Double? = null; internal set
     var longitude: Double? = null; internal set
-    /** XMP's capture time: the first of `exif:DateTimeOriginal`, `photoshop:DateCreated`, `xmp:CreateDate`, a wall clock. */
-    var xmpCapturedAt: Long? = null; internal set
+    /** XMP's capture time: the first of `DateTimeOriginal`, `DateCreated`, `CreateDate` that reads, a wall clock. */
+    var xmpCapturedAtMs: Double? = null; internal set
     var xmpCreatorTool: String? = null; internal set
     var xmpRating: Double? = null; internal set
     var xmpTitle: String? = null; internal set
     var xmpDescription: String? = null; internal set
     var iptcObjectName: String? = null; internal set
 
-    internal fun isEmpty(): Boolean = listOf<Any?>(
-        make, model, orientation, software, artist, copyright, rating, imageDescription, dateTime, imageWidth, imageLength,
-        exposureTime, fNumber, isoSpeedRatings, dateTimeOriginal, dateTimeDigitized, exposureBiasValue, flash, focalLength,
-        focalLengthIn35mmFilm, pixelXDimension, pixelYDimension, lensMake, lensModel, gpsAltitude, gpsAltitudeRef,
-        gpsImgDirection, gpsImgDirectionRef, gpsHPositioningError, latitude, longitude, xmpCapturedAt, xmpCreatorTool,
-        xmpRating, xmpTitle, xmpDescription, iptcObjectName,
-    ).all { it == null }
+    val dateTime: Long? get() = dateTimeMs?.toLong()
+    val dateTimeOriginal: Long? get() = dateTimeOriginalMs?.toLong()
+    val dateTimeDigitized: Long? get() = dateTimeDigitizedMs?.toLong()
+    val xmpCapturedAt: Long? get() = xmpCapturedAtMs?.toLong()
+
+    internal fun isEmpty(): Boolean =
+        make == null && model == null && orientation == null && software == null && artist == null && copyright == null &&
+            rating == null && imageDescription == null && dateTimeMs == null && imageWidth == null && imageLength == null &&
+            exposureTime == null && fNumber == null && isoSpeedRatings == null && dateTimeOriginalMs == null &&
+            dateTimeDigitizedMs == null && exposureBiasValue == null && flash == null && focalLength == null &&
+            focalLengthIn35mmFilm == null && pixelXDimension == null && pixelYDimension == null && lensMake == null &&
+            lensModel == null && gpsAltitude == null && gpsAltitudeRef == null && gpsImgDirection == null &&
+            gpsImgDirectionRef == null && gpsHPositioningError == null && latitude == null && longitude == null &&
+            xmpCapturedAtMs == null && xmpCreatorTool == null && xmpRating == null && xmpTitle == null &&
+            xmpDescription == null && iptcObjectName == null
 }
 
 /**
- * Reads [ExifTags] from a photo's container (what the web's ExifReader reads, `exifTags.ts`): a JPEG's `APP1` Exif and
- * XMP and its `APP13` IPTC object name; a bare TIFF (its first [TIFF_PREFIX]); a PNG's `eXIf` and uncompressed XMP `iTXt`
- * and a WebP's `EXIF` and `XMP ` (each within its first [CHUNKED_PREFIX], as the web reads them); a HEIC's or an AVIF's
- * `Exif` item through its `meta` box. Only the tags [ExifTags] names are read. Never the whole file: a JPEG's segments and
- * a HEIF's `meta` are read by their headers, at most [SLICED_MAX] in all. A container this does not know answers null, and
- * so does a damaged one past what it read.
+ * Reads [ExifTags] from a photo's container, as the web read them through the ExifReader library until ADR 0155's media
+ * headers' slice (`contracts/platform/media/v1-vectors.json` holds every client to the same answers): a JPEG's last `APP1`
+ * Exif, its `APP1` XMP and its `APP13` IPTC object name; a bare TIFF (its first [TIFF_PREFIX]); a PNG's `eXIf` and
+ * uncompressed XMP `iTXt` and a WebP's `EXIF` and `XMP ` (each within its first [CHUNKED_PREFIX]: a PNG's metadata usually
+ * precedes its pixels, a WebP's follows them, so a larger WebP answers nothing); a HEIC's or an AVIF's `Exif` item through
+ * its `meta` box. Only the tags [ExifTags] names are read; what is not parsed cannot be mis-parsed. Never the whole file: a
+ * JPEG's segments and a HEIF's boxes are read by their headers in windows of [WINDOW], at most [SLICED_MAX] in all. A
+ * container this does not know answers null, and so does a damaged one past what it read. No `Regex`, `HashMap` or `Long`
+ * on the way (the web's path): the XMP is scanned by hand ([Xmp]), the dates parsed by hand.
  */
 object ExifReader {
     const val CHUNKED_PREFIX = 512 * 1024
     const val TIFF_PREFIX = 1024 * 1024
     const val SLICED_MAX = 4 * 1024 * 1024
+    /** A JPEG's or a HEIF's read window: a JPEG's head usually holds every segment before its image data. */
+    const val WINDOW = 128 * 1024
 
     /** [source]'s tags, or null where it carries none this reads. */
-    suspend fun read(source: ByteSource): ExifTags? {
-        val head = source.read(0, 12)
-        if (head.size < 12) return null
-        val tags = ExifTags()
-        runCatching {
-            when {
-                isTiff(head, 0) -> tiff(source.read(0, minOf(source.size, TIFF_PREFIX.toLong()).toInt()), 0, tags)
-                head[0] == 0x89.toByte() && ascii(head, 1, "PNG") -> png(source.read(0, minOf(source.size, CHUNKED_PREFIX.toLong()).toInt()), tags)
-                ascii(head, 0, "RIFF") && ascii(head, 8, "WEBP") -> webp(source.read(0, minOf(source.size, CHUNKED_PREFIX.toLong()).toInt()), tags)
-                u8(head, 0) == 0xFF && u8(head, 1) == 0xD8 -> jpeg(source, tags)
-                ascii(head, 4, "ftyp") -> heif(source, tags)
-                else -> return null
+    suspend fun read(source: ByteSource): ExifTags? = read(source.media())
+
+    /**
+     * [file]'s tags, or null where it carries none this reads. A read the file refuses fails the whole read, as any read of
+     * the file would; a block damaged past what was read leaves what was read standing.
+     */
+    suspend fun read(file: MediaBytes): ExifTags? {
+        var refused: Throwable? = null
+        val reads = MediaBytes(file.size) { from, length ->
+            try {
+                file.read(from, length)
+            } catch (e: Throwable) {
+                refused = e
+                throw e
             }
         }
-        return tags.takeUnless { it.isEmpty() }
+        if (reads.size < 12) return null
+        val head = reads.read(0.0, 12)
+        if (head.size < 12) return null
+        val tags = ExifTags()
+        try {
+            when {
+                isTiff(head, 0) -> tiff(reads.read(0.0, min(reads.size, TIFF_PREFIX.toDouble()).toInt()), 0, tags)
+                u8(head, 0) == 0x89 && Bytes.ascii(head, 1, "PNG") -> png(reads.read(0.0, min(reads.size, CHUNKED_PREFIX.toDouble()).toInt()), tags)
+                Bytes.ascii(head, 0, "RIFF") && Bytes.ascii(head, 8, "WEBP") -> webp(reads.read(0.0, min(reads.size, CHUNKED_PREFIX.toDouble()).toInt()), tags)
+                u8(head, 0) == 0xFF && u8(head, 1) == 0xD8 -> jpeg(HeaderReader(reads, WINDOW, SLICED_MAX.toDouble(), Int.MAX_VALUE), tags)
+                Bytes.ascii(head, 4, "ftyp") -> heif(HeaderReader(reads, WINDOW, SLICED_MAX.toDouble(), Int.MAX_VALUE), tags)
+                else -> return null
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            refused?.let { throw it }
+            // a block damaged past what was read: what was read stands
+        }
+        return if (tags.isEmpty()) null else tags
     }
 
     // --- containers ------------------------------------------------------------------------------------------------
 
-    private suspend fun jpeg(source: ByteSource, tags: ExifTags) {
-        var at = 2L
-        var budget = SLICED_MAX.toLong()
-        while (at + 4 <= source.size) {
-            val h = source.read(at, 4)
-            if (h.size < 4 || u8(h, 0) != 0xFF) return
-            val marker = u8(h, 1)
-            when {
-                marker == 0xFF -> { at += 1; continue } // fill byte
-                marker == 0xD8 || marker in 0xD0..0xD7 || marker == 0x01 -> { at += 2; continue }
-                marker == 0xDA || marker == 0xD9 -> return // the image data, or its end: no metadata follows
+    private const val XMP_JPEG = "http://ns.adobe.com/xap/1.0/\u0000"
+
+    private suspend fun jpeg(r: HeaderReader, tags: ExifTags) {
+        if (r.hold(0.0, 4) < 4) return
+        var at = 2.0
+        var exif: ByteArray? = null // the last Exif segment is the one read (the web's)
+        while (at + 4 <= r.size) {
+            if (r.hold(at, 4) < 4 || r.u8(at) != 0xFF) break
+            val marker = r.u8(at + 1)
+            if (marker == 0xFF) {
+                at += 1 // a fill byte
+                continue
             }
-            val length = (u8(h, 2) shl 8) or u8(h, 3)
-            if (length < 2) return
+            if (marker == 0xD8 || marker in 0xD0..0xD7 || marker == 0x01) {
+                at += 2
+                continue
+            }
+            if (marker == 0xDA || marker == 0xD9) break // the image data, or its end: no metadata follows
+            val length = r.u16be(at + 2)
+            if (length < 2) break
             if (marker == 0xE1 || marker == 0xED) {
-                budget -= length
-                if (budget < 0) return
-                val body = source.read(at + 4, length - 2)
+                val n = length - 2
+                if (r.hold(at + 4, n) < n) break
+                val body = r.copy(at + 4, n)
                 when {
-                    marker == 0xE1 && ascii(body, 0, "Exif\u0000\u0000") -> tiff(body, 6, tags)
-                    marker == 0xE1 && ascii(body, 0, XMP_JPEG) -> xmp(body.decodeToString(XMP_JPEG.length, body.size), tags)
-                    marker == 0xED && ascii(body, 0, "Photoshop 3.0\u0000") -> photoshop(body, 14, tags)
+                    marker == 0xE1 && Bytes.ascii(body, 0, "Exif\u0000\u0000") -> exif = body
+                    marker == 0xE1 && Bytes.ascii(body, 0, XMP_JPEG) -> Xmp.read(body.decodeToString(XMP_JPEG.length, body.size), tags)
+                    marker == 0xED && Bytes.ascii(body, 0, "Photoshop 3.0\u0000") -> photoshop(body, 14, tags)
                 }
             }
             at += 2 + length
         }
+        exif?.let { tiff(it, 6, tags) }
     }
 
     private fun png(b: ByteArray, tags: ExifTags) {
         var at = 8
         while (at + 8 <= b.size) {
             val length = u32be(b, at)
-            val type = fourcc(b, at + 4)
             val body = at + 8
             if (length < 0 || body + length > b.size) return
-            when (type) {
-                "eXIf" -> tiff(b.copyOfRange(body, body + length.toInt()), 0, tags)
-                "iTXt" -> {
-                    val keyEnd = indexOf(b, 0, body, body + length.toInt())
-                    if (keyEnd > 0 && b.decodeToString(body, keyEnd) == "XML:com.adobe.xmp" && keyEnd + 2 < body + length && b[keyEnd + 1].toInt() == 0) {
-                        // keyword, NUL, compression flag (0: none), method, language tag NUL, translated keyword NUL, text
-                        val lang = indexOf(b, 0, keyEnd + 3, body + length.toInt())
-                        val translated = if (lang < 0) -1 else indexOf(b, 0, lang + 1, body + length.toInt())
-                        if (translated >= 0) xmp(b.decodeToString(translated + 1, body + length.toInt()), tags)
+            val end = body + length.toInt()
+            when {
+                Bytes.ascii(b, at + 4, "eXIf") -> tiff(b.copyOfRange(body, end), 0, tags)
+                Bytes.ascii(b, at + 4, "iTXt") -> {
+                    val keyEnd = indexOf(b, 0, body, end)
+                    // keyword, NUL, compression flag (0: none), method, language tag NUL, translated keyword NUL, text
+                    if (keyEnd > 0 && Bytes.ascii(b, body, "XML:com.adobe.xmp") && keyEnd == body + 17 && keyEnd + 2 < end && b[keyEnd + 1].toInt() == 0) {
+                        val lang = indexOf(b, 0, keyEnd + 3, end)
+                        val translated = if (lang < 0) -1 else indexOf(b, 0, lang + 1, end)
+                        if (translated >= 0) Xmp.read(b.decodeToString(translated + 1, end), tags)
                     }
                 }
-                "IEND" -> return
+                Bytes.ascii(b, at + 4, "IEND") -> return
             }
-            at = body + length.toInt() + 4
+            at = end + 4
         }
     }
 
     private fun webp(b: ByteArray, tags: ExifTags) {
         var at = 12
         while (at + 8 <= b.size) {
-            val type = fourcc(b, at)
             val length = u32le(b, at + 4)
             val body = at + 8
             if (length < 0 || body + length > b.size) return
-            when (type) {
-                "EXIF" -> tiff(b, if (ascii(b, body, "Exif\u0000\u0000")) body + 6 else body, tags)
-                "XMP " -> xmp(b.decodeToString(body, body + length.toInt()), tags)
+            val end = body + length.toInt()
+            when {
+                Bytes.ascii(b, at, "EXIF") -> tiff(b.copyOfRange(body, end), if (Bytes.ascii(b, body, "Exif\u0000\u0000")) 6 else 0, tags)
+                Bytes.ascii(b, at, "XMP ") -> Xmp.read(b.decodeToString(body, end), tags)
             }
-            at = body + length.toInt() + (length.toInt() and 1)
+            at = end + (length.toInt() and 1)
         }
     }
 
     /** A HEIC's or an AVIF's `Exif` item: the top-level `meta` box's `iinf` names it, its `iloc` places it. */
-    private suspend fun heif(source: ByteSource, tags: ExifTags) {
-        var at = 0L
+    private suspend fun heif(r: HeaderReader, tags: ExifTags) {
+        var at = 0.0
         var visits = 0
-        var meta: Pair<Long, Long>? = null
-        while (at + 8 <= source.size && visits++ < 64) {
-            val h = source.read(at, 16)
-            if (h.size < 8) return
-            var size = u32be(h, 0)
+        var metaAt = -1.0
+        var metaEnd = -1.0
+        while (at + 8 <= r.size && visits++ < 64) {
+            val n = r.hold(at, 16)
+            if (n < 8) return
+            var size = r.u32be(at)
             var body = at + 8
-            if (size == 1L) {
-                if (h.size < 16) return
-                size = (u32be(h, 8) shl 32) or u32be(h, 12)
+            if (size == 1.0) {
+                if (n < 16) return
+                size = r.u32be(at + 8) * 4_294_967_296.0 + r.u32be(at + 12)
                 body = at + 16
-            } else if (size == 0L) size = source.size - at
+            } else if (size == 0.0) {
+                size = r.size - at
+            }
             if (size < body - at) return
-            if (fourcc(h, 4) == "meta") {
-                meta = body to at + size
+            if (r.fourcc(at + 4, "meta")) {
+                metaAt = body
+                metaEnd = at + size
                 break
             }
             at += size
         }
-        val (from, end) = meta ?: return
-        if (end - from > SLICED_MAX) return
-        val m = source.read(from, (end - from).toInt())
-        // a full box: version and flags, then its children
-        var exifId = -1L
-        val locations = HashMap<Long, List<Pair<Long, Long>>>()
-        eachBox(m, 4, m.size) { type, b0, b1 ->
-            when (type) {
-                "iinf" -> exifId = exifItem(m, b0, b1)
-                "iloc" -> locations.putAll(itemLocations(m, b0, b1))
-            }
-        }
-        val extents = locations[exifId] ?: return
-        val total = extents.sumOf { it.second }
-        if (exifId < 0 || total <= 4 || total > SLICED_MAX) return
+        if (metaAt < 0 || metaEnd - metaAt > SLICED_MAX || metaEnd > r.size) return
+        val length = (metaEnd - metaAt).toInt()
+        if (r.hold(metaAt, length) < length) return
+        val m = r.copy(metaAt, length)
+        // a full box: version and flags, then its children; the `iinf` names the Exif item, the `iloc` places it
+        val exifId = boxIn(m, 4, m.size, "iinf")?.let { exifItem(m, it, boxEnd(m, it)) } ?: return
+        if (exifId < 0) return
+        val iloc = boxIn(m, 4, m.size, "iloc") ?: return
+        val extents = itemExtents(m, iloc, boxEnd(m, iloc), exifId) ?: return
+        var total = 0.0
+        for (i in 1 until extents.size step 2) total += extents[i]
+        if (total <= 4 || total > SLICED_MAX) return
         val data = ByteArray(total.toInt())
         var o = 0
-        for ((offset, length) in extents) {
-            source.read(offset, length.toInt()).copyInto(data, o)
-            o += length.toInt()
+        for (i in 0 until extents.size step 2) {
+            val len = extents[i + 1].toInt()
+            if (r.hold(extents[i], len) < len) return
+            r.copy(extents[i], len).copyInto(data, o)
+            o += len
         }
         val tiffAt = 4 + u32be(data, 0)
-        if (tiffAt < data.size) tiff(data, tiffAt.toInt(), tags)
+        if (tiffAt >= 4 && tiffAt < data.size) tiff(data, tiffAt.toInt(), tags)
     }
 
-    private inline fun eachBox(b: ByteArray, from: Int, end: Int, visit: (String, Int, Int) -> Unit) {
+    /** The body of the first child box of [type] in `[from, end)` of [b] (a box's size, then its type), or null. */
+    private fun boxIn(b: ByteArray, from: Int, end: Int, type: String): Int? {
         var at = from
         var visits = 0
         while (at + 8 <= end && visits++ < 4096) {
             val size = u32be(b, at)
-            if (size < 8 || at + size > end) return
-            visit(fourcc(b, at + 4), at + 8, (at + size).toInt())
+            if (size < 8 || at + size > end) return null
+            if (Bytes.ascii(b, at + 4, type)) return at + 8
             at += size.toInt()
         }
+        return null
     }
+
+    /** Where the box whose body starts at [body] ends. */
+    private fun boxEnd(b: ByteArray, body: Int): Int = body - 8 + u32be(b, body - 8).toInt()
 
     /** The id of the `Exif` item an `iinf` lists, or -1. */
-    private fun exifItem(b: ByteArray, body: Int, end: Int): Long {
+    private fun exifItem(b: ByteArray, body: Int, end: Int): Double {
         val version = u8(b, body)
-        var found = -1L
-        eachBox(b, body + 4 + (if (version == 0) 2 else 4), end) { type, b0, _ ->
-            if (type != "infe") return@eachBox
-            val v = u8(b, b0)
-            if (v < 2) return@eachBox
-            val id = if (v == 2) u16be(b, b0 + 4).toLong() else u32be(b, b0 + 4)
-            val typeAt = b0 + 4 + (if (v == 2) 2 else 4) + 2
-            if (found < 0 && fourcc(b, typeAt) == "Exif") found = id
+        var at = body + 4 + (if (version == 0) 2 else 4)
+        var visits = 0
+        while (at + 8 <= end && visits++ < 4096) {
+            val size = u32be(b, at)
+            if (size < 8 || at + size > end) return -1.0
+            val e = at + 8
+            if (Bytes.ascii(b, at + 4, "infe")) {
+                val v = u8(b, e)
+                if (v >= 2) {
+                    val id = if (v == 2) u16be(b, e + 4).toDouble() else u32be(b, e + 4)
+                    val typeAt = e + 4 + (if (v == 2) 2 else 4) + 2
+                    if (Bytes.ascii(b, typeAt, "Exif")) return id
+                }
+            }
+            at += size.toInt()
         }
-        return found
+        return -1.0
     }
 
-    /** Each item's extents in the file (offset, length), for the items stored in the file itself (construction 0). */
-    private fun itemLocations(b: ByteArray, body: Int, end: Int): Map<Long, List<Pair<Long, Long>>> {
+    /** The extents (offset, length, offset, length, …) an `iloc` gives item [id] in the file itself (construction 0), or null. */
+    private fun itemExtents(b: ByteArray, body: Int, end: Int, id: Double): DoubleArray? {
         val version = u8(b, body)
         var at = body + 4
         val offsetSize = u8(b, at) shr 4
@@ -242,46 +305,52 @@ object ExifReader {
         val baseSize = u8(b, at + 1) shr 4
         val indexSize = if (version == 1 || version == 2) u8(b, at + 1) and 0xF else 0
         at += 2
-        val count = if (version < 2) u16be(b, at).toLong().also { at += 2 } else u32be(b, at).also { at += 4 }
-        fun sized(n: Int): Long {
-            var v = 0L
-            repeat(n) { v = (v shl 8) or u8(b, at + it).toLong() }
+        val count: Double
+        if (version < 2) {
+            count = u16be(b, at).toDouble()
+            at += 2
+        } else {
+            count = u32be(b, at)
+            at += 4
+        }
+        fun sized(n: Int): Double {
+            var v = 0.0
+            for (i in 0 until n) v = v * 256 + u8(b, at + i)
             at += n
             return v
         }
-        val out = HashMap<Long, List<Pair<Long, Long>>>()
-        for (i in 0 until minOf(count, 4096L)) {
-            if (at >= end) break
-            val id = if (version < 2) sized(2) else sized(4)
-            val construction = if (version == 1 || version == 2) (sized(2) and 0xF).toInt() else 0
+        var i = 0.0
+        while (i < count && i < 4096 && at < end) {
+            val item = if (version < 2) sized(2) else sized(4)
+            val construction = if (version == 1 || version == 2) sized(2).toInt() and 0xF else 0
             sized(2) // data reference index
             val base = sized(baseSize)
-            val extents = sized(2).toInt()
-            val list = ArrayList<Pair<Long, Long>>()
-            repeat(extents) {
+            val n = sized(2).toInt()
+            val extents = DoubleArray(2 * n)
+            for (k in 0 until n) {
                 if (indexSize > 0) sized(indexSize)
-                val offset = sized(offsetSize)
-                val length = sized(lengthSize)
-                list += (base + offset) to length
+                extents[2 * k] = base + sized(offsetSize)
+                extents[2 * k + 1] = sized(lengthSize)
             }
-            if (construction == 0) out[id] = list
+            if (item == id && construction == 0) return extents
+            i++
         }
-        return out
+        return null
     }
 
     /** A Photoshop `APP13`'s image resources: the IPTC block (`0x0404`) carries the object name (record 2, dataset 5). */
     private fun photoshop(b: ByteArray, from: Int, tags: ExifTags) {
         var at = from
-        while (at + 12 <= b.size && ascii(b, at, "8BIM")) {
+        while (at + 12 <= b.size && Bytes.ascii(b, at, "8BIM")) {
             val id = u16be(b, at + 4)
             val nameLength = u8(b, at + 6)
             val sizeAt = at + 6 + ((nameLength + 2) and 1.inv()) // the Pascal name padded to an even length
             if (sizeAt + 4 > b.size) return
-            val size = u32be(b, sizeAt).toInt()
+            val size = u32be(b, sizeAt)
             val data = sizeAt + 4
             if (size < 0 || data + size > b.size) return
-            if (id == 0x0404) iptc(b, data, data + size, tags)
-            at = data + size + (size and 1)
+            if (id == 0x0404) iptc(b, data, data + size.toInt(), tags)
+            at = data + size.toInt() + (size.toInt() and 1)
         }
     }
 
@@ -300,211 +369,299 @@ object ExifReader {
     // --- TIFF ------------------------------------------------------------------------------------------------------
 
     private fun isTiff(b: ByteArray, at: Int) =
-        (ascii(b, at, "II") && u8(b, at + 2) == 0x2A && u8(b, at + 3) == 0) || (ascii(b, at, "MM") && u8(b, at + 2) == 0 && u8(b, at + 3) == 0x2A)
+        (Bytes.ascii(b, at, "II") && u8(b, at + 2) == 0x2A && u8(b, at + 3) == 0) ||
+            (Bytes.ascii(b, at, "MM") && u8(b, at + 2) == 0 && u8(b, at + 3) == 0x2A)
 
-    /** A TIFF header at [base] of [b]: IFD0, then the Exif IFD and the GPS IFD it points at. Offsets count from [base]. */
+    /**
+     * A TIFF header at [base] of [b]: IFD0, then the Exif IFD and the GPS IFD it points at; offsets count from [base]. IFD0's
+     * and the Exif IFD's tags are read by their numbers alike (a date in IFD0 is read as the web read it), the Exif IFD's
+     * after IFD0's.
+     */
     private fun tiff(b: ByteArray, base: Int, tags: ExifTags) {
         if (!isTiff(b, base)) return
         val t = Tiff(b, base, u8(b, base) == 'I'.code)
-        val ifd0 = t.ifd(t.u32(4)) ?: return
-        tags.make = ifd0[0x010F]?.text()
-        tags.model = ifd0[0x0110]?.text()
-        tags.orientation = ifd0[0x0112]?.number()
-        tags.software = ifd0[0x0131]?.text()
-        tags.artist = ifd0[0x013B]?.text()
-        tags.copyright = ifd0[0x8298]?.text()
-        tags.rating = ifd0[0x4746]?.number()
-        tags.imageDescription = ifd0[0x010E]?.text()
-        tags.dateTime = ifd0[0x0132]?.text()?.let(::exifClock)
-        tags.imageWidth = ifd0[0x0100]?.number()
-        tags.imageLength = ifd0[0x0101]?.number()
-        ifd0[0x8769]?.number()?.let { t.ifd(it.toLong()) }?.let { exif ->
-            tags.exposureTime = exif[0x829A]?.number()
-            tags.fNumber = exif[0x829D]?.number()
-            tags.isoSpeedRatings = exif[0x8827]?.number()
-            tags.dateTimeOriginal = exif[0x9003]?.text()?.let(::exifClock)
-            tags.dateTimeDigitized = exif[0x9004]?.text()?.let(::exifClock)
-            tags.exposureBiasValue = exif[0x9204]?.number()
-            tags.flash = exif[0x9209]?.number()
-            tags.focalLength = exif[0x920A]?.number()
-            tags.focalLengthIn35mmFilm = exif[0xA405]?.number()
-            tags.pixelXDimension = exif[0xA002]?.number()
-            tags.pixelYDimension = exif[0xA003]?.number()
-            tags.lensMake = exif[0xA433]?.text()
-            tags.lensModel = exif[0xA434]?.text()
+        var exifAt = -1.0
+        var gpsAt = -1.0
+        t.each(t.u32(4.0)) { tag, e ->
+            when (tag) {
+                0x8769 -> exifAt = t.number(e) ?: -1.0
+                0x8825 -> gpsAt = t.number(e) ?: -1.0
+                else -> main(t, tag, e, tags)
+            }
         }
-        ifd0[0x8825]?.number()?.let { t.ifd(it.toLong()) }?.let { gps ->
-            tags.gpsAltitudeRef = gps[0x0005]?.number()
-            tags.gpsAltitude = gps[0x0006]?.number()
-            tags.gpsImgDirectionRef = gps[0x0010]?.text()
-            tags.gpsImgDirection = gps[0x0011]?.number()
-            tags.gpsHPositioningError = gps[0x001F]?.number()
-            val lat = gps[0x0002]?.degrees()?.let { if (gps[0x0001]?.text() == "S") -it else it }
-            val lng = gps[0x0004]?.degrees()?.let { if (gps[0x0003]?.text() == "W") -it else it }
-            if (lat != null && lng != null) {
-                tags.latitude = lat
-                tags.longitude = lng
+        if (exifAt > 0) t.each(exifAt) { tag, e -> main(t, tag, e, tags) }
+        if (gpsAt > 0) {
+            var latRef: String? = null
+            var lngRef: String? = null
+            var lat: Double? = null
+            var lng: Double? = null
+            t.each(gpsAt) { tag, e ->
+                when (tag) {
+                    0x0001 -> latRef = t.text(e)
+                    0x0002 -> lat = t.degrees(e)
+                    0x0003 -> lngRef = t.text(e)
+                    0x0004 -> lng = t.degrees(e)
+                    0x0005 -> tags.gpsAltitudeRef = t.number(e)
+                    0x0006 -> tags.gpsAltitude = t.number(e)
+                    0x0010 -> tags.gpsImgDirectionRef = t.text(e)
+                    0x0011 -> tags.gpsImgDirection = t.number(e)
+                    0x001F -> tags.gpsHPositioningError = t.number(e)
+                }
+            }
+            // a coordinate is its reference's too: both halves, each with its hemisphere, or no position
+            val la = lat
+            val ln = lng
+            if (la != null && ln != null && latRef != null && lngRef != null) {
+                tags.latitude = if (latRef == "S") -la else la
+                tags.longitude = if (lngRef == "W") -ln else ln
             }
         }
     }
 
-    /** One IFD entry's value as stored: text bytes, or its numbers (a rational divided out). */
-    private class Value(val texts: List<String>?, val numbers: List<Double>?) {
-        /** An ASCII tag; of several NUL-separated strings, the first. */
-        fun text(): String? = texts?.firstOrNull()
-
-        /** A single number; a count above one is no number. */
-        fun number(): Double? = numbers?.singleOrNull()?.takeIf { it.isFinite() }
-
-        /** Degrees, minutes, seconds as decimal degrees (ExifReader's computed GPS value). */
-        fun degrees(): Double? = numbers?.takeIf { it.size == 3 }?.let { (d, m, s) -> d + m / 60 + s / 3600 }?.takeIf { it.isFinite() }
+    /** One of IFD0's or the Exif IFD's tags into [tags]. */
+    private fun main(t: Tiff, tag: Int, e: Int, tags: ExifTags) {
+        when (tag) {
+            0x010F -> tags.make = t.text(e)
+            0x0110 -> tags.model = t.text(e)
+            0x0112 -> tags.orientation = t.number(e)
+            0x0131 -> tags.software = t.text(e)
+            0x013B -> tags.artist = t.text(e)
+            0x8298 -> tags.copyright = t.text(e)
+            0x4746 -> tags.rating = t.number(e)
+            0x010E -> tags.imageDescription = t.text(e)
+            0x0132 -> tags.dateTimeMs = t.text(e)?.let(::exifClock)
+            0x0100 -> tags.imageWidth = t.number(e)
+            0x0101 -> tags.imageLength = t.number(e)
+            0x829A -> tags.exposureTime = t.number(e)
+            0x829D -> tags.fNumber = t.number(e)
+            0x8827 -> tags.isoSpeedRatings = t.number(e)
+            0x9003 -> tags.dateTimeOriginalMs = t.text(e)?.let(::exifClock)
+            0x9004 -> tags.dateTimeDigitizedMs = t.text(e)?.let(::exifClock)
+            0x9204 -> tags.exposureBiasValue = t.number(e)
+            0x9209 -> tags.flash = t.number(e)
+            0x920A -> tags.focalLength = t.number(e)
+            0xA405 -> tags.focalLengthIn35mmFilm = t.number(e)
+            0xA002 -> tags.pixelXDimension = t.number(e)
+            0xA003 -> tags.pixelYDimension = t.number(e)
+            0xA433 -> tags.lensMake = t.text(e)
+            0xA434 -> tags.lensModel = t.text(e)
+        }
     }
 
+    /** A TIFF block's reader: its offsets count from [base], every read bounds-checked (-1 outside the block). */
     private class Tiff(val b: ByteArray, val base: Int, val le: Boolean) {
-        fun u16(at: Long): Int = (base + at).toInt().let { if (it < 0 || it + 2 > b.size) -1 else if (le) u16le(b, it) else u16be(b, it) }
-        fun u32(at: Long): Long = (base + at).toInt().let { if (it < 0 || it + 4 > b.size) -1 else if (le) u32le(b, it) else u32be(b, it) }
+        private fun at(off: Double): Int = if (off < 0 || base + off > b.size) -1 else (base + off).toInt()
+        fun u16(off: Double): Int = at(off).let { if (it < 0 || it + 2 > b.size) -1 else if (le) Bytes.u16le(b, it) else Bytes.u16be(b, it) }
+        fun u32(off: Double): Double = at(off).let { if (it < 0 || it + 4 > b.size) -1.0 else if (le) Bytes.u32le(b, it) else Bytes.u32be(b, it) }
 
-        /** The entries of the IFD at [at] by tag; null where it is not inside the block. */
-        fun ifd(at: Long): Map<Int, Value>? {
-            if (at <= 0) return null
-            val count = u16(at)
-            if (count < 0 || count > 1024) return null
-            val out = HashMap<Int, Value>()
+        /** A signed 32-bit number at [off], which the caller has bounds-checked. */
+        private fun i32(off: Double): Int = (base + off).toInt().let { if (le) Bytes.i32le(b, it) else Bytes.i32be(b, it) }
+
+        /** Each entry of the IFD at [off]: its tag and the entry's offset; nothing where it is not inside the block. */
+        inline fun each(off: Double, visit: (tag: Int, entry: Int) -> Unit) {
+            if (off <= 0) return
+            val count = u16(off)
+            if (count < 0 || count > 1024) return
             for (i in 0 until count) {
-                val e = at + 2 + 12L * i
+                val e = off + 2 + 12.0 * i
                 val tag = u16(e)
-                val type = u16(e + 2)
-                val n = u32(e + 4)
-                if (tag < 0 || type < 0 || n < 0) break
-                val unit = UNIT.getOrNull(type) ?: continue
-                val bytes = unit * n
-                if (bytes > 65536) continue
-                val at0 = if (bytes <= 4) e + 8 else u32(e + 8)
-                if (at0 < 0 || base + at0 + bytes > b.size) continue
-                value(type, at0, n.toInt())?.let { out[tag] = it }
-            }
-            return out
-        }
-
-        private fun value(type: Int, at: Long, n: Int): Value? = when (type) {
-            2 -> {
-                val start = (base + at).toInt()
-                var end = start + n
-                while (end > start && b[end - 1].toInt() == 0) end--
-                Value(splitNul(b, start, end).map { text(b, it.first, it.second) }, null)
-            }
-            1, 7 -> Value(null, List(n) { u8(b, (base + at).toInt() + it).toDouble() })
-            6 -> Value(null, List(n) { b[(base + at).toInt() + it].toDouble() })
-            3 -> Value(null, List(n) { u16(at + 2L * it).toDouble() })
-            8 -> Value(null, List(n) { u16(at + 2L * it).toShort().toDouble() })
-            4 -> Value(null, List(n) { u32(at + 4L * it).toDouble() })
-            9 -> Value(null, List(n) { u32(at + 4L * it).toInt().toDouble() })
-            5 -> Value(null, List(n) { u32(at + 8L * it).toDouble() / u32(at + 8L * it + 4).toDouble() })
-            10 -> Value(null, List(n) { u32(at + 8L * it).toInt().toDouble() / u32(at + 8L * it + 4).toInt().toDouble() })
-            else -> null
-        }
-
-        companion object {
-            /** Bytes per value by TIFF type (1 BYTE … 12 DOUBLE); FLOAT and DOUBLE are not read. */
-            val UNIT = listOf(null, 1, 1, 2, 4, 8, 1, 1, 2, 4, 8, null, null)
-        }
-    }
-
-    // --- XMP -------------------------------------------------------------------------------------------------------
-
-    private const val XMP_JPEG = "http://ns.adobe.com/xap/1.0/\u0000"
-
-    /** The XMP properties [ExifTags] names, in attribute form or element form (a language alternative's `x-default`). */
-    private fun xmp(packet: String, tags: ExifTags) {
-        tags.xmpCapturedAt = xmpClock(xmpValue(packet, "exif", "DateTimeOriginal"))
-            ?: xmpClock(xmpValue(packet, "photoshop", "DateCreated"))
-            ?: xmpClock(xmpValue(packet, "xmp", "CreateDate"))
-        tags.xmpCreatorTool = xmpValue(packet, "xmp", "CreatorTool")
-        tags.xmpRating = xmpValue(packet, "xmp", "Rating")?.trim()?.takeIf { it.isNotEmpty() }?.toDoubleOrNull()?.takeIf { it.isFinite() }
-        tags.xmpTitle = xmpValue(packet, "dc", "title")
-        tags.xmpDescription = xmpValue(packet, "dc", "description")
-    }
-
-    internal fun xmpValue(packet: String, prefix: String, name: String): String? {
-        val q = Regex.escape("$prefix:$name")
-        Regex("""\s$q\s*=\s*(?:"([^"]*)"|'([^']*)')""").find(packet)?.let { m ->
-            return unescape(m.groupValues[1].ifEmpty { m.groupValues[2] })
-        }
-        // `[\s\S]`, not `.` with DOT_MATCHES_ALL: that option is not in the common stdlib, so commonMain's metadata
-        // compile failed on it while every platform compile passed. Any character, line breaks included, either way.
-        val element = Regex("""<$q(?:\s[^>]*)?>([\s\S]*?)</$q\s*>""").find(packet) ?: return null
-        val inner = element.groupValues[1]
-        val items = Regex("""<rdf:li(\s[^>]*)?>([\s\S]*?)</rdf:li\s*>""").findAll(inner).toList()
-        if (items.isEmpty()) return if (inner.contains('<')) null else unescape(inner)
-        val chosen = items.firstOrNull { it.groupValues[1].contains("\"x-default\"") || it.groupValues[1].contains("'x-default'") } ?: items.first()
-        return unescape(chosen.groupValues[2])
-    }
-
-    private fun unescape(s: String): String = Regex("&(#x[0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos);").replace(s) { m ->
-        val e = m.groupValues[1]
-        when {
-            e == "amp" -> "&"
-            e == "lt" -> "<"
-            e == "gt" -> ">"
-            e == "quot" -> "\""
-            e == "apos" -> "'"
-            else -> {
-                val code = if (e.startsWith("#x")) e.drop(2).toIntOrNull(16) else e.drop(1).toIntOrNull()
-                code?.let { codePoint(it) } ?: m.value
+                if (tag < 0 || u16(e + 2) < 0 || u32(e + 4) < 0) return
+                visit(tag, e.toInt())
             }
         }
-    }
 
-    private fun codePoint(c: Int): String = if (c < 0x10000) c.toChar().toString() else {
-        val v = c - 0x10000
-        charArrayOf((0xD800 + (v shr 10)).toChar(), (0xDC00 + (v and 0x3FF)).toChar()).concatToString()
+        /** Where entry [e]'s value is (inline or at its offset) and its count, or -1 where it lies outside the block. */
+        private fun valueAt(e: Int, unit: Int): Double {
+            val bytes = unit * u32(e + 4.0)
+            if (bytes > 65536) return -1.0
+            val off = if (bytes <= 4) e + 8.0 else u32(e + 8.0)
+            return if (off < 0 || base + off + bytes > b.size) -1.0 else off
+        }
+
+        private fun unit(type: Int): Int = when (type) {
+            1, 2, 6, 7 -> 1
+            3, 8 -> 2
+            4, 9 -> 4
+            5, 10 -> 8
+            else -> 0
+        }
+
+        /** An ASCII tag's text: of several NUL-separated strings, the first; an empty one is none. */
+        fun text(e: Int): String? {
+            if (u16(e + 2.0) != 2) return null
+            val off = valueAt(e, 1)
+            if (off < 0) return null
+            val start = base + off.toInt()
+            var end = start + u32(e + 4.0).toInt()
+            while (end > start && b[end - 1].toInt() == 0) end--
+            var first = start
+            while (first < end && b[first].toInt() != 0) first++
+            return if (first == start) null else ExifReader.text(b, start, first)
+        }
+
+        /** The [i]th value of entry [e] as a number (a rational divided out), or NaN. */
+        private fun value(e: Int, type: Int, off: Double, i: Int): Double = when (type) {
+            1, 7 -> Bytes.u8(b, base + off.toInt() + i).toDouble()
+            6 -> b[base + off.toInt() + i].toDouble()
+            3 -> u16(off + 2.0 * i).toDouble()
+            8 -> u16(off + 2.0 * i).toShort().toDouble()
+            4 -> u32(off + 4.0 * i)
+            9 -> i32(off + 4.0 * i).toDouble()
+            5 -> u32(off + 8.0 * i) / u32(off + 8.0 * i + 4)
+            10 -> i32(off + 8.0 * i).toDouble() / i32(off + 8.0 * i + 4).toDouble()
+            else -> Double.NaN
+        }
+
+        /** A single number; a count above one, a text or a division by zero is none. */
+        fun number(e: Int): Double? {
+            val type = u16(e + 2.0)
+            if (type == 2 || unit(type) == 0 || u32(e + 4.0) != 1.0) return null
+            val off = valueAt(e, unit(type))
+            if (off < 0) return null
+            return value(e, type, off, 0).takeIf { it.isFinite() }
+        }
+
+        /** Degrees, minutes, seconds (three rationals) as decimal degrees. */
+        fun degrees(e: Int): Double? {
+            val type = u16(e + 2.0)
+            if ((type != 5 && type != 10) || u32(e + 4.0) != 3.0) return null
+            val off = valueAt(e, 8)
+            if (off < 0) return null
+            return (value(e, type, off, 0) + value(e, type, off, 1) / 60 + value(e, type, off, 2) / 3600).takeIf { it.isFinite() }
+        }
     }
 
     // --- dates -----------------------------------------------------------------------------------------------------
 
-    /** `YYYY:MM:DD[ HH:MM:SS]` (or with dashes) as the device's wall clock; a blank or zeroed date is none. */
-    internal fun exifClock(s: String): Long? =
-        clock(Regex("""^(\d{4})[:-](\d{2})[:-](\d{2})(?: (\d{2}):(\d{2}):(\d{2}))?""").find(s.trim()))
+    /** `YYYY:MM:DD[ HH:MM:SS]` (or with dashes), trimmed, as the device's wall clock; a blank or zeroed date is none. */
+    internal fun exifClock(s: String): Double? {
+        val p = Parts(JsText.trim(s))
+        val y = p.digits(4) ?: return null
+        if (!p.oneOf(':', '-')) return null
+        val mo = p.digits(2) ?: return null
+        if (!p.oneOf(':', '-')) return null
+        val d = p.digits(2) ?: return null
+        var h = 0
+        var mi = 0
+        var sec = 0
+        val mark = p.at
+        if (p.char(' ')) {
+            val hh = p.digits(2)
+            val mm = if (hh != null && p.char(':')) p.digits(2) else null
+            val ss = if (mm != null && p.char(':')) p.digits(2) else null
+            if (ss != null) {
+                h = hh!!
+                mi = mm!!
+                sec = ss
+            } else {
+                p.at = mark
+            }
+        }
+        return clock(y, mo, d, h, mi, sec)
+    }
 
-    /** An ISO 8601 date with an optional time, its fraction and zone dropped: the wall clock, as an EXIF one. */
-    internal fun xmpClock(s: String?): Long? =
-        s?.let { clock(Regex("""^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2}))?)?""").find(it.trim())) }
+    /** An ISO 8601 date with an optional `Thh:mm[:ss]`, trimmed, its fraction and zone dropped: the wall clock. */
+    internal fun xmpClock(s: String?): Double? {
+        val p = Parts(JsText.trim(s ?: return null))
+        val y = p.digits(4) ?: return null
+        if (!p.char('-')) return null
+        val mo = p.digits(2) ?: return null
+        if (!p.char('-')) return null
+        val d = p.digits(2) ?: return null
+        var h = 0
+        var mi = 0
+        var sec = 0
+        if (p.char('T')) {
+            val hh = p.digits(2)
+            val mm = if (hh != null && p.char(':')) p.digits(2) else null
+            if (mm != null) {
+                h = hh!!
+                mi = mm
+                val mark = p.at
+                if (p.char(':')) sec = p.digits(2) ?: 0.also { p.at = mark }
+            }
+        }
+        return clock(y, mo, d, h, mi, sec)
+    }
 
-    private fun clock(m: MatchResult?): Long? {
-        m ?: return null
-        val p = m.groupValues.drop(1).map { it.ifEmpty { "0" }.toInt() }
-        if (p[0] == 0 || p[1] == 0 || p[2] == 0) return null
-        return localWallClock(p[0], p[1], p[2], p[3], p[4], p[5])
+    private fun clock(y: Int, mo: Int, d: Int, h: Int, mi: Int, s: Int): Double? =
+        if (y == 0 || mo == 0 || d == 0) null else localWallClockMs(y, mo, d, h, mi, s)
+
+    /** A cursor over a date's text: ASCII digits only (JavaScript's `\d`). */
+    private class Parts(val s: String) {
+        var at = 0
+        fun digits(n: Int): Int? {
+            if (at + n > s.length) return null
+            var v = 0
+            for (i in 0 until n) {
+                val c = s[at + i]
+                if (c !in '0'..'9') return null
+                v = v * 10 + (c - '0')
+            }
+            at += n
+            return v
+        }
+        fun char(c: Char): Boolean = (at < s.length && s[at] == c).also { if (it) at++ }
+        fun oneOf(a: Char, b: Char): Boolean = char(a) || char(b)
+    }
+
+    /**
+     * JavaScript's `Number(s)` for an XMP number, which XMP carries as text: decimal with an optional sign, fraction and
+     * exponent, or `0x`, `0o`, `0b`; trimmed; anything else none, and so is a value that is not finite.
+     */
+    internal fun jsNumber(text: String?): Double? {
+        val s = JsText.trim(text ?: return null)
+        if (s.isEmpty()) return null
+        if (s.length > 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X' || s[1] == 'o' || s[1] == 'O' || s[1] == 'b' || s[1] == 'B')) {
+            val radix = when (s[1]) {
+                'x', 'X' -> 16
+                'o', 'O' -> 8
+                else -> 2
+            }
+            var v = 0.0
+            for (i in 2 until s.length) {
+                val digit = s[i].digitToIntOrNull(radix) ?: return null
+                v = v * radix + digit
+            }
+            return v.takeIf { it.isFinite() }
+        }
+        var i = 0
+        if (s[i] == '+' || s[i] == '-') i++
+        var digits = 0
+        while (i < s.length && s[i] in '0'..'9') { i++; digits++ }
+        if (i < s.length && s[i] == '.') {
+            i++
+            while (i < s.length && s[i] in '0'..'9') { i++; digits++ }
+        }
+        if (digits == 0) return null
+        if (i < s.length && (s[i] == 'e' || s[i] == 'E')) {
+            i++
+            if (i < s.length && (s[i] == '+' || s[i] == '-')) i++
+            val from = i
+            while (i < s.length && s[i] in '0'..'9') i++
+            if (i == from) return null
+        }
+        if (i != s.length) return null
+        return s.toDouble().takeIf { it.isFinite() }
     }
 
     // --- bytes -----------------------------------------------------------------------------------------------------
 
     private fun u8(b: ByteArray, at: Int) = if (at < 0 || at >= b.size) -1 else b[at].toInt() and 0xFF
-    private fun u16be(b: ByteArray, at: Int) = (u8(b, at) shl 8) or u8(b, at + 1)
-    private fun u16le(b: ByteArray, at: Int) = u8(b, at) or (u8(b, at + 1) shl 8)
-    private fun u32be(b: ByteArray, at: Int): Long =
-        if (at < 0 || at + 4 > b.size) -1 else (u8(b, at).toLong() shl 24) or (u8(b, at + 1).toLong() shl 16) or (u8(b, at + 2).toLong() shl 8) or u8(b, at + 3).toLong()
-    private fun u32le(b: ByteArray, at: Int): Long =
-        if (at < 0 || at + 4 > b.size) -1 else (u8(b, at + 3).toLong() shl 24) or (u8(b, at + 2).toLong() shl 16) or (u8(b, at + 1).toLong() shl 8) or u8(b, at).toLong()
-    private fun fourcc(b: ByteArray, at: Int) = if (at < 0 || at + 4 > b.size) "" else CharArray(4) { (b[at + it].toInt() and 0xFF).toChar() }.concatToString()
-    private fun ascii(b: ByteArray, at: Int, s: String) = at >= 0 && at + s.length <= b.size && s.indices.all { (b[at + it].toInt() and 0xFF) == s[it].code }
+    private fun u16be(b: ByteArray, at: Int) = if (at < 0 || at + 2 > b.size) -1 else Bytes.u16be(b, at)
+    private fun u32be(b: ByteArray, at: Int): Double = if (at < 0 || at + 4 > b.size) -1.0 else Bytes.u32be(b, at)
+    private fun u32le(b: ByteArray, at: Int): Double = if (at < 0 || at + 4 > b.size) -1.0 else Bytes.u32le(b, at)
     private fun indexOf(b: ByteArray, value: Int, from: Int, end: Int): Int {
-        for (i in from until minOf(end, b.size)) if (b[i].toInt() == value) return i
+        for (i in from until min(end, b.size)) if (b[i].toInt() == value) return i
         return -1
     }
 
-    private fun splitNul(b: ByteArray, start: Int, end: Int): List<Pair<Int, Int>> {
-        val out = ArrayList<Pair<Int, Int>>()
-        var from = start
-        for (i in start until end) if (b[i].toInt() == 0) {
-            out += from to i
-            from = i + 1
-        }
-        out += from to end
-        return out
-    }
-
     /** Text bytes as UTF-8 where they are valid UTF-8, else byte by byte (Latin-1). */
-    private fun text(b: ByteArray, start: Int, end: Int): String =
-        runCatching { b.decodeToString(start, end, throwOnInvalidSequence = true) }.getOrElse { CharArray(end - start) { (b[start + it].toInt() and 0xFF).toChar() }.concatToString() }
+    internal fun text(b: ByteArray, start: Int, end: Int): String = try {
+        b.decodeToString(start, end, throwOnInvalidSequence = true)
+    } catch (_: CharacterCodingException) {
+        val chars = CharArray(end - start)
+        for (i in chars.indices) chars[i] = (b[start + i].toInt() and 0xFF).toChar()
+        chars.concatToString()
+    }
 }

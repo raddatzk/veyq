@@ -50,16 +50,13 @@ overrides:
 # Which dependencies may run their own install scripts. pnpm runs none it is not told to, and refuses an install
 # that meets an undecided one (ERR_PNPM_IGNORED_BUILDS) — so a new dependency with a script is a decision here, not a
 # silent `postinstall`. Every one below is refused, because none is needed (measured 2026-11-03: every surface's
-# check and the admin image build green with all four refused):
+# check and the admin image build green with all four refused; exifreader, the fourth, left with ADR 0155's media headers' slice):
 #   - @openapitools/openapi-generator-cli: `opencollective || exit 0`, a donation banner. The generator JAR is
 #     fetched and checked by generate:api (scripts/verify_openapi_generator_jar.mjs), never by this script.
 #   - core-js: a donation banner (`node -e "try{require('./postinstall')}catch(e){}"`).
 #   - esbuild: `node install.js` checks the platform binary; the binary itself is the optional
 #     @esbuild/<platform> package, which esbuild finds without it.
-#   - exifreader: `node bin/build.js --only-with-config`, a custom build that runs only with a config in the
-#     dependant's package.json, which src/web/ does not carry.
 allowBuilds:
   '@openapitools/openapi-generator-cli': false
   core-js: false
   esbuild: false
-  exifreader: false

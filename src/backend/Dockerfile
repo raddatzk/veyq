@@ -232,7 +232,7 @@ COPY --from=image-prep /prep/opt/veyq/image-commands.jar /opt/veyq/image-command
 COPY --from=backend-build-jvm --chown=10001:10001 /repo/src/backend/build/quarkus-app /work/quarkus-app
 # The AGPL travels with the object code it covers (§4/§6): a pulled image is a conveyed copy. The same path in
 # both images, beside the notices of every jar in /work/quarkus-app/lib (buildSrc's ThirdPartyLicenses) and of every
-# package the web bundle carries (vite.config.ts's licence file, each with its source - ExifReader is MPL-2.0, §3.2).
+# package the web bundle carries (vite.config.ts's licence file, each with its source, as MPL-2.0 §3.2 asks of a copyleft one).
 # The app also serves that file, at /third-party-licenses.txt; the copy here is for a recipient who never starts it.
 # The MariaDB driver (LGPL-2.1) stays a jar of its own in lib/main, which is what lets a recipient replace it.
 COPY LICENSE NOTICE /usr/share/licenses/veyq/
