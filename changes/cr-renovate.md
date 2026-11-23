@@ -178,9 +178,15 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
     manager reads and a `pip install requests==2.32.0` were red as unreached.
   - Helm forced back to v4.0.1 in a copy: the lookup proposed v4.3.2 for all three workflows, in the one branch
     `renovate/helm`. The SHA-256 is `pin_follow.py helm`'s: run on a copy at v4.1.4 it wrote `70b2c30a…` into all
-    three, the same from get.helm.sh's `.sha256sum`, the tarball and the release notes. That Renovate itself runs the
-    task is seen only in a run on GitHub: after the merge, a dispatch's dry run has the generator's 7.27.0 and
-    PyYAML's 6.0.4 to propose, each with its task.
+    three, the same from get.helm.sh's `.sha256sum`, the tarball and the release notes.
+  - Renovate runs the task itself, measured on GitHub 2026-11-23 (dispatch run 45169620214 on `main` `561bbdcc4`, its
+    full log from the run's logs archive): in `renovate/openapi-generator` it executed `python3 scripts/pin_follow.py
+    openapi-generator-jar`, which wrote 7.27.0's `db9c4b73…` (matching Central's `.sha1` and `.md5`) and dropped
+    7.23.0's line; the task's `fileFilters` kept `scripts/openapi_generator_jar.sha256` and left out the
+    `__pycache__` the run wrote, and the branch is a would-commit. PyYAML's 6.0.4 was not proposed in that run: it was
+    uploaded 2026-11-20 23:34 UTC, inside the three-day cool-down, so `internalChecksFilter` held the branch. The
+    `pypi-hashes` task is proven by its live probe and selftest; its first run under Renovate is the scheduled run of
+    2026-11-28, read before phase 5 starts.
   - `pin_follow_selftest.py` (31 cases) and `pin_inventory_selftest.py` run in `Checks`' `guards` job, each bitten by
     breaking one of its checks.
 - [ ] **4 the guards take over the follow's rules.**
