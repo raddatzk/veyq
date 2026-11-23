@@ -53,7 +53,7 @@ jobs:
           # confusing python error into a red build that says so.
           shopt -s nullglob
           python3 -m venv .venv
-          .venv/bin/pip install --quiet pyyaml
+          .venv/bin/pip install --quiet --require-hashes --only-binary :all: -r scripts/requirements-release.txt
           count=0
           for f in scripts/validate_*.py; do
             if [ "$f" = "scripts/validate_guard_gaps.py" ]; then
@@ -115,5 +115,5 @@ jobs:
       - name: Validate the guard gaps
         run: |
           python3 -m venv .venv
-          .venv/bin/pip install --quiet pyyaml
+          .venv/bin/pip install --quiet --require-hashes --only-binary :all: -r scripts/requirements-release.txt
           .venv/bin/python scripts/validate_guard_gaps.py --force

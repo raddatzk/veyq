@@ -71,3 +71,7 @@ jobs:
           RENOVATE_REQUIRE_CONFIG: required
           RENOVATE_DRY_RUN: full
           LOG_LEVEL: debug
+          # The only commands a postUpgradeTask may run (renovate.json5): pin_follow.py's three follow-ups, exactly. A
+          # repository script from the default branch, run in Renovate's container; dependencies' install scripts stay
+          # off (Renovate's default for a self-hosted run, `allowScripts` unset).
+          RENOVATE_ALLOWED_COMMANDS: '["^python3 scripts/pin_follow\\.py helm$", "^python3 scripts/pin_follow\\.py openapi-generator-jar$", "^python3 scripts/pin_follow\\.py pypi-hashes scripts/requirements-release\\.txt$"]'
