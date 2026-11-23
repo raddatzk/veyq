@@ -151,7 +151,9 @@ Measured before the decision (2026-11-20):
          eager, not lazy: every part sat in the eager set already);
       5. **the media headers** — EXIF, video and image headers (4,780 B gz): lazy, and no vectors yet — **built**, § The media
          headers' slice (4,809 B gz deleted; its two header readers measured eager, the EXIF reader and its library lazy);
-      6. **the export archive** — the ZIP, its CRC and manifest (5,726 B gz): lazy, streamed, and a wrong byte loses data;
+      6. **the export archive** — the ZIP, its CRC and manifest (5,726 B gz): lazy, streamed, and a wrong byte loses data —
+         **built**, § The export archive's slice (5,608 B gz deleted; measured eager, not lazy; the digest worker keeps its
+         CRC-32);
       7. **the music order and fades** (859 B gz).
 
       Not slices: the **formats** move with the slice or application that owns each (money with Expenses) — alone they
@@ -161,7 +163,9 @@ Measured before the decision (2026-11-20):
       `:core`'s one JavaScript file, which a bundler cannot split, so a rule that is lazy in TypeScript turns eager when
       it moves — the reason slices 4 to 6 come last, each asking first whether a module of its own is cheaper (slice 4 measured
       its TypeScript eager already, so the question did not arise: § The file facts' slice, D2; slice 5 turned ~10 KB gz eager
-      and took a 45 KB gz lazy library out: § The media headers' slice, D2) — and the
+      and took a 45 KB gz lazy library out: § The media headers' slice, D2; slice 6 measured its TypeScript eager already, and
+      a module of its own would not have spared the one lazy user, a worker, the standard library's floor: § The export
+      archive's slice, D2) — and the
       package's size check becomes one running bound on that file: the split's measured search alone plus R × each moved
       slice's deleted TypeScript (a slice the owner granted another ratio carries it, named with the owner's date, on its row
       of `src/packages/core-js/src/slice.test.ts`; R stays the rule). Platform code an application's façade needs (Expenses'
@@ -836,6 +840,88 @@ Measured before the decision (2026-11-20):
     store, against the web's adapters over the shipped module, both bundled by esbuild; the answers compared first, the
     TypeScript's XMP tags left out of the comparison since Node has no `DOMParser`); delivery by
     `scratchpad/mh/repro.py` (three `--no-daemon --rerun-tasks :composition:jsPackage` builds from a removed `dist/`).
+
+- **The export archive's slice** (decision 7.2's sixth, built 2026-11-23, branch `claude/export-archive-slice`). A download's
+  store-only ZIP — written (`export/ZipWriter`), its exact length before the first byte (`ZipWriter.length`), read and
+  distrusted (`export/ZipReader`), the CRC-32 both run (`export/Crc32`) — and the manifest's check and payload walk
+  (`export/ManifestRules`, new, over `json/JsonAccess`) are the platform's alone; the web draws them through
+  `@veyq/core-js/export` (`jsMain/…/export/web/`) behind its `core/export/zip.ts` and `manifest.ts`, which hold no rule — the
+  sink's close and abort, the `Blob`'s slices, an entry as a lazy `Blob`, the types, the errors the web throws and the
+  build's release major stay. `contracts/platform/export/v1-vectors.json` holds every side — 7 CRC, 9 DOS-stamp, 42
+  written archives byte for byte (hex or SHA-256, the sink's write count, each file's CRC), 8 lengths at the real 4 GiB and
+  65,535-entry limits, 43 reads of written and patched archives (entries, each stream's chunk lengths, what opening may
+  read) and their refusals, 79 manifests and 7 payload walks — (`ArchiveVectorsTest`, the writer; the package's
+  `export.test.ts`; the web's `archive.vectors.test.ts`). Its gate (each number against `7a75535d2`):
+
+  | Criterion | Measured | Bound |
+  |---|---|---|
+  | size: the platform module, every entry | 55,190 → 65,831 B gz; own code 10,641 = 1.90× the 5,608 B gz deleted (2.47× the 4,316 net of the adapters' 1,292) | 60,678 + 3.0 × 5,608 = 77,502 |
+  | size: the eager set | +6,090 B gz (651,396 → 657,486: the Kotlin in the `review` chunk +10,043, `main` −3,978 for the ZIP and the manifest it no longer carries) | 16,824 at R |
+  | size: any lazy chunk | +69 B gz at most (`MemoryDetailHost`); the digest worker's chunk unchanged | ≤ 1,024 |
+  | time (Node 22, a download of 100 folders, 1,000 files of 16 KiB and 8 of 2 MiB in 256 KiB frames — 33.3 MB written —, a 10,101-node manifest; median of 15 after 3 warm-ups, three runs) | writing the archive 0.88–0.91× (≤ 71.4 ms); `zipLength` of its plan 1.74–1.96× (≤ 0.32 ms); opening it 1.45–1.50× (≤ 15.9 ms); every entry read back, its CRC checked, 0.91–0.94× (≤ 89.9 ms); `parseManifest` 1.17–1.20× (≤ 20.4 ms); `collectPayloads` over every node 1.64–1.75× (≤ 1.85 ms); the archives byte-identical, every answer identical | ≤ 2.5× and ≤ 100 ms |
+  | delivery | three `--no-daemon --rerun-tasks :composition:jsPackage` builds from a removed `dist/`, one digest (`261ccbe0…`); `verify:csp`, `verify:license-sources` green (51 packages, each with its source) | identical |
+  | tests | the web's `zip.test.ts` stays, through the adapters, and each of its cases is a vector case too but two (the ZIP64 limit at 20,000 bytes, the length above the payloads' sum); bitten — a CRC finished one bit off, a directory offset one byte off, an entry buffered whole before its first write: each red in the core's, the package's and the web's vector tests (D8) | — |
+  | behaviour | the web's tests pass with their imports unchanged (592 files, 7,929 tests; `importCases.test.ts` over the Python-written import cases among them); a download and its import in a browser, before and after, are owed (inbox #1150) | identical |
+
+  The slice's decision log, kept by its implementer (question, options, choice and why, evidence, cost):
+  - **D1 — The slice's set: the writer, the reader, the length and the manifest's check; the CRC-32 twice.** *Q:* what
+    TypeScript leaves? *Choice:* `zip.ts`' writer, reader and `zipLength`, `manifest.ts`' check, payload walk, version-1 path
+    rule, `applicationOf` and facts; `crc32.ts` stays as the digest worker's own (D2). *Evidence:* measured,
+    `node scratchpad/ea/measure-ts.mjs <worktree> scratchpad/ea/old` (each set's exports bundled alone with esbuild, every
+    other import external, minified, gzip -9; the old files from git): `zip.ts` 10,776 B min / 4,013 B gz, `manifest.ts`
+    4,097 / 1,805, **together 14,939 B min / 5,608 B gz**; `crc32.ts` 379 / 265 (ADR 0155's row of 5,726 counted it — 5,739
+    measured with it); the adapters 2,846 / 1,292, so 4,316 B gz net. *Cost:* two CRC-32s, held to one set of cases.
+  - **D2 — Lazy or eager, and a module of its own?** *Q:* the ADR's standing question for slices 4–6. *Evidence:* measured
+    on the production build at `7a75535d2` (`vite build` under Node 22, `scratchpad/ea/eager.py`; the rules located by their
+    messages in the minified chunks): the writer, the reader and the manifest's check all sat in `main` — eager, reached by
+    `LevelView`'s static import of `importSubtree`'s `isDownloadArchive` —; the CRC also in the lazy `digest.worker` chunk
+    (3,363 B gz), which sums an import payload's CRC beside its SHA-256 (inbox #557). For the page a module of its own buys
+    nothing. For the worker: one function of the platform module bundled alone costs 50,198 B gz
+    (`scratchpad/ea/one.mjs`, `foldArchiveName` from `@veyq/core-js/files`), one export of the standard library's file
+    alone 17,551 B gz — a module of its own pays that floor unless it imports nothing of the standard library, at the price
+    of a Gradle module, the module graph's guard and a package entry, for 26 lines. *Choice:* the platform module for the
+    page; the worker keeps `crc32.ts` as its own primitive beside its SHA-256 (decision 1 keeps the workers and the raw
+    primitives the web's), held to the vectors' `crc32` cases (`archive.vectors.test.ts` runs them over it and over the
+    core). *Cost:* a CRC-32 in two languages (265 B gz); inbox #1152 names when to look again.
+  - **D3 — The entry is `@veyq/core-js/export`.** `jsMain/…/export/web/`, the core area's name, read by the web's direction
+    guard as core's; its code the module file, its types `dist/export.d.mts`. The writer, the reader and an entry's read cross
+    as opaque handles (`ZipWriterHandle`, `ZipReaderHandle`, `ZipReadingHandle`), as the tree's facts do.
+  - **D4 — Streaming over the web's promises, pulled, without kotlinx.coroutines.** *Q:* the web's sink awaits each write
+    (back-pressure from the download route or a file), its chunks arrive by an async iterator, an entry is read by `Blob`
+    slices. *Choice:* the writer's sink suspends, a file's chunks are pulled (`ZipChunksShape.next`), an entry's read is pulled
+    too (`ZipReader.reading(name).next()`, the CRC checked after the last chunk, as the web's generator did) — each the web's
+    promise awaited by `suspendCoroutine`, answered with `startCoroutine` (media D4's intrinsics). The apps' API moved with
+    it: `ZipWriter`'s sink suspends (`NodeExport` wraps its own), `addDirectory` and `finish` suspend, `ZipFailure` left for
+    `ZipReader.ZipError` and its new `SIZE_MISMATCH`. *Evidence:* every write case's sink takes as many writes as the web's
+    did (one per record and per chunk); the bite of D8. *Cost:* a promise per chunk each way — measured, writing 0.88–0.91×.
+  - **D5 — The JSON seam's read-only form.** *Q:* the manifest's check walks an untrusted document of up to 200,000 nodes,
+    `JSON.parse`'s on the web, kotlinx's in the apps; the parked Expenses move built a tree (`JsonValue`) every value is copied
+    into. *Options:* (a) that tree, (b) a read-only view asked of the platform's own value (`json/JsonAccess`:
+    `KotlinxJsonAccess`, `JsJsonAccess`). *Choice:* (b) — no copy of a large document to check it, and the walk hands back
+    the web's own objects (`manifestPayloads`, held by identity in the package's test). *Evidence:* `parseManifest` 1.17–1.20×.
+    *Cost:* two forms of the seam once the parked tree lands — the tree for a format read and written, the view for a
+    check; inbox #1151.
+  - **D6 — No `Long` on the hot path, no `Regex`.** The CRC-32 runs on an `Int` (the old `LongArray` table ran an emulated
+    `Long` per byte on JavaScript), its `Long` forms kept for the apps; offsets and sizes stay `Long` (a few operations per
+    record: writing measured 0.88–0.91×); the manifest's character classes are hand-written; the DOS stamp is arithmetic
+    (`kotlin.time.Instant`'s ISO text is no longer pulled into the module).
+  - **D7 — Where the core and the web answered apart, the web's answer won** (ADR 0154's rule; each a vector case): a name's
+    lone surrogate is written as U+FFFD (the JVM's encoder wrote `?`; `ZipWriter.utf8` is every platform's now); a declared
+    size is checked before the path (`ZipWriter.declaredSize`, the web's order); a JSON number is read as JavaScript reads
+    it, an infinite one too (the apps' `Manifest.number` dropped it before the check, so a reference with such a size was no
+    reference). One the other way, unreachable after the check: `applicationOf` of a type without a dot — the web dropped its
+    last character, the core keeps it whole. *Evidence:* `:core:jvmTest --tests '*ArchiveVectorsTest*'` green and the file
+    rewritten by the core byte for byte (`VEYQ_WRITE_VECTORS=1`).
+  - **D8 — A wrong byte is caught everywhere, bitten:** a CRC finished one bit off (`Crc32.finish` `xor 1`), a directory
+    record's offset one byte off, and an entry buffered whole before its one write — each turned the core's
+    `ArchiveVectorsTest` red (its write and read sections; the CRC's too for the first), the package's `export.test.ts` (34,
+    34 and 5 of 92) and the web's `archive.vectors.test.ts` (34, 34 and 5 of 91); each restored with `/bin/cp -f` from a
+    copy, the tree clean after.
+  - **D9 — The gate** (Node 22.23.4, macOS arm64, Kotlin 2.4.21; the machine at a load of ~9–12 from other applications, no
+    other agent): the size rows by the package's `slice.test.ts` (`pnpm run check` in `src/packages/core-js`) and
+    `scratchpad/ea/eager.py` over `vite build`'s `dist` at `7a75535d2` and after; the time rows by `scratchpad/ea/bench/bench.mjs`
+    (the deleted files from git against the web's adapters over the shipped module, both bundled by esbuild; the archives
+    and every answer compared first); delivery by `scratchpad/ea/repro.py`.
 
 - **Expenses' move is parked, not merged** ([cr-web-expenses-on-the-core](../../changes/cr-web-expenses-on-the-core.md)),
   on branch `claude/p2-impl`: the vectors (`c76d3212f`), the JSON seam and Expenses' pure homes (`c5793db14`), the
