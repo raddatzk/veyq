@@ -96,8 +96,8 @@ internal fun SearchScreen(model: AppModel, onClose: () -> Unit, banner: @Composa
     LaunchedEffect(expanded) { if (!expanded) onClose() }
     // a chip chosen keeps only the rest of the text (core's): the field follows the model there, never while typing
     LaunchedEffect(shown.chips) { if (query != shown.text) query = shown.text }
-    // a settings result: the Settings page, at its section
-    LaunchedEffect(shown.openSettingsCount) { model.openSettingsFromSearch(shown.openSettings, shown.openSettingsCount) }
+    // a result opened (inbox #959): core emptied the field, the screen's own text follows (the app model leaves Search)
+    LaunchedEffect(shown.openedCount) { query = shown.text }
     val focus = remember { FocusRequester() }
     LaunchedEffect(search) { runCatching { focus.requestFocus() } }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -228,11 +228,27 @@ private fun ResultRow(r: ResultShown, onOpen: () -> Unit) {
             append(bold(reason))
         }
     }
+    val matched = r.matched.map { piece(it) }
     ListItem(
         headlineContent = { Text(bold(r.name)) },
         supportingContent = meta.takeIf { it.isNotEmpty() }?.let { { Text(it) } },
         leadingContent = {
             if (person != null) PersonAvatar(r.name.joinToString("") { it.text }, person) else Icon(searchIcon(r.icon), null)
+        },
+        // the web's badges at the row's end (inbox #962): *You are here* on the page on screen, the values its chips matched
+        trailingContent = if (r.here || matched.isNotEmpty()) {
+            {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    if (r.here) {
+                        Label(stringResource(R.string.search_here), MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer, "search-here")
+                    }
+                    for (v in matched) {
+                        Label(v, MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurfaceVariant, "search-matched")
+                    }
+                }
+            }
+        } else {
+            null
         },
         colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
         modifier = Modifier.clickableRow(onClick = onOpen),
@@ -255,6 +271,14 @@ internal fun SearchPage(
     SearchBar(inputField = inputField, expanded = expanded, onExpandedChange = onExpandedChange, modifier = Modifier.fillMaxWidth()) {
         banner()
         content()
+    }
+}
+
+/** A small tonal label at a row's end (Material 3 has no badge with text beside a list item's content): not touchable. */
+@Composable
+private fun Label(text: String, container: androidx.compose.ui.graphics.Color, content: androidx.compose.ui.graphics.Color, tag: String) {
+    androidx.compose.material3.Surface(shape = MaterialTheme.shapes.small, color = container, contentColor = content, modifier = Modifier.testTag(tag)) {
+        Text(text, style = MaterialTheme.typography.labelSmall, maxLines = 1, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
     }
 }
 

@@ -82,8 +82,10 @@ internal static class SearchPlan
         _ => "",
     };
 
-    /// <summary>What a screen reader hears for a result's row: its name, its second line (<paramref name="line"/>, said)
-    /// and its reason, the empty ones left out.</summary>
-    public static string Spoken(ResultShown r, string line) =>
-        string.Join(", ", new[] { string.Concat(r.name.Select(p => p.text)), line, string.Concat((r.reason ?? []).Select(p => p.text)) }.Where(t => t.Length > 0));
+    /// <summary>What a screen reader hears for a result's row: its name, its second line (<paramref name="line"/>, said),
+    /// its reason and its badges (<paramref name="marks"/>, said: <i>You are here</i>, the values its chips matched), the
+    /// empty ones left out.</summary>
+    public static string Spoken(ResultShown r, string line, IEnumerable<string>? marks = null) =>
+        string.Join(", ", new[] { string.Concat(r.name.Select(p => p.text)), line, string.Concat((r.reason ?? []).Select(p => p.text)) }
+            .Concat(marks ?? []).Where(t => t.Length > 0));
 }

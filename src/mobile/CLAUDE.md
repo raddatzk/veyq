@@ -917,7 +917,11 @@ A Gradle build of its own, run through its own wrapper.
   `VEYQ_DEV_CAMERA=<image>` (Apple, Linux, Windows; the image offered ten times a second) and on Android the emulator's
   virtual scene (§ Traps); `VEYQ_DEV_KIT=<path>` (Apple: a kit read through the sign-in's own `readKit`) and
   `VEYQ_DEV_KIT_SCAN=1` (Apple: the kit scanner opened once the sign-in shows); the Settings page over a played state,
-  no server — `veyq.devSettings=1|refused` (Android), `VEYQ_DEV_SETTINGS=1|refused` (Apple, Linux, Windows).
+  no server — `veyq.devSettings=1|refused` (Android), `VEYQ_DEV_SETTINGS=1|refused` (Apple, Linux, Windows). An Apple
+  debug build traces, always on and to the unified log only (`log stream --level debug --predicate 'subsystem ==
+  "app.veyq" AND category == "drop"'`, or `"focus"`): each drop's item types, its target and its branch to the outcome
+  (`AppModel.dropLog`), and on a Mac each click's hit view and first responder before and after it (`FocusTrace`) —
+  types, class names and counts, never a name or a value.
 - `xcodebuild -project apple/Veyq.xcodeproj -target Veyq -sdk macosx build CODE_SIGNING_ALLOWED=NO` (or
   `-sdk iphonesimulator`) — the Apple app compiles. On a fresh checkout run `./gradlew :composition:assembleVeyqCoreDebugXCFramework`
   once first: Xcode looks for the framework before the project's own pre-build step can make it.

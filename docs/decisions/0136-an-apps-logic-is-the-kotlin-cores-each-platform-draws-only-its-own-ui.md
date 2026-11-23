@@ -547,6 +547,36 @@ Decision log (question, choice and why, evidence, cost):
   says and break its true twin, so it stays; the question left (inbox #1180) is whether a Memory's name conflict should also name
   files (then `memory_slug_taken` and `memory.slugTaken` change together). Eager set (measured as above): 659,361 B
   before, 659,380 B after, **+19 B gz**.
+- *A Memory's name conflict names files (inbox #1180; the owner's copy decision 2026-11-23, "as proposed"):* a
+  Memory's or chapter's create refused with `409 slug_taken` says what an upload's conflict says, because a
+  file's name folds into the same slug token as a folder's or a Memory's: en "A folder, Memory or file with a similar name
+  already exists here." / de „Hier gibt es schon einen Ordner, eine Erinnerung oder eine Datei mit ähnlichem Namen.“
+  (was "A folder or Memory with a similar name already exists here." / „Ein Ordner oder eine Erinnerung mit ähnlichem
+  Namen existiert hier bereits.“). `memory_slug_taken` and `memory.slugTaken` changed together and stay twins; the apps'
+  `upload_name_taken` now says the same text under its own key, paired `apart` from `memory.slugTaken` in `web.json`
+  (the guard's loose match offered it), so nothing holds the two equal (an upload's refusal is not a dialog's). Said in: the web's `MemoryNodeDialog` (a Memory or a chapter created, after the
+  server's 409; the client-side check before it names the colliding sibling instead, and a rename is core's
+  `FolderNameDialog`, which says `words.node_slug_taken`) and the apps'
+  `MemoryCreate.refused` (a Memory or a chapter created). Left as it was, listed: inside a Memory the siblings a chapter
+  can meet are chapters and media, which the sentence names as "a folder, Memory or file" — the old wording named no
+  chapter either.
+- *A sign-in the rate limit refused (inbox #1190; the owner's copy decision 2026-11-23, "as proposed"):* the login's
+  challenge and verify and the session's refresh share the server's per-address budget (`@RateLimit(key = IP)` on
+  `LoginResource` and `TokenResource`, `veyq.ratelimit.auth.*`, ADR 0051), whose `429 rate_limited` the core read as
+  `PROTOCOL` ("Signing in did not work.") and the web as its generic failure. Now the core's `SignInFailure.Reason`
+  has `RATE_LIMITED` (`SignInFailure.refused`: a `429` at the challenge or verify, in the sign-in, the password unlock,
+  the locked sign-in and `isPassword`), which `SessionModel.words` says as `signin_error_rate_limited`; the web's
+  `LoginView` says `login.rateLimited` for a `429` from its submit and its locked entry; the two are twins: en "Too many
+  sign-in attempts. Please wait a minute." / de „Zu viele Anmeldeversuche. Bitte warte eine Minute.“ A fixed text:
+  `Retry-After` is not read (a minute is the default window, and a member is not asked to count seconds). Every app
+  shows it through its generated words, as the other reasons: the sign-in and unlock screens draw the gate's `error`
+  key (Apple's `say`, Linux's `said::key`, Windows' `Said.Key`, Android's generated `words`) — no platform code names a
+  sign-in reason. Found on the
+  way: a remembered device's resume (`resumeOnline`) read the refresh's `429` as a refused session and forgot the
+  record, its kept token and its offline store, and a reconnect (`reconnect`) ended the account the same way; both now
+  throw `RATE_LIMITED` / stay offline and keep everything. The session's mid-use refresh (`refresh`) still says
+  `CREDENTIALS` on a `429`, which ends nothing (the call fails, the next one retries). Not changed: the web's other
+  logins (`TenantJoinView` after registering, `ModerationGate`) keep their own failure words.
 
 ## Alternatives considered
 

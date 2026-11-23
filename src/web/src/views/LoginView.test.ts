@@ -95,6 +95,7 @@ import { LoginVerifyRequestSessionScopeEnum } from '../api/generated/auth'
 import { realI18n, t } from '../test/i18n'
 import { CORE_DEVICE_LINKING, CORE_REMEMBER_DEVICE, CORE_REMEMBER_DEVICE_PASSWORDLESS } from '../features/platform/capabilities'
 import { KdfProfileRefused } from '@veyq/crypto/v1'
+import { httpError } from '../test/httpError'
 
 const stubs = {
   VeyqCard: { template: '<div><slot name="title" /><slot /></div>' },
@@ -875,6 +876,31 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
 
       expect(wrapper.text()).toContain(shown)
       expect(wrapper.text()).not.toContain(notShown)
+    }
+  })
+
+  it('a login the rate limit refused says to wait, on the submit and on the locked entry (inbox #1190)', async () => {
+    // `429 rate_limited` from the challenge or the verify is the server's per-address budget (ADR 0051), not the
+    // password: "check your email and password" would send someone to retype a right one. Control on the same paths:
+    // any other refusal still says the generic failure.
+    for (const enter of [
+      (w: VueWrapper) => w.find('form').trigger('submit').then(() => flushPromises()),
+      (w: VueWrapper) => enterLocked(w),
+    ]) {
+      for (const [failure, shown, notShown] of [
+        [httpError(429, 'rate_limited'), t('login.rateLimited'), t('login.failed')],
+        [httpError(401), t('login.failed'), t('login.rateLimited')],
+        [httpError(500), t('login.failed'), t('login.rateLimited')],
+      ] as const) {
+        vi.mocked(login).mockRejectedValueOnce(failure)
+        const wrapper = mountView()
+        await fillCredentials(wrapper)
+        await wrapper.find('input[name="secret-key"]').setValue('the-secret-key')
+        await enter(wrapper)
+
+        expect(wrapper.text()).toContain(shown)
+        expect(wrapper.text()).not.toContain(notShown)
+      }
     }
   })
 })

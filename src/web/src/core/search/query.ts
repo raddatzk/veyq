@@ -81,7 +81,7 @@ export function corpusOf(docs: readonly SearchDocument[]): core.SearchCorpus {
 }
 
 /** A document as the core reads it: the web's own, its `open` as whether it opens itself. */
-function shapeOf(d: SearchDocument): core.DocumentShape {
+export function shapeOf(d: SearchDocument): core.DocumentShape {
   return {
     scopeId: d.scopeId, kind: d.kind, id: d.id, revision: d.revision, name: d.name, path: d.path, pathIds: d.pathIds, facets: d.facets,
     nodeId: d.nodeId, opensItself: d.open !== undefined, aliases: d.aliases, keywords: d.keywords, subtitle: d.subtitle,
@@ -106,6 +106,15 @@ export const textRank = (doc: SearchDocument, t: string): number | null => core.
 /** The settings word that is the reason `doc` matches the folded text `t`, as the section names it, or null: a word is the
  *  reason only where neither the name nor another name it carries matched. The row draws it on its second line. */
 export const reasonKeyword = (doc: SearchDocument, t: string): string | null => core.reasonKeyword(shapeOf(doc), t) ?? null
+
+/** A value of a chip in force a result carries: `text` shown as it is, or a month chip's `year` and `month` (1-12), which
+ *  the field names in the UI's language. */
+export type MatchedValue = { text: string } | { year: number; month: number }
+
+/** The values of `chips` that `doc` carries, each once, in the chips' order - its years (a span as "from–to"), the month,
+ *  its place as it names it, the person -, drawn beside its row; a space, a kind and an *In:* chip add none. */
+export const matchedValues = (doc: SearchDocument, chips: readonly SearchChip[]): MatchedValue[] =>
+  core.matchedValues(shapeOf(doc), chips).map((v) => (typeof v.text === 'string' ? { text: v.text } : { year: v.year as number, month: v.month as number }))
 
 /** `name` in parts, the parts that matched the folded text `t` marked `strong`, mapped back over `name`'s own characters. */
 export const nameParts = (name: string, t: string): NamePart[] => core.nameParts(name, t).map((p) => ({ text: p.text, strong: p.strong }))

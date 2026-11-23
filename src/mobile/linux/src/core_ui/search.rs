@@ -9,7 +9,9 @@
 //! The keys: Ctrl+F opens and closes the bar (the shell's), Esc closes it (`GtkSearchBar`), Enter takes the first entry —
 //! the first chip offered, else the first result —, Backspace in an empty entry removes the last chip, Down moves into
 //! the list. A result opens where it lives (the core's `SearchModel.open`: the shell's state moves, a photo of another
-//! Memory opens its lightbox through the gallery's request); a settings section is handed to [Search::on_settings]. What a
+//! Memory opens its lightbox through the gallery's request); a settings section is handed to [Search::on_settings]. Once
+//! the core counts a result opened (`SearchShown.openedCount`, inbox #959) the bar closes, as on every app. A result row
+//! carries the web's badges at its end: *You are here* on the page on screen, the values its chips matched. What a
 //! screen reader hears is the core's announcement, through GTK's `gtk_accessible_announce`.
 //!
 //! Every state is the core's (`Search.Open`, `Watched.Search`: `SearchShown`), every action one call, the text applied in
@@ -64,6 +66,8 @@ struct Inner {
     /// How many settings results the last state counted (`SearchShown.openSettingsCount`): each new one opens the page,
     /// the same section chosen twice included; a state that repeats the count opens nothing.
     settings_opened: Cell<i32>,
+    /// How many results the last state counted opened (`SearchShown.openedCount`, inbox #959): each new one closes the bar.
+    opened: Cell<i32>,
     asked: Cell<bool>,
     on_asked: Listener<bool>,
     on_settings: Listener<String>,
@@ -102,6 +106,7 @@ impl Search {
             adopt: Cell::new(None),
             announced: RefCell::new(String::new()),
             settings_opened: Cell::new(0),
+            opened: Cell::new(0),
             asked: Cell::new(false),
             on_asked: RefCell::new(None),
             on_settings: RefCell::new(None),
@@ -250,6 +255,7 @@ impl Inner {
                         i.watch.borrow_mut().take();
                         // the next search is a new model, counting from nothing
                         i.settings_opened.set(0);
+                        i.opened.set(0);
                         i.bar.set_search_mode(false);
                         i.clear();
                         return;
@@ -298,12 +304,8 @@ impl Inner {
                 self.adopt.set(Some(self.chips_set()));
                 bridge::send(Call::SearchChoose { search, index });
             }
-            Entry::Open(index) => {
-                bridge::send(Call::SearchOpenResult { search, index });
-                if let Some(f) = self.on_opened.borrow().as_ref() {
-                    f(());
-                }
-            }
+            // the bar closes once the state counts it opened ([Inner::draw]): never here, before the core said what opened
+            Entry::Open(index) => bridge::send(Call::SearchOpenResult { search, index }),
             Entry::More => bridge::send(Call::SearchMore { search }),
         }
     }
@@ -342,6 +344,19 @@ impl Inner {
         {
             eprintln!("veyq: search opens settings at {section} ({})", s.open_settings_count);
             f(section);
+        }
+        // a result opened (inbox #959): the core emptied the field in this state; the bar closes, which empties the entry
+        // and gives the sidebar back, and the content shows (a narrow window's split)
+        if self.opened.replace(s.opened_count) != s.opened_count {
+            eprintln!("veyq: search closes after a result opened ({})", s.opened_count);
+            if let Some(f) = self.on_opened.borrow().as_ref() {
+                f(());
+            }
+            if self.bar.is_search_mode() {
+                self.bar.set_search_mode(false);
+            } else {
+                self.clear();
+            }
         }
     }
 
@@ -416,9 +431,13 @@ impl Inner {
                     subtitle = if subtitle.is_empty() { markup(reason) } else { said::joined(&[subtitle, markup(reason)]) };
                 }
                 let row = row(icon(&r.icon), &markup(&r.name), &subtitle, None);
+                // the web's badges at the row's end (inbox #962): *You are here*, then the values its chips matched
+                let here = if r.here { words::search_here() } else { String::new() };
+                let matched: Vec<String> = r.matched.iter().map(said::piece).collect();
+                badges(&row, &here, &matched);
                 let plain: String = r.name.iter().map(|p| p.text.as_str()).collect();
                 let reason: String = r.reason.iter().flatten().map(|p| p.text.as_str()).collect();
-                let said = [plain, line, reason].into_iter().filter(|t| !t.is_empty()).collect::<Vec<_>>().join(", ");
+                let said = [plain, line, reason, here, matched.join(", ")].into_iter().filter(|t| !t.is_empty()).collect::<Vec<_>>().join(", ");
                 row.update_property(&[gtk::accessible::Property::Label(&said)]);
                 self.rows.append(&row);
                 entries.push(Some(Entry::Open(i as i32)));
@@ -485,6 +504,26 @@ fn row(icon: &str, title: &str, subtitle: &str, suffix: Option<&str>) -> gtk::Li
         content.append(&kind);
     }
     gtk::ListBoxRow::builder().child(&content).build()
+}
+
+/// A result row's small labels at its end (libadwaita has no badge widget): [here] (empty: none) in the accent colour, each
+/// of [matched] dim, all as captions.
+fn badges(row: &gtk::ListBoxRow, here: &str, matched: &[String]) {
+    let Some(content) = row.child().and_downcast::<gtk::Box>() else { return };
+    if !here.is_empty() {
+        let label = gtk::Label::new(Some(here));
+        label.add_css_class("caption-heading");
+        label.add_css_class("accent");
+        label.set_widget_name("search-here");
+        content.append(&label);
+    }
+    for v in matched {
+        let label = gtk::Label::new(Some(v.as_str()));
+        label.add_css_class("caption");
+        label.add_css_class("dim-label");
+        label.set_widget_name("search-matched");
+        content.append(&label);
+    }
 }
 
 /// A heading over a part of the list, as `AdwSidebar` titles its sections.

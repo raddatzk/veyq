@@ -183,6 +183,22 @@ data class Shell(
 
     fun search(on: Boolean): Shell = copy(searching = on)
 
+    /**
+     * Whether the page of object [node] is on screen or back returns to it: it is the open object here or on the way back
+     * ([back]). A platform keeps a page's model (a Memory's gallery) while this holds and closes it once it does not — the
+     * page left for Home, an application's list or a person's page it does not return to —, so what the page holds (its
+     * contribution to the search, inbox #958) goes with it. A rotation, which keeps the shell, keeps the page.
+     */
+    fun keeps(node: NodeAt): Boolean {
+        var s: Shell? = this
+        while (s != null) {
+            val open = s.openObject
+            if (open != null && open.scopeId == node.scopeId && open.nodeId == node.nodeId) return true
+            s = s.back
+        }
+        return false
+    }
+
     companion object {
         /** Folder [n]'s label among its sibling folders in [tree] ([Home.labelled]); null where its name is the label. */
         private fun labelOf(tree: List<NodeRef>, n: NodeRef): String? =

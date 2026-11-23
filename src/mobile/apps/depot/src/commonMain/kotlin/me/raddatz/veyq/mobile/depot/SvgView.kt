@@ -70,6 +70,8 @@ object SvgView {
         "<!doctype html><html><head><meta charset=\"utf-8\">" +
             "<meta http-equiv=\"Content-Security-Policy\" content=\"$CONTENT_SECURITY_POLICY\">" +
             "<meta name=\"referrer\" content=\"no-referrer\">" +
+            // an icon of its own, empty: else a web view asks the page's host for /favicon.ico (WebView2 did, SvgWebTest)
+            "<link rel=\"icon\" href=\"data:,\">" +
             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=16\">" +
             "<style>:root{--z:1;color-scheme:light dark}html,body{margin:0;height:100%;background:transparent}" +
             "body{display:flex;overflow:auto}" +

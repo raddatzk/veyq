@@ -13,6 +13,7 @@ import { leaveLiveSession, liveSessionAddress, sameAccountAddress } from '../fea
 import { signOut, takeSignOutNotice, type SignOutNotice } from '../features/account/login/signOut'
 import { unlockMasterKey, unlockWithDevice } from '../features/account/unlock/unlock'
 import { KdfProfileRefused } from '@veyq/crypto/v1'
+import { HttpStatus, isHttpStatus } from '../shared/httpError'
 import { trustThisDevice, untrustThisDevice, isTrusted, trustedEmails } from '../features/account/trustDevice/trustDevice'
 import {
   enrolDeviceKey,
@@ -242,6 +243,14 @@ async function enrolConvenienceWrap() {
   }
 }
 
+/**
+ * What a failed login says before any unlock: a `429` from the challenge or the verify is the server's per-address
+ * budget (ADR 0051), not the password, so it says to wait (inbox #1190); anything else the one generic failure.
+ */
+function loginFailure(e: unknown): string {
+  return isHttpStatus(e, HttpStatus.tooManyRequests) ? t('login.rateLimited') : t('login.failed')
+}
+
 async function finishAndRoute() {
   password.value = ''
   secretKey.value = ''
@@ -301,7 +310,7 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
       error.value =
         e instanceof KdfProfileRefused
           ? t('common.unreachable')
-          : sessionReady.value ? t('unlock.failed') : t('login.failed')
+          : sessionReady.value ? t('unlock.failed') : loginFailure(e)
     },
   },
 )
@@ -333,7 +342,7 @@ const { run: runLockedEntry, pending: enteringLocked } = useAsyncAction(
     await signInUnlessLive(false, async () => LoginVerifyRequestSessionScopeEnum.Session)
     lockedEntry.value = true
   },
-  { onError: () => { error.value = t('login.failed') } },
+  { onError: (e) => { error.value = loginFailure(e) } },
 )
 
 async function enterLocked() {

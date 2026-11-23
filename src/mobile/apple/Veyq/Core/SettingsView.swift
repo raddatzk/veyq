@@ -143,7 +143,10 @@ struct SettingsView: View {
         }
         // the name goes into the field as the alert appears, never before presenting it: a Mac's alert keeps its text
         // field across presentations, and a value the binding already held when it was presented again never reached
-        // that field, which showed empty (inbox #917); the change made once it shows is pushed into the live field
+        // that field, which showed empty (inbox #917); the change made once it shows is pushed into the live field.
+        // Measured in a replica of this alert (2026-11-23, in-process, the alert answered by its Cancel): the name set
+        // before presenting showed empty on every opening after the first, from the pencil and from a `Menu`'s item
+        // alike; set here, each opening showed its device's name, switching between this device and another both ways
         .onChange(of: renaming) { _, open in
             guard open else { return }
             let label = renamingFamily?.label ?? state.device.label

@@ -101,6 +101,7 @@ class SvgViewTest {
         assertTrue("<img src=\"picture.svg\"" in page)
         assertTrue("default-src 'none'" in page && "script-src 'none'" in page && "img-src 'self'" in page)
         assertFalse("<script" in page.lowercase(), "no script of its own")
+        assertTrue("<link rel=\"icon\" href=\"data:,\">" in page, "an empty icon of its own: no /favicon.ico asked for")
         assertFalse("<iframe" in page.lowercase() || "<object" in page.lowercase() || "<embed" in page.lowercase(), "never a document of the SVG")
         assertEquals(SvgView.DOCUMENT, "https://${SvgView.HOST}/${SvgView.DOCUMENT_NAME}")
         assertEquals(SvgView.PICTURE, "https://${SvgView.HOST}/${SvgView.PICTURE_NAME}")

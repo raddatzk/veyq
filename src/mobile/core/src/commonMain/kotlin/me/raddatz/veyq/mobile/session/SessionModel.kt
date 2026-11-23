@@ -986,6 +986,7 @@ class SessionModel<A : Connection, T : Any>(
             SignInFailure.Reason.NO_TENANT -> Msg.SIGNIN_ERROR_NO_TENANT
             SignInFailure.Reason.DEVICE_NOT_TRUSTED -> Msg.SIGNIN_ERROR_DEVICE_NOT_TRUSTED
             SignInFailure.Reason.SESSION_ENDED -> Msg.SIGNIN_ERROR_SESSION_ENDED
+            SignInFailure.Reason.RATE_LIMITED -> Msg.SIGNIN_ERROR_RATE_LIMITED
             SignInFailure.Reason.PROTOCOL, SignInFailure.Reason.DEVICE_AUTH_CANCELLED -> Msg.SIGNIN_ERROR_OTHER
         }
 

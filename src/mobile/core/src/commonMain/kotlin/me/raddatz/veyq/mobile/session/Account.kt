@@ -97,6 +97,19 @@ class SignInFailure(val reason: Reason, detail: String? = null) : Exception(deta
         DEVICE_AUTH_CANCELLED,
         /** A remembered session the server ended (a revoke, a password change): sign in again. */
         SESSION_ENDED,
+        /**
+         * The server's per-address budget for the login and the session's renewal is spent (`429 rate_limited`, ADR 0051's
+         * `veyq.ratelimit.auth.*`): wait, then try again. Nothing is forgotten or ended on it (inbox #1190).
+         */
+        RATE_LIMITED,
+    }
+
+    companion object {
+        internal const val TOO_MANY_REQUESTS = 429
+
+        /** A login step's refusal that is not the password's: [Reason.RATE_LIMITED] on a `429`, else [Reason.PROTOCOL]. */
+        internal fun refused(step: String, status: Int): SignInFailure =
+            SignInFailure(if (status == TOO_MANY_REQUESTS) Reason.RATE_LIMITED else Reason.PROTOCOL, "$step $status")
     }
 }
 
@@ -347,6 +360,8 @@ class VeyqAccount private constructor(
             val seed = authSeed
             if (refresh != null) {
                 val r = TokenApi(server, http).refreshSession(RefreshRequest(refresh))
+                // the rate limit refuses no session: still offline, the next reconnect asks again (inbox #1190)
+                if (r.status == SignInFailure.TOO_MANY_REQUESTS) return@withLock false
                 if (r.status in 400..499) return@withLock false.also { end(SignInFailure.Reason.SESSION_ENDED, forgetRecord = trusted?.method == TrustedDevice.Method.DEVICE_KEY) }
                 if (!r.success) return@withLock false
                 val pair = r.body()
@@ -877,14 +892,14 @@ class VeyqAccount private constructor(
     suspend fun isPassword(password: String): Boolean {
         val login = LoginApi(server, http)
         val challenge = login.requestLoginChallenge(LoginChallengeRequest(email)).let {
-            if (!it.success) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "challenge ${it.status}")
+            if (!it.success) throw SignInFailure.refused("challenge", it.status)
             it.body()
         }
         val seed = suite.authSeed(password, suite.authSalt(unb64(challenge.instanceSalt), email))
         val signature = try { primitives.ed25519Sign(seed, unb64(challenge.nonce)) } finally { seed.fill(0) }
         val session = login.verifyLogin(LoginVerifyRequest(email = email, nonce = challenge.nonce, signature = b64(signature)))
         if (session.status == 401) return false
-        if (!session.success) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "verify ${session.status}")
+        if (!session.success) throw SignInFailure.refused("verify", session.status)
         // the check's own session is not this one: it ends here (best effort — it expires unused otherwise)
         runCatching { respond { SessionApi(server, http).revokeSessionFamily(session.body().family.id) } }
         return true
@@ -1355,7 +1370,7 @@ class VeyqAccount private constructor(
         private suspend fun login(primitives: Primitives, c: Connected, email: String, password: String): SessionResponse {
             val login = LoginApi(c.base, c.http)
             val challenge = login.requestLoginChallenge(LoginChallengeRequest(email.trim())).let {
-                if (!it.success) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "challenge ${it.status}")
+                if (!it.success) throw SignInFailure.refused("challenge", it.status)
                 it.body()
             }
             val seed = c.suite.authSeed(password, c.suite.authSalt(unb64(challenge.instanceSalt), email))
@@ -1363,7 +1378,7 @@ class VeyqAccount private constructor(
             seed.fill(0)
             val session = login.verifyLogin(LoginVerifyRequest(email = email.trim(), nonce = challenge.nonce, signature = b64(signature)))
             if (session.status == 401) throw SignInFailure(SignInFailure.Reason.CREDENTIALS)
-            if (!session.success) throw SignInFailure(SignInFailure.Reason.PROTOCOL, "verify ${session.status}")
+            if (!session.success) throw SignInFailure.refused("verify", session.status)
             return session.body().also { c.tokens.access = it.accessToken; c.tokens.refresh = it.refreshToken }
         }
 
@@ -1847,6 +1862,8 @@ class VeyqAccount private constructor(
                 } catch (e: Exception) {
                     throw SignInFailure(SignInFailure.Reason.UNREACHABLE, e.message)
                 }
+                // the rate limit refuses no session: the token, the record and the store stay (inbox #1190)
+                if (r.status == SignInFailure.TOO_MANY_REQUESTS) throw SignInFailure.refused("refresh", r.status)
                 if (r.status in 400..499) {
                     device.keys.deleteSecret(record.refreshAlias)
                     device.forget(record.key)

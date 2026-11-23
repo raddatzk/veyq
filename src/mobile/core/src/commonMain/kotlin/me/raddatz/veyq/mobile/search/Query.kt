@@ -19,6 +19,15 @@ sealed class SearchChip {
     data class In(val scopeId: String, val nodeId: String, val label: String, val path: List<String>) : SearchChip()
 }
 
+/** A value of a chip in force a result carries ([Query.matchedValues]). */
+sealed class MatchedValue {
+    /** Shown as it is: a year or a span of years, a place as the document names it, a person's name. */
+    data class Text(val text: String) : MatchedValue()
+
+    /** A month chip's month ([month] 1–12), which each UI names in its language. */
+    data class Month(val year: Int, val month: Int) : MatchedValue()
+}
+
 /** One text and the chips (the web's `SearchQuery`). */
 data class SearchQuery(val chips: List<SearchChip>, val text: String)
 
@@ -205,6 +214,27 @@ object Query {
         is SearchChip.Kind -> doc.kind in chip.kinds
         // by id, never by name; the space too, as an id is the space's
         is SearchChip.In -> doc.scopeId == chip.scopeId && chip.nodeId in doc.pathIds
+    }
+
+    /**
+     * The values of the chips in force that [doc] carries, in the chips' order, each once (the web's `matchedValues`, inbox
+     * #962): drawn beside its row, so a result says why a chip kept it — its years (a span as "from–to"), the month chosen,
+     * its place as it names it, the person. A space, a kind and an *In:* chip add nothing: the row's second line already
+     * says where it lies and its icon what it is. Only what the row's document already holds in plaintext, never a key.
+     */
+    fun matchedValues(doc: SearchDocument, chips: List<SearchChip>): List<MatchedValue> {
+        val out = ArrayList<MatchedValue>()
+        for (c in chips) {
+            val v = when (c) {
+                is SearchChip.Year -> yearsOf(doc)?.let { MatchedValue.Text(if (it.from == it.to) "${it.from}" else "${it.from}–${it.to}") }
+                is SearchChip.Month -> MatchedValue.Month(c.year, c.month)
+                is SearchChip.Place -> doc.foldedPlaces.indexOf(c.place).takeIf { it >= 0 }?.let { MatchedValue.Text(doc.facets.places!![it]) }
+                is SearchChip.Person -> MatchedValue.Text(c.label)
+                is SearchChip.Space, is SearchChip.Kind, is SearchChip.In -> null
+            }
+            if (v != null && v !in out) out += v
+        }
+        return out
     }
 
     /** The characters of [t] — code points, so a character outside the basic plane is one. */

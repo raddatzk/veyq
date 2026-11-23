@@ -301,7 +301,9 @@ struct KitDocument: FileDocument {
 /// (core's intake swaps it), a kit file opened in place (`.fileImporter`: Files on iOS, the open panel on a Mac), the
 /// scan where a camera may be (`KitScannerView`) — and a held kit shown as at the sign-in, its key never on screen, with
 /// *Enter it instead*. A kit of another account warns, one made at another server informs (decision 2); neither blocks.
-/// The fields carry a `prompt:` (#1030: a grouped form's empty field on a Mac takes a click only where it draws text).
+/// The fields carry a `prompt:`, the placeholder a grouped form draws in an empty field. It is not what lets a click focus
+/// the field: a replica of these sheets (2026-11-23, in-process clicks) focused an empty field without a prompt at its
+/// start, middle and end alike (#1030 is not explained by it).
 struct FlowKeySection<Extra: View>: View {
     let intake: KeyIntake
     @Binding var text: String

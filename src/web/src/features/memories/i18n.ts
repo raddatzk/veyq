@@ -46,7 +46,7 @@ const en = {
     deleteMemoryTitle: 'Delete Memory',
     deleteChapterTitle: 'Delete chapter',
     // Memories' own create dialog keeps naming what can collide in a folder; core's `words.node_slug_taken` is neutral.
-    slugTaken: 'A folder or Memory with a similar name already exists here.',
+    slugTaken: 'A folder, Memory or file with a similar name already exists here.',
     meta: {
       conflict: 'Someone else changed this meanwhile. It now shows their version — save again to replace it.',
       unreadable:
@@ -444,7 +444,7 @@ const de: typeof en = {
     viewMap: 'Kartenansicht',
     deleteMemoryTitle: 'Erinnerung löschen',
     deleteChapterTitle: 'Kapitel löschen',
-    slugTaken: 'Ein Ordner oder eine Erinnerung mit ähnlichem Namen existiert hier bereits.',
+    slugTaken: 'Hier gibt es schon einen Ordner, eine Erinnerung oder eine Datei mit ähnlichem Namen.',
     meta: {
       conflict: 'Jemand anderes hat das inzwischen geändert. Jetzt steht dort diese Version — speichere erneut, um sie zu ersetzen.',
       unreadable:

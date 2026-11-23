@@ -35,19 +35,27 @@ enum IncomingFiles {
     /// file is neither taken nor said, as `read`'s. Where it lands judges, sorts and says (the core).
     static func dropped(_ providers: [NSItemProvider]) async -> [Dropped] {
         var items: [Dropped] = []
+        // each item's registered types in a debug build's log, so a drop that does nothing names the shape it came in (#1039)
+        for (i, provider) in providers.enumerated() { AppModel.dropLog("item \(i): \(provider.registeredTypeIdentifiers)") }
         #if os(macOS)
         let (folders, rest) = await folders(providers)
         for url in folders {
             let files = AppModel.folderFiles(url)
+            AppModel.dropLog("folder: \(files.count) entries walked")
             items.append(Dropped.Folder(path: url.path, shownName: nil, found: ApplePlatform.shared.found(root: url, entries: files)))
         }
         #else
         let rest = providers
         #endif
-        for provider in rest where carriesFile(provider) {
+        for provider in rest {
+            guard carriesFile(provider) else {
+                AppModel.dropLog("not a file: \(provider.registeredTypeIdentifiers)")
+                continue
+            }
             if let (url, type) = await load(provider), let source = source(url, type: type, suggested: provider.suggestedName) {
                 items.append(Dropped.File(source: source))
             } else {
+                AppModel.dropLog("file not read: \(provider.registeredTypeIdentifiers)")
                 items.append(Dropped.Unread(name: provider.suggestedName ?? ""))
             }
         }
@@ -85,6 +93,7 @@ enum IncomingFiles {
         for provider in providers {
             if let url = await folderURL(provider) { folders.append(url) } else { rest.append(provider) }
         }
+        AppModel.dropLog("folders: \(folders.count), other items: \(rest.count)")
         return (folders, rest)
     }
 
@@ -92,7 +101,10 @@ enum IncomingFiles {
     /// else by the in-place representation of the folder's own type. A provider holding only `public.folder` (no
     /// `public.file-url`, none of `.data`) passed neither this nor `carriesFile`, so a dropped folder was skipped without
     /// a word while a ZIP went up (the macOS pass of 2026-11-20; which shape Finder's drop takes is not measured here —
-    /// both are read).
+    /// both are read). The file-URL branch was measured in a replica (2026-11-23, inbox #1039) to return the folder for
+    /// every provider a folder can be made into outside a drag: `NSItemProvider(object:)` of its URL,
+    /// `NSItemProvider(contentsOf:)` (`dyn.…`, `public.file-url`, `public.url`) and a `public.file-url` holding Finder's
+    /// file reference URL (`file:///.file/id=…`), which `loadObject(ofClass: URL.self)` resolves to the folder's path.
     private static func folderURL(_ provider: NSItemProvider) async -> URL? {
         if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier), let url = await fileURL(provider) {
             return (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true ? url : nil
