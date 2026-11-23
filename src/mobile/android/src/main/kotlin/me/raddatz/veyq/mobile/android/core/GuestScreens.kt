@@ -531,7 +531,7 @@ internal fun RecordNotice(days: Int?, origin: String, guestId: String? = null) {
     }
 }
 
-/** A guest naming itself (the web's naming dialog and drop forms): its name, who sees it, the record's notice, *Continue*. */
+/** A guest naming itself (the web's naming dialog): its name, who sees it, the record's notice, *Continue*. */
 @Composable
 private fun NamingDialog(
     title: String, hint: String, days: Int?, origin: String, onClose: () -> Unit,
@@ -577,26 +577,6 @@ private fun NameField(name: String, onName: (String) -> Unit) {
         label = { Text(stringResource(R.string.share_your_name)) },
         placeholder = { Text(stringResource(R.string.share_your_name_placeholder)) },
     )
-}
-
-/** A drop page's naming in its body (the web's drop forms): the field, its hint, the record's notice, *Continue*. */
-@Composable
-internal fun InlineNaming(hint: String, days: Int?, origin: String, onName: suspend (String) -> Boolean) {
-    var name by remember { mutableStateOf("") }
-    var working by remember { mutableStateOf(false) }
-    var failed by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    NameField(name) { name = it; failed = false }
-    Text(hint, style = MaterialTheme.typography.bodySmall, color = role(LocalPalette.current.muted))
-    RecordNotice(days, origin)
-    if (failed) Text(stringResource(R.string.share_join_failed), color = MaterialTheme.colorScheme.error)
-    PrimaryButton(stringResource(R.string.share_join), Modifier.testTag("guest-name-continue"), enabled = name.isNotBlank() && !working) {
-        working = true
-        scope.launch {
-            failed = !withContext(Dispatchers.IO) { onName(name.trim()) }
-            working = false
-        }
-    }
 }
 
 /** *Keep*: the places the link may be kept — the personal space first —, then the bookmark's dialog filled with the link. */

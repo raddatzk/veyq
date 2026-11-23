@@ -46,7 +46,6 @@ import me.raddatz.veyq.mobile.android.core.CreateAction
 import me.raddatz.veyq.mobile.android.core.CreateDialog
 import me.raddatz.veyq.mobile.android.core.GuestWriteColumn
 import me.raddatz.veyq.mobile.android.core.HeaderContribution
-import me.raddatz.veyq.mobile.android.core.InlineNaming
 import me.raddatz.veyq.mobile.android.core.KindPage
 import me.raddatz.veyq.mobile.android.core.LocalListStates
 import me.raddatz.veyq.mobile.android.core.LocalPalette
@@ -166,8 +165,10 @@ private fun MemoriesList(s: Screen.Signed, model: AppModel, onOpen: (ObjectRef) 
 }
 
 /**
- * A Memory's or a chapter's WRITE_ONLY link (the web's `MemoryShareBody`): the guest names itself — the record's notice
- * before —, then adds photos and videos; it sees only what it sent while the link is open here, and removes its own.
+ * A Memory's or a chapter's WRITE_ONLY link (the web's `MemoryShareBody`): the guest adds photos and videos at once; a guest
+ * not named yet is asked its name at that upload by the core (`GuestUploader.uploadAsking`, its dialog the link's
+ * `NamingAsked`, the record's notice in it; #1090: no form in the page). Named, "You are here as …" with *Not you?*; it
+ * sees only what it sent while the link is open here, and removes its own.
  */
 @Composable
 private fun GuestUploaderPage(up: me.raddatz.veyq.mobile.memories.GuestUploader, access: GuestAccess?, model: AppModel, snackbar: SnackbarHostState) {
@@ -180,17 +181,17 @@ private fun GuestUploaderPage(up: me.raddatz.veyq.mobile.memories.GuestUploader,
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
         if (uris.isNotEmpty()) scope.launch {
             val sources = withContext(Dispatchers.IO) { uris.mapNotNull { model.picked(it) }.map { model.source(it) } }
-            up.upload(sources)
+            // a guest not named yet is asked its name first (the core's `uploadAsking`); declined, nothing is queued or said
+            if (up.uploadAsking(sources).queued == 0) sources.forEach { it.close() }
         }
     }
     GuestWriteColumn {
         Text(stringResource(R.string.share_uploader_intro), color = role(LocalPalette.current.muted))
-        val named = session
-        if (named == null) {
-            InlineNaming(stringResource(R.string.share_name_visibility), days, origin) { up.name(it) }
-        } else if (up.offered) {
-            NotYou(named, up::forget)
-            RecordNotice(days, origin, named.identityId)
+        if (up.offered) {
+            session?.let { named ->
+                NotYou(named, up::forget)
+                RecordNotice(days, origin, named.identityId)
+            }
             PrimaryButton(stringResource(R.string.share_add_photos), Modifier.testTag("guest-uploader-pick")) {
                 pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo))
             }

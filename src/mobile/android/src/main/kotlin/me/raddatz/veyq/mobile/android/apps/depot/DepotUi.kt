@@ -39,7 +39,6 @@ import me.raddatz.veyq.mobile.android.core.AppModel
 import me.raddatz.veyq.mobile.android.core.ApplicationUi
 import me.raddatz.veyq.mobile.android.core.GuestWriteColumn
 import me.raddatz.veyq.mobile.android.core.HeaderContribution
-import me.raddatz.veyq.mobile.android.core.InlineNaming
 import me.raddatz.veyq.mobile.android.core.KindPage
 import me.raddatz.veyq.mobile.android.core.LocalPalette
 import me.raddatz.veyq.mobile.android.core.NotYou
@@ -99,8 +98,10 @@ private fun fileHeader(node: NodeAt, model: AppModel): HeaderContribution? {
 }
 
 /**
- * A drop box's WRITE_ONLY link (the web's `DropBoxShareBody`): the guest names itself — the record's notice before —, then
- * sends files, each into its own folder; what it sent while the link is open here is listed, nothing else of the drop box.
+ * A drop box's WRITE_ONLY link (the web's `DropBoxShareBody`): the guest picks files at once, each sent into its own folder;
+ * a guest not named yet is asked its name at that upload by the core (`GuestDropBox.uploadAsking`, its dialog the link's
+ * `NamingAsked`, the record's notice in it; #1090: no form in the page). Named, "You are here as …" with *Not you?*; what
+ * it sent while the link is open here is listed, nothing else of the drop box.
  */
 @Composable
 private fun GuestDropBoxPage(drop: me.raddatz.veyq.mobile.depot.GuestDropBox, access: GuestAccess?, model: AppModel) {
@@ -113,37 +114,35 @@ private fun GuestDropBoxPage(drop: me.raddatz.veyq.mobile.depot.GuestDropBox, ac
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) scope.launch {
             val sources = withContext(Dispatchers.IO) { uris.mapNotNull { model.picked(it) }.map { model.source(it) } }
-            drop.upload(sources)
+            // a guest not named yet is asked its name first (the core's `uploadAsking`); declined, nothing is queued or said
+            if (drop.uploadAsking(sources).queued == 0) sources.forEach { it.close() }
         }
     }
     GuestWriteColumn {
         Text(stringResource(R.string.share_dropbox_title), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Text(stringResource(R.string.share_dropbox_hint, drop.node.name), color = role(LocalPalette.current.muted))
-        val named = session
-        if (named == null) {
-            InlineNaming(stringResource(R.string.share_dropbox_name_hint), days, origin) { drop.name(it) }
-        } else {
+        session?.let { named ->
             NotYou(named, drop::forget)
             RecordNotice(days, origin, named.identityId)
-            PrimaryButton(stringResource(R.string.share_dropbox_pick), Modifier.testTag("guest-drop-pick")) { pick.launch(arrayOf("*/*")) }
-            val mine = queue.batches.filter { it.label == drop.node.name }.flatMap { it.items }
-            if (sent.isNotEmpty() || mine.isNotEmpty()) {
-                Text(stringResource(R.string.share_dropbox_session), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
-                for (item in mine) Text(
-                    listOf(
-                        item.name,
-                        stringResource(
-                            when {
-                                item.active -> R.string.share_dropbox_sending
-                                item.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.FAILED -> R.string.share_dropbox_failed
-                                else -> R.string.share_dropbox_sent
-                            },
-                        ),
-                    ).joined(),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                for (name in sent.filter { n -> mine.none { it.name == n } }) Text(name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("guest-drop-sent"))
-            }
+        }
+        PrimaryButton(stringResource(R.string.share_dropbox_pick), Modifier.testTag("guest-drop-pick")) { pick.launch(arrayOf("*/*")) }
+        val mine = queue.batches.filter { it.label == drop.node.name }.flatMap { it.items }
+        if (sent.isNotEmpty() || mine.isNotEmpty()) {
+            Text(stringResource(R.string.share_dropbox_session), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 8.dp))
+            for (item in mine) Text(
+                listOf(
+                    item.name,
+                    stringResource(
+                        when {
+                            item.active -> R.string.share_dropbox_sending
+                            item.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.FAILED -> R.string.share_dropbox_failed
+                            else -> R.string.share_dropbox_sent
+                        },
+                    ),
+                ).joined(),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            for (name in sent.filter { n -> mine.none { it.name == n } }) Text(name, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("guest-drop-sent"))
         }
     }
 }

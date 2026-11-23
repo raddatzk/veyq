@@ -131,16 +131,6 @@ object AppleSharing {
     suspend fun nameGuest(access: GuestAccess, displayName: String): Boolean =
         withContext(Dispatchers.Default) { runCatching { access.nameGuest(displayName.trim()) }.isSuccess }
 
-    /** A drop box's guest named ([GuestDropBox.name]); whether it went. */
-    @Throws(Exception::class)
-    suspend fun nameDrop(drop: me.raddatz.veyq.mobile.depot.GuestDropBox, displayName: String): Boolean =
-        withContext(Dispatchers.Default) { drop.name(displayName) }
-
-    /** An uploader's guest named ([GuestUploader.name]); whether it went. */
-    @Throws(Exception::class)
-    suspend fun nameUploader(up: me.raddatz.veyq.mobile.memories.GuestUploader, displayName: String): Boolean =
-        withContext(Dispatchers.Default) { up.name(displayName) }
-
     /** The bookmark's save ([BookmarkCreate.save]); whether it was made. */
     @Throws(Exception::class)
     suspend fun save(create: BookmarkCreate): Boolean = withContext(Dispatchers.Default) { create.save() }

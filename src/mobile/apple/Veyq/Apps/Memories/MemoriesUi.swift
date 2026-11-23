@@ -167,8 +167,10 @@ struct NewMemorySheet: View {
     }
 }
 
-/// A Memory's or a chapter's WRITE_ONLY link (the web's `MemoryShareBody`): the guest names itself — the record's notice
-/// before —, then adds photos and videos; it sees only what it sent while the link is open here, and removes its own.
+/// A Memory's or a chapter's WRITE_ONLY link (the web's `MemoryShareBody`): the guest adds photos and videos at once; a
+/// guest not named yet is asked its name at that upload by the core (`GuestUploader.uploadAsking`, its sheet the link's
+/// `AskedNaming`, the record's notice in it; #1090: no form in the page). Named, "You are here as …" with *Not you?*; it
+/// sees only what it sent while the link is open here, and removes its own.
 private struct GuestUploaderView: View {
     @Bindable var model: AppModel
     let held: GuestHeld
@@ -185,34 +187,30 @@ private struct GuestUploaderView: View {
     var body: some View {
         GateColumn {
             Text(say(.shareUploaderIntro)).foregroundStyle(Role.muted)
-            if let named = held.guest.value {
-                if up.offered {
+            if up.offered {
+                if let named = held.guest.value {
                     NotYou(session: named) { up.forget() }
                     RecordNotice(days: days, origin: origin, guestId: named.identityId)
-                    Menu {
-                        Button { pickingPhotos = true } label: { Label(say(.photoLibrary), systemImage: "photo.on.rectangle") }
-                        Button { pickingFiles = true } label: { Label(say(.tabDepotFiles), systemImage: "folder") }
-                    } label: {
-                        Label(say(.shareAddPhotos), systemImage: "plus").frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Role.primary)
-                    .accessibilityIdentifier("guest-uploader-pick")
-                    Text(say(.shareUploaderSession)).font(.footnote).foregroundStyle(Role.muted)
-                    ForEach((sent?.value as? [GuestUploader.Sent]) ?? [], id: \.mediaId) { s in
-                        HStack {
-                            Text(s.name).accessibilityIdentifier("guest-uploader-sent")
-                            Spacer()
-                            Button(say(.entryDelete), role: .destructive) {
-                                Task { failed = !((try? await up.remove(mediaId: s.mediaId))?.boolValue ?? false) }
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                    }
                 }
-            } else {
-                InlineNaming(hint: say(.shareNameVisibility), days: days, origin: origin) { name in
-                    (try? await AppleSharing.shared.nameUploader(up: up, displayName: name))?.boolValue ?? false
+                Menu {
+                    Button { pickingPhotos = true } label: { Label(say(.photoLibrary), systemImage: "photo.on.rectangle") }
+                    Button { pickingFiles = true } label: { Label(say(.tabDepotFiles), systemImage: "folder") }
+                } label: {
+                    Label(say(.shareAddPhotos), systemImage: "plus").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Role.primary)
+                .accessibilityIdentifier("guest-uploader-pick")
+                Text(say(.shareUploaderSession)).font(.footnote).foregroundStyle(Role.muted)
+                ForEach((sent?.value as? [GuestUploader.Sent]) ?? [], id: \.mediaId) { s in
+                    HStack {
+                        Text(s.name).accessibilityIdentifier("guest-uploader-sent")
+                        Spacer()
+                        Button(say(.entryDelete), role: .destructive) {
+                            Task { failed = !((try? await up.remove(mediaId: s.mediaId))?.boolValue ?? false) }
+                        }
+                        .buttonStyle(.borderless)
+                    }
                 }
             }
         }
@@ -227,17 +225,26 @@ private struct GuestUploaderView: View {
                 for item in picked {
                     if let file = try? await item.loadTransferable(type: PickedMedia.self) { urls.append(file.url) }
                 }
-                _ = up.upload(sources: urls.compactMap { model.memories.guestMediaSource($0, fromPhotos: true) })
+                upload(urls.compactMap { model.memories.guestMediaSource($0, fromPhotos: true) })
             }
         }
         .fileImporter(isPresented: $pickingFiles, allowedContentTypes: [.image, .movie], allowsMultipleSelection: true) { result in
             guard case .success(let urls) = result, !urls.isEmpty else { return }
-            _ = up.upload(sources: urls.compactMap { model.memories.guestMediaSource($0, fromPhotos: false) })
+            upload(urls.compactMap { model.memories.guestMediaSource($0, fromPhotos: false) })
         }
         .onAppear {
             sent = CoreState({ (up.sent.value as? NSArray) ?? [] }) { changed in ApplePlatform.shared.watch(flow: up.sent) { @Sendable _ in changed() } }
         }
         .onDisappear { sent?.stop() }
+    }
+
+    /// The picked media queued as the guest; one not named yet is asked its name first (the core's `uploadAsking`);
+    /// declined, nothing is queued or said.
+    private func upload(_ sources: [UploadSource]) {
+        Task {
+            let queued = (try? await up.uploadAsking(sources: sources))?.queued ?? 0
+            if queued == 0 { sources.forEach { $0.close() } }
+        }
     }
 }
 

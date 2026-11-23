@@ -257,6 +257,14 @@ class GuestDoorsTest {
         assertFalse(access.naming.asking.value)
     }
 
+    /** The guest named as a write asks it: the core's one naming flow (#1090: no page form names a WRITE_ONLY guest). */
+    private suspend fun nameAtTheWrite(access: GuestAccess, name: String) {
+        val asked = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default).async { access.naming.request() }
+        withContext(kotlinx.coroutines.Dispatchers.Default) { withTimeout(5_000) { access.naming.asking.first { it } } }
+        assertEquals(me.raddatz.veyq.mobile.navigation.NameAnswer.DONE, access.naming.name(name))
+        assertNotNull(asked.await(), "the named guest's write did not go on")
+    }
+
     @Test
     fun aDropBoxsGuestNamesItselfAndAddsAFileIntoItsOwnFolder() = runTest {
         val share = PlayedShare(p, role = "WRITE_ONLY", rootKind = "DEPOT_DROPBOX")
@@ -266,7 +274,7 @@ class GuestDoorsTest {
         val v = view(share, sessions)
         v.load()
         val drop = assertIs<DepotGuest.DropBox>(v.page.value).model
-        assertTrue(drop.name("Ben"))
+        nameAtTheWrite(assertNotNull(v.access), "Ben")
         val session = assertNotNull(drop.session.value)
         assertNotNull(session.uploaderKey, "the uploader's K_up was not kept")
         // its session went to the credential store, under a name that is not the link's id
@@ -283,6 +291,28 @@ class GuestDoorsTest {
         share.assertNoKeyInAnyRequest()
     }
 
+    /**
+     * #1090: *Not you?* on a drop box forgets the guest; the next one, asked its name at its upload, gets a folder of its
+     * own — never the one the forgotten guest's first file made (the web's page forgets its folder with the session).
+     */
+    @Test
+    fun aDropBoxsNextGuestAfterNotYouGetsAFolderOfItsOwn() = runTest {
+        val share = PlayedShare(p, role = "WRITE_ONLY", rootKind = "DEPOT_DROPBOX")
+        val content = PlayedGuestContent(share)
+        content.dropKey()
+        val v = view(share)
+        v.load()
+        val drop = assertIs<DepotGuest.DropBox>(v.page.value).model
+        val access = assertNotNull(v.access)
+        nameAtTheWrite(access, "Ben")
+        assertEquals(DepotFiles.Outcome.DONE, drop.send(source("bens.txt", "ben")).outcome)
+        drop.forget()
+        assertNull(drop.session.value)
+        nameAtTheWrite(access, "Cleo")
+        assertEquals(DepotFiles.Outcome.DONE, drop.send(source("cleos.txt", "cleo")).outcome)
+        assertEquals(2, content.dropFolders, "the next guest's file went into the forgotten guest's folder")
+    }
+
     @Test
     fun aMemorysUploaderNamesItselfAndSendsUnderItsOwnKey() = runTest {
         val share = PlayedShare(p, role = "WRITE_ONLY", rootKind = "MEMORY")
@@ -291,7 +321,7 @@ class GuestDoorsTest {
         val v = view(share)
         v.load()
         val uploader = assertIs<MemoriesGuest.Uploader>(v.page.value).model
-        assertTrue(uploader.name("Ada"))
+        nameAtTheWrite(assertNotNull(v.access), "Ada")
         val bytes = "a picture".encodeToByteArray()
         val original = MediaUpload.Original(ByteSource(bytes.size.toLong()) { from, length -> bytes.copyOfRange(from.toInt(), (from + length).toInt()) }, "image/jpeg", "a.jpg", null)
         val prepared = MediaUpload.Prepared("image/jpeg", "sha", Derivation.Derived(null, null, null, null), null, null)

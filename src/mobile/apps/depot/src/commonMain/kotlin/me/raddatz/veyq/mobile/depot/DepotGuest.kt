@@ -278,8 +278,9 @@ object DepotGuest {
 
 /**
  * A drop box's page for the guest of its WRITE_ONLY link (ADR 0150 decision 5; the web's `DropBoxShareBody` over
- * `dropBox.ts`): the guest names itself — a fresh `K_up` wrapped to the drop box's drop public key, kept as its session in
- * the credential store —, and each file it adds goes into its own folder (made with its first file, its name the guest's,
+ * `dropBox.ts`): the guest is asked its name at its first upload ([uploadAsking], the core's one naming flow; never by a
+ * form of the page's, #1090) — a fresh `K_up` wrapped to the drop box's drop public key, kept as its session in the
+ * credential store —, and each file it adds goes into its own folder (made with its first file, its name the guest's,
  * sealed under `K_up`), as a file node created and filled as the guest. It sees nothing else of the drop box; what it sent
  * in this visit is listed by name.
  */
@@ -292,10 +293,7 @@ class GuestDropBox internal constructor(private val access: GuestAccess, val nod
     /** The names of the files sent from this device in this visit, in order. */
     val sent: StateFlow<List<String>> = _sent.asStateFlow()
 
-    /** Name the guest from the drop page's own form (the phones', the web's): through the core's one naming flow. */
-    suspend fun name(displayName: String): Boolean = access.naming.name(displayName).let { it.problem == null && it.notice == null }
-
-    /** *Not you?* */
+    /** *Not you?*: this device's session forgotten; the next upload asks a name again, a new identity with a folder of its own. */
     fun forget() = access.forgetGuest()
 
     /** [sources] queued into the guest's folder; how many were (none before the guest named itself, or without a queue). */
@@ -354,14 +352,18 @@ class GuestDropBox internal constructor(private val access: GuestAccess, val nod
         }
     }
 
-    /** The guest's folder as it opened: id, key and epoch. */
-    private class Folder(val nodeId: String, val key: ByteArray, val epoch: Int, val scopeEpoch: Int)
+    /** The guest's folder as it opened: id, key and epoch, and the identity it is the folder of. */
+    private class Folder(val nodeId: String, val key: ByteArray, val epoch: Int, val scopeEpoch: Int, val identityId: String)
 
     private var folder: Folder? = null
 
-    /** The guest's own folder: made on its first file, the same one on every later call (its wrap opens under `K_up`). */
+    /**
+     * The guest's own folder: made on its first file, the same one on every later call (its wrap opens under `K_up`) —
+     * of this identity only: after *Not you?* the next guest's first file makes its own (the web's drop page forgets its
+     * folder with the session).
+     */
     private suspend fun ensureFolder(session: GuestSession, kUp: ByteArray): Folder {
-        folder?.let { return it }
+        folder?.takeIf { it.identityId == session.identityId }?.let { return it }
         val suite = DepotGuest.suiteOf(access)
         val nodeId = access.uuid()
         val scopeEpoch = access.rootScopeEpoch
@@ -384,7 +386,7 @@ class GuestDropBox internal constructor(private val access: GuestAccess, val nod
         val res = r.body()
         val at = arrayOf<Pair<String, Any?>>("scopeId" to access.scopeId, "nodeId" to res.nodeId, "epoch" to res.scopeEpoch.toLong(), "placementRevision" to res.placementRevision)
         val key = suite.open(Context("content-key", *at), kUp, unb64(res.wrappedContentKey))
-        return Folder(res.nodeId, key, res.epoch, res.scopeEpoch).also { folder = it }
+        return Folder(res.nodeId, key, res.epoch, res.scopeEpoch, session.identityId).also { folder = it }
     }
 
     /** A FILE node named [name] made in [folder] as the guest; its id and key, or null where the name is taken. */
