@@ -88,12 +88,12 @@ class OrderTest {
         val order = PlayOrder(ids(4), random)
         val a = order.current()
         val b = order.next()
-        assertEquals(PreviousStep.Restart, order.previous(4000))
+        assertEquals(PreviousStep.Restart, order.previous(4000.0))
         assertEquals(b, order.current())
-        assertEquals(PreviousStep.Back(a!!), order.previous(2000))
+        assertEquals(PreviousStep.Back(a!!), order.previous(2000.0))
         assertEquals(a, order.current())
         // nothing before the first: previous restarts it
-        assertEquals(PreviousStep.Restart, order.previous(2000))
+        assertEquals(PreviousStep.Restart, order.previous(2000.0))
         // and next goes forward through what was played again
         assertEquals(b, order.next())
     }

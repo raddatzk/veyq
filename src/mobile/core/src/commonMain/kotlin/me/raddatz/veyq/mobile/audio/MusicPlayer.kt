@@ -178,7 +178,7 @@ class MusicPlayer(
             val order = order ?: return@launch
             val slot = slots[active]
             val into = slot.deck.positionMs() - slot.span.startMs
-            when (val step = order.previous(into)) {
+            when (val step = order.previous(into.toDouble())) {
                 PreviousStep.Restart -> doSeek(0)
                 is PreviousStep.Back -> {
                     pausedByListener = false // a track change plays, as it did before the pause held loads

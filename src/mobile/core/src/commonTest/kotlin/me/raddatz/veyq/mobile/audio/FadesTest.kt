@@ -3,7 +3,8 @@ package me.raddatz.veyq.mobile.audio
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-/** The web's `core/audio/fades.test.ts`, case for case (ADR 0135 decision 7, ADR 0142 decision 1). */
+/** The fades on the apps' `Long` clock ([Span]; ADR 0135 decision 7, ADR 0142 decision 1): the rule itself is held by
+ *  `contracts/platform/audio/v1-vectors.json` ([MusicVectorsTest]); these hold what the clock makes of its answers. */
 class FadesTest {
     private val song = Span(400, 180_400)
 
@@ -31,5 +32,13 @@ class FadesTest {
         assertEquals(FADE_MS, fadeLengthAt(song, 175_400))
         assertEquals(FADE_MS, fadeLengthAt(song, 100_000))
         assertEquals(0L, fadeLengthAt(song, 190_000))
+    }
+
+    @Test
+    fun theClockTruncatesAThirdAndAnUnknownEndNeverFades() {
+        val odd = Span(0, 7000)
+        assertEquals(2333L to 4666L, autoFadeMs(odd) to fadeOutAtMs(odd))
+        val open = Span(300, Span.UNKNOWN_END)
+        assertEquals(listOf(FADE_MS, PRESS_FADE_MS, Span.UNKNOWN_END, FADE_MS), listOf(autoFadeMs(open), pressFadeMs(open), fadeOutAtMs(open), fadeLengthAt(open, 1_000_000)))
     }
 }
