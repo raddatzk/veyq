@@ -13,8 +13,8 @@ name: Publish
 # since a release deletes the snapshot tag — publishes nothing, with a notice. Two triggers, and no other: the weekly
 # `schedule` (on `main` only: GitHub runs a schedule on the default branch alone) and a `workflow_dispatch` (Actions →
 # Publish → Run workflow, on `main` or `release/<major>.x`). A snapshot of `main` also gets its release draft
-# (`release-draft`), which the owner reads before running Release. The weekly run also deletes old staging images
-# (`staging-retention`).
+# (`release-draft`), which the owner reads before running Release; a dispatch over an unreleased snapshot refreshes
+# that draft. The weekly run also deletes old staging images (`staging-retention`).
 #
 # This file signs SNAPSHOTS. Keyless signing names the workflow file that holds the signing job, so a snapshot's
 # identity is `.github/workflows/publish.yml` on `main` or `release/<major>.x`. A release is a promotion of a snapshot,
@@ -75,6 +75,9 @@ jobs:
       run_id: ${{ steps.checks-run.outputs.run_id }}
       run_url: ${{ steps.checks-run.outputs.run_url }}
       version: ${{ steps.checks-run.outputs.version }}
+      # The version whose release draft this run writes: the new snapshot's, or — when the commit already carries its
+      # unreleased snapshot and nothing is published — that snapshot's; empty once the commit is released.
+      draft_version: ${{ steps.checks-run.outputs.draft_version }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -376,6 +379,10 @@ jobs:
   # (create, update its own untouched draft, or leave a draft a person edited); the one write is this job's own line,
   # and it never publishes (`draft: true` is the payload's, checked before the write). It runs no third-party code:
   # the script is the standard library and `gh`.
+  # Also on a run that publishes nothing because the commit already carries its unreleased snapshot: a dispatch then
+  # refreshes the draft after a note was corrected in its pull request (cr-release-draft-from-publish phase 5). Either way the tag
+  # must exist first — after a green `snapshot-tag`, or because `kind` is `none` — and the script refuses unless
+  # `snapshot-<version>` names the commit.
   release-draft:
     name: Write the release draft
     runs-on: ubuntu-latest
@@ -383,7 +390,7 @@ jobs:
     needs:
       - checks-run
       - snapshot-tag
-    if: ${{ !cancelled() && needs.snapshot-tag.result == 'success' && github.ref_name == 'main' }}
+    if: ${{ !cancelled() && github.ref_name == 'main' && needs.checks-run.outputs.draft_version != '' && (needs.snapshot-tag.result == 'success' || needs.checks-run.outputs.kind == 'none') }}
     permissions:
       contents: write # listing and writing a draft release (GitHub lists drafts only to push access)
       pull-requests: read # each merged pull request's release note
@@ -398,7 +405,7 @@ jobs:
       - name: Decide the draft
         id: plan
         env:
-          VERSION: ${{ needs.checks-run.outputs.version }}
+          VERSION: ${{ needs.checks-run.outputs.draft_version }}
           COMMIT: ${{ needs.checks-run.outputs.commit }}
           GH_TOKEN: ${{ github.token }}
         run: |

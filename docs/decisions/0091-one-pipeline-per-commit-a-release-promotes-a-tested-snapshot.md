@@ -4,8 +4,8 @@
 - Built: partly (not built: decision 3's lanes L2 and L3, decision 5's rerun of moved lanes — a promotion refuses an
   input it cannot compare instead — and the retention job, decision 6, decision 7; decision 5's snapshot — weekly and
   by dispatch since its amendment of 2026-11-07, per green push before — its attestations, its `snapshot-` tag and the
-  promotion `release.yml` are built, and since its amendment of 2026-11-22 the release draft Publish writes — its first
-  run on GitHub owed)
+  promotion `release.yml` are built, and since its amendment of 2026-11-22 the release draft Publish writes — first
+  written on GitHub by run 45076081333, 2026-11-22; a release promoted from it still owed)
 - Date: 2026-10-16
 - Model: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md)
 
@@ -218,6 +218,14 @@ several, or one on another tag is refused (`scripts/promote.py` check 1). A save
      as published too: `release.yml` deletes the snapshot tag once it released the commit, so the schedule of
      2026-11-16 made the already released `b7dda2de` a snapshot again (`snapshot-1.247`, beside `v1.247`), and a draft
      would have followed it.
+     **Refined 2026-11-23 (owner, cr-release-draft-from-publish phase 5):** the first draft (run 45076081333) named a pull request
+     under **Needs a note**; its note was then written in the pull request, but no run could carry it into the draft — the
+     job ran only after a *new* snapshot tag, and a commit that has its snapshot publishes nothing. So the job also runs
+     when `checks-run` finds the commit already carrying its unreleased snapshot (`kind == 'none'`, no `v` tag;
+     `snapshot.py`'s `draft_version`), and a dispatch on `main` refreshes the untouched draft; `release_notes.py`
+     refuses unless `snapshot-<version>` names the commit, and the job's whole `if:` is pinned by
+     `validate_release_identity.py`. And the promotion refuses a draft that still lists anything under **Needs a note**
+     (`promote.py` check 1): until then such a draft was publishable as it stood.
 
 6. **The backup archive.** Every release publishes the L1 run's capture (ADR 0056's tool, test data only) **with its
    object pool** (`--objects-to`: a capture's store leg is only its index, ADR 0056 §3) as a signed OCI artifact

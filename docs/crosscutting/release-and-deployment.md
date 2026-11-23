@@ -116,12 +116,14 @@ which no guard reads.
 A release is a snapshot promoted (ADR 0091 decision 5); nothing is built again. Publish writes the **draft** GitHub
 Release on the `snapshot-<major>.<minor>` tag of each snapshot it makes on `main`, its notes gathered from the `## Release
 note` section of every pull request since the last release (`publish.yml` › `release-draft`, `scripts/release_notes.py`;
-it keeps the one draft the promotion needs and never overwrites one a person edited); the owner reads it, edits it, and starts `release.yml` (*Run workflow*) on the branch
+it keeps the one draft the promotion needs and never overwrites one a person edited; a dispatch on `main` over a
+snapshot already made refreshes its untouched draft, after a note was corrected in its pull request); the owner reads it, edits it, and starts `release.yml` (*Run workflow*) on the branch
 the snapshot came from; the click path is [`infra/README.md`](../../infra/README.md) § Cutting a release. GitHub starts
 no workflow for a draft, which is why the dispatch starts it. Its jobs, each holding only what it writes, in group
 `veyq-release`:
 
-1. `check` (`scripts/promote.py`) refuses unless exactly one draft exists, on a snapshot tag; the run's branch may
+1. `check` (`scripts/promote.py`) refuses unless exactly one draft exists, on a snapshot tag, listing nothing under
+   **Needs a note**; the run's branch may
    release that major (`main` its `VERSION`, `release/<major>.x` its own); the tag's commit counts that version and is on
    the branch; it is newer than every release of its major (so `<major>` and `latest` never move backwards); the
    snapshot's `sha-<commit>` and `-SNAPSHOT` name one index per image, signed under the snapshot identity; no release

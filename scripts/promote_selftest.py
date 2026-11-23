@@ -196,6 +196,17 @@ w = World(); w.releases[0]["tag_name"] = "v0.12"
 refuses("a draft on a release tag", w, "not on a `snapshot-<major>.<minor>` tag", drafts=[7])
 w = World(); w.releases[0]["tag_name"] = "snapshot-0.12-rc"
 refuses("a draft on a tag that only starts like a snapshot's", w, "not on a `snapshot-<major>.<minor>` tag")
+import release_notes  # noqa: E402
+needs = release_notes.assemble([{"number": 43, "title": "t", "author": "someone", "body": "no note"}])
+if not (f"**{release_notes.NEEDS_A_NOTE}**" in needs and promote.NEEDS_A_NOTE.search(needs)):
+    failures.append(
+        "promote.py does not see the heading release_notes.py writes for a pull request without a note")
+w = World(); w.releases[0]["body"] = needs
+refuses("a draft that still needs a note", w, "**Needs a note**", drafts=[7])
+w = World(); w.releases[0]["body"] = promote.note("Notes.", "the draft still lists pull requests under **Needs a note**.", "u")
+if promote.NEEDS_A_NOTE.search(w.releases[0]["body"]) is not None:
+    failures.append(
+        "the refusal note that names the heading makes the draft refuse again after its notes were fixed")
 
 # ---- 2. the branch -------------------------------------------------------------------------------------------------
 refuses("a feature branch", World(), "a release is promoted from `main` or `release/<major>.x`", ref="feature/x")
