@@ -7,7 +7,7 @@ import platform.Foundation.NSTimeZone
 import platform.Foundation.localTimeZone
 import platform.Foundation.timeIntervalSince1970
 
-actual fun localWallClock(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int): Long? {
+actual fun localWallClockMs(year: Int, month: Int, day: Int, hour: Int, minute: Int, second: Int): Double? {
     val calendar = NSCalendar(calendarIdentifier = NSCalendarIdentifierGregorian)
     calendar.timeZone = NSTimeZone.localTimeZone
     val parts = NSDateComponents().apply {
@@ -19,5 +19,5 @@ actual fun localWallClock(year: Int, month: Int, day: Int, hour: Int, minute: In
         this.second = second.toLong()
     }
     val date = calendar.dateFromComponents(parts) ?: return null
-    return (date.timeIntervalSince1970 * 1000).toLong()
+    return (date.timeIntervalSince1970 * 1000).toLong().toDouble()
 }

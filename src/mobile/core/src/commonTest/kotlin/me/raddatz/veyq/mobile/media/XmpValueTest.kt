@@ -4,7 +4,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-/** `ExifReader.xmpValue`: an attribute, a plain element, and an `rdf:Alt` list — each spanning lines, as XMP writers lay them out. */
+/** `Xmp.value`: an attribute, a plain element, and an `rdf:Alt` list — each spanning lines, as XMP writers lay them out. */
 class XmpValueTest {
     private val packet = """
         <rdf:Description rdf:about=""
@@ -26,26 +26,26 @@ class XmpValueTest {
               <rdf:li xml:lang="de">nur eine Sprache</rdf:li>
             </rdf:Alt>
           </dc:description>
-          <dc:subject><rdf:Bag><b>nested</b></rdf:Bag></dc:subject>
+          <xmp:CreateDate><rdf:Bag><b>nested</b></rdf:Bag></xmp:CreateDate>
         </rdf:Description>
     """.trimIndent()
 
     @Test
-    fun anAttributeIsRead() = assertEquals("Darktable 5.2", ExifReader.xmpValue(packet, "xmp", "CreatorTool"))
+    fun anAttributeIsRead() = assertEquals("Darktable 5.2", Xmp.value(packet, "CreatorTool"))
 
     @Test
-    fun anElementSpanningLinesIsRead() = assertEquals("\n    4\n  ", ExifReader.xmpValue(packet, "xmp", "Rating"))
+    fun anElementSpanningLinesIsRead() = assertEquals("\n    4\n  ", Xmp.value(packet, "Rating"))
 
     @Test
     fun theDefaultLanguageIsChosenAcrossLineBreaks() =
-        assertEquals("At the lake\n        by night & fog", ExifReader.xmpValue(packet, "dc", "title"))
+        assertEquals("At the lake\n        by night & fog", Xmp.value(packet, "title"))
 
     @Test
-    fun withoutADefaultTheFirstItemIsTaken() = assertEquals("nur eine Sprache", ExifReader.xmpValue(packet, "dc", "description"))
+    fun withoutADefaultTheFirstItemIsTaken() = assertEquals("nur eine Sprache", Xmp.value(packet, "description"))
 
     @Test
-    fun markupThatIsNoListIsNoValue() = assertNull(ExifReader.xmpValue(packet, "dc", "subject"))
+    fun markupThatIsNoListIsNoValue() = assertNull(Xmp.value(packet, "CreateDate"))
 
     @Test
-    fun anAbsentNameIsNull() = assertNull(ExifReader.xmpValue(packet, "dc", "creator"))
+    fun anAbsentNameIsNull() = assertNull(Xmp.value(packet, "DateCreated"))
 }

@@ -1933,9 +1933,9 @@
         }
       ],
       "expected": {
-        "date": "rejects",
-        "xmpDate": "rejects",
-        "all": "rejects"
+        "date": null,
+        "xmpDate": null,
+        "all": null
       }
     },
     {
@@ -2171,9 +2171,9 @@
         "end": 131072
       },
       "expected": {
-        "date": "rejects",
-        "xmpDate": "rejects",
-        "all": "rejects"
+        "date": null,
+        "xmpDate": null,
+        "all": null
       }
     },
     {
@@ -2189,9 +2189,9 @@
         "end": 131072
       },
       "expected": {
-        "date": "rejects",
-        "xmpDate": "rejects",
-        "all": "rejects"
+        "date": null,
+        "xmpDate": null,
+        "all": null
       }
     },
     {
@@ -2207,9 +2207,9 @@
         "end": 131072
       },
       "expected": {
-        "date": "rejects",
-        "xmpDate": "rejects",
-        "all": "rejects"
+        "date": null,
+        "xmpDate": null,
+        "all": null
       }
     },
     {
@@ -2225,9 +2225,9 @@
         "end": 131072
       },
       "expected": {
-        "date": "rejects",
-        "xmpDate": "rejects",
-        "all": "rejects"
+        "date": null,
+        "xmpDate": null,
+        "all": null
       }
     },
     {
@@ -2243,9 +2243,9 @@
         "end": 131072
       },
       "expected": {
-        "date": "rejects",
-        "xmpDate": "rejects",
-        "all": "rejects"
+        "date": null,
+        "xmpDate": null,
+        "all": null
       }
     },
     {
@@ -2261,9 +2261,9 @@
         "end": 131072
       },
       "expected": {
-        "date": "rejects",
-        "xmpDate": "rejects",
-        "all": "rejects"
+        "date": null,
+        "xmpDate": null,
+        "all": null
       }
     },
     {
@@ -2279,9 +2279,9 @@
         "end": 131072
       },
       "expected": {
-        "date": "rejects",
-        "xmpDate": "rejects",
-        "all": "rejects"
+        "date": null,
+        "xmpDate": null,
+        "all": null
       }
     },
     {
@@ -2297,9 +2297,9 @@
         "end": 131072
       },
       "expected": {
-        "date": "rejects",
-        "xmpDate": "rejects",
-        "all": "rejects"
+        "date": null,
+        "xmpDate": null,
+        "all": null
       }
     },
     {
@@ -2315,9 +2315,9 @@
         "end": 131072
       },
       "expected": {
-        "date": "rejects",
-        "xmpDate": "rejects",
-        "all": "rejects"
+        "date": null,
+        "xmpDate": null,
+        "all": null
       }
     },
     {
@@ -2333,9 +2333,9 @@
         "end": 131072
       },
       "expected": {
-        "date": "rejects",
-        "xmpDate": "rejects",
-        "all": "rejects"
+        "date": null,
+        "xmpDate": null,
+        "all": null
       }
     },
     {
@@ -2351,9 +2351,9 @@
         "end": 131072
       },
       "expected": {
-        "date": "rejects",
-        "xmpDate": "rejects",
-        "all": "rejects"
+        "date": null,
+        "xmpDate": null,
+        "all": null
       }
     },
     {
