@@ -51,10 +51,11 @@ import kotlin.time.Duration.Companion.minutes
 class ImportLiveTest {
     init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
 
-    private val liveRun = LiveRun()
+    /** Each account's devices taken off that account of the throwaway (never the seeded principal's `.run/.env`). */
+    private val runs = mutableMapOf<String, LiveRun>()
 
     @AfterTest
-    fun takeOffTheDevices() = liveRun.removeAll()
+    fun takeOffTheDevices() = runs.values.forEach { it.removeAll() }
 
     private fun sha(b: ByteArray) = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
 
@@ -70,7 +71,7 @@ class ImportLiveTest {
         }
         runTest(timeout = 6.minutes) {
             suspend fun session(): TenantSession {
-                val a = VeyqAccount.signIn(BouncyCastlePrimitives, origin, t.email(), t.env.getValue("VEYQ_PASSWORD"), t.env.getValue("VEYQ_SECRET_KEY"), liveRun.device()) { block -> HttpClient(OkHttp, block) }
+                val a = VeyqAccount.signIn(BouncyCastlePrimitives, origin, t.email(), t.env.getValue("VEYQ_PASSWORD"), t.env.getValue("VEYQ_SECRET_KEY"), runs.getOrPut("VEYQ") { LiveRun("VEYQ", t.file) }.device()) { block -> HttpClient(OkHttp, block) }
                 return a.open(a.tenants.first { it.domain == domain }).also { it.rekeyRules = AppKinds.rules }
             }
             val tenant = session()
@@ -153,7 +154,7 @@ class ImportLiveTest {
         val root = File(System.getProperty("veyq.repoRoot"))
         val zip = memoryRooted(File(root, "contracts/export/import-cases/web-download.zip"), "Lisbon")
         runTest(timeout = 6.minutes) {
-            val a = VeyqAccount.signIn(BouncyCastlePrimitives, origin, t.email(), t.env.getValue("VEYQ_PASSWORD"), t.env.getValue("VEYQ_SECRET_KEY"), liveRun.device()) { block -> HttpClient(OkHttp, block) }
+            val a = VeyqAccount.signIn(BouncyCastlePrimitives, origin, t.email(), t.env.getValue("VEYQ_PASSWORD"), t.env.getValue("VEYQ_SECRET_KEY"), runs.getOrPut("VEYQ") { LiveRun("VEYQ", t.file) }.device()) { block -> HttpClient(OkHttp, block) }
             val tenant = a.open(a.tenants.first { it.domain == domain }).also { it.rekeyRules = AppKinds.rules }
             val scopeId = tenant.spaces().first { it.kind == "TENANT" }.scopeId
             val folder = (FolderCreate.create(tenant, scopeId, null, "App import fail ${System.currentTimeMillis() % 100_000}") as NodeCreate.Result.Done).created.nodeId

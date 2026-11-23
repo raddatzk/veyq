@@ -21,7 +21,16 @@ import java.util.concurrent.ConcurrentLinkedQueue
  * `409 too_many_devices` from then on), 653 session families, and a register (`MAX_DEVICES` = 32) full of test names.
  *
  * [who] is the prefix of the account's credentials in `.run/.env` (or `VEYQ_ENV_FILE`'s): `VEYQ` for the seeded
- * principal, `VEYQ_USER2` for the seeded member; [envFile] names another account's env file (a throwaway one).
+ * principal, `VEYQ_USER2` for the seeded member; [envFile] names another account's env file (a throwaway one). A
+ * throwaway's case builds one per account over the throwaway's file (`LiveRun(who, t.file)`), never the bare
+ * `LiveRun()`, whose [removeAll] would sign the seeded principal in with the throwaway's stores (`ThrowawayLiveRunTest`).
+ *
+ * Every sign-in — the case's and [removeAll]'s — spends the login challenge and verify against the instance's per-IP
+ * budget (`veyq.ratelimit.auth.*`, 60 a minute by default, ADR 0051), which every browser, agent and live run on this
+ * machine shares. A module's live suite comes close to it on its own (measured 2026-11-23: `:apps:memories` run twice
+ * back to back failed with `SignInFailure: challenge 429` / `verify 429`, four cases the second time; each throwaway case
+ * alone, a minute apart, passed): a 429 at a live sign-in is that budget spent, never the case's defect — run again after
+ * a quiet minute.
  */
 class LiveRun(private val who: String = "VEYQ", private val envFile: File? = null) {
     private val p = BouncyCastlePrimitives

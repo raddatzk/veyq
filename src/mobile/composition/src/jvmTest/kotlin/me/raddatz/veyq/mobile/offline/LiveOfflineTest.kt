@@ -48,6 +48,8 @@ import kotlin.test.assertTrue
  * taken off the account however the case ends.
  */
 class LiveOfflineTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val liveRun = LiveRun()
 
     @AfterTest

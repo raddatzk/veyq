@@ -57,6 +57,8 @@ import kotlin.time.Duration.Companion.minutes
  * decide it), named "veyq live test (MusicLiveTest)" in its reason.
  */
 class MusicLiveTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val liveRun = LiveRun()
 
     @AfterTest

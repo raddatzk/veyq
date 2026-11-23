@@ -41,10 +41,13 @@ import kotlin.time.Duration.Companion.minutes
  * (`MemoryDownloadFixtureTest`, the web's `exportImport.test.ts`). Everything stays in the throwaway, erased with it.
  */
 class MemoryExportLiveTest {
-    private val liveRun = LiveRun()
+    init { me.raddatz.veyq.mobile.TestApplications.install(MemoriesKinds) }
+
+    /** Each account's devices taken off that account of the throwaway (never the seeded principal's `.run/.env`). */
+    private val runs = mutableMapOf<String, LiveRun>()
 
     @AfterTest
-    fun takeOffTheDevices() = liveRun.removeAll()
+    fun takeOffTheDevices() = runs.values.forEach { it.removeAll() }
 
     private fun sha(b: ByteArray) = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
 
@@ -56,7 +59,7 @@ class MemoryExportLiveTest {
         val root = File(System.getProperty("veyq.repoRoot"))
         runTest(timeout = 6.minutes) {
             suspend fun session(): TenantSession {
-                val a = VeyqAccount.signIn(BouncyCastlePrimitives, origin, t.email(), t.env.getValue("VEYQ_PASSWORD"), t.env.getValue("VEYQ_SECRET_KEY"), liveRun.device()) { block -> HttpClient(OkHttp, block) }
+                val a = VeyqAccount.signIn(BouncyCastlePrimitives, origin, t.email(), t.env.getValue("VEYQ_PASSWORD"), t.env.getValue("VEYQ_SECRET_KEY"), runs.getOrPut("VEYQ") { LiveRun("VEYQ", t.file) }.device()) { block -> HttpClient(OkHttp, block) }
                 return a.open(a.tenants.first { it.domain == domain }).also { it.rekeyRules = AppKinds.rules }
             }
             val tenant = session()

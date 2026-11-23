@@ -47,6 +47,8 @@ import kotlin.test.assertTrue
  * receipt opening. Everything made is trashed and purged, the device taken off the account however the case ends.
  */
 class LiveQueuedTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val accounts by lazy { Throwaway.accounts() }
     private val liveRun by lazy { LiveRun(envFile = accounts.file) }
 

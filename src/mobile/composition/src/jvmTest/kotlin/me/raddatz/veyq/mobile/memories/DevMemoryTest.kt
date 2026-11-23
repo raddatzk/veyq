@@ -30,6 +30,8 @@ import kotlin.test.assertNotNull
  * The principal is `VEYQ_ENV_FILE`'s, or this checkout's `.run/.env`.
  */
 class DevMemoryTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     @Test
     fun makeOrRemoveAMemoryForADevicePass() = runBlocking {
         val origin = System.getenv("VEYQ_LIVE") ?: return@runBlocking

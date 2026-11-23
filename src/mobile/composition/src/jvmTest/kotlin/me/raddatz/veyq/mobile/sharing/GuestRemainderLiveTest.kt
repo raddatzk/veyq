@@ -51,6 +51,8 @@ import kotlin.time.Duration.Companion.minutes
  * - A kept link's page renamed shows its new name; trashed, it is left (`ShellModel.afterRename`/`afterTrash`).
  */
 class GuestRemainderLiveTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val runs = mutableMapOf<String, LiveRun>()
 
     @AfterTest

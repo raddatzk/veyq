@@ -27,6 +27,8 @@ import me.raddatz.veyq.mobile.session.LiveRun
  * uploaded and prints its size and SHA-256, to hold against the original.
  */
 class DepotLiveTest {
+    init { me.raddatz.veyq.mobile.TestApplications.install(DepotKinds) }
+
     /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
     private val liveRun = LiveRun()
 

@@ -32,10 +32,13 @@ import kotlin.time.Duration.Companion.minutes
  * medium to the byte and the banner's picture. The Memory stays in the throwaway, erased with it.
  */
 class MemoryRekeyLiveTest {
-    private val liveRun = LiveRun()
+    init { me.raddatz.veyq.mobile.TestApplications.install(MemoriesKinds) }
+
+    /** Each account's devices taken off that account of the throwaway (never the seeded principal's `.run/.env`). */
+    private val runs = mutableMapOf<String, LiveRun>()
 
     @AfterTest
-    fun takeOffTheDevices() = liveRun.removeAll()
+    fun takeOffTheDevices() = runs.values.forEach { it.removeAll() }
 
     @Test
     fun aMemberUploadPullsADueMemoryForward_theWebsRekeyNoLongerNeeded() {
@@ -47,7 +50,7 @@ class MemoryRekeyLiveTest {
         runTest(timeout = 6.minutes) {
             suspend fun session(who: String): TenantSession {
                 val a = VeyqAccount.signIn(
-                    BouncyCastlePrimitives, origin, t.email(who), t.env.getValue("${who}_PASSWORD"), t.env.getValue("${who}_SECRET_KEY"), liveRun.device(),
+                    BouncyCastlePrimitives, origin, t.email(who), t.env.getValue("${who}_PASSWORD"), t.env.getValue("${who}_SECRET_KEY"), runs.getOrPut(who) { LiveRun(who, t.file) }.device(),
                 ) { block -> HttpClient(OkHttp, block) }
                 return a.open(a.tenants.first { it.domain == domain }).also { it.rekeyRules = AppKinds.rules }
             }

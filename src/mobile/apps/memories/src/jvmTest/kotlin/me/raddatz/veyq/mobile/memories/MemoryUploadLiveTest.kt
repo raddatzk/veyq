@@ -32,6 +32,8 @@ import me.raddatz.veyq.mobile.session.LiveRun
  * Both stay, for the web's gallery and lightbox to show.
  */
 class MemoryUploadLiveTest {
+    init { me.raddatz.veyq.mobile.TestApplications.install(MemoriesKinds) }
+
     /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
     private val liveRun = LiveRun()
 

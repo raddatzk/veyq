@@ -22,6 +22,8 @@ import me.raddatz.veyq.mobile.session.LiveRun
  * to its listed size; each file's SHA-256 is printed, to hold against what the guest dropped.
  */
 class DropBoxLiveTest {
+    init { me.raddatz.veyq.mobile.TestApplications.install(DepotKinds) }
+
     /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
     private val liveRun = LiveRun()
 

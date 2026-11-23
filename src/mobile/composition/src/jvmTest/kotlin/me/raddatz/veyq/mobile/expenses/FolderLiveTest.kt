@@ -33,6 +33,8 @@ import me.raddatz.veyq.mobile.session.LiveRun
  * after unless `VEYQ_LIVE_COPY_KEEP` is set.
  */
 class FolderLiveTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
     private val liveRun = LiveRun()
 

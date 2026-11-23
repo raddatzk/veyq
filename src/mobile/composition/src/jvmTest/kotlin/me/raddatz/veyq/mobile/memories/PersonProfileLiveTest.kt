@@ -43,6 +43,8 @@ import kotlin.test.assertTrue
  * and purged, the store wiped and every device taken off the account however the case ends.
  */
 class PersonProfileLiveTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val liveRun = LiveRun()
 
     @AfterTest

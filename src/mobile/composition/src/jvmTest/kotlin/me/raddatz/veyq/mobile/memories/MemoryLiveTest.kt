@@ -25,6 +25,8 @@ import me.raddatz.veyq.mobile.session.LiveRun
  * back, and the two must be the same bytes (a video's playback reads it so).
  */
 class MemoryLiveTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     /** Every device this case signs in with, taken off the account again after it, whatever it came to. */
     private val liveRun = LiveRun()
 

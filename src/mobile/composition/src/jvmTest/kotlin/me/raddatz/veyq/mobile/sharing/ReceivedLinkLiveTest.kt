@@ -42,6 +42,8 @@ import kotlin.time.Duration.Companion.minutes
  * the personal space and reads it back. Every request the guest's client sent is searched for `K_share`.
  */
 class ReceivedLinkLiveTest {
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
     private val runs = mutableMapOf<String, LiveRun>()
 
     @AfterTest

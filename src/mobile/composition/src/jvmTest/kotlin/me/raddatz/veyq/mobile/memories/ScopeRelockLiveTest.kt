@@ -29,12 +29,20 @@ import kotlin.time.Duration.Companion.minutes
  * opened anew, then reads the space and the Memory's gallery under the new key, and its upload into the Memory pulls the
  * Memory's re-key forward and lands. A fresh session reads both photos to the byte. The Memory stays in the throwaway,
  * erased with it.
+ *
+ * It runs in `:composition`, over every application: a new lock re-seals every root entry of the space, whatever
+ * application owns it, so a throwaway whose space already holds another application's node (a Pot, a Depot file — left by
+ * a browser pass or another live case) cannot be relocked by Memories composed alone (measured 2026-11-23 in
+ * `:apps:memories`: `scope rekey: no slug rule for the kind EXPENSES_POT`).
  */
 class ScopeRelockLiveTest {
-    private val liveRun = LiveRun()
+    init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
+
+    /** Each account's devices taken off that account of the throwaway (never the seeded principal's `.run/.env`). */
+    private val runs = mutableMapOf<String, LiveRun>()
 
     @AfterTest
-    fun takeOffTheDevices() = liveRun.removeAll()
+    fun takeOffTheDevices() = runs.values.forEach { it.removeAll() }
 
     @Test
     fun anOpenSessionReadsAndUploadsAcrossAnotherDevicesNewLock() {
@@ -46,7 +54,7 @@ class ScopeRelockLiveTest {
         runTest(timeout = 6.minutes) {
             suspend fun session(): TenantSession {
                 val a = VeyqAccount.signIn(
-                    BouncyCastlePrimitives, origin, t.email(), t.env.getValue("VEYQ_PASSWORD"), t.env.getValue("VEYQ_SECRET_KEY"), liveRun.device(),
+                    BouncyCastlePrimitives, origin, t.email(), t.env.getValue("VEYQ_PASSWORD"), t.env.getValue("VEYQ_SECRET_KEY"), runs.getOrPut("VEYQ") { LiveRun("VEYQ", t.file) }.device(),
                 ) { block -> HttpClient(OkHttp, block) }
                 return a.open(a.tenants.first { it.domain == domain }).also { it.rekeyRules = AppKinds.rules }
             }
