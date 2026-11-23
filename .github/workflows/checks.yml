@@ -75,7 +75,7 @@ jobs:
         run: |
           shopt -s nullglob
           python3 -m venv .venv
-          .venv/bin/pip install --quiet pyyaml
+          .venv/bin/pip install --quiet --require-hashes --only-binary :all: -r scripts/requirements-release.txt
           count=0
           for f in scripts/validate_*.py; do
             if [ "$f" = "scripts/validate_guard_gaps.py" ]; then
@@ -115,6 +115,54 @@ jobs:
       # (scripts/dependabot_follow.py): proven on every commit that could change it, before its next push.
       - name: Dependabot follow self-test
         run: .venv/bin/python scripts/dependabot_follow_selftest.py
+
+      # What Renovate's postUpgradeTasks write beside a bump (scripts/pin_follow.py: Helm's SHA-256, the OpenAPI
+      # generator JAR's, PyYAML's hashes) and the release pages it refuses, offline: proven before a bump runs it.
+      - name: Pin follow self-test
+        run: .venv/bin/python scripts/pin_follow_selftest.py
+
+      # The `pins` job's verdicts (scripts/pin_inventory.py) on synthetic trees and reports: a pin of each shape
+      # unreached, skipped or without a version is red, a derived one follows its partner.
+      - name: Pin inventory self-test
+        run: .venv/bin/python scripts/pin_inventory_selftest.py
+
+  # Every pin has an updater (ADR 0158 decision 1): Renovate extracts every dependency it reaches from this checkout,
+  # and scripts/pin_inventory.py is red on a pin found by shape that no manager extracted, or one with no version.
+  # Renovate is the image renovate.yml runs (read from that file, so it is pinned once), in its extract-only dry run on
+  # the `local` platform: no token, no lookup, nothing written but the report. The checkout is mounted read-only. The
+  # image's user (uid 12021) is not the runner's, so the report goes to a directory of its own that it may write, and
+  # git is told the checkout is safe: refused as another user's repository, Renovate would glob the files instead of
+  # listing the tracked ones. `RENOVATE_GITHUB_TOKEN_WARN=false`: without a token Renovate marks every dependency
+  # looked up on GitHub `github-token-required`, a fact about this run, not about the config (an extraction needs no
+  # lookup; measured 2026-11-23, every action and Helm carried it).
+  pins:
+    name: Every pin has an updater
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Extract every dependency with Renovate
+        run: |
+          set -euo pipefail
+          image="$(python3 scripts/pin_inventory.py --renovate-image)"
+          report_dir="${RUNNER_TEMP}/renovate-report"
+          mkdir -p "$report_dir"
+          chmod 777 "$report_dir"
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/usr/src/app:ro" -v "${report_dir}:/report" -w /usr/src/app \
+            -e LOG_LEVEL=info \
+            -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/usr/src/app \
+            -e RENOVATE_PLATFORM=local -e RENOVATE_DRY_RUN=extract \
+            -e RENOVATE_ONBOARDING=false -e RENOVATE_REQUIRE_CONFIG=required -e RENOVATE_GITHUB_TOKEN_WARN=false \
+            -e RENOVATE_REPORT_TYPE=file -e RENOVATE_REPORT_PATH=/report/renovate-report.json \
+            "$image" renovate
+
+      - name: Compare the pins with the extraction
+        run: python3 scripts/pin_inventory.py --report "${RUNNER_TEMP}/renovate-report/renovate-report.json"
 
   backend:
     name: Backend checks
@@ -336,7 +384,7 @@ jobs:
       - name: Chart checks
         run: |
           python3 -m venv "${RUNNER_TEMP}/chart-venv"
-          "${RUNNER_TEMP}/chart-venv/bin/pip" install --quiet pyyaml
+          "${RUNNER_TEMP}/chart-venv/bin/pip" install --quiet --require-hashes --only-binary :all: -r scripts/requirements-release.txt
           "${RUNNER_TEMP}/chart-venv/bin/python" scripts/chart_meta_check.py
 
       # What `veyqctl init --gitops` writes (ADR 0126) rendered with this Helm against this tree's chart AND the newest
@@ -962,7 +1010,7 @@ jobs:
       - name: Set up the orchestrator's Python
         run: |
           python3 -m venv "${RUNNER_TEMP}/stack-venv"
-          "${RUNNER_TEMP}/stack-venv/bin/pip" install --quiet pyyaml
+          "${RUNNER_TEMP}/stack-venv/bin/pip" install --quiet --require-hashes --only-binary :all: -r scripts/requirements-release.txt
 
       - name: Set up Docker Buildx
         if: needs.version.outputs.kind != 'stage'
@@ -1228,6 +1276,7 @@ jobs:
     timeout-minutes: 5
     needs:
       - guards
+      - pins
       - backend
       - backend-races
       - frontend
@@ -1243,6 +1292,7 @@ jobs:
     if: >-
       always()
       && needs.guards.result == 'success'
+      && needs.pins.result == 'success'
       && needs.backend.result == 'success'
       && needs.backend-races.result == 'success'
       && needs.frontend.result == 'success'

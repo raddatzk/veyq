@@ -57,7 +57,8 @@ The following are gone at the end:
     becomes LTS on 2027-10-20. dependabot.yml's rule held 27 back as odd, which was wrong.
   - ~~Whether Renovate reads `packageManager` for pnpm.~~ It does: the dry run proposed `pnpm` 12.16.1 → 12.21.0 in
     `package.json` and `site/package.json` (depType `packageManager`). The other pnpm sites still need phase 3.
-  - Whether `helm-values` takes a `repo:tag@sha256` value. If it does not, a regex manager with `currentDigest` does.
+  - ~~Whether `helm-values` takes a `repo:tag@sha256` value.~~ Not needed: one regex manager with `currentDigest` reads
+    the chart's values and the Python image constants alike (phase 3).
 - **Owner-only steps:**
   - creating the App and storing its key (phase 1);
   - switching on, in the repository settings, anything phase 5 cannot set from a file.
@@ -153,7 +154,7 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
   (`gh api repos/raddatzk/veyq/actions/runs/<id>/logs`) holds all of it. Two warnings, both for later phases: the
   Gradle wrapper's files are not regenerated, because `gradleWrapper` is not in `allowedUnsafeExecutions` (phase 3);
   and branch protection cannot be read without administration, which Renovate handles as foreseen in phase 1.
-- [ ] **3 every pin reached.**
+- [x] **3 every pin reached.**
   - Custom managers for each unreached pin.
   - `pin_follow.py` with its self-test: the Helm SHA-256, checked three ways as the Helm pin's comment does (the
     `.sha256sum` file, the tarball's hash, the release notes); `lock.py`; `build.py --write`.
@@ -167,6 +168,21 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
   · Done when: the dry run extracts every pin `pin_inventory.py` finds. A pin added without a manager turns `pins` red,
   and so does one added without a version (two bites). Forcing Helm back to v4.0.1 on a scratch branch makes the dry run
   propose v4.3.2 with the matching SHA-256 in all three workflows.
+
+  Built 2026-11-23. Measured with the pinned Renovate image on the branch's tree:
+  - `pin_inventory.py` against Renovate's extract report: `297 pins in 42 files, every one reached by Renovate`. Its
+    first run was red on three catalog versions only build code reads (`java`, `opentelemetry`, `mariadb-jdbc`);
+    three regex managers reach them now.
+  - Bites, each a real extract: a new `KUBECONFORM_VERSION`/`_SHA256` pair in a workflow `env:` was red on both lines;
+    `pip install requests` in a workflow was red as versionless; a new `PROBE_IMAGE` constant from a registry no
+    manager reads and a `pip install requests==2.32.0` were red as unreached.
+  - Helm forced back to v4.0.1 in a copy: the lookup proposed v4.3.2 for all three workflows, in the one branch
+    `renovate/helm`. The SHA-256 is `pin_follow.py helm`'s: run on a copy at v4.1.4 it wrote `70b2c30a…` into all
+    three, the same from get.helm.sh's `.sha256sum`, the tarball and the release notes. That Renovate itself runs the
+    task is seen only in a run on GitHub: after the merge, a dispatch's dry run has the generator's 7.27.0 and
+    PyYAML's 6.0.4 to propose, each with its task.
+  - `pin_follow_selftest.py` (31 cases) and `pin_inventory_selftest.py` run in `Checks`' `guards` job, each bitten by
+    breaking one of its checks.
 - [ ] **4 the guards take over the follow's rules.**
   - The append-only check on `verification-metadata.xml` becomes a guard.
   - The Playwright match is completed in `validate_image_pins.py`.
@@ -224,6 +240,23 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
 - **2026-11-23, phase 2.** Found reached in the dry run, so phase 3 has less to do: the root Gradle wrapper
   (`gradle-wrapper`), `tests/fuzz/Dockerfile` (`dockerfile`), setup-node's and setup-java's versions and
   `cosign-release` (`github-actions`, depType `uses-with`), and `pnpm` in `packageManager`.
+
+- **2026-11-23, phase 3.** The five bare `pip install pyyaml` install from `scripts/requirements-release.txt`, hashed,
+  like the jobs with write permissions: PyYAML has one pin, which `pip_requirements` reads, and `pin_follow.py
+  pypi-hashes` rewrites its hashes on a bump.
+- **2026-11-23, phase 3.** `tests/fuzz/requirements.txt` is in `ignorePaths`: it is written whole by `lock.py`, and
+  Renovate read as requirements would bump each transitive package alone. Its one input, `SCHEMATHESIS` in `lock.py`,
+  has a regex manager. Running `lock.py` as a postUpgradeTask needs the Dockerfile's Python 3.13 image, so a
+  Schemathesis bump has no follow-up yet; the same holds for libwebp's and Emscripten's `build.py --write`. Both are
+  phase 5's, before those ecosystems leave the dry run.
+- **2026-11-23, phase 3.** `gradleWrapper` stays out of `allowedUnsafeExecutions`: it would run the repository's
+  Gradle, with the build's plugins, in the job that holds the App's token. Phase 5 measures whether a wrapper bump
+  without it (properties only) is green, and if not, a `Checks`-side regeneration comes before an exception.
+- **2026-11-23, phase 3.** Renovate's own version is a regex manager on `renovate.yml` (the github-actions manager
+  refuses `<version>@<digest>`), grouped with the actions; `pins` reads the image from that one line.
+- **2026-11-23, phase 3.** `pins` runs in `checks.yml`, so a docs-only or site-only commit does not run it (the
+  workflow's `paths-ignore`). A site-only change can touch `site/package.json`; its pins are checked by the next
+  commit that runs `Checks`. Accepted: no new shape lives only under `site/`.
 
 ## Definition of done
 
