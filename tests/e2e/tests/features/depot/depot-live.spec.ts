@@ -127,13 +127,15 @@ test(
       const tab = dropper.page
       await tab.goto(dropLink)
       await expect(tab.getByRole('heading', { name: 'Send files' })).toBeVisible({ timeout: 60_000 })
-      await tab.getByLabel('Your name').fill(recordTyped(dropperName))
-      await tab.getByRole('button', { name: 'Continue', exact: true }).click()
+      // The picker is offered at once; the name is asked at the first pick, in the shell's naming dialog.
       const chooser = tab.waitForEvent('filechooser')
       await tab.getByRole('button', { name: 'Choose files', exact: true }).click()
       await (await chooser).setFiles({
         name: recordTyped(dropped[i]), mimeType: 'application/octet-stream', buffer: Buffer.from(bytes(60_000 + i)),
       })
+      const naming = tab.getByRole('dialog', { name: 'What is your name?' })
+      await naming.getByLabel('Your name').fill(recordTyped(dropperName))
+      await naming.getByRole('button', { name: 'Continue' }).click()
       await expect(tab.getByText(/^Sent · /)).toBeVisible({ timeout: 60_000 })
       await expect(page.getByText(i === 0 ? '1 person' : '2 people', { exact: true })).toBeVisible({ timeout: LIVE })
     }
@@ -171,12 +173,16 @@ test(
     const tab = latecomer.page
     await tab.goto(dropLink)
     await expect(tab.getByRole('heading', { name: 'Send files' })).toBeVisible({ timeout: 60_000 })
-    await tab.getByLabel('Your name').fill(recordTyped(lateName))
-    await tab.getByRole('button', { name: 'Continue', exact: true }).click()
     for (const [i, name] of lateFiles.entries()) {
       const chooser = tab.waitForEvent('filechooser')
       await tab.getByRole('button', { name: 'Choose files', exact: true }).click()
       await (await chooser).setFiles({ name: recordTyped(name), mimeType: 'application/octet-stream', buffer: Buffer.from(bytes(50_000 + i)) })
+      if (i === 0) {
+        // The first pick asks the name, in the shell's naming dialog; the second is sent under it without asking.
+        const naming = tab.getByRole('dialog', { name: 'What is your name?' })
+        await naming.getByLabel('Your name').fill(recordTyped(lateName))
+        await naming.getByRole('button', { name: 'Continue' }).click()
+      }
       await expect(tab.getByText(/^Sent · /)).toHaveCount(i + 1, { timeout: 60_000 })
       // Its first file brings the guest's folder onto the open page, its second counts there.
       await expect(late).toContainText(i === 0 ? '1 file' : '2 files', { timeout: LIVE })

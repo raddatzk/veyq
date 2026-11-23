@@ -22,8 +22,9 @@
 //     cr-files-application moved out of `memory.css`), computed in light and dark. memories-styles.spec.ts reads
 //     Memories' sheet and depot-styles.spec.ts the PDF text layer; neither reads these. A token's value is never spelled
 //     here: a probe element given the same declaration gives the expected value.
-//  7. A drop-box guest's page on reload: before the first file the name is not kept (a reload asks again); after it, the
-//     stored session (localStorage) brings the page back as that guest, "Not you?" offered, and the next file lands in
+//  7. A drop-box guest's page on reload: before the first pick the page asks no name and keeps nothing; the first pick
+//     asks the name in the shell's naming dialog and makes the identity at once; from then on the stored session
+//     (localStorage) brings the page back as that guest, "Not you?" offered, and the next file lands in
 //     the same folder — a name sent before the reload is refused there ("you already sent a file with this name"). A
 //     switched-off link refuses the next file with its own message, and keeps what arrived.
 //
@@ -746,7 +747,7 @@ test(
 // --- 7. a drop-box guest's page on reload ----------------------------------------------------------------------------
 
 test(
-  "a drop-box guest's page on reload: the name is kept from the first file on, and the next file lands in the same folder",
+  "a drop-box guest's page on reload: the name, asked at the first pick, is kept from then on, and the next file lands in the same folder",
   { tag: ['@uc.depot.drop-box:one-folder-per-guest-identity', '@uc.depot.drop-box:revoking-the-link-keeps-everything'] },
   async ({ browser }) => {
     const { page } = member
@@ -758,28 +759,28 @@ test(
     const tab = guest.page
     const heading = tab.getByRole('heading', { name: 'Send files' })
     const nameField = tab.getByLabel('Your name')
+    const naming = tab.getByRole('dialog', { name: 'What is your name?' })
     const named = tab.getByText(`You are here as ${dropper}.`, { exact: true })
     await tab.goto(dropLink)
     await expect(heading).toBeVisible({ timeout: 60_000 })
 
-    // Named, nothing sent: nothing is kept, so a reload asks again.
-    await nameField.fill(recordTyped(dropper))
-    await tab.getByRole('button', { name: 'Continue', exact: true }).click()
-    await expect(named).toBeVisible()
-    expect(await storedSessions(tab), 'no session before the first file').toEqual([])
-    await tab.reload()
-    await expect(heading).toBeVisible({ timeout: 60_000 })
-    await expect(nameField).toBeVisible()
+    // Before any pick: the picker is offered at once, no name is asked on the page, and nothing is kept.
+    await expect(tab.getByRole('button', { name: 'Choose files', exact: true })).toBeVisible()
+    await expect(nameField).toHaveCount(0)
     await expect(named).toHaveCount(0)
+    expect(await storedSessions(tab), 'no session before the first pick').toEqual([])
 
-    // The first file makes the identity and its folder; the session is kept on this device from then on.
-    await nameField.fill(recordTyped(dropper))
-    await tab.getByRole('button', { name: 'Continue', exact: true }).click()
+    // The first pick asks the name in the shell's naming dialog; saving it makes the identity, and the file is sent into
+    // its folder. The session is kept on this device from then on.
     await sendOnDropPage(tab, dropped[0], 40_000)
+    await naming.getByLabel('Your name').fill(recordTyped(dropper))
+    await naming.getByRole('button', { name: 'Continue' }).click()
+    await expect(naming).toBeHidden()
+    await expect(named).toBeVisible()
     await expect(tab.getByText(/^Sent · /)).toHaveCount(1, { timeout: 60_000 })
     expect(await storedSessions(tab)).toHaveLength(1)
 
-    // Reloaded: the stored session, not the form; the session's list was this page's own and is gone.
+    // Reloaded: the stored session, no name asked; the session's list was this page's own and is gone.
     await tab.reload()
     await expect(heading).toBeVisible({ timeout: 60_000 })
     await expect(named).toBeVisible()

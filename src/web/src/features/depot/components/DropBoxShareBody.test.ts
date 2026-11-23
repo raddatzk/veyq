@@ -33,6 +33,7 @@ import { ShareRole, type PublicShare } from '../../../api/generated/sharing'
 import { realI18n } from '../../../test/i18n'
 import { formatBytes } from '../../../shared/formatBytes'
 import { mountConfirmDialog } from '../../../test/confirmDialog'
+import type { GuestAccess } from '../../../core/access'
 import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 
@@ -66,6 +67,8 @@ function fakeJob(file: File) {
 
 beforeEach(() => {
   if (confirmRequest.value) settleConfirm(false)
+  asked = []
+  answer = () => new Promise(() => {}) // never answered unless the test answers
   clearUploads()
   runs.clear()
   outcome = async () => ({ nodeId: 'n' })
@@ -78,9 +81,20 @@ beforeEach(() => {
   vi.mocked(guestFileUploadJob).mockReset().mockImplementation((_t, file) => fakeJob(file))
 })
 
+// The shell's one naming dialog, as the page reaches it (`GuestAccess.requestGuest`): each question recorded, answered by
+// the test — a name (`make` runs under it, as the dialog's save does), or null (the guest cancelled).
+type Make = Parameters<GuestAccess['requestGuest']>[0]
+let asked: Make[]
+let answer: (make: Make) => ReturnType<GuestAccess['requestGuest']>
+const named = (name: string) => (make: Make) => (make ? make(name) : Promise.resolve(null))
+const requestGuest: GuestAccess['requestGuest'] = (make) => {
+  asked.push(make)
+  return answer(make)
+}
+
 function mountPage(reload: () => Promise<void> = async () => {}, head: PublicShareHead = HEAD) {
   return mount(DropBoxShareBody, {
-    props: { shareId: SHARE, fragmentKey: 'frag', pwToken: undefined, head, reload, access: guestAccessFor(head) },
+    props: { shareId: SHARE, fragmentKey: 'frag', pwToken: undefined, head, reload, access: guestAccessFor(head, { requestGuest }) },
     global: { plugins: [realI18n()] },
   })
 }
@@ -203,70 +217,81 @@ describe('DropBoxShareBody: what became of every file (inbox #381)', () => {
   })
 })
 
-describe('DropBoxShareBody: whose session this is (inbox #385 a)', () => {
+describe('DropBoxShareBody: the name asked at the first pick (inbox #1090), whose session this is (inbox #385 a)', () => {
   const ANNA: DropGuestSession = { ...SESSION, displayName: 'Anna' }
   const BEN: DropGuestSession = { identityId: 'id-2', contributorToken: 'tok-2', identityKey: 'a2V5Mg==', displayName: 'Ben' }
   const notYou = (w: Page) => w.find('button.guest-naming-not-you')
-  async function name(w: Page, who: string) {
-    await w.find('input').setValue(who)
-    await w.find('form').trigger('submit')
-    await flushPromises()
-  }
 
-  // Inbox #385 (a): a visitor who names itself and leaves leaves nothing on the server — no identity, no folder.
-  it('naming makes no identity and no folder; the first file makes both, under the name the guest gave', async () => {
+  it('an unnamed guest sees no name form, only the picker; nothing is asked and nothing made before a pick', async () => {
+    vi.mocked(loadDropGuest).mockReturnValue(null)
+    const w = mountPage()
+    await flushPromises()
+    expect(w.find('form').exists(), 'no name form in the page').toBe(false)
+    expect(w.find('.guest-naming-input').exists()).toBe(false)
+    expect(w.find('.guest-naming-identity').exists(), 'no session line before a name').toBe(false)
+    expect(w.find('input.dropbox-picker').exists(), 'the picker at once').toBe(true)
+    expect(asked).toEqual([])
+    expect(nameDropGuest).not.toHaveBeenCalled()
+  })
+
+  it('the first pick asks the name through the shell\'s dialog; its answer makes the identity and the folder, under that name', async () => {
     vi.mocked(loadDropGuest).mockReturnValue(null)
     vi.mocked(nameDropGuest).mockResolvedValue(ANNA)
+    answer = named('Anna')
     const w = mountPage()
-    await name(w, 'Anna')
-    expect(nameDropGuest, 'no identity for a guest who sent nothing').not.toHaveBeenCalled()
-    expect(saveDropGuest).not.toHaveBeenCalled()
-    expect(ensureDropFolder, 'no folder for a guest who sent nothing').not.toHaveBeenCalled()
-    expect(w.text(), 'the page says whose it is already').toContain(t('share.guest.as', { name: 'Anna' }))
     await pick(w, 'a.pdf', 'b.pdf')
+    expect(asked, 'asked once, with this page\'s own identity as what the name makes').toHaveLength(1)
+    expect(asked[0]).toBeTypeOf('function')
     expect(vi.mocked(nameDropGuest).mock.calls).toEqual([[HEAD, { name: 'Anna', pwToken: undefined }]])
     expect(saveDropGuest).toHaveBeenCalledWith(expect.objectContaining({ shareId: SHARE, apiBase: '' }), ANNA) // the link where it lives (ADR 0121)
     expect(ensureDropFolder).toHaveBeenCalledOnce()
     expect(vi.mocked(ensureDropFolder).mock.calls[0][1]).toEqual(ANNA)
     expect(vi.mocked(ensureDropFolder).mock.calls[0][2]).toBe('Anna')
+    expect(w.text(), 'the page says whose it is').toContain(t('share.guest.as', { name: 'Anna' }))
     await settled(w, 2)
     await pick(w, 'c.pdf')
+    expect(asked, 'named, a later pick asks nothing').toHaveLength(1)
     expect(nameDropGuest, 'one identity for every later file').toHaveBeenCalledOnce()
     await settled(w, 3)
   })
 
-  it('a second pick while the first is still creating the identity makes no second identity', async () => {
+  it('declined, nothing is made, nothing sent and nothing said — and the next pick asks again', async () => {
     vi.mocked(loadDropGuest).mockReturnValue(null)
-    let resolveName: (s: DropGuestSession) => void = () => {}
-    vi.mocked(nameDropGuest).mockReturnValue(new Promise((r) => (resolveName = r)))
+    answer = async () => null
     const w = mountPage()
-    await name(w, 'Anna')
     await pick(w, 'a.pdf')
-    expect(notYou(w).attributes('disabled'), '"Not you?" waits while the identity is made').toBeDefined()
+    expect(asked).toHaveLength(1)
+    expect(nameDropGuest).not.toHaveBeenCalled()
+    expect(ensureDropFolder).not.toHaveBeenCalled()
+    expect(guestFileUploadJob).not.toHaveBeenCalled()
+    expect(rows(w)).toEqual([])
+    expect(w.find('.veyq-message').exists(), 'nothing said').toBe(false)
+    expect(w.find('.guest-naming-identity').exists()).toBe(false)
+    await pick(w, 'a.pdf')
+    expect(asked).toHaveLength(2)
+  })
+
+  it('a second pick while the first is still asking asks no second time and makes no second identity', async () => {
+    vi.mocked(loadDropGuest).mockReturnValue(null)
+    vi.mocked(nameDropGuest).mockResolvedValue(ANNA)
+    let give: (name: string) => void = () => {}
+    answer = (make) => new Promise((resolve) => (give = (name) => resolve(make!(name))))
+    const w = mountPage()
+    await pick(w, 'a.pdf')
     await pick(w, 'b.pdf')
-    resolveName(ANNA)
+    give('Anna')
     await settled(w, 2)
+    expect(asked).toHaveLength(1)
     expect(nameDropGuest).toHaveBeenCalledOnce()
   })
 
-  it('"Not you?" before anything was sent asks nothing and forgets the name', async () => {
-    vi.mocked(loadDropGuest).mockReturnValue(null)
-    const w = mountPage()
-    await name(w, 'Anna')
-    await notYou(w).trigger('click')
-    await flushPromises()
-    expect(confirmRequest.value, 'nothing to lose, nothing asked').toBeNull()
-    expect(w.find('form').exists(), 'the name form again').toBe(true)
-    expect(w.text()).not.toContain('Anna')
-    expect(nameDropGuest).not.toHaveBeenCalled()
-  })
-
-  it('a reload says whose session it is; "Not you?" forgets it and asks for a name, without the files sent before', async () => {
+  it('a reload says whose session it is; "Not you?" asks first, forgets it, and the next pick asks for a name again', async () => {
     vi.mocked(loadDropGuest).mockReturnValue(ANNA)
     const w = mountPage()
     expect(w.text()).toContain(t('share.guest.as', { name: 'Anna' }))
     await pick(w, 'annas.pdf')
     await settled(w, 1)
+    expect(asked, 'a saved session is asked nothing').toEqual([])
     expect(vi.mocked(ensureDropFolder).mock.calls[0][2], 'after a reload the folder is named from the session').toBe('Anna')
     expect(notYou(w).text()).toBe(t('share.guest.notYou'))
 
@@ -284,15 +309,17 @@ describe('DropBoxShareBody: whose session this is (inbox #385 a)', () => {
     dialog.click(t('share.guest.notYouAccept'))
     await flushPromises()
     expect(forgetDropGuest).toHaveBeenCalledWith(expect.objectContaining({ shareId: SHARE, apiBase: '' }))
-    expect(w.find('form').exists(), 'the name form again').toBe(true)
+    expect(w.find('.guest-naming-identity').exists(), 'no line once forgotten').toBe(false)
+    expect(w.find('form').exists(), 'no name form either: the next pick asks').toBe(false)
     expect(w.text()).not.toContain('Anna')
+    expect(w.text(), 'the next visitor does not see what Anna sent').not.toContain('annas.pdf')
 
     vi.mocked(nameDropGuest).mockResolvedValue(BEN)
     vi.mocked(ensureDropFolder).mockClear()
-    await name(w, 'Ben')
-    expect(w.text()).toContain(t('share.guest.as', { name: 'Ben' }))
-    expect(w.text(), 'the next visitor does not see what Anna sent').not.toContain('annas.pdf')
+    answer = named('Ben')
     await pick(w, 'bens.pdf')
+    expect(asked).toHaveLength(1)
+    expect(w.text()).toContain(t('share.guest.as', { name: 'Ben' }))
     expect(vi.mocked(ensureDropFolder).mock.calls[0][1], 'a new identity, a new folder').toEqual(BEN)
     await settled(w, 1)
   })
@@ -323,32 +350,40 @@ describe('DropBoxShareBody: whose session this is (inbox #385 a)', () => {
     expect(reload).toHaveBeenCalledOnce()
     expect(confirmRequest.value, 'no question after a gone link').toBeNull()
     expect(forgetDropGuest).toHaveBeenCalledWith(expect.objectContaining({ shareId: SHARE, apiBase: '' }))
-    expect(w.find('form').exists()).toBe(true)
+    expect(w.find('input.dropbox-picker').exists(), 'the picker again; its pick asks a new name').toBe(true)
     expect(w.text()).not.toContain(t('depot.dropBox.guestGone'))
   })
 
-  it('refused before any session (the link is gone at its first file): the gone state, no picker, no session kept', async () => {
+  it('refused at the name (the link is gone at its first pick): the dialog closes, the gone state, no session kept', async () => {
     vi.mocked(loadDropGuest).mockReturnValue(null)
     vi.mocked(nameDropGuest).mockRejectedValue(http(404, 'share_not_found'))
+    let made: unknown = 'unanswered'
+    answer = async (make) => (made = await make!('Anna'))
     const w = mountPage()
-    await name(w, 'Anna')
     await pick(w, 'a.pdf')
+    expect(made, 'what the name made: nothing, so the dialog closes').toBeNull()
     expect(w.text()).toContain(t('depot.dropBox.guestGone'))
     expect(w.find('input.dropbox-picker').exists()).toBe(false)
     expect(saveDropGuest).not.toHaveBeenCalled()
     expect(ensureDropFolder).not.toHaveBeenCalled()
-    expect(notYou(w).text()).toBe(t('depot.dropBox.guestStartOver'))
   })
 })
 
 describe('DropBoxShareBody: the guest-write record (uc.depot.drop-box A4b)', () => {
   const notice = (w: Page) => w.find('[data-testid="guest-write-record-notice"]')
 
-  it('tells a guest before its first file, with the N the resolve served, and the objection on its own', async () => {
+  // Before its first file the notice comes with the name, in the shell's dialog (`GuestNaming`'s `dialog` shape, inbox
+  // #1090): the page's body says nothing of a record that holds nothing of this visitor yet.
+  it('says nothing in the body before the guest named itself (the dialog tells it, with the name)', async () => {
     vi.mocked(loadDropGuest).mockReturnValue(null)
     const w = mountPage()
     await flushPromises()
-    expect(w.find('.guest-naming-input').exists(), 'the name form, before any file').toBe(true)
+    expect(notice(w).exists()).toBe(false)
+  })
+
+  it('keeps telling a named guest beside its session line, with the N the resolve served', async () => {
+    const w = mountPage()
+    await flushPromises()
     expect(notice(w).find('.guest-write-record-kept').text()).toBe(t('share.guest.recordKept', { days: 7 }, 7))
     expect(notice(w).find('.guest-write-record-objection').text()).toBe(t('share.guest.recordObjection'))
   })

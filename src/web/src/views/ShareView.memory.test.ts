@@ -320,19 +320,60 @@ describe('a Memory link is the member\'s Memory detail (inbox #401 S5)', () => {
     w.unmount()
   })
 
-  it('WRITE_ONLY: the drop page tells the guest before its first photo what is kept, for the N served (uc.sharing.share-uploader A3)', async () => {
+  /** A photo picked on the drop page (the picker's first read is at once). */
+  async function pickPhoto(w: Page) {
+    const input = w.find('input[type="file"]')
+    Object.defineProperty(input.element, 'files', { value: [new File(['x'], 'a.jpg', { type: 'image/jpeg' })], configurable: true })
+    await input.trigger('change')
+    await flushPromises()
+  }
+  const namingDialog = (w: Page) => w.find('.dialog-stub.guest-naming')
+
+  // Inbox #1090 (ADR 0154 decision 1): the uploader's name is asked at its first pick, in the shell's one naming dialog —
+  // the one a READ_WRITE guest's write asks in —, never by a form in the page's body.
+  it('WRITE_ONLY: no name form in the page; the first pick asks in the shell\'s dialog, which tells what is kept, for the N served (uc.sharing.share-uploader A3)', async () => {
+    const { createShareIdentity } = stubApi(publicSharesApi, { createShareIdentity: { identityId: 'id-new', contributorToken: 'tok-new' } })
     const w = await mountPage(head(ShareRole.WriteOnly, { recordDays: 14 }))
-    const notice = w.find('.share-name-card [data-testid="guest-write-record-notice"]')
+    expect(w.find('.guest-naming-input').exists(), 'no name form before a pick').toBe(false)
+    expect(namingDialog(w).exists()).toBe(false)
+    await pickPhoto(w)
+    const dialog = namingDialog(w)
+    expect(dialog.find('.header').text()).toBe(t('share.guest.nameTitle'))
+    const notice = dialog.find('[data-testid="guest-write-record-notice"]')
     expect(notice.find('.guest-write-record-kept').text()).toBe(t('share.guest.recordKept', { days: 14 }, 14))
     expect(notice.find('.guest-write-record-objection').text()).toBe(t('share.guest.recordObjection'))
+    await dialog.find('.guest-naming-input').setValue('Ada')
+    await dialog.find('form').trigger('submit')
+    await flushPromises()
+    expect(createShareIdentity, 'the uploader\'s own identity').toHaveBeenCalledOnce()
+    expect(namingDialog(w).exists(), 'named, the dialog closes').toBe(false)
+    expect(loadGuestSession(SHARE)?.displayName).toBe('Ada')
+    await vi.waitFor(() => expect(addSharePhoto, 'the photo goes on under the name').toHaveBeenCalledOnce())
+    expect(w.text()).toContain(t('share.guest.as', { name: 'Ada' }))
     expect(authenticatedCalls).toEqual([])
+    w.unmount()
+  })
+
+  it('WRITE_ONLY: the dialog cancelled, nothing is made, nothing sent and nothing said', async () => {
+    const { createShareIdentity } = stubApi(publicSharesApi, { createShareIdentity: { identityId: 'id-new', contributorToken: 'tok-new' } })
+    const w = await mountPage(head(ShareRole.WriteOnly, { recordDays: 14 }))
+    const before = w.text()
+    await pickPhoto(w)
+    const cancel = namingDialog(w).findAll('button').find((b) => b.text() === t('common.cancel'))!
+    await cancel.trigger('click')
+    await flushPromises()
+    expect(namingDialog(w).exists()).toBe(false)
+    expect(createShareIdentity).not.toHaveBeenCalled()
+    expect(addSharePhoto).not.toHaveBeenCalled()
+    expect(loadGuestSession(SHARE)).toBeNull()
+    expect(w.text(), 'nothing said').toBe(before)
     w.unmount()
   })
 
   it('WRITE_ONLY: the drop page — no tree, no gallery, no member detail', async () => {
     const w = await mountPage(head(ShareRole.WriteOnly))
     expect(w.find('.share-view-unavailable').exists()).toBe(false)
-    expect(w.find('.share-name-card').text()).toContain(t('share.uploaderIntro'))
+    expect(w.find('.share-uploader-intro').text()).toBe(t('share.uploaderIntro'))
     expect(w.find('.memory-detail').exists()).toBe(false)
     expect(w.find('[data-testid="memory-participants"]').exists(), 'no participants on a drop page').toBe(false)
     expect(w.find('.share-folder-bar').exists(), "core's page").toBe(false)

@@ -67,7 +67,7 @@ describe('Access: the two shapes', () => {
     expectTypeOf<GuestAccess['pwToken']>().toEqualTypeOf<string | undefined>()
     expectTypeOf<GuestAccess['head']>().toEqualTypeOf<PublicShareHead>()
     expectTypeOf<GuestAccess['fragmentKey']>().toEqualTypeOf<string>()
-    expectTypeOf<GuestAccess['requestGuest']>().toEqualTypeOf<() => Promise<GuestIdentity | null>>()
+    expectTypeOf<GuestAccess['requestGuest']>().toEqualTypeOf<(make?: (name: string) => Promise<GuestIdentity | null>) => Promise<GuestIdentity | null>>()
     expectTypeOf<GuestAccess['reload']>().toEqualTypeOf<() => Promise<void>>()
     // no member state is reachable from a guest's access
     expectTypeOf<GuestAccess>().not.toHaveProperty('epochs')

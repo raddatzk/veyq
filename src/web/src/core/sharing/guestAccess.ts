@@ -113,7 +113,7 @@ export function guestAccess(fields: {
   head: PublicShareHead
   pwToken?: string
   fragmentKey: string
-  requestGuest: () => Promise<GuestIdentity | null>
+  requestGuest: (make?: (name: string) => Promise<GuestIdentity | null>) => Promise<GuestIdentity | null>
   reload: () => Promise<void>
   poll?: (signal: AbortSignal) => Promise<boolean>
 }): GuestAccess {

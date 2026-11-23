@@ -171,23 +171,40 @@ export function useShareGates(input: ShareGateInput) {
   const naming = ref(false)
   // The views waiting for the guest's identity: resolved once it is named, or with null when the dialog closes unnamed.
   let waiting: ((g: GuestIdentity | null) => void)[] = []
+  // What the open question's name makes, where a WRITE_ONLY link's page makes its own identity (`requestGuest`'s `make`),
+  // and what it made; null: the link's own identity (`nameShareGuest`), read back as the device's session.
+  let making: ((name: string) => Promise<GuestIdentity | null>) | null = null
+  let made: GuestIdentity | null = null
   /** The guest's identity for this link: the device's session, else the visitor names itself first (null: it closed the
-   *  dialog without a name). */
-  function requestGuest(): Promise<GuestIdentity | null> {
-    if (session.value) return Promise.resolve(session.value)
-    naming.value = true
+   *  dialog without a name). With `make` (a WRITE_ONLY page's own identity) the dialog asks whatever the device holds —
+   *  the page asks only when it has none it can write with. One question at a time: a request while the dialog is open
+   *  waits on the same answer. */
+  function requestGuest(make?: (name: string) => Promise<GuestIdentity | null>): Promise<GuestIdentity | null> {
+    if (!make && session.value) return Promise.resolve(session.value)
+    if (!naming.value) {
+      making = make ?? null
+      made = null
+      naming.value = true
+    }
     return new Promise((resolve) => waiting.push(resolve))
   }
   async function nameGuest(name: string) {
+    if (making) {
+      made = await making(name)
+      return
+    }
     const h = head.value
     if (!h) throw new Error('share_not_ready')
     await nameShareGuest(h, { name, fragmentKey: input.fragmentKey(), pwToken: pwToken.value })
   }
   function onNamingClose() {
     naming.value = false
+    const answer = making ? made : session.value
+    making = null
+    made = null
     const all = waiting
     waiting = []
-    for (const w of all) w(session.value)
+    for (const w of all) w(answer)
   }
   /** "Not you?": forget this device's session of the link. */
   function forgetGuest() {

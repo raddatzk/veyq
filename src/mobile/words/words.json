@@ -6592,8 +6592,8 @@
     "de": "Fotos hinzufügen"
   },
   "share_uploader_intro": {
-    "en": "You can add your own photos here. You won’t see what is already here or what others added. First, tell us your name.",
-    "de": "Du kannst hier eigene Fotos hinzufügen. Was schon hier ist und was andere hinzugefügt haben, siehst du nicht. Sag uns zuerst deinen Namen."
+    "en": "You can add your own photos here. You won’t see what is already here or what others added.",
+    "de": "Du kannst hier eigene Fotos hinzufügen. Was schon hier ist und was andere hinzugefügt haben, siehst du nicht."
   },
   "share_uploader_session": {
     "note": "the web's share.uploaderSessionNote, its 'session' the open link in the app (a reload is leaving the link)",
@@ -6612,10 +6612,6 @@
   "share_dropbox_hint": {
     "en": "Your files go to {1}. You cannot see what others sent, and you cannot see your files again here after you leave.",
     "de": "Deine Dateien gehen an {1}. Was andere gesendet haben, siehst du nicht, und deine eigenen Dateien siehst du hier nach dem Verlassen nicht mehr."
-  },
-  "share_dropbox_name_hint": {
-    "en": "The owner sees your files under this name.",
-    "de": "Unter diesem Namen sieht die Person, die den Link geteilt hat, deine Dateien."
   },
   "share_dropbox_pick": {
     "en": "Choose files",
