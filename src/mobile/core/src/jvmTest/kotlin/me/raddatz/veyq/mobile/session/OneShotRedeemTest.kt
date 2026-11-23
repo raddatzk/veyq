@@ -1,6 +1,5 @@
 package me.raddatz.veyq.mobile.session
 
-import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
@@ -24,7 +23,7 @@ import kotlin.test.assertEquals
  * has no pooled connection.
  */
 class OneShotRedeemTest {
-    private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> HttpClient(OkHttp, block) }
+    private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> LiveHttp.client(block) }
 
     /** A server on a free port that reads each request's head and body and closes without answering; the POSTs it saw. */
     private fun dropping(): Pair<Int, AtomicInteger> {

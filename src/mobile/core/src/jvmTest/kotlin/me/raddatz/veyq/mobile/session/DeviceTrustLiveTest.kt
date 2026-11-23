@@ -1,7 +1,5 @@
 package me.raddatz.veyq.mobile.session
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import java.io.File
@@ -34,7 +32,7 @@ class DeviceTrustLiveTest {
     fun takeOffTheDevices() = liveRun.removeAll()
 
     private val p = BouncyCastlePrimitives
-    private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> HttpClient(OkHttp, block) }
+    private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> LiveHttp.client(block) }
     private val bind = "veyq/v1/device-bind".encodeToByteArray()
 
     @Test

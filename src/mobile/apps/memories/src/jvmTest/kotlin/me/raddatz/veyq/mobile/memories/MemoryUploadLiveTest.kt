@@ -1,8 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
 import me.raddatz.veyq.mobile.media.Derivation
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.media.ByteSource
@@ -23,6 +21,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlin.test.AfterTest
 import me.raddatz.veyq.mobile.session.LiveRun
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * A member's upload into a Memory on a running dev instance (`VEYQ_LIVE`): `VEYQ_LIVE_MEMORY_UPLOAD=<memory name>` uploads
@@ -51,7 +50,7 @@ class MemoryUploadLiveTest {
         suspend fun signIn() = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             liveRun.device(),
-        ) { block -> HttpClient(OkHttp, block) }.let { it.open(it.defaultTenant!!) }
+        ) { block -> LiveHttp.client(block) }.let { it.open(it.defaultTenant!!) }
         val tenant = signIn()
         val memory = tenant.nodes().first { it.kind == "MEMORY" && it.name == name }
         val now = System.currentTimeMillis()

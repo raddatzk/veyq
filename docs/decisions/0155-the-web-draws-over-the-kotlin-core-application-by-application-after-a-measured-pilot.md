@@ -752,10 +752,13 @@ Measured before the decision (2026-11-20):
     nothing; the steps; the cap; the page holding no script and the SVG only as an `<img>`), bitten (the unescape removed
     and the open's refusal dropped: three red, restored with `/bin/cp -f`). *Cost:* a web view per SVG on three apps (a
     browser process; on Windows a user-data folder, InPrivate, deleted after); Android steps by the WebView's zoom, pinch
-    included, not exactly the web's steps; Linux draws one raster, so a large SVG far zoomed is coarser than the web's tile.
+    included, not exactly the web's steps. Linux draws only the part in view at each step (inbox #1112): gdk-pixbuf draws
+    an SVG only whole, so the part is cut by the SVG's own root (`file_page.rs`' `svg_clipped`: its `viewBox` set to the
+    part in the SVG's units, its size to the part's pixels) and drawn by the same sandboxed loader, the ×1 picture stretched
+    beneath while a scroll's part is drawn — the cap holds per view, as the web's tile.
     *Left:* Android's hostile-file proof on a device and a committed Apple one (the macOS probe is the session's, no Apple
     test target exists; inbox #1110); iOS's first run (CoreSimulator is out of date here) and every app's click pass
-    (#1111); Linux's region rendering for a far zoom (#1112).
+    (#1111); Linux's pass of a far zoom scrolled (#1112).
 
 - **The media headers' slice** (decision 7.2's fifth, built 2026-11-23, branch `claude/media-headers-slice`). An image's pixel
   size from its header (`media/ImageHeader`, new in the core), a video's display size and capture time from its container

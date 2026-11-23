@@ -2,7 +2,6 @@ package me.raddatz.veyq.mobile.memories
 
 import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -48,6 +47,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * A Memory's date, place and tracks against a running dev instance (ADR 0143 D5, D8, D9; `VEYQ_LIVE`, skipped without one).
@@ -72,7 +72,7 @@ class PlacesLiveTest {
     @AfterTest
     fun takeOffTheDevices() = liveRun.removeAll()
 
-    private val client: (io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> HttpClient(OkHttp, block) }
+    private val client: (io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> LiveHttp.client(block) }
 
     private val root = File(System.getProperty("veyq.repoRoot"))
     private fun fixture(name: String) = File(root, "src/web/src/features/memories/__fixtures__/$name").readBytes()

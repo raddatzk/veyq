@@ -1,7 +1,5 @@
 package me.raddatz.veyq.mobile.bridge
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.runBlocking
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.qr.QrScan
@@ -17,6 +15,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * Device linking through the bridge's calls against a running dev instance (`VEYQ_LIVE`, as the seeded principal from
@@ -137,6 +136,6 @@ class LiveLinkBridgeTest {
                 host.reply(token, wire.encodeToString(HostReply.serializer(), reply))
             }
         }
-        return Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config(device), HostStore(host), { NoDeviceKeys }, JvmFiles)
+        return Bridge.live(BouncyCastlePrimitives, { block -> LiveHttp.client(block) }, Config(device), HostStore(host), { NoDeviceKeys }, JvmFiles)
     }
 }

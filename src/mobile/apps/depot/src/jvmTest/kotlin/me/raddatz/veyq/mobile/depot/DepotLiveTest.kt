@@ -1,7 +1,5 @@
 package me.raddatz.veyq.mobile.depot
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
@@ -17,6 +15,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlin.test.AfterTest
 import me.raddatz.veyq.mobile.session.LiveRun
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * Depot's files on a running dev instance (`VEYQ_LIVE`), as the web's `fileUploadJob` and download write and read them:
@@ -46,7 +45,7 @@ class DepotLiveTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             liveRun.device(),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         val tenant = account.open(account.defaultTenant!!)
 
         System.getenv("VEYQ_LIVE_DEPOT_READ")?.let { spec ->
@@ -123,7 +122,7 @@ class DepotLiveTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             liveRun.device(),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         val tenant = account.open(account.defaultTenant!!)
         val parent = tenant.nodes().first { it.kind == "FOLDER" && it.parentId == null && it.name == rootName }
         val big = ByteArray(600_000) { (it * 13).toByte() }
@@ -185,7 +184,7 @@ class DepotLiveTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             liveRun.device(),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         val tenant = account.open(account.defaultTenant!!)
         val (rootName, folderName) = spec.split('/', limit = 2)
         val nodes = tenant.nodes()

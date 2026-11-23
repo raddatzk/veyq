@@ -89,6 +89,30 @@ android {
     packaging {
         resources.excludes += setOf("META-INF/versions/9/OSGI-INF/MANIFEST.MF", "META-INF/INDEX.LIST", "META-INF/DEPENDENCIES")
     }
+
+    // The JVM tests (`:android:testDebugUnitTest`): Compose's test rule on Robolectric, a layout held without a device
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+}
+
+// The Android framework Robolectric runs the tests on, for the SDK the tests pin (`@Config(sdk = [37])`): resolved and
+// verified by Gradle (gradle/verification-metadata.xml), handed to Robolectric offline — it never fetches a jar itself.
+// The version is the one Robolectric's `DefaultSdkProvider` names for that SDK; a Robolectric bump re-reads it.
+val robolectricSdk: Configuration by configurations.creating {
+    isCanBeConsumed = false
+    isTransitive = false
+}
+val robolectricSdkDir = layout.buildDirectory.dir("robolectric-sdk")
+val syncRobolectricSdk = tasks.register<Sync>("syncRobolectricSdk") {
+    from(robolectricSdk)
+    into(robolectricSdkDir)
+}
+tasks.withType<Test>().configureEach {
+    dependsOn(syncRobolectricSdk)
+    inputs.files(robolectricSdk)
+    systemProperty("robolectric.offline", "true")
+    systemProperty("robolectric.dependency.dir", robolectricSdkDir.get().asFile.absolutePath)
 }
 
 kotlin {
@@ -115,4 +139,10 @@ dependencies {
     implementation(libs.camerax.lifecycle)
     implementation(libs.camerax.view)
     implementation(libs.work.runtime)
+    testImplementation(libs.robolectric)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.espresso.core)
+    debugImplementation(libs.compose.ui.test.manifest)
+    robolectricSdk("org.robolectric:android-all-instrumented:17-robolectric-16653203-i7")
 }

@@ -1,7 +1,5 @@
 package me.raddatz.veyq.mobile.expenses
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
@@ -20,6 +18,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlin.test.AfterTest
 import me.raddatz.veyq.mobile.session.LiveRun
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * A link's close re-keys its root's whole subtree (ADR 0114), on a running dev instance (`VEYQ_LIVE`), with
@@ -42,7 +41,7 @@ class SubtreeRekeyLiveTest {
             .mapNotNull { l -> l.substringBefore('=', "").takeIf { it.isNotBlank() }?.let { it.trim() to l.substringAfter('=').trim().trim('"', '\'') } }
             .toMap()
         val device = liveRun.device()
-        val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> HttpClient(OkHttp, block) }
+        val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> LiveHttp.client(block) }
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             device, client,

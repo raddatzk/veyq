@@ -215,14 +215,16 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
         Place(!shell.searching && tab == shell.selectedTab, { model.select(tab) }, tabIcon(tab, shell.openObject?.kind), tabLabel(tab, shell.openObject?.kind))
     } + Place(shell.searching, { model.search(true) }, Icons.Outlined.Search, stringResource(R.string.tab_search))
     val body: @Composable () -> Unit = {
+        // core's banner: the open page's own kept time where it has one (a Pot's ledger), else the lists'
+        val waitingCount by model.queuedBanner.collectAsStateWithLifecycle()
+        val offlineBanner: @Composable () -> Unit = { s.banner?.let { OfflineBanner(it, waitingCount) } }
         Scaffold(
             // a drop onto the app is a share (ADR 0138 decision 9); a Memory's gallery takes its own
             modifier = Modifier.sharedFilesDrop { model.receiveDrop(it.incoming) },
             containerColor = MaterialTheme.colorScheme.background,
             snackbarHost = { androidx.compose.material3.SnackbarHost(snackbar) },
             topBar = {
-                Column {
-                if (!shell.searching) {
+                ShellTopBar(shell.searching, banner = offlineBanner, appBar = {
                     // The node on screen — an open object, or the folder Home shows — headed by core for every kind (the
                     // web's `NodePage` + `NodeHeader`): its name, what its kind's page contributes, core's actions.
                     val space = shell.space
@@ -303,11 +305,8 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                             }
                         },
                     )
-                }
-                // core's banner: the open page's own kept time where it has one (a Pot's ledger), else the lists'
-                val waitingCount by model.queuedBanner.collectAsStateWithLifecycle()
-                s.banner?.let { OfflineBanner(it, waitingCount) }
-                incoming?.let { ShareBanner(it, s, model, snackbar, onCancel = model::cancelShare) }
+                }) {
+                    incoming?.let { ShareBanner(it, s, model, snackbar, onCancel = model::cancelShare) }
                 }
             },
             bottomBar = {
@@ -366,7 +365,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
               androidx.compose.runtime.CompositionLocalProvider(LocalNodeHero provides hero, LocalListStates provides listStates) {
                 when {
                     // a wide window: the application's list and its open object side by side (Material 3's list-detail)
-                    shell.searching -> SearchScreen(model, onClose = { model.search(false) })
+                    shell.searching -> SearchScreen(model, onClose = { model.search(false) }, banner = offlineBanner)
                     shell.person != null -> PersonScreen(shell.person!!, model)
                     // a kept link's page (ADR 0150 decision 6, #1032): the share in place, or the link on its own page
                     shell.bookmark != null -> BookmarkScreen(shell.bookmark!!, model)
@@ -1111,8 +1110,25 @@ internal val LocalPicking = androidx.compose.runtime.compositionLocalOf { false 
 internal val LocalTakesShare = androidx.compose.runtime.compositionLocalOf<(ObjectRef) -> Boolean> { { false } }
 
 /**
+ * The shell's top bar: the app bar with the offline [banner] under it, then [more] (the pick mode's banner). While
+ * searching it draws neither: Material 3's full-screen search takes the screen, the top app bar with it, so the banner
+ * stands on the search's own page, under its field (`SearchPage`, inbox #961) — never above the search.
+ */
+@Composable
+internal fun ShellTopBar(searching: Boolean, banner: @Composable () -> Unit, appBar: @Composable () -> Unit, more: @Composable () -> Unit) {
+    Column {
+        if (!searching) {
+            appBar()
+            banner()
+        }
+        more()
+    }
+}
+
+/**
  * The shell's banner while the server is out of reach (ADR 0140 decision 10, core's words: "Offline — content as of …"):
  * a strip under the top app bar, as Material shows a lasting state of the whole screen; every write is gone meanwhile.
+ * While searching it stands under the search's field instead ([ShellTopBar]).
  */
 @Composable
 private fun OfflineBanner(banner: me.raddatz.veyq.mobile.words.Notice, waiting: me.raddatz.veyq.mobile.words.Notice?) {

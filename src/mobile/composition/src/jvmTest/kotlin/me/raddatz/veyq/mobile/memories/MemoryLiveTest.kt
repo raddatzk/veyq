@@ -1,8 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
 import me.raddatz.veyq.mobile.media.Derivation
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
@@ -15,6 +13,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlin.test.AfterTest
 import me.raddatz.veyq.mobile.session.LiveRun
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * A Memory the web made and filled, read on a running dev instance (`VEYQ_LIVE`): `VEYQ_LIVE_MEMORY=<memory name>` lists
@@ -51,7 +50,7 @@ class MemoryLiveTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin!!, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             liveRun.device(),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         val tenant = account.open(account.defaultTenant!!)
         val shell = me.raddatz.veyq.mobile.composition.ShellModel(
             tenant, me.raddatz.veyq.mobile.navigation.Hidden({}, emptySet()), me.raddatz.veyq.mobile.navigation.RecentUses({}, emptyList()),
@@ -112,7 +111,7 @@ class MemoryLiveTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             liveRun.device(),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         val tenant = account.open(account.defaultTenant!!)
         if (name == "*") {
             for (m in tenant.nodes().filter { it.kind == "MEMORY" || it.kind == "CHAPTER" }) {

@@ -1,7 +1,5 @@
 package me.raddatz.veyq.mobile.session
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -38,7 +36,7 @@ class LiveSignInTest {
     fun takeOffTheDevices() = liveRun.removeAll()
 
     private val p = BouncyCastlePrimitives
-    private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> HttpClient(OkHttp, block) }
+    private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> LiveHttp.client(block) }
 
     @Test
     fun theSeededPrincipalSignsInUnlocksAndReadsEveryTenant() {

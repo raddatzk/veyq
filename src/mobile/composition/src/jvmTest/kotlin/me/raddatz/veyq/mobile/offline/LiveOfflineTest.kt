@@ -3,7 +3,6 @@ package me.raddatz.veyq.mobile.offline
 import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
-import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.api.createClientPlugin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -31,6 +30,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * A gallery viewed online opened from the offline store with the server unreachable, after the account was closed and
@@ -68,7 +68,7 @@ class LiveOfflineTest {
         }
     }
 
-    private val client: (HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> HttpClient(OkHttp) { block(); install(cut) } }
+    private val client: (HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> LiveHttp.client { block(); install(cut) } }
 
     @Test
     fun aGalleryViewedOnlineOpensFromTheStoreWithTheServerUnreachable() = runBlocking {

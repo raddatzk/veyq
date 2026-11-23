@@ -3,7 +3,6 @@ package me.raddatz.veyq.mobile.search
 import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
-import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.api.createClientPlugin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -36,6 +35,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * The apps' search against a running dev instance (ADR 0146; `VEYQ_LIVE`, skipped without one).
@@ -63,7 +63,7 @@ class SearchLiveTest {
             if (path.matches(Regex("/api/scopes/[^/]+/(nodes|media)"))) reads += path to r.status.value
         }
     }
-    private val client: (HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> HttpClient(OkHttp) { block(); install(counted) } }
+    private val client: (HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> LiveHttp.client { block(); install(counted) } }
 
     private val root = File(System.getProperty("veyq.repoRoot"))
 

@@ -1,8 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
 import me.raddatz.veyq.mobile.media.Derivation
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.blob.UploadSource
@@ -22,6 +20,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * A Memory left due is re-keyed by the app (ADR 0149 decision 2), on a running dev instance as a throwaway with a member
@@ -51,7 +50,7 @@ class MemoryRekeyLiveTest {
             suspend fun session(who: String): TenantSession {
                 val a = VeyqAccount.signIn(
                     BouncyCastlePrimitives, origin, t.email(who), t.env.getValue("${who}_PASSWORD"), t.env.getValue("${who}_SECRET_KEY"), runs.getOrPut(who) { LiveRun(who, t.file) }.device(),
-                ) { block -> HttpClient(OkHttp, block) }
+                ) { block -> LiveHttp.client(block) }
                 return a.open(a.tenants.first { it.domain == domain }).also { it.rekeyRules = AppKinds.rules }
             }
             val owner = session("VEYQ")

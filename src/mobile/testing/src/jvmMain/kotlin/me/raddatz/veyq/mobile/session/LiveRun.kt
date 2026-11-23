@@ -1,7 +1,5 @@
 package me.raddatz.veyq.mobile.session
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.runBlocking
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import java.io.File
@@ -29,8 +27,8 @@ import java.util.concurrent.ConcurrentLinkedQueue
  * budget (`veyq.ratelimit.auth.*`, 60 a minute by default, ADR 0051), which every browser, agent and live run on this
  * machine shares. A module's live suite comes close to it on its own (measured 2026-11-23: `:apps:memories` run twice
  * back to back failed with `SignInFailure: challenge 429` / `verify 429`, four cases the second time; each throwaway case
- * alone, a minute apart, passed): a 429 at a live sign-in is that budget spent, never the case's defect — run again after
- * a quiet minute.
+ * alone, a minute apart, passed). So every live client is [LiveHttp]'s, which sits out the `Retry-After` of such a 429 up to a
+ * bound (inbox #1191); a 429 that still reaches a case is a budget spent past that bound, never the case's defect.
  */
 class LiveRun(private val who: String = "VEYQ", private val envFile: File? = null) {
     private val p = BouncyCastlePrimitives
@@ -76,7 +74,7 @@ class LiveRun(private val who: String = "VEYQ", private val envFile: File? = nul
                     VeyqAccount.signIn(
                         p, origin, env.getValue("${who}_EMAIL"), env.getValue("${who}_PASSWORD"), env.getValue("${who}_SECRET_KEY"),
                         ThisDevice(store, SoftwareDeviceKeys(p), "live test device", p),
-                    ) { block -> HttpClient(OkHttp, block) }.removeThisDevice()
+                    ) { block -> LiveHttp.client(block) }.removeThisDevice()
                 } catch (e: Exception) {
                     failed += "${e::class.simpleName}: ${e.message}"
                 }

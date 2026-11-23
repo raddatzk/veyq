@@ -1,8 +1,6 @@
 package me.raddatz.veyq.mobile.memories
 
 import me.raddatz.veyq.mobile.media.Derivation
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
@@ -16,6 +14,7 @@ import java.io.RandomAccessFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * Dev tooling, not a test of the product: makes and removes a Memory of the seeded principal for a device pass of the
@@ -44,7 +43,7 @@ class DevMemoryTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             testDevice(BouncyCastlePrimitives),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         try {
             val tenant = account.open(account.defaultTenant!!)
             if (purge != null) {

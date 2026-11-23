@@ -3,7 +3,6 @@ package me.raddatz.veyq.mobile.memories
 import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
-import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.http.HttpMethod
 import kotlinx.coroutines.Dispatchers
@@ -44,6 +43,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * A Memory's banner against a running dev instance (ADR 0144 decisions 5 and 7; `VEYQ_LIVE`, skipped without one). The dev
@@ -84,7 +84,7 @@ class BannerLiveTest {
         }
     }
 
-    private val client: (HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> HttpClient(OkHttp) { block(); install(watch) } }
+    private val client: (HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> LiveHttp.client { block(); install(watch) } }
 
     private val root = File(System.getProperty("veyq.repoRoot"))
     private val jpeg = File(root, "src/web/src/features/memories/__fixtures__/exif-sample.jpg").readBytes()

@@ -1,7 +1,5 @@
 package me.raddatz.veyq.mobile.bridge
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.runBlocking
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.session.LiveRun
@@ -14,6 +12,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * The account's flows through the bridge over the real core (ADR 0148 decision 11), as a throwaway ([Throwaway]: a file
@@ -45,7 +44,7 @@ class LiveAccountBridgeTest {
                 host.reply(token, wire.encodeToString(HostReply.serializer(), reply))
             }
         }
-        val b = Bridge.live(BouncyCastlePrimitives, { block -> HttpClient(OkHttp, block) }, Config("bridge account test"), HostStore(host), { NoDeviceKeys }, JvmFiles)
+        val b = Bridge.live(BouncyCastlePrimitives, { block -> LiveHttp.client(block) }, Config("bridge account test"), HostStore(host), { NoDeviceKeys }, JvmFiles)
         val gate = b.watching(Watched.Session)
         assertEquals(Answer.Done, b.ask(Call.SessionStart))
         val password = t.env.getValue("VEYQ_PASSWORD")

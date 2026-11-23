@@ -1,7 +1,6 @@
 package me.raddatz.veyq.mobile.session
 
 import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.header
 import io.ktor.serialization.kotlinx.json.json
@@ -49,7 +48,7 @@ import kotlin.time.Duration.Companion.minutes
 class LiveDeviceLinkTest {
     private val p = BouncyCastlePrimitives
     private val run = LiveRun()
-    private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> HttpClient(OkHttp, block) }
+    private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> LiveHttp.client(block) }
 
     /**
      * D1's measurement: a delegated family's refresh token, spent once at `POST /api/token/refresh` with the token in the

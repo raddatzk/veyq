@@ -1,7 +1,5 @@
 package me.raddatz.veyq.mobile.session
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
@@ -29,7 +27,7 @@ class DevSecondSessionTest {
             .toMap()
         val p = BouncyCastlePrimitives
         val account = VeyqAccount.signIn(p, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), testDevice(p)) { block ->
-            HttpClient(OkHttp, block)
+            LiveHttp.client(block)
         }
         val page = AccountSettings(AccountSettings.Over(account), Alone(account), account.email) { System.currentTimeMillis() }
         page.refresh()
@@ -67,7 +65,7 @@ class DevSecondSessionTest {
             .toMap()
         val p = BouncyCastlePrimitives
         val account = VeyqAccount.signIn(p, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), testDevice(p)) { block ->
-            HttpClient(OkHttp, block)
+            LiveHttp.client(block)
         }
         val page = AccountSettings(AccountSettings.Over(account), Alone(account), account.email) { System.currentTimeMillis() }
         try {

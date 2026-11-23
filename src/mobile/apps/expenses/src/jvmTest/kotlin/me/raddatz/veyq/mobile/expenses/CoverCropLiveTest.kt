@@ -1,7 +1,5 @@
 package me.raddatz.veyq.mobile.expenses
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.okhttp.OkHttp
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.session.NodeCover
@@ -15,6 +13,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlin.test.AfterTest
 import me.raddatz.veyq.mobile.session.LiveRun
+import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
  * A cover framed in the app (the web's crop), on a running dev instance (`VEYQ_LIVE`), with `VEYQ_LIVE_COVER_CROP=<pot name>`:
@@ -41,7 +40,7 @@ class CoverCropLiveTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             liveRun.device(),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         val tenant = account.open(account.defaultTenant!!)
         val ref = tenant.nodes().first { it.kind == PotSession.KIND && it.name == potName }
         val image = java.awt.image.BufferedImage(640, 360, java.awt.image.BufferedImage.TYPE_INT_RGB).apply {
@@ -95,7 +94,7 @@ class CoverCropLiveTest {
         val account = VeyqAccount.signIn(
             BouncyCastlePrimitives, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"),
             liveRun.device(),
-        ) { block -> HttpClient(OkHttp, block) }
+        ) { block -> LiveHttp.client(block) }
         val tenant = account.open(account.defaultTenant!!)
         val ref = tenant.nodes().filter { it.name == name }.also { assertEquals(1, it.size, "no single node named $name") }.single()
         val node = tenant.node(ref.scopeId, ref.nodeId)!!

@@ -33,6 +33,14 @@ openapi-generator = "7.23.0"
 # Apache-2.0, an Apache project, maintained (3.0.8 released 2026-07-08, checked on Maven Central 2026-11-13); JVM-only,
 # which is why it is no candidate for the apps' own drawing.
 pdfbox = "3.0.8"
+# Test-only, the Android app's JVM tests (never shipped): Compose's test rule run on the JVM, so a Compose layout's order
+# is held without a device (inbox #961). MIT, maintained (4.18.1 released 2026-11-18, checked on Maven Central
+# 2026-11-23). The Android framework it runs on is an artifact Gradle resolves and verifies, never one Robolectric fetches
+# itself (`android/build.gradle.kts`).
+robolectric = "4.18.1"
+# Compose's test rule idles through Espresso; the 3.5.0 it pulls calls `InputManager.getInstance()`, which SDK 37 no
+# longer has (NoSuchMethodException, measured 2026-11-23): the current stable, 3.7.0, replaces it.
+espresso = "3.7.0"
 
 [libraries]
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
@@ -50,6 +58,10 @@ kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.
 kotlincrypto-sha3 = { module = "org.kotlincrypto.hash:sha3", version.ref = "kotlincrypto-sha3" }
 bouncycastle = { module = "org.bouncycastle:bcprov-jdk18on", version.ref = "bouncycastle" }
 pdfbox = { module = "org.apache.pdfbox:pdfbox", version.ref = "pdfbox" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
+espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso" }
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "compose-bom" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-material3-adaptive-navigation-suite = { module = "androidx.compose.material3:material3-adaptive-navigation-suite" }
