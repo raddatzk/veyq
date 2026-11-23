@@ -59,7 +59,7 @@ RUN pnpm run build && pnpm run verify:no-backdoor && pnpm run verify:csp && pnpm
 
 # --- backend (JVM) ---------------------------------------------------------------------------------------
 # The JDK is the backend's one Java major (gradle/libs.versions.toml's `java`, ADR 0119): Gradle's toolchain finds it here.
-FROM eclipse-temurin:25-jdk-jammy@sha256:e4f029273ed9e4444697df30bb6098dbe51477291598aebc54dd0b48d95d6ae7 AS backend-build-base
+FROM eclipse-temurin:25-jdk-jammy@sha256:43d6f1775a0660b561c1c42edfdf8538a89672a040961acb3730c3ccc53c53de AS backend-build-base
 WORKDIR /repo/src/backend
 # gradle.properties (build-JVM heap) is not an optional extra, and neither is :core's pitest.scope.json:
 # core/build.gradle.kts parses the PIT manifest at CONFIGURATION time, so even `gradlew help` dies without it. Both
