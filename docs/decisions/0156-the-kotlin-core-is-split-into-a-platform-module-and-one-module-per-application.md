@@ -90,8 +90,9 @@ carry a second façade without the first one's users paying for it (ADR 0155 § 
   container) — so the core is the third client held to the files, beside the backend's `KindsContractTest` and the web's
   `kindsContract.test.ts`. `guest.writeOnlyCreates` is the backend's alone, as on the web. It found no drift. The core's
   JVM tests run in no CI job (#1085).
-- **Left, named:** 82 platform-package tests run in `:composition` rather than over a played kind; the played server
-  `PlayedTenant` is not split into the platform's half and the applications'; `validate_mobile_search_names_no_application.py`
+- **Left, named:** 82 platform-package tests run in `:composition` rather than over a played kind; the played server's
+  application halves are extensions in tests (Memories' banner in its module, Expenses' Pots in `:composition`'s,
+  entry 78), its platform half in `:testing`; `validate_mobile_search_names_no_application.py`
   is a second check of what the build now holds; a few kind literals remain in the composition (it may name applications).
 
 ## Alternatives considered
@@ -712,3 +713,31 @@ names were the implementation session's and are not kept.
     `ShellModelCompanion (Extensions)` 1); the planned renames (`DropTarget.Page`, `AddHere.Page`, `addHere(…page:)`,
     `moveSheet(…open:)`, `LevelUploadsScreened`, `DirectoryWalk.rootName`), the protocols `PageIntake`, `LevelUploads`,
     `OpenCopy` and their conformance members; no `_`-suffixed selector, no class renamed.
+78. **2026-11-24 — The composition's tests that name one application moved to their application (#1260); the guard's rule (g).** Of the
+    44 test sources of `:composition` that named exactly one application (rule (g) measured before the move), 37 moved to
+    their module with their package kept (Memories 34 — among them the live cases, `AppleQueuedTest` into its
+    `appleTest`, `SearchVolumeMeasure` into its `threadedTest`, `PlayedRotation` with `FinishRotationTest` —, Depot's
+    `FileModelTest`, Expenses' `LinkFormTest` and `NodeMetaWriteTest`), each composing its application alone
+    (`AppComposition.install()` → `TestApplications.install(<its part>)`), one (`PlayedUploads`) to `:testing` and six
+    stayed. The played server's platform half went to `:testing` (`offline/PlayedTenant`, `PlayedUploads`), naming no application: a Pot's revision carries its sealed
+    bytes, a blob its role, and a field of a node's meta made when served (`Node.metaServed`) takes Memories' banner,
+    whose wrap follows the node's key. The application halves are test extensions: Memories' `banner` in its module
+    (`offline/PlayedBanners.kt`), Expenses' `pot`/`revise`/`receipt` in `:composition`'s tests (`offline/PlayedPots.kt`),
+    because five of its six readers span Expenses and another application and no module both reach may name one.
+    **Stayed, each listed in the guard with its reason:** `ImportScreenTest` (entry 16), `ShareSheetTest` and
+    `KindsContractTest` (the composed registry, entry 70 and § Consequences), `ScopeRelockLiveTest` (a relock re-seals
+    every application's roots, measured 2026-11-23), `GuestReportTest` (moved, then measured red over Memories alone:
+    its upload-link case reports a Depot drop box), `OfflinePotTest`, and the new `PlayedPots.kt` beside it (one copy of the Pot half).
+    *Alternatives rejected:* a copy of the Pot half in Expenses' tests (two copies of one played server drift); one
+    source directory compiled into two modules' tests (IntelliJ keeps a content root in one module only); a test-support
+    module per application (three more targets' worth of build for six files). The live cases moved unrun (no
+    `VEYQ_LIVE` here): the one failure shape a played kind of another application causes over inert parts is the
+    relock's slug rule, and only `ScopeRelockLiveTest` relocks (grep of every moved live case for `Rotation`/`relock`).
+    **The guard:** rule (g) of `validate_mobile_module_graph.py` — a `:composition` test source naming exactly one
+    application in code is red unless `COMPOSITION_ONE_APPLICATION_TESTS` lists it with a reason; an entry whose file
+    left or that no longer names one application alone is red. Pinned as guard-gaps 137 (Memories' `MemoryCopyTest`
+    copied back, unlisted), 138 (a listed file gone), 139 (a listed file importing a second application). *Evidence:*
+    measured, `./gradlew --continue compileKotlinJs compileTestKotlinJs jvmTest macosArm64Test` exit 0 before and after,
+    the executed cases of every `build/test-results/*/*.xml` the same by task, class, name and run/skip — jvmTest 1,808
+    (40 skipped), macosArm64Test 1,419 — `:composition` 513 → 360 (JVM) and 473 → 343 (macOS), `:apps:memories` 308 → 433
+    and 298 → 407, `:apps:depot` 45 → 60 and 38 → 53, `:apps:expenses` 136 → 149 and 46 → 52.

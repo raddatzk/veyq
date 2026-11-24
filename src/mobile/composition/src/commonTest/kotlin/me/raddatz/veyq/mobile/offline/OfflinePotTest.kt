@@ -203,7 +203,7 @@ class OfflinePotTest {
             request.revisions.forEach {
                 pot.node.revisions += PlayedTenant.PotRevision(
                     it.entryId, it.revision,
-                    me.raddatz.veyq.mobile.expenses.SealedRevision(me.raddatz.veyq.mobile.crypto.unb64(it.sealedBody), me.raddatz.veyq.mobile.crypto.unb64(it.wrappedRevisionKey)),
+                    me.raddatz.veyq.mobile.crypto.unb64(it.sealedBody), me.raddatz.veyq.mobile.crypto.unb64(it.wrappedRevisionKey),
                     it.tombstone == true,
                 )
             }

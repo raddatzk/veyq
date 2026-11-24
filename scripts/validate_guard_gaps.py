@@ -337,6 +337,11 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      applications is the platform's behind a hook or an interface, never a second composition file
   135 `AppComposition.kt` gone — rejected: rule (f), the root that installs every application's part is the composition
   136 a stub `:composition` main file naming no application — rejected: rule (f) reads file names, not what they name
+  137 Memories' `MemoryCopyTest` moved back into `:composition`'s tests, unlisted — rejected: rule (g), a test of one
+     application lives in its module (#1260)
+  138 a listed one-application composition test (`ImportScreenTest.kt`) gone, its entry left — rejected: rule (g)
+  139 a listed one-application composition test (`ShareSheetTest.kt`) importing Memories as well — rejected: rule (g),
+     the entry no longer names why it stays
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1331,6 +1336,36 @@ def forge_mobile_composition_stub(root: pathlib.Path) -> str:
     return "a stub composition file naming no application (must be REJECTED — the root alone, whatever a file names)"
 
 
+COMPOSITION_TEST = "composition/src/commonTest/kotlin/me/raddatz/veyq/mobile"
+
+
+def forge_mobile_composition_test_one_application(root: pathlib.Path) -> str:
+    src = root / MOBILE_DIR / "apps/memories/src/commonTest/kotlin/me/raddatz/veyq/mobile/memories/MemoryCopyTest.kt"
+    if not src.is_file():
+        raise ForgeError(f"{MOBILE_DIR}/apps/memories/…/MemoryCopyTest.kt is missing — re-anchor this forgery")
+    f = root / MOBILE_DIR / COMPOSITION_TEST / "memories/MemoryCopyTest.kt"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(_sub(src.read_text(), "me.raddatz.veyq.mobile.TestApplications.install(me.raddatz.veyq.mobile.memories.MemoriesKinds)",
+                      "me.raddatz.veyq.mobile.composition.AppComposition.install()"))
+    return ("Memories' MemoryCopyTest moved back into the composition's tests, unlisted (must be REJECTED — a test of one "
+            "application lives in its module)")
+
+
+def forge_mobile_composition_test_entry_stale(root: pathlib.Path) -> str:
+    f = root / MOBILE_DIR / COMPOSITION_TEST / "depot/ImportScreenTest.kt"
+    if not f.is_file():
+        raise ForgeError(f"{MOBILE_DIR}/{COMPOSITION_TEST}/depot/ImportScreenTest.kt is missing — re-anchor this forgery")
+    f.unlink()
+    return "a listed one-application composition test gone, its entry left (must be REJECTED — a stale reason)"
+
+
+def forge_mobile_composition_test_listed_names_two(root: pathlib.Path) -> str:
+    _mobile_edit(root, f"{COMPOSITION_TEST}/navigation/ShareSheetTest.kt", "import me.raddatz.veyq.mobile.depot.DropBoxes\n",
+                 "import me.raddatz.veyq.mobile.depot.DropBoxes\nimport me.raddatz.veyq.mobile.memories.MemoriesKinds\n")
+    return ("a listed one-application composition test now naming Memories as well (must be REJECTED — the entry no longer "
+            "says why it is here)")
+
+
 ANDROID_UI = "android/src/main/kotlin/me/raddatz/veyq/mobile/android"
 
 
@@ -2132,6 +2167,9 @@ CASES = [
     ("134", MOBILE_GRAPH, forge_mobile_composition_file_unlisted, False),
     ("135", MOBILE_GRAPH, forge_mobile_composition_root_gone, False),
     ("136", MOBILE_GRAPH, forge_mobile_composition_stub, False),
+    ("137", MOBILE_GRAPH, forge_mobile_composition_test_one_application, False),
+    ("138", MOBILE_GRAPH, forge_mobile_composition_test_entry_stale, False),
+    ("139", MOBILE_GRAPH, forge_mobile_composition_test_listed_names_two, False),
     ("116", "validate_mobile_ui_direction.py", forge_android_core_ui_names_core_application, False),
     ("117", "validate_mobile_ui_direction.py", forge_android_application_names_other_core_application, False),
     ("118", "validate_mobile_ui_direction.py", forge_apple_core_ui_names_core_application, False),
