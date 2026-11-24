@@ -39,7 +39,7 @@ an application added there is guarded the day it lands. Every source is read wit
     `AppleSessions.openReceipt`), less what the platform or the composition declares under the same name; one marked
     `@HiddenFromObjC` or `@PlatformApi` is none. What the core UI held of an application lives in the `Holding` the
     application registers (`Core/Holding.swift`), and what it asked of an application's Apple object for itself
-    (watching a state, a picked file's source) is the composition's `ApplePlatform`.
+    (watching a state, a picked file's source) is the platform's `ApplePlatform`.
   - fail closed: a directory under `Apps/` that is no application, an application without a file, a composition root
     that is missing or names nothing of an application, and a top-level name declared by two sides (an overload of a
     core function in an application, which the index cannot tell from core's) are each red.

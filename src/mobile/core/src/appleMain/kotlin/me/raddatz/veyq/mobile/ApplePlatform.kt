@@ -1,4 +1,4 @@
-package me.raddatz.veyq.mobile.composition
+package me.raddatz.veyq.mobile
 
 import me.raddatz.veyq.mobile.blob.DirectoryWalk
 import kotlinx.cinterop.BetaInteropApi
