@@ -27,7 +27,8 @@ use crate::core_ui::home::glib_escape;
 use crate::core_ui::{header, said, words};
 
 thread_local! {
-    /// How many files the queue holds waiting or running, as last shown: what closing the window asks about.
+    /// How many files of every upload in the process wait or run (`Watched.Underway`, a tenant open or not — a link
+    /// guest's count signed out, inbox #1016): what closing the window asks about.
     static ACTIVE: Cell<i64> = const { Cell::new(0) };
     /// The person chose *Quit anyway*: the next close goes through.
     static QUITTING: Cell<bool> = const { Cell::new(false) };
@@ -57,6 +58,24 @@ pub fn ask_before_close(window: &adw::ApplicationWindow) {
         });
         ask.present(Some(w));
         glib::Propagation::Stop
+    });
+}
+
+/// Follows how many files of the process's uploads wait or run (`Watched.Underway`), for [ask_before_close]: from the
+/// core's start, a tenant open or not, so a link guest's upload left running signed out is asked about too (inbox #1016).
+pub fn watch_underway() {
+    let Some((watch, updates)) = bridge::watch(&Watched::Underway) else {
+        eprintln!("veyq: the uploads under way were not watched");
+        return;
+    };
+    glib::spawn_future_local(async move {
+        let _watch = watch;
+        while let Ok(update) = updates.recv().await {
+            match update {
+                Ok(Update::Underway { files }) => ACTIVE.with(|a| a.set(i64::from(files))),
+                other => eprintln!("veyq: an under-way update did not read: {other:?}"),
+            }
+        }
     });
 }
 
@@ -419,7 +438,6 @@ impl Uploads {
     fn draw(self: &Rc<Self>, shown: Option<&UploadsShown>) {
         let empty = Vec::new();
         let batches = shown.map(|s| &s.batches).unwrap_or(&empty);
-        ACTIVE.with(|a| a.set(shown.map_or(0, |s| i64::from(s.active))));
         self.draw_batches(batches);
         let Some(s) = shown else {
             self.uploads_shown.set(false);

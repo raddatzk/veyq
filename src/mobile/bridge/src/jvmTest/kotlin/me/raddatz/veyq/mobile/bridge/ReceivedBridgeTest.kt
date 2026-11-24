@@ -180,6 +180,31 @@ class ReceivedBridgeTest {
     }
 
     /**
+     * #1016: the desktops' quit question counts every upload under way in the process — a tenant open or not, so a
+     * signed-out guest's upload counts (`Watched.Underway` over core's `UploadsUnderway`; the tray's `UploadsShown` is
+     * null with no tenant).
+     */
+    @Test
+    fun theUnderwayCountIsTheProcesssUploadsWithNoTenantOpen() = runBlocking {
+        val b = bridge(PlayedShare(p, role = "WRITE_ONLY", rootKind = "DEPOT_DROPBOX"))
+        val w = b.watching(Watched.Underway)
+        fun files(j: kotlinx.serialization.json.JsonElement) = (wire.decodeFromJsonElement(Update.serializer(), j) as Update.Underway).files
+        w.untilJson { j -> files(j).takeIf { it == 0 } }
+        val go = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val queue = me.raddatz.veyq.mobile.blob.UploadQueue()
+        val job = object : me.raddatz.veyq.mobile.blob.UploadQueue.Job {
+            override val name = "a.txt"
+            override val sizeBytes = 1L
+            override suspend fun run(progress: (Double) -> Unit) = go.await()
+        }
+        queue.enqueue(listOf(job), "Drop", null, null, null)
+        assertEquals(1, w.untilJson { j -> files(j).takeIf { it > 0 } })
+        go.complete(Unit)
+        assertEquals(0, w.untilJson { j -> files(j).takeIf { it == 0 } })
+        b.shutdown()
+    }
+
+    /**
      * A drop box's guest adds a file by path and is asked its name at that write by the core (`GuestAccess.naming`, #1042:
      * an uploader's, no role read by the bridge) — declined, nothing is sent; named, the upload waiting on it goes on —; the
      * page's update names the file once it was sent (#1018's write).

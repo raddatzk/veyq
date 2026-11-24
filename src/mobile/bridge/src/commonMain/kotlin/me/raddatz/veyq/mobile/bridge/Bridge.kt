@@ -3034,6 +3034,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             open?.models?.queued?.items?.map { Update.QueuedTray(it) } ?: flowOf(Update.QueuedTray(null))
         }
         Watched.Uploads -> uploads.flatMapLatest { u -> u?.state?.map { Update.Uploads(shownUploads(it)) } ?: flowOf(Update.Uploads(null)) }
+        Watched.Underway -> me.raddatz.veyq.mobile.blob.UploadsUnderway.uploads.map { Update.Underway(me.raddatz.veyq.mobile.blob.UploadsUnderway.total(it)?.files ?: 0) }.distinctUntilChanged()
         is Watched.Pot -> {
             val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
             (pots[w.pot]?.state ?: flowOf(null)).combine(pictures) { s, p -> Update.Pot(w.pot, s, if (s == null) emptyList() else p.keys.sorted()) }

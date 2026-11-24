@@ -33,9 +33,21 @@ internal sealed class Uploads : IDisposable
     private bool _taking;
     private readonly Dictionary<string, (UploadStatus, int)> _logged = [];
 
-    /// <summary>How many files the queue holds waiting or running, as last shown: what closing the window asks about
-    /// (ADR 0145 decision 2).</summary>
+    /// <summary>How many files of every upload in the process wait or run (Watched.Underway, a tenant open or not — a link
+    /// guest's count signed out, inbox #1016): what closing the window asks about (ADR 0145 decision 2).</summary>
     public static int Active { get; private set; }
+
+    private static Watch? _underway;
+
+    /// <summary>Follows <see cref="Active"/> from the core's start, for the whole run: a link guest's upload left running
+    /// with no tenant open is asked about too (inbox #1016). Calling it again does nothing.</summary>
+    public static void WatchUnderway()
+    {
+        _underway ??= Core.Watch(new Watched.Underway(), update =>
+        {
+            if (update is Update.Underway u) Active = u.files;
+        }, e => Log.Write($"an under-way update: {e.Message}"));
+    }
 
     /// <summary>The queue's command for the CommandBar; null while the queue lists nothing.</summary>
     public AppBarButton? Button { get; private set; }
@@ -85,7 +97,6 @@ internal sealed class Uploads : IDisposable
     private void Draw()
     {
         var s = _last;
-        Active = s?.active ?? 0;
         _list.Children.Clear();
         var uploads = s is not null && (s.summary is not null || s.preparing is not null);
         var visible = uploads || _queued.Count > 0;

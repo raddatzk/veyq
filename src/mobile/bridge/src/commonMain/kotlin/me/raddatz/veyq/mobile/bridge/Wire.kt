@@ -2430,6 +2430,12 @@ internal sealed class Watched {
     /** The uploads of the tenant open now (`DepotUploads`), whichever that is: the tray, what it says once. */
     @Serializable @SerialName("Uploads") data object Uploads : Watched()
 
+    /**
+     * How many files of every upload under way in this process wait or run (core's `UploadsUnderway`), a tenant open or
+     * not: a link guest's uploads count signed out (inbox #1016). What a desktop's quit question counts (ADR 0145 decision 2).
+     */
+    @Serializable @SerialName("Underway") data object Underway : Watched()
+
     /** The writes made offline of the open tenant's account (`QueuedTray.items`): the uploads tray's list of its own. */
     @Serializable @SerialName("QueuedTray") data object QueuedTray : Watched()
 
@@ -2599,6 +2605,9 @@ internal sealed class Update {
 
     /** The uploads; null while no tenant is open. */
     @Serializable @SerialName("Uploads") data class Uploads(val shown: UploadsShown?) : Update()
+
+    /** The files under way in this process ([Watched.Underway]): 0 while none waits or runs. */
+    @Serializable @SerialName("Underway") data class Underway(val files: Int) : Update()
 
     /**
      * The writes made offline, oldest first ([me.raddatz.veyq.mobile.offline.QueuedItem]: each under the name of the place

@@ -35,7 +35,9 @@ class AndroidGuestSessions(private val keys: DeviceKeys) : GuestSessions {
  * the shell, which stay where they were and are shown again once the link is left. Every guest view of the app — opened
  * here, from a bookmark's page or its *Open on its own page* — is made by [view] over the app's HTTP client, its device
  * store (the terms' and the note's acceptances), the Keystore-wrapped [sessions] and its one upload queue. Nothing of a
- * link is kept here once it is left: the core's model holds the key and zeroes it ([GuestScreen.leave]).
+ * link is kept here once it is left: the core's model holds the key and zeroes it ([GuestScreen.leave]) — once the
+ * guest's uploads still under way are in, which go on with the link left as a member's do (`UploadWork.kt`'s worker
+ * follows them, inbox #1016).
  */
 class GuestLinks(
     private val scope: CoroutineScope,
