@@ -1,8 +1,9 @@
 // A file's page (Depot's file viewer; ADR 0123's Consequences, the Windows app's Depot whole; Linux's file_page.rs), Fluent's way: the file's
 // content in place — a picture (Image, decoded by WIC at the core's edge at most), a text (a read-only monospace TextBox,
-// the cut said in an InfoBar above it), a PDF (WebView2's own PDF viewer fed from memory, PdfWeb.cs, where its text is
-// selected and copied; a password-protected one, or one on a device without WebView2's runtime, through Windows.Data.Pdf,
-// PdfPages.cs: its pages rendered as they come into view and let go when far from it), an audio or video played by the system's own player (MediaPlayerElement with its
+// the cut said in an InfoBar above it), a PDF (WebView2's own PDF viewer fed from memory, PdfWeb.cs and PdfWebView.cs,
+// where its text is selected, copied and read by Narrator, a password-protected one's password asked by the viewer; on a
+// device without WebView2's runtime through Windows.Data.Pdf, PdfPages.cs, after the page's own password prompt: its
+// pages rendered as they come into view and let go when far from it), an audio or video played by the system's own player (MediaPlayerElement with its
 // transport controls, over a MediaSource of ReaderStream: the core's reader read in ranges; Media Foundation and the
 // Store's extensions decode it, and what they cannot is said as not shown here), or what the core says where it shows
 // none — and its facts beneath. Everything is the core's FileModel (File.Open, Watched.File): what shows is decided by the
@@ -248,39 +249,44 @@ internal sealed class FilePage : IDisposable
     }
 
     /// <summary>
-    /// The PDF in <paramref name="bytes"/> shown, opened with <paramref name="password"/> where one was typed. A
-    /// password-protected PDF asks for its password in the page first, as the web's does (FileViewer.vue): a PasswordBox
-    /// whose value goes to Windows' renderer and nowhere else, emptied at each try; a wrong one said; Cancel says the PDF
-    /// is protected and leaves Save a copy.
+    /// The PDF in <paramref name="bytes"/> shown, opened with <paramref name="password"/> where one was typed here
+    /// (PdfWeb.Route, inbox #964). In WebView2's viewer where the device has it, a password-protected PDF too: the viewer
+    /// asks for its password itself, once, as Edge does. Without it the pages are drawn by Windows.Data.Pdf, and a
+    /// protected PDF asks for its password in the page first, as the web's does (FileViewer.vue): a PasswordBox whose
+    /// value goes to Windows' renderer and nowhere else, emptied at each try; a wrong one said; Cancel says the PDF is
+    /// protected and leaves Save a copy.
     /// </summary>
     private async Task ShowPdf((FileViewKind, int) asked, byte[] bytes, double scale, string? password)
     {
         var (pdf, locked) = await PdfView.OpenAsync(bytes, scale, password);
         if (_closed || _drawn != asked) return;
-        if (locked)
+        var opening = pdf is not null ? PdfWeb.Opening.Opened : locked ? PdfWeb.Opening.Locked : PdfWeb.Opening.Failed;
+        // a password typed here was asked because the viewer is not there: the pages, or the prompt again
+        var shown = password is null ? PdfWeb.Route(opening, PdfWeb.Available(), asksPassword: true)
+            : pdf is not null ? PdfWeb.Shown.Pages : locked ? PdfWeb.Shown.AskHere : PdfWeb.Shown.NotShown;
+        if (shown == PdfWeb.Shown.Viewer)
         {
-            _content.Content = PdfPassword(Node.name, wrong: password is not null, typed => _ = ShowPdf(asked, bytes, scale, typed), () => _content.Content = Message(Words.FilePdfPasswordDeclined()));
-            return;
-        }
-        if (pdf is null)
-        {
-            _content.Content = Message(Words.FileUnsupported());
-            return;
-        }
-        // its text selectable in WebView2's viewer; a protected one stays with the pages drawn here, as the password was
-        // typed here and the viewer would ask for it once more
-        if (password is null && PdfWeb.Available())
-        {
-            var web = new PdfWebView(bytes);
+            var web = new PdfWebView(bytes, "file-pdf-web", Node.name);
             _web = web;
             _content.Content = web.Element;
             if (await web.Start())
             {
-                Log.Write("file PDF: in WebView2's viewer");
+                Log.Write(locked ? "file PDF: in WebView2's viewer, which asks its password" : "file PDF: in WebView2's viewer");
                 return;
             }
             if (_closed || _drawn != asked) return;
             StopWeb();
+            shown = pdf is not null ? PdfWeb.Shown.Pages : PdfWeb.Shown.AskHere;
+        }
+        if (shown == PdfWeb.Shown.AskHere)
+        {
+            _content.Content = PdfPassword(Node.name, wrong: password is not null, typed => _ = ShowPdf(asked, bytes, scale, typed), () => _content.Content = Message(Words.FilePdfPasswordDeclined()));
+            return;
+        }
+        if (shown != PdfWeb.Shown.Pages || pdf is null)
+        {
+            _content.Content = Message(Words.FileUnsupported());
+            return;
         }
         _pdf = pdf;
         _content.Content = pdf.Scroll;
@@ -657,81 +663,6 @@ internal sealed class FilePage : IDisposable
             catch (Exception e)
             {
                 Log.Write($"WebView2's SVG view did not close ({e.GetType().Name})");
-            }
-        }
-    }
-
-    /// <summary>A PDF in WebView2's own viewer (PdfWeb): a browser of its own, InPrivate, in a user-data folder made for this
-    /// PDF and deleted once the browser has exited, the bytes served from memory. Its text is selected and copied as in
-    /// any viewer; nothing reaches the clipboard but on the person's Ctrl+C or Copy.</summary>
-    private sealed class PdfWebView
-    {
-        private readonly byte[] _bytes;
-        private readonly WebView2 _control = new() { HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch };
-        private string? _folder;
-        private CoreWebView2Environment? _environment;
-        private bool _closed;
-
-        public PdfWebView(byte[] bytes)
-        {
-            _bytes = bytes;
-            AutomationProperties.SetAutomationId(_control, "file-pdf-web");
-        }
-
-        public UIElement Element => _control;
-
-        /// <summary>The viewer started on the PDF; false where WebView2 did not start (the pages are drawn instead).</summary>
-        public async Task<bool> Start()
-        {
-            try
-            {
-                _folder = PdfWeb.NewFolder();
-                _environment = await PdfWeb.EnvironmentAsync(_folder);
-                if (_closed)
-                {
-                    Close();
-                    return true;
-                }
-                await _control.EnsureCoreWebView2Async(_environment, PdfWeb.ControllerOptions(_environment));
-                if (_closed)
-                {
-                    Close();
-                    return true;
-                }
-                PdfWeb.Show(_environment, _control.CoreWebView2, _bytes);
-                return true;
-            }
-            catch (Exception e)
-            {
-                Log.Write($"WebView2's PDF viewer did not start ({e.GetType().Name}: {e.Message})");
-                Close();
-                return false;
-            }
-        }
-
-        /// <summary>The viewer closed; its folder deleted once its browser has exited.</summary>
-        public void Close()
-        {
-            _closed = true;
-            var folder = _folder;
-            var environment = _environment;
-            _folder = null;
-            _environment = null;
-            if (folder is null) return;
-            if (environment is null)
-            {
-                _ = PdfWeb.DeleteAsync(folder);
-                return;
-            }
-            var queue = _control.DispatcherQueue;
-            environment.BrowserProcessExited += (_, _) => queue.TryEnqueue(() => _ = PdfWeb.DeleteAsync(folder));
-            try
-            {
-                _control.Close();
-            }
-            catch (Exception e)
-            {
-                Log.Write($"WebView2's PDF viewer did not close ({e.GetType().Name})");
             }
         }
     }
