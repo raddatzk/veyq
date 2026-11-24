@@ -1,6 +1,7 @@
 package me.raddatz.veyq.mobile.depot
 
 import me.raddatz.veyq.mobile.blob.DirectoryWalk
+import me.raddatz.veyq.mobile.blob.LevelUploads.Screened
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,7 +52,7 @@ class DepotUploads(
      * desktops do; the phones upload a download as the file it is until the owner switches them on (owner 2026-11-19).
      */
     private val importOffered: Boolean = false,
-) {
+) : me.raddatz.veyq.mobile.blob.LevelUploads {
     /** What the uploads read and make ([over] a shell, a test over a server it plays). */
     interface Door {
         /** [source] as a new file named [name] under [parentId] (null: the space's top) of [scopeId]; null without a tenant. */
@@ -98,9 +99,6 @@ class DepotUploads(
             asFile: (() -> Unit)?, closed: () -> Unit, deletedName: String,
         ): me.raddatz.veyq.mobile.export.ImportDialog? = null
     }
-
-    /** What an upload's screen came to: how many files it queued, and the import it offers (null: none). */
-    class Screened(val queued: Int, val offer: me.raddatz.veyq.mobile.export.ImportDialog?)
 
     /** What the uploads say once: a folder upload's outcome (one line each), or a replace offered with its [action]. */
     class Said(val id: Long, val notices: List<Notice>, val offer: DepotFiles.Offer? = null) {
@@ -185,7 +183,7 @@ class DepotUploads(
      * [upload] whose sources are handed to [left] once no run reads them again (a share's files, ADR 0138 decision 6) — at
      * once for one not queued (offline, no tenant).
      */
-    fun upload(scopeId: String, parentId: String?, label: String, sources: List<UploadSource>, left: ((UploadSource) -> Unit)?): Int {
+    override fun upload(scopeId: String, parentId: String?, label: String, sources: List<UploadSource>, left: ((UploadSource) -> Unit)?): Int {
         if (!door.online() && door.queues) {
             // offline each is sealed at once and waits to be sent (ADR 0153): it shows where it was made, *Waiting to send*
             scope.launch { for (s in sources) runCatching { door.queue(scopeId, parentId, s, s.name) { left?.invoke(it) } }; door.changed() }
@@ -212,8 +210,8 @@ class DepotUploads(
      * pick, drop or share. A share's [left] takes the offered file back once its dialog is gone (an upload as a file hands
      * it back as [upload] does). [deletedName]: how an erased person of an imported Pot is named (the app's words).
      */
-    suspend fun screen(
-        scopeId: String, parentId: String?, label: String, sources: List<UploadSource>, left: ((UploadSource) -> Unit)? = null, deletedName: String = "",
+    override suspend fun screen(
+        scopeId: String, parentId: String?, label: String, sources: List<UploadSource>, left: ((UploadSource) -> Unit)?, deletedName: String,
     ): Screened {
         val download = if (importOffered && door.online() && door.mayImport(scopeId, parentId)) {
             withContext(work) { sources.firstOrNull { me.raddatz.veyq.mobile.export.ImportSource.isDownload(it) } }
@@ -235,14 +233,14 @@ class DepotUploads(
      * walk that holds `.veyq/manifest.json` at its root is a download unpacked and becomes the import's offer — no *Upload
      * as a file*; any other directory is uploaded as its tree. [label]: the level's name, where the import goes.
      */
-    suspend fun screenFolder(
-        scopeId: String, parentId: String?, label: String, shownName: String?, path: String, found: List<DirectoryWalk.Found>, deletedName: String = "",
+    override suspend fun screenFolder(
+        scopeId: String, parentId: String?, label: String, shownName: String?, path: String, found: List<DirectoryWalk.Found>, deletedName: String,
     ): Screened {
         val files = found.filter(FolderUpload::keeps)
         if (importOffered && door.online() && door.mayImport(scopeId, parentId) &&
             me.raddatz.veyq.mobile.export.ImportSource.holdsManifest(files.map { it.path })
         ) {
-            val input = me.raddatz.veyq.mobile.export.ImportInput.Folder(FolderUpload.rootName(shownName, path), files.map { it.path to it.source!! })
+            val input = me.raddatz.veyq.mobile.export.ImportInput.Folder(DirectoryWalk.rootName(shownName, path), files.map { it.path to it.source!! })
             door.importDialog(scopeId, parentId, label, input, null, {}, deletedName)?.let { return Screened(0, it) }
         }
         return Screened(uploadFolder(scopeId, parentId, shownName, path, found), null)
@@ -250,13 +248,13 @@ class DepotUploads(
 
     /**
      * A picked directory uploaded under [parentId] of [scopeId]: what its walk [found] kept ([FolderUpload.keeps]; each link
-     * and unreadable entry said), its folders made — [State.preparing] naming it ([FolderUpload.rootName] of [shownName] and
+     * and unreadable entry said), its folders made — [State.preparing] naming it ([DirectoryWalk.rootName] of [shownName] and
      * [path]) — and its files queued as one batch under the folder's name; a refusal or a folder not made said in Depot's
      * words. Runs off the caller's thread; returns once its files are queued, with how many were (0 where none went).
      */
-    suspend fun uploadFolder(scopeId: String, parentId: String?, shownName: String?, path: String, found: List<DirectoryWalk.Found>): Int =
+    override suspend fun uploadFolder(scopeId: String, parentId: String?, shownName: String?, path: String, found: List<DirectoryWalk.Found>): Int =
         if (!door.online()) 0 else withContext(work) {
-            val rootName = FolderUpload.rootName(shownName, path)
+            val rootName = DirectoryWalk.rootName(shownName, path)
             val walked = FolderUpload.walked(found)
             _state.update { it.copy(preparing = rootName) }
             val report = try {

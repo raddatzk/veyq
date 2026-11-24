@@ -1,6 +1,6 @@
-package me.raddatz.veyq.mobile.composition
+package me.raddatz.veyq.mobile.offline
 
-import me.raddatz.veyq.mobile.offline.*
+import me.raddatz.veyq.mobile.navigation.ShellModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

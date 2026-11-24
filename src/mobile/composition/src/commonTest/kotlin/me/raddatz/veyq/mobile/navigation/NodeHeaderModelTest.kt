@@ -1,6 +1,6 @@
 package me.raddatz.veyq.mobile.navigation
 
-import me.raddatz.veyq.mobile.composition.ShellModel
+import me.raddatz.veyq.mobile.navigation.ShellModel
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async

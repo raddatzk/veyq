@@ -37,7 +37,11 @@ carry a second façade without the first one's users paying for it (ADR 0155 § 
    keeps the mechanism, each application registers its part — the notices' lines, the share sheet's words, the kept reads
    and what the offline store reaches through them (`ApplicationKept`), the guest pages (`GuestPage` open, each
    application's page nested in its door), and Swift's adapters over one application as extensions of the platform's
-   object (an Objective-C category: Swift's call sites unchanged).
+   object (an Objective-C category: Swift's call sites unchanged). **Since #1215 (entries 73–77) the composition holds
+   its root alone** (`AppComposition.kt`, the web's `applications.ts`): what it lifted whole went on to the platform —
+   the shell's model `navigation/ShellModel`, the drop and *Add here* over interfaces an application implements
+   (`PageIntake`, `blob/LevelUploads`, `OpenCopy`), the received link's Apple door `sharing/AppleSharing` — and each
+   application's pages over the shell are its own extensions of `ShellModel` (`<application>/ShellPages.kt`).
 4. **What the platform keeps from the clients stays kept.** A member an application or the composition needs of the
    platform's `internal` is `@PlatformApi` — `@RequiresOptIn(ERROR)`, opted into by the core's modules alone — and
    `@HiddenFromObjC`; a constructor is opened only through a hidden `of(…)`. Swift sees what it saw before the split.
@@ -662,3 +666,49 @@ names were the implementation session's and are not kept.
     (expenses alone) and `ShareSheet.kt` (depot alone) — what entry 70 then moved. Pinned as `validate_guard_gaps.py`
     cases 133 (Expenses' `PotExport` imported into `FileDownloads.kt` again), 134 (a new unlisted file), 135 (a listed
     file deleted).
+73. **2026-11-24 — #1215 slice 1: `AppleSharing` is the platform's.** Its one Memories reference was an unused import;
+    with it gone rule (f) went red on exactly "names depot alone". The received link's Apple door (`AppleSharing`,
+    `GuestOpener`, `AppleOpenLink`, `KeychainGuestSessions`) moved to core's `appleMain` (`sharing/`); Depot's two calls
+    (`guestUploadFolder`, `saveFile`) are extensions of it in Depot's `AppleDepot.kt` — entry 69's pattern, a category
+    Swift calls as before. Apple's `Holding` method of the same name became `uploadFolderAsGuest`: once a Depot symbol
+    carried the name, `validate_mobile_ui_direction.py` (c) read the core UI's call of its own holding as naming Depot — a
+    collision of names, not a reach (the Depot holding still calls `AppleSharing.shared.guestUploadFolder`).
+74. **2026-11-24 — #1215 slice 2: the drop and *Add here* are the platform's, over two interfaces.** `Drop.kt` and
+    `AddHere.kt` moved to core's `navigation/`. A page that takes files is a `PageIntake` (Memories' `GalleryModel` and
+    `Contributions`): its node, its `answer`, `dropIntake()` (`Takes`, `Refused(notice)`, `NotHere`), `upload`, what it
+    says of the folders and of the files its answer left (two calls, so a drop's notices keep their order: folders, the
+    unread, the left), `offersShare`/`takeShare` for *Add here*. Named for the interface: `Contributions` already has
+    `intake()` with its own enum, which one class cannot hold twice. A level's upload is `blob/LevelUploads`
+    (`DepotUploads`; `DepotUploads.Screened` became `LevelUploads.Screened`), a walked folder's name
+    `DirectoryWalk.rootName`. Public shape: `DropTarget.Gallery`/`Bucket` → `DropTarget.Page(intake)`, `AddHere.Gallery` →
+    `AddHere.Page(intake)`, `ShellModel.addHere(…gallery:)` → `(…page:)`; the phones' Memories holdings claim a `Page`
+    whose intake is a `GalleryModel`, the bridge maps `DropOn` in two lines, the wire does not move. Held in core by
+    `PageIntakeTest` over a fake page and level; `BucketDropTest` moved to `:apps:memories`.
+75. **2026-11-24 — #1215 slice 3: `ShellModel` is the platform's; an application's pages are its extensions.** The
+    class moved whole to core's `navigation/` with the wrappers `NodeDownload`, `FileDownloads` and `AppleQueued`. Its 25
+    application factories are extensions in `memories/ShellPages.kt` and `depot/ShellPages.kt` with the same names,
+    parameters, defaults and overloads (Kotlin callers import them; Swift sees a category). What they read of the shell is
+    `@PlatformApi @HiddenFromObjC` — `now`, `readOnly`, `tenantId`, `queues`, `noRoom`, `wallClock`, `queuedMade`,
+    `scopeNodesWithQueued`, `madeOffline`, `offlineNow`, `builtMaps`, `mapsLanguage`, nothing a moved page does not read.
+    The rest the shell named of an application became the platform's form: a drop box's creation and a found row's page
+    are registry hooks (`ApplicationKinds.createDropBox`, Depot; `rowPage`, Memories); a Pot's copy from the move sheet
+    goes through `navigation/OpenCopy`, which `PotModel` implements (`moveSheet(…pot:)` → `(…open:)`, two Swift sites).
+    No per-shell slot for an application's state: `PlaceNames` holds none, so Memories' `placeNames` derives one per read
+    from `builtMaps`, and `mapsOffered` reads `builtMaps != null`. The companion's `galleryAt` is Memories' extension of
+    `ShellModel.Companion`. The composition's tests stay where they ran — over the composed registry and its played
+    fixtures; that some name one application only is older than this and filed (#1260).
+76. **2026-11-24 — The guard: rule (f) is the root alone.** `:composition`'s main sources are `AppComposition.kt`
+    (`COMPOSITION_ROOT`); any other main file is red whatever it names, and so is a composition without its root —
+    `COMPOSITION_FILES`, its `wraps` flag and the per-file count of applications are gone. Pinned as guard-gaps 133
+    (Memories' `ShellPages.kt` copied back), 134 (a new file naming two applications), 135 (the root gone) and 136 (a stub
+    naming nothing). An application's import put back into `:core` is the build's to refuse (measured: `:core:compileKotlinJvm`
+    red, `Unresolved reference 'memories'`), the edge that would let it compile rule (b)'s (case 109); no text rule beside
+    the build, as retired cases 38 and 47 reasoned.
+77. **2026-11-24 — Swift's surface is proved by the generated header.** Kotlin/Native exports an extension on a Kotlin
+    class as a member of an Objective-C category (`@interface VeyqCoreShellModel (Extensions)`), and renames a clashing
+    category member silently, so each slice diffed every `@interface`/`@protocol` member of `VeyqCore.h` (22,922 lines at
+    the base) against the one before. The whole diff, base to slice 3: the moved members re-appear with identical
+    declarations in their categories (`AppleSharing (Extensions)` 2, `ShellModel (Extensions)` 19 and `placeNames`,
+    `ShellModelCompanion (Extensions)` 1); the planned renames (`DropTarget.Page`, `AddHere.Page`, `addHere(…page:)`,
+    `moveSheet(…open:)`, `LevelUploadsScreened`, `DirectoryWalk.rootName`), the protocols `PageIntake`, `LevelUploads`,
+    `OpenCopy` and their conformance members; no `_`-suffixed selector, no class renamed.

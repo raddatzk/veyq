@@ -168,6 +168,10 @@ object DepotKinds : ApplicationKinds {
     // a drop box's own links are its WRITE_ONLY ones
     override fun shareShape(kind: String): ShareSheet.Shape? = if (kind == DROPBOX) ShareSheet.Shape.WRITE_ONLY else null
 
+    override suspend fun createDropBox(
+        tenant: me.raddatz.veyq.mobile.session.TenantSession, scopeId: String, parentId: String?, name: String, password: String, expiresAt: String?,
+    ): ShareSheet.Made = DropBoxes.made(DropBoxes.create(tenant, scopeId, parentId, name, password, expiresAt))
+
     // a folder — a space's top asks as one — takes shared files into Depot's upload queue
     override fun share(kind: String): ShareAnswer? = if (kind == FOLDER) FolderShare.answer else null
 

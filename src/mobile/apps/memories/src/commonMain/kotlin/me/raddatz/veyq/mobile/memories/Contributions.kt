@@ -18,7 +18,7 @@ import me.raddatz.veyq.mobile.session.TenantSession
  * under a primary ([State.createsSub]), a sub-bucket renamed or deleted ([State.renames]), a move within one root
  * ([State.moveTargets]). Online only for a write (ADR 0140 decision 7); offline the rows read from the kept listing.
  */
-class Contributions(private val gallery: GalleryModel, private val door: Door) {
+class Contributions(private val gallery: GalleryModel, private val door: Door) : me.raddatz.veyq.mobile.navigation.PageIntake {
     companion object {
         /** Whether the Contributions view is offered beside Photos | Music | Map — yes, exactly as the web offers it (ADR 0149 decision 6, owner 2026-11-19). */
         const val OFFERED = true
@@ -183,7 +183,7 @@ class Contributions(private val gallery: GalleryModel, private val door: Door) {
      * queued; none where [intake] is not [Intake.TAKES]. A move refused or failed leaves the medium in the primary and is
      * said as a curation's is ([State.refused]).
      */
-    fun upload(sources: List<UploadSource>): Int {
+    override fun upload(sources: List<UploadSource>): Int {
         if (intake() != Intake.TAKES) return 0
         val row = current.row ?: return 0
         if (row.isPrimary) return gallery.upload(sources)
@@ -193,6 +193,28 @@ class Contributions(private val gallery: GalleryModel, private val door: Door) {
             if (out != Buckets.Outcome.DONE) _state.update { it.copy(refused = out) }
         }
     }
+
+    // ---- the bucket's intake: a drop (core's `PageIntake`, ADR 0156; inbox #1065) ----
+
+    /** The page's node: its gallery's. */
+    override val node: me.raddatz.veyq.mobile.navigation.NodeAt get() = gallery.node
+
+    /** What a drop keeps here: photos and videos, as the gallery's ([MemoryShare.answer]). */
+    override val answer: me.raddatz.veyq.mobile.navigation.ShareAnswer get() = MemoryShare.answer
+
+    /** A drop lands here per [intake]: another uploader's root and a sub-bucket offline refuse it in their own words. */
+    override fun dropIntake(): me.raddatz.veyq.mobile.navigation.PageIntake.Intake = when (intake()) {
+        Intake.TAKES -> me.raddatz.veyq.mobile.navigation.PageIntake.Intake.Takes
+        Intake.NOT_OWN -> me.raddatz.veyq.mobile.navigation.PageIntake.Intake.Refused(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.MEMORY_BUCKETS_DROP_NOT_OWN))
+        Intake.OFFLINE -> me.raddatz.veyq.mobile.navigation.PageIntake.Intake.Refused(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.OFFLINE_READ_ONLY))
+        Intake.NONE -> me.raddatz.veyq.mobile.navigation.PageIntake.Intake.NotHere
+    }
+
+    /** A dropped folder is said by name, as on the gallery. */
+    override fun foldersNotTaken(names: List<String>): List<me.raddatz.veyq.mobile.words.Notice> = gallery.foldersNotTaken(names)
+
+    /** Dropped files that are no photo or video, said by count, as on the gallery. */
+    override fun filesNotTaken(count: Int): me.raddatz.veyq.mobile.words.Notice? = gallery.filesNotTaken(count)
 
     /** What [State.refused] said was seen. */
     fun seen() = _state.update { it.copy(refused = null) }

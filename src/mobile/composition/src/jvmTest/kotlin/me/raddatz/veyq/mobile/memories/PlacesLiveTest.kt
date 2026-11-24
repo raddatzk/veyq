@@ -21,7 +21,7 @@ import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.Home
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.composition.ShellModel
+import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.offline.KeptRead
 import me.raddatz.veyq.mobile.offline.Pin
 import me.raddatz.veyq.mobile.session.AccountDoor

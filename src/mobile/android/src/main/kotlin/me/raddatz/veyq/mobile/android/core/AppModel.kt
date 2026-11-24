@@ -134,8 +134,8 @@ sealed interface Screen {
         val levelGroups: List<me.raddatz.veyq.mobile.navigation.Home.Group> get() = lists.groups(shell)
 
         /** The lists as core's shell holds them, for its rules. */
-        private val lists: me.raddatz.veyq.mobile.composition.ShellModel.Lists
-            get() = me.raddatz.veyq.mobile.composition.ShellModel.Lists(spaces, nodes, objects, favorites, applications, filters, drawer, uses)
+        private val lists: me.raddatz.veyq.mobile.navigation.ShellModel.Lists
+            get() = me.raddatz.veyq.mobile.navigation.ShellModel.Lists(spaces, nodes, objects, favorites, applications, filters, drawer, uses)
     }
 }
 
@@ -163,7 +163,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     )
 
     /** The shell over the current tenant (core's `ShellModel`): its lists, where the person is, the actions on a node. */
-    internal var shellModel: me.raddatz.veyq.mobile.composition.ShellModel? = null
+    internal var shellModel: me.raddatz.veyq.mobile.navigation.ShellModel? = null
         private set
     private var shellWatch: kotlinx.coroutines.Job? = null
 
@@ -1002,7 +1002,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         // what each application held open of the tenant before closes (its pages, its dialogs, a profile's section)
         eachHolding { it.leave() }
         rows = me.raddatz.veyq.mobile.navigation.RowDetails.Read.EMPTY
-        val model = me.raddatz.veyq.mobile.composition.ShellModel(t, hidden, recent, System::currentTimeMillis)
+        val model = me.raddatz.veyq.mobile.navigation.ShellModel(t, hidden, recent, System::currentTimeMillis)
         shellWatch?.cancel()
         shellModel = model
         _shell.value = model
@@ -1065,14 +1065,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * What *Add here* puts the waiting files into on [shell] (core's `ShellModel.addHere`): [page]'s place, the open
      * Memory's or chapter's, or the level shown — a folder or a space's top — where this member may put files; null elsewhere.
      */
-    internal fun addHereTarget(shell: Shell, page: AddHerePage?): me.raddatz.veyq.mobile.composition.AddHere? =
+    internal fun addHereTarget(shell: Shell, page: AddHerePage?): me.raddatz.veyq.mobile.navigation.AddHere? =
         if (page != null) page.at(shell) else shellModel?.addHere(shareInbox, shell, null)
 
     /**
      * *Add here* on [target]: what its place takes queued there — a gallery's photos and videos, a level's files into
      * Depot's queue under [label] —, the share ended; what was left out said. The place's application answers it.
      */
-    fun addHere(target: me.raddatz.veyq.mobile.composition.AddHere, label: String): me.raddatz.veyq.mobile.words.Notice? =
+    fun addHere(target: me.raddatz.veyq.mobile.navigation.AddHere, label: String): me.raddatz.veyq.mobile.words.Notice? =
         holdings.values.firstNotNullOfOrNull { it.addHere(target, label) }?.notice
 
     /**
@@ -1080,23 +1080,23 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * uploads (`ShellModel.drop`), and says what it did not take. A level that takes none leaves the files waiting in the pick
      * mode, as a share's do (the open Pot among the places, [receiveDrop]); a gallery's or a row's refusal is said.
      */
-    fun drop(target: me.raddatz.veyq.mobile.composition.DropTarget, drop: ShareIn.Drop) {
+    fun drop(target: me.raddatz.veyq.mobile.navigation.DropTarget, drop: ShareIn.Drop) {
         val m = shellModel
         if (m == null) {
-            if (target is me.raddatz.veyq.mobile.composition.DropTarget.Level) receiveDrop(drop.incoming) else drop.release()
+            if (target is me.raddatz.veyq.mobile.navigation.DropTarget.Level) receiveDrop(drop.incoming) else drop.release()
             return
         }
         viewModelScope.launch {
             // the target's application answers (a gallery's Memories, a level's or a folder row's Depot)
             val outcome = holdings.values.firstNotNullOfOrNull { it.drop(m, target, drop.items) }
                 ?: m.drop(target, drop.items, null, ShareIn::release)
-            if (outcome is me.raddatz.veyq.mobile.composition.DropOutcome.Refused && target is me.raddatz.veyq.mobile.composition.DropTarget.Level) {
+            if (outcome is me.raddatz.veyq.mobile.navigation.DropOutcome.Refused && target is me.raddatz.veyq.mobile.navigation.DropTarget.Level) {
                 receiveDrop(drop.incoming)
                 return@launch
             }
-            if (outcome is me.raddatz.veyq.mobile.composition.DropOutcome.Refused) drop.release()
+            if (outcome is me.raddatz.veyq.mobile.navigation.DropOutcome.Refused) drop.release()
             // the phones' Depot offers no import (core's `DepotUploads` built so, owner 2026-11-19): never offered here
-            if (outcome is me.raddatz.veyq.mobile.composition.DropOutcome.Offered) outcome.offer.uploadAsFile()
+            if (outcome is me.raddatz.veyq.mobile.navigation.DropOutcome.Offered) outcome.offer.uploadAsFile()
             outcome.notices.forEach(::said)
         }
     }
@@ -1297,7 +1297,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     // ---- the writes made offline (ADR 0153): core's outbox, its tray, its marks and its notices; the app only draws ----
 
     /** The shell's model as it changes: the outbox's flows follow the tenant shown. */
-    private val _shell = MutableStateFlow<me.raddatz.veyq.mobile.composition.ShellModel?>(null)
+    private val _shell = MutableStateFlow<me.raddatz.veyq.mobile.navigation.ShellModel?>(null)
 
     /** Under the offline banner: how many writes made offline wait (core's `ShellModel.queuedBanner`); null while none does. */
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -1775,7 +1775,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     private var startPending = false
 
     /** The screen over [state], the core shell's, with this device's servers and the tenant shown. */
-    private fun publish(state: me.raddatz.veyq.mobile.composition.ShellModel.State) {
+    private fun publish(state: me.raddatz.veyq.mobile.navigation.ShellModel.State) {
         val gate = session.current as? me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed ?: return
         val signed = session.signedTo ?: return
         if (shellModel?.tenant !== signed.session) return // a switch under way: the shell shown stays until the other one read

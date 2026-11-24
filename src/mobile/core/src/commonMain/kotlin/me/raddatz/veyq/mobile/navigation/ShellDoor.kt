@@ -2,9 +2,8 @@ package me.raddatz.veyq.mobile.navigation
 
 
 /**
- * What an application's model reads and asks of the shell it was opened from (the composition's `ShellModel`, which the
- * platform and the applications do not see): its lists read anew, where the person is, what it lists, an object opened
- * there. Expenses' Pot copies and creates through it (`PotModel.duplicate`, `PotModel.createSheet`).
+ * What an application's model reads and asks of the shell it was opened from ([ShellModel], kept to these few members so
+ * a model holds no shell's state): its lists read anew, where the person is, what it lists, an object opened there. Expenses' Pot copies and creates through it (`PotModel.duplicate`, `PotModel.createSheet`).
  */
 interface ShellDoor {
     /** The shell's lists read anew. */

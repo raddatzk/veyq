@@ -1,5 +1,18 @@
 package me.raddatz.veyq.mobile.android.apps.memories
 
+import me.raddatz.veyq.mobile.memories.contributions
+import me.raddatz.veyq.mobile.memories.createMemory
+import me.raddatz.veyq.mobile.memories.dateEditor
+import me.raddatz.veyq.mobile.memories.galleryModel
+import me.raddatz.veyq.mobile.memories.mediaUploads
+import me.raddatz.veyq.mobile.memories.memoriesMap
+import me.raddatz.veyq.mobile.memories.memoryDates
+import me.raddatz.veyq.mobile.memories.musicModel
+import me.raddatz.veyq.mobile.memories.offersAutoPlace
+import me.raddatz.veyq.mobile.memories.offersWasThere
+import me.raddatz.veyq.mobile.memories.personMemories
+import me.raddatz.veyq.mobile.memories.placeEditor
+import me.raddatz.veyq.mobile.memories.trackList
 import android.app.Application
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.viewModelScope
@@ -20,11 +33,11 @@ import me.raddatz.veyq.mobile.android.core.ShareIn
 import me.raddatz.veyq.mobile.android.core.language
 import me.raddatz.veyq.mobile.android.core.text
 import me.raddatz.veyq.mobile.android.words
-import me.raddatz.veyq.mobile.composition.AddHere
-import me.raddatz.veyq.mobile.composition.DropOutcome
-import me.raddatz.veyq.mobile.composition.DropTarget
-import me.raddatz.veyq.mobile.composition.Dropped
-import me.raddatz.veyq.mobile.composition.ShellModel
+import me.raddatz.veyq.mobile.navigation.AddHere
+import me.raddatz.veyq.mobile.navigation.DropOutcome
+import me.raddatz.veyq.mobile.navigation.DropTarget
+import me.raddatz.veyq.mobile.navigation.Dropped
+import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.memories.Contributions
 import me.raddatz.veyq.mobile.memories.GalleryFilter
 import me.raddatz.veyq.mobile.memories.GalleryModel
@@ -101,13 +114,13 @@ internal class MemoriesHolding(private val model: AppModel) : Holding() {
 
     /** *Add here* on a Memory's or a chapter's page: its gallery's upload; what is no photo or video said. */
     override fun addHere(target: AddHere, label: String): AddedHere? {
-        if (target !is AddHere.Gallery) return null
+        if (target !is AddHere.Page || target.intake !is GalleryModel) return null
         return target.take(model.shareInbox, label, null, ShareIn::release)?.let { AddedHere(MediaUploads.notTaken(it.refused)) }
     }
 
     /** Files dropped onto a gallery, or onto the bucket its Contributions view shows: its upload (core's one drop). */
     override suspend fun drop(shell: ShellModel, target: DropTarget, items: List<Dropped>): DropOutcome? =
-        if (target is DropTarget.Gallery || target is DropTarget.Bucket) shell.drop(target, items, null, ShareIn::release) else null
+        if (target is DropTarget.Page) shell.drop(target, items, null, ShareIn::release) else null
 
     override val deriver: me.raddatz.veyq.mobile.media.Derivation.Deriver get() = tiers
 

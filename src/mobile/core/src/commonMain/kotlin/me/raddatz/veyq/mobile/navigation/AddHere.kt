@@ -1,20 +1,17 @@
-package me.raddatz.veyq.mobile.composition
+package me.raddatz.veyq.mobile.navigation
 
-import me.raddatz.veyq.mobile.navigation.NodeAt
-import me.raddatz.veyq.mobile.navigation.*
 import me.raddatz.veyq.mobile.AppKinds
+import me.raddatz.veyq.mobile.blob.LevelUploads
 import me.raddatz.veyq.mobile.blob.UploadSource
-import me.raddatz.veyq.mobile.depot.DepotUploads
-import me.raddatz.veyq.mobile.memories.GalleryModel
-import me.raddatz.veyq.mobile.memories.MemoryShare
 
 /**
  * Where the pick mode's *Add here* puts what waits (ADR 0138 decision 3): the open page's own save, the place's answer
  * deciding what it takes. Core picks the target ([at], asked through `ShellModel.addHere`) so no app branches on kinds:
  *
- * - [Gallery] — a Memory's or a chapter's page open as the shell's object: Memories' answer, queued into its gallery;
- * - [Level] — the level the shell shows, a folder or a space's top: Depot's answer (a space's top asks as a folder),
- *   queued into Depot's upload queue under that level, as its picker's upload is.
+ * - [Page] — a page open as the shell's object that takes files ([PageIntake], a Memory's or a chapter's): its answer,
+ *   queued into it;
+ * - [Level] — the level the shell shows, a folder or a space's top: a folder's answer (a space's top asks as one), queued
+ *   into the level's upload ([LevelUploads], Depot's) under that level, as its picker's upload is.
  *
  * Each [answer] is the one `AppKinds.share` gives for the place's kind: what [take] queues and what a share extension
  * hands on (iOS's handoff, ADR 0138 decision 6).
@@ -28,19 +25,19 @@ sealed class AddHere {
      * ended (once). A level's files go into [depot] under [label] (the level's name, the batch's label), each handed to
      * [left] once that queue lets it go. Null where the place takes none of it now (nothing waits, no right, offline).
      */
-    abstract fun take(inbox: ShareInbox, label: String, depot: DepotUploads?, left: (UploadSource) -> Unit): ShareInbox.Taken?
+    abstract fun take(inbox: ShareInbox, label: String, depot: LevelUploads?, left: (UploadSource) -> Unit): ShareInbox.Taken?
 
-    /** A Memory's or a chapter's page: its gallery's upload. */
-    class Gallery(val gallery: GalleryModel) : AddHere() {
-        override val answer: ShareAnswer get() = MemoryShare.answer
-        override fun take(inbox: ShareInbox, label: String, depot: DepotUploads?, left: (UploadSource) -> Unit) = MemoryShare.addHere(inbox, gallery)
+    /** A page that takes files ([PageIntake], a Memory's or a chapter's): its own upload. */
+    class Page(val intake: PageIntake) : AddHere() {
+        override val answer: ShareAnswer get() = intake.answer
+        override fun take(inbox: ShareInbox, label: String, depot: LevelUploads?, left: (UploadSource) -> Unit) = intake.takeShare(inbox)
     }
 
     /** The level shown: folder [parentId] of space [scopeId], or the space's top (null), at [place]. */
     data class Level(val scopeId: String, val parentId: String?, val place: ShareAnswer.Place) : AddHere() {
         override val answer: ShareAnswer get() = AppKinds.share(place.kind) ?: error("a level is a folder, whose kind answers")
 
-        override fun take(inbox: ShareInbox, label: String, depot: DepotUploads?, left: (UploadSource) -> Unit): ShareInbox.Taken? {
+        override fun take(inbox: ShareInbox, label: String, depot: LevelUploads?, left: (UploadSource) -> Unit): ShareInbox.Taken? {
             if (depot == null || !answer.mayChoose(place)) return null
             return inbox.queue(answer) { depot.upload(scopeId, parentId, label, it, left) }
         }
@@ -50,7 +47,7 @@ sealed class AddHere {
          * into [depot] named [label], each handed to [left] once that queue lets it go; the rest, and all where the level
          * may take nothing now, handed back at once. The number queued.
          */
-        fun drop(files: List<UploadSource>, label: String, depot: DepotUploads?, left: (UploadSource) -> Unit): Int {
+        fun drop(files: List<UploadSource>, label: String, depot: LevelUploads?, left: (UploadSource) -> Unit): Int {
             val sorted = answer.sort(files)
             sorted.left.forEach { runCatching { left(it) } }
             if (depot == null || !answer.mayChoose(place)) {
@@ -61,10 +58,10 @@ sealed class AddHere {
         }
 
         /**
-         * [take] through the import's screen (ADR 0152 decision 1; `DepotUploads.screen`): a download among what waits is
+         * [take] through the import's screen (ADR 0152 decision 1; `LevelUploads.screen`): a download among what waits is
          * offered as an import, the rest queued. [Offered.offer] null where none is offered (a phone, a guest's folder).
          */
-        suspend fun takeOrOffer(inbox: ShareInbox, label: String, depot: DepotUploads?, left: (UploadSource) -> Unit, deletedName: String): Offered? {
+        suspend fun takeOrOffer(inbox: ShareInbox, label: String, depot: LevelUploads?, left: (UploadSource) -> Unit, deletedName: String): Offered? {
             if (depot == null || !answer.mayChoose(place)) return null
             var fit: List<UploadSource> = emptyList()
             val taken = inbox.queue(answer) { fit = it; it.size } ?: return null
@@ -72,12 +69,12 @@ sealed class AddHere {
         }
 
         /** [drop] through the import's screen: a dropped download offered as an import, the rest uploaded at once. */
-        suspend fun dropOrOffer(files: List<UploadSource>, label: String, depot: DepotUploads?, left: (UploadSource) -> Unit, deletedName: String): DepotUploads.Screened {
+        suspend fun dropOrOffer(files: List<UploadSource>, label: String, depot: LevelUploads?, left: (UploadSource) -> Unit, deletedName: String): LevelUploads.Screened {
             val sorted = answer.sort(files)
             sorted.left.forEach { runCatching { left(it) } }
             if (depot == null || !answer.mayChoose(place)) {
                 sorted.taken.forEach { runCatching { left(it) } }
-                return DepotUploads.Screened(0, null)
+                return LevelUploads.Screened(0, null)
             }
             return depot.screen(scopeId, parentId, label, sorted.taken, left, deletedName)
         }
@@ -88,17 +85,17 @@ sealed class AddHere {
 
     companion object {
         /**
-         * The page in [shell] that offers *Add here* for what waits in [inbox]: [gallery], the page of the shell's open
-         * object, where Memories take one of the files there; else the level the shell shows — no object, application,
+         * The page in [shell] that offers *Add here* for what waits in [inbox]: [page], the page of the shell's open
+         * object, where it takes one of the files there ([PageIntake.offersShare]); else the level the shell shows — no object, application,
          * person's page, kept link or Search open — at the place [placeOf] its folder (null: the space's top), where its
          * answer may be chosen and takes one of them. Null anywhere else, and while nothing waits.
          */
-        fun at(inbox: ShareInbox, shell: Shell, gallery: GalleryModel?, placeOf: (NodeAt?) -> ShareAnswer.Place): AddHere? {
+        fun at(inbox: ShareInbox, shell: Shell, page: PageIntake?, placeOf: (NodeAt?) -> ShareAnswer.Place): AddHere? {
             if (inbox.waiting.value == null) return null
             val open = shell.openObject
             if (open != null) {
-                val g = gallery?.takeIf { it.node.nodeId == open.nodeId && MemoryShare.offered(inbox, it) } ?: return null
-                return Gallery(g)
+                val p = page?.takeIf { it.node.nodeId == open.nodeId && it.offersShare(inbox) } ?: return null
+                return Page(p)
             }
             val level = shown(shell, placeOf) ?: return null
             return level.takeIf { inbox.offers(AppKinds.share(it.place.kind), it.place) }

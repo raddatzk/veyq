@@ -226,7 +226,7 @@ internal fun MemoryGallery(
     // Only where the gallery's media show: the Music and Map views take no drop, as the web's tabs take none (#1054); on the
     // Contributions view they go into the bucket it shows (#1065)
     val dropped = Modifier.sharedFilesDrop { drop ->
-        model.drop(contributions?.let { me.raddatz.veyq.mobile.composition.DropTarget.Bucket(it) } ?: me.raddatz.veyq.mobile.composition.DropTarget.Gallery(gallery), drop)
+        model.drop(contributions?.let { me.raddatz.veyq.mobile.navigation.DropTarget.Page(it) } ?: me.raddatz.veyq.mobile.navigation.DropTarget.Page(gallery), drop)
     }
     // a member adds photos through the header's Upload (core's `GalleryModel.headerActions`); a guest's link page has no
     // core header, so its page offers them here

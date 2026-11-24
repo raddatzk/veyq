@@ -7,7 +7,7 @@ import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.composition.ShellModel
+import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.offline.PlayedTenant
 import me.raddatz.veyq.mobile.offline.removeAll
 import kotlin.test.AfterTest

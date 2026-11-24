@@ -15,7 +15,7 @@ import me.raddatz.veyq.mobile.android.R
 import me.raddatz.veyq.mobile.android.core.AppModel
 import me.raddatz.veyq.mobile.android.core.Holding
 import me.raddatz.veyq.mobile.android.core.HoldingKey
-import me.raddatz.veyq.mobile.composition.ShellModel
+import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.expenses.EntryEditor
 import me.raddatz.veyq.mobile.expenses.PotCreateSheet
 import me.raddatz.veyq.mobile.expenses.PotExport

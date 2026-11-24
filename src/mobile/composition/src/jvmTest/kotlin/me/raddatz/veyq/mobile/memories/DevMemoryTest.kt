@@ -53,7 +53,7 @@ class DevMemoryTest {
                 println("dev memory: $purge trashed and purged")
                 return@runBlocking
             }
-            val shell = me.raddatz.veyq.mobile.composition.ShellModel(
+            val shell = me.raddatz.veyq.mobile.navigation.ShellModel(
                 tenant, me.raddatz.veyq.mobile.navigation.Hidden({}, emptySet()), me.raddatz.veyq.mobile.navigation.RecentUses({}, emptyList()),
             ) { System.currentTimeMillis() }
             shell.load(openLastUsed = false)

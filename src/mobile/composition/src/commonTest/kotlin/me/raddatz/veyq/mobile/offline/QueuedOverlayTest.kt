@@ -1,5 +1,10 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.depot.depotUploads
+import me.raddatz.veyq.mobile.memories.createMemory
+import me.raddatz.veyq.mobile.memories.galleryAt
+import me.raddatz.veyq.mobile.memories.galleryModel
+import me.raddatz.veyq.mobile.memories.mediaUploads
 import me.raddatz.veyq.mobile.media.Derivation
 import me.raddatz.veyq.mobile.offline.QueuedLoss
 import me.raddatz.veyq.mobile.offline.QueuedShown
@@ -29,7 +34,7 @@ import me.raddatz.veyq.mobile.navigation.NameAnswer
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.composition.ShellModel
+import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.Reach
 import me.raddatz.veyq.mobile.session.TenantSession
 import me.raddatz.veyq.mobile.session.VeyqAccount

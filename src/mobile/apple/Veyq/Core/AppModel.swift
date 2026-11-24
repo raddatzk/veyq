@@ -910,7 +910,7 @@ final class AppModel {
         _ = spaces // observed: a level's rights move with the lists
         // a page an application holds on screen answers first (a Memory's gallery), else the level shown
         return holdings.lazy.compactMap { $0.addHereTarget(m, inbox: self.inbox, at: self.shell) }.first
-            ?? m.addHere(inbox: inbox, shell: shell, gallery: nil)
+            ?? m.addHere(inbox: inbox, shell: shell, page: nil)
     }
 
     /// *Add here*: what `target` takes of the waiting files goes there — a gallery's photos and videos, a level's files into
@@ -1449,7 +1449,7 @@ final class AppModel {
         }
         // the kind whose copy an application makes answers (a Pot's, by the open Pot); every other the composition's
         return holdings.lazy.compactMap { $0.moveSheet(m, node, copying: copying, changed: changed) }.first
-            ?? m.moveSheet(node: node, copying: copying, pot: nil, deletedName: say(.potDeletedPerson)) { changed() }
+            ?? m.moveSheet(node: node, copying: copying, open: nil, deletedName: say(.potDeletedPerson)) { changed() }
     }
 
     // MARK: The space's trash (core's NodeTrash)

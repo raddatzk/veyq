@@ -429,6 +429,21 @@ object AppKinds {
     ): List<me.raddatz.veyq.mobile.blob.UploadQueue.Job> =
         sources.mapNotNull { source -> applications.firstNotNullOfOrNull { it.guestLevelUpload(access, session, parent, source) } }
 
+    /**
+     * "Add files only" (`ShellModel`'s share sheet): a drop box [name] under [parentId] (null: the space's top) of [scopeId]
+     * with its first link, made by the application that holds drop boxes (Depot's); refused where none does.
+     */
+    internal suspend fun createDropBox(
+        tenant: me.raddatz.veyq.mobile.session.TenantSession, scopeId: String, parentId: String?, name: String, password: String, expiresAt: String?,
+    ): me.raddatz.veyq.mobile.navigation.ShareSheet.Made {
+        for (app in applications) app.createDropBox(tenant, scopeId, parentId, name, password, expiresAt)?.let { return it }
+        return me.raddatz.veyq.mobile.navigation.ShareSheet.Made(null, me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.SHARE_FAILED))
+    }
+
+    /** The object listed node [row] opens as where it is no object itself (a chapter its Memory-kind page, Memories'). */
+    internal fun rowPage(row: me.raddatz.veyq.mobile.navigation.NodeRef): me.raddatz.veyq.mobile.navigation.ObjectRef? =
+        applications.firstNotNullOfOrNull { it.rowPage(row) }
+
     private const val FOLDER = "FOLDER"
     private const val SHARE_BOOKMARK = "SHARE_BOOKMARK"
 }

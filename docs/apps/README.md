@@ -130,9 +130,11 @@ library that owns nothing is allowed, never required; an application's rights an
   (`src/mobile/apps/<application>`) an application's code in its own packages `me.raddatz.veyq.mobile.<application>` and
   its generated client `…mobile.api.<application>` (every spec of `contracts/api/<application>/`), `:composition`
   (`src/mobile/composition`) the one module that names every application — it installs each one's part
-  (`<Application>Kinds`) into the platform's registry `AppKinds` before any session opens, holds the shell's model and
-  what reads several applications, and is what the Apple framework, the bridge, Android and `@veyq/core-js` are built
-  from — and `:testing` the test support. What an application needs of the platform's `internal` is `@PlatformApi`, an
+  (`<Application>Kinds`) into the platform's registry `AppKinds` before any session opens — `AppComposition.kt`, its one
+  main file, as the web's `applications.ts` — and is what the Apple framework, the bridge, Android and `@veyq/core-js`
+  are built from — and `:testing` the test support. The shell's model is the platform's (`navigation/ShellModel`), and so
+  are the drop and *Add here*, over the interfaces an application implements (`PageIntake`, `blob/LevelUploads`); each
+  application's pages over the shell are its extensions in its module (`<application>/ShellPages.kt`). What an application needs of the platform's `internal` is `@PlatformApi`, an
   opt-in only the core's modules take, hidden from Objective-C. A test of one application runs in its module over
   `TestApplications.install(<its part>)`; one across applications or of the composition in `:composition`.
 

@@ -11,4 +11,14 @@ object DirectoryWalk {
 
     /** One entry a walk met: its path below the picked directory (`/`-separated), what it is, and for a file its [source]. */
     class Found(val path: String, val kind: Kind, val source: UploadSource? = null)
+
+    /**
+     * The name a walked directory is said and made by: the picked directory's own ([shown], what the platform's picker
+     * names it), else the last part of its [path] (a path's or a document id's, parted at `/`, a backslash and `:`) — never
+     * a word of the app's own. A dropped folder's name (`Dropped.Folder.name`) and Depot's uploaded folder's.
+     */
+    fun rootName(shown: String?, path: String): String {
+        shown?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        return path.split('/', '\\', ':').lastOrNull { it.isNotBlank() }?.trim().orEmpty()
+    }
 }

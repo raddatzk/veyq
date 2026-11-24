@@ -57,9 +57,9 @@ object ShareIn {
      * one not read, by its name. [incoming] is the same drop as a share's files, for the pick mode a level that takes none
      * leaves it to.
      */
-    class Drop(val items: List<me.raddatz.veyq.mobile.composition.Dropped>) {
-        private val files get() = items.filterIsInstance<me.raddatz.veyq.mobile.composition.Dropped.File>().map { it.source }
-        val incoming: ShareInbox.Incoming get() = ShareInbox.Incoming(files, items.count { it !is me.raddatz.veyq.mobile.composition.Dropped.File })
+    class Drop(val items: List<me.raddatz.veyq.mobile.navigation.Dropped>) {
+        private val files get() = items.filterIsInstance<me.raddatz.veyq.mobile.navigation.Dropped.File>().map { it.source }
+        val incoming: ShareInbox.Incoming get() = ShareInbox.Incoming(files, items.count { it !is me.raddatz.veyq.mobile.navigation.Dropped.File })
 
         /** Nothing of the drop is kept: each file let go. */
         fun release() = files.forEach(::release)
@@ -71,8 +71,8 @@ object ShareIn {
         val uris = (0 until c.itemCount).mapNotNull { c.getItemAt(it).uri }
         if (uris.isEmpty()) return null
         return Drop(uris.map { uri ->
-            source(context, uri)?.let { me.raddatz.veyq.mobile.composition.Dropped.File(it) }
-                ?: me.raddatz.veyq.mobile.composition.Dropped.Unread(uri.lastPathSegment ?: uri.toString())
+            source(context, uri)?.let { me.raddatz.veyq.mobile.navigation.Dropped.File(it) }
+                ?: me.raddatz.veyq.mobile.navigation.Dropped.Unread(uri.lastPathSegment ?: uri.toString())
         })
     }
 

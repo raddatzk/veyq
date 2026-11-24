@@ -1,4 +1,4 @@
-package me.raddatz.veyq.mobile.composition
+package me.raddatz.veyq.mobile.navigation
 
 import me.raddatz.veyq.mobile.export.*
 import kotlinx.coroutines.Dispatchers
@@ -18,7 +18,7 @@ object FileDownloads {
      */
     @Throws(Exception::class)
     suspend fun subtree(
-        shell: ShellModel, ref: me.raddatz.veyq.mobile.navigation.NodeAt, deletedName: String,
+        shell: ShellModel, ref: NodeAt, deletedName: String,
         nowMs: Long, path: String,
     ): List<NodeExport.Skipped>? = withContext(Dispatchers.Default) { shell.download(ref, deletedName, nowMs, path) }
 }

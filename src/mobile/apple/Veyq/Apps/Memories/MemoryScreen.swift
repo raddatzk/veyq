@@ -337,8 +337,8 @@ struct MemoryScreen: View {
         .onDrop(of: showsMusic || showsMap ? [] : IncomingFiles.accepted, isTargeted: nil) { providers in
             guard guest == nil, !showsMusic, !showsMap, let gallery = model.memories.galleryModel(node) else { return false }
             // on the Contributions view into the bucket it shows (#1065), one of the caller's own root alone (core's `Contributions.intake`)
-            let target: DropTarget = showsContributions ? (contributions.map { DropTarget.Bucket(contributions: $0.model) } ?? DropTarget.Gallery(gallery: gallery))
-                : DropTarget.Gallery(gallery: gallery)
+            let target: DropTarget = showsContributions ? (contributions.map { DropTarget.Page(intake: $0.model) } ?? DropTarget.Page(intake: gallery))
+                : DropTarget.Page(intake: gallery)
             Task { await model.drop(providers, onto: target) }
             return true
         }
