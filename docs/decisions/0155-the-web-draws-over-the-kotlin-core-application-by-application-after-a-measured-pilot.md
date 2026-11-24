@@ -19,7 +19,8 @@
   § The music order and fades' slice — 1.56×), so decision 7.2's list is built. Decision 7.3's first application
   (2026-11-24: Expenses' rules, `@veyq/core-js/expenses` from `:apps:expenses`' own module file, decision 4's JSON seam
   with it, § Expenses' move); the owner (2026-11-22) counts the platform code its façade needs against the platform
-  module's running budget and retired the search-alone budget. Decision 8 is not built
+  module's running budget and retired the search-alone budget. Its second (2026-11-24: Depot's rules, `@veyq/core-js/depot`
+  from `:apps:depot`'s own module file, a lazy chunk, § Depot's move). Decision 8 is not built
 - Date: 2026-11-20
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -1194,6 +1195,60 @@ Measured before the decision (2026-11-20):
     and a new Pot's or entry's digits stop depending on the browser's ICU.
   - *Not done here:* the browser pass of the refine's phase 4 (two builds over one backend, en and de) — the tests above
     hold the behaviour; the pass is owed.
+
+- **Depot's move** (decision 7.3's second application, built 2026-11-24, branch `claude/depot-web-core`, the work order
+  cr-web-depot-on-the-core, deleted at harvest). What the web's Depot decided beside a Kotlin twin the apps already ran — what
+  an opened file is (`view.ts`' decision: the bytes decide, the claim narrows, the caps, a text's frames and cut), a
+  picked directory's plan (`uploadFolder.ts`' `planFolderUpload`: safe names, slug-numbered per directory, the top among the
+  level's siblings) and an SVG's canvas and zoom steps (`svgRaster.ts`' `planRaster` and caps, `SvgView.vue`'s steps) — is
+  `:apps:depot`'s (`FileView.decided`, `FolderUpload.planned`, `SvgView`), drawn through `@veyq/core-js/depot`
+  (`apps/depot/src/jsMain/…/depot/web/`), its code Depot's own module file (`kotlin_veyq_mobile_apps_depot.mjs`), a lazy
+  chunk: the file's page and the first folder upload load it, never a level alone. `contracts/depot/v1-vectors.json` holds
+  every side (43 openings, 12 plans with the folding's tokens each may ask, 14 rasters, the zoom steps): `DepotVectorsTest`
+  writes it, the package's `depot.test.ts` and the web's `features/depot/vectors.test.ts` answer it. What stays TypeScript,
+  and why: everything that awaits I/O or keeps state (the reading and decoding, `createFolders`, `takeBackEmptyFolders`, the
+  uploads, the drop box, the rows, the viewer — decision 8), and three rules with no whole Kotlin twin to draw — the rights
+  matrix (inbox #1300), the uploader's naming (#1301), the export content checks over variant A's tree (#1302). Its gate
+  (each number against `96a40323e`, the tree before the move, its own build):
+
+  | Criterion | Measured | Bound |
+  |---|---|---|
+  | size: Depot over every platform entry (the package's `slice.test.ts`, gross, `@noble/*` external) | +3,249 B gz (its module's own 7,587 B minified) | ≤ 25,600 |
+  | size: the platform module, every entry | 79,768 B gz (79,637 before: +131 — the standard library's collection members the plan reaches first, 871 B minified, and `ArchiveName.of`'s set adapter) | the running budget, 80,094 |
+  | size: the web's eager set and Depot's chunks together (`vite build`, gzip -9 per chunk) | +3,460 B gz all in: eager −627 (`main` −3,392 with the folder plan gone from it, the rest rechunked), Depot's module +3,280 and `uploadFolder` +883 lazy, `FileDetail` −115 | ≤ 25,600 |
+  | size: any other lazy chunk | +54 B gz at most (`MemoryDetailHost`) | ≤ 1,024 |
+  | size: a link guest's first load (decision 10: the eager set plus the static closure of the chunk the share view mounts; `scratchpad` `paths.py` over both builds) | a single file's link 700,081 → 702,621 (+2,540: Depot's module); a folder's 688,697 → 688,070 (−627, the eager set alone); a drop box's 692,384 → 691,778 (−606) | the owner's number, decision 10 |
+  | size: a chunk only members load (Depot's share dialogs, a drop box's page) | 4,995 → 5,011 B gz (+16) | measured, not gated (decision 10) |
+  | time: `planFolderUpload`, a directory of 10,000 files (100 directories, case clashes, hostile names, slug clashes, 20 numbered siblings; Node 22.23.4, median of 15 after 3 warm-ups, the glue as it ships against the deleted TypeScript) | 10.5–10.8 ms against the TypeScript's 7.1–7.4 (1.46–1.49×), three runs at a load of ~5 from other applications | ≤ 2.5× and ≤ 100 ms |
+  | time: the view's decision, the first frames of 1,000 openings (100 each of a PNG, a JPEG, an SVG, an MP4, an MP3, a PDF, a binary and three 256 KiB texts) | 57.7–58.0 ms against 57.5–58.3 (0.99–1.00×; the 256 KiB texts' validation, the platform's sniff, is most of it) | ≤ 2.5× and ≤ 100 ms |
+  | answers | identical (the plan's 369,753 B of JSON; 10,000 decisions) | identical |
+  | behaviour | the web's tests pass (591 files, 8,313 tests) with the twins' tests (`view.test.ts`, `uploadFolder.test.ts`, `svgRaster.test.ts`, `levelRows*.test.ts`) unchanged but one import line each in the two rows tests (D2) | identical |
+  | delivery | three `--no-daemon --rerun-tasks :composition:jsPackage` builds from a removed `dist/`, one digest over its 226 files (`c47ab942…9332f695`); the web's `pnpm run check` with `verify:csp` and `verify:license-sources` green | identical |
+  | tests | the slug check dropped from `FolderUpload`'s namer turned the core's `folderPlan` red (3 cases), the package's `depot.test.ts` (3 of 80) and the web's (5: 3 vectors, 2 of `uploadFolder.test.ts`); a text of exactly 1 MiB read as truncated (`>=` for `>`) the core's `view` (1), the package's (1 of 80) and the web's (2: the vector, `view.test.ts`' own); each restored from git, the tree clean after | each red |
+
+  The move's decision log, kept by its implementer (question, choice and why, evidence, cost):
+  - **D1 — The set: three rules with a twin, nothing without one.** Decision 1 deletes a twin; a rule the apps do not run
+    whole is built in the core first, which is its own work (#1300–#1302). The TypeScript sets measured (each set's
+    exports bundled alone with esbuild, every other import external, minified, gzip -9; `scratchpad` `measure-ts.mjs`):
+    1,847 B gz before, 1,473 B gz of glue after — 374 B gz net. The move is small in bytes; its point is one rule.
+  - **D2 — Depot's module is a lazy chunk.** `levelRows.ts` (eager, the shell's rows) imported `uploadFolder.ts`; a static
+    import of the façade there would have made every visitor load Depot's module. It imports `./uploadFolder` when a folder
+    is picked or dropped (`await import`). *Cost:* the two rows tests that drive a folder upload import it up front.
+  - **D3 — Each sniff read once** (the optimisation round). The first façade asked the text's encoding again after
+    `decide` had validated it: 2.00× over 10,000 openings (1,136 against 567 ms). `FileView.decided` returns the decision
+    with the stream and the encoding its own sniff found; `decide`, the apps' call, is its first part. After: 1.00×.
+  - **D4 — A too-large decision carries the sniffed type**, so the web says which cap a file passed; the apps read the kind.
+  - **D5 — Where the core and the web answered apart, the web's answer won** (ADR 0154's rule): a path that names no file
+    counts toward neither the plan's files nor its bytes (the core counted every entry), a vector case.
+  - **D6 — The tokens are part of a plan's case.** A plan asks each kind's folding; a case lists every (kind, name, token)
+    it may ask, written by the core from the apps' real foldings and checked against them, and a client fails the case
+    where it asks one not listed — so the order of the questions is held, not only the names.
+  - **D7 — `planRaster` is no hot path:** it runs once per paint, 150 ms after the last zoom, scroll or resize. Measured:
+    100,000 rasters 4.4 ms against the TypeScript's 0.15 (~44 ns each, an object across the boundary).
+  - **D8 — Decision 10's guest path, measured for the first time** (the owner sets its number): the eager set plus the
+    static imports of the chunk a link's share view mounts — `FileDetail` for a single file's link, `DropBoxShareBody` for a
+    drop box's; a folder's link draws core's level and Depot's rows, both eager. For the record, the other kinds' at the
+    same build: a Memory's share body 715,671, a Memory's page 811,620, a Pot's page 718,724 B gz.
 
 - **The operator-served web is unchanged in kind** ([ADR 0026](0026-client-trust-tiers.md)): still same-origin,
   content-hashed chunks, no new CSP source, no Subresource Integrity in use before or after; the Kotlin output is one
