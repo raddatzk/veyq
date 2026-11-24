@@ -29,9 +29,18 @@ class RevisionCodec(private val suite: V1) {
     private fun bodyContext(a: RevisionAddress) =
         Context("expense-entry", "scopeId" to a.scopeId, "nodeId" to a.nodeId, "entryId" to a.entryId, "revision" to a.revision)
 
-    /** A revision's `K_rev` moved from the Pot's old key to its new one (a re-key, `rekeyPotContent`): the body is untouched. */
+    /** The `K_rev` of one revision (a report hands it over, ADR 0108 decision 6); [RevisionUnreadable] when its wrap does
+     *  not open at [address]. The caller zeroes it. */
+    fun revisionKey(address: RevisionAddress, potKey: ByteArray, wrapped: ByteArray): ByteArray = try {
+        suite.open(keyContext(address), potKey, wrapped)
+    } catch (e: Exception) {
+        throw RevisionUnreadable(RevisionUnreadable.Reason.KEY)
+    }
+
+    /** A revision's `K_rev` moved from the Pot's old key to its new one (a re-key, `rekeyPotContent`): the body is untouched,
+     *  and a wrap that does not open under the old key is [RevisionUnreadable] — nothing is re-wrapped blind. */
     fun rewrapRevisionKey(address: RevisionAddress, oldKey: ByteArray, newKey: ByteArray, wrapped: ByteArray): ByteArray {
-        val kRev = suite.open(keyContext(address), oldKey, wrapped)
+        val kRev = revisionKey(address, oldKey, wrapped)
         try {
             return suite.seal(keyContext(address), newKey, kRev)
         } finally {
@@ -63,6 +72,21 @@ class RevisionCodec(private val suite: V1) {
             throw RevisionUnreadable(RevisionUnreadable.Reason.BODY)
         } finally {
             kRev.fill(0)
+        }
+        return try {
+            RevisionFormat.decode(Pad.unpad(padded))
+        } catch (e: Exception) {
+            throw RevisionUnreadable(RevisionUnreadable.Reason.FORMAT)
+        }
+    }
+
+    /** Opens one revision's body with its `K_rev` alone — a moderator's review, handed the keys a report shared, holds no
+     *  Pot key — bound to [address] as every open is; throws [RevisionUnreadable]. */
+    fun openWithKey(address: RevisionAddress, kRev: ByteArray, sealedBody: ByteArray): RevisionBody {
+        val padded = try {
+            suite.openField(bodyContext(address), kRev, sealedBody)
+        } catch (e: Exception) {
+            throw RevisionUnreadable(RevisionUnreadable.Reason.BODY)
         }
         return try {
             RevisionFormat.decode(Pad.unpad(padded))
