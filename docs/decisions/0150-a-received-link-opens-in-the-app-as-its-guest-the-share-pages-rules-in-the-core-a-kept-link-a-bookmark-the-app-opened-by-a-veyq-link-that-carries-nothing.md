@@ -3,7 +3,9 @@
 - Built: decisions 1–9 yes — on every app (Android, iOS, macOS, Linux, Windows), 2026-11-19; passed on Android, Linux
   and Windows as throwaways and by the core's live tests; the macOS pass is open and the iPhone's and iPad's are the
   owner's (§ Consequences); § O yes — the web's banner and `veyq:` on every app, 2026-11-19; passed on the web,
-  Android, Linux and Windows as throwaways; the Mac's `open` and the iPhone's are open (§ Consequences)
+  Android, Linux and Windows as throwaways; the Mac's `open` and the iPhone's are open (§ Consequences); § S yes — a link
+  shared into the app on Android and iOS, 2026-11-24, by the core's and Android's JVM tests and the Apple builds; the
+  Android and iPhone share passes are owed (§ Consequences)
 - Date: 2026-11-19
 - Model: [native-apps](../crosscutting/native-apps.md) (the share page: [uc.sharing.share-public-viewer](../features/sharing/use-cases/uc.sharing.share-public-viewer.md))
 
@@ -159,6 +161,56 @@ den du bekommen hast*, *Open in the browser* / *Im Browser öffnen*, *Keep* / *B
 4. **What the server sees:** nothing — a `veyq:` navigation leaves the browser for the system. **Residual:** on the share
    page the click puts the link on the clipboard and opens whichever app holds `veyq:`; an app that claimed the scheme and
    reads the clipboard when opened learns the link — the share dialog's copy's exposure plus the launch.
+
+### S — A link shared into the app from another app (inbox #1015)
+
+A handover without the clipboard: the share sheet of the chat or the browser the link arrived in hands it to veyq.
+
+1. **The core finds the link; *Open a link* checks it.** A shared text is often more than the link ("Look at this:
+   https://…", a link in angle brackets or a mark-up's parentheses). The core's `SharedText.linkIn(text)` answers *One*
+   (the whole text, trimmed, when *Open a link* opens it; else the one distinct link among the words holding `http://` or
+   `https://`, each read from its scheme on and without a sentence's closing punctuation — no share link ends in one),
+   *Several* (two or more distinct links the app would open: which one was meant is never guessed) or *None* (no
+   `http(s)` word at all). Where none of the candidates opens, the first one is the answer, so its own refusal says why
+   (a foreign link `NOT_A_SHARE`, a moderator's review `MODERATION` with *Open in the browser*). `OpenLink.received(text)`
+   puts *One* through the field's own check (decision 2's `ReceivedLink.open`) and refuses *None* and *Several* with words
+   of their own (`link_problem_no_link_in_text`, `link_problem_several_links`; the app's alone — the web has no share
+   sheet), leaving the field empty: nothing of a text that is no link to open stays on screen. In the core so every app
+   shares it, never exported to the web's bundle (`SharingWeb` names what the web draws).
+2. **Each platform opens it as *Open a link* does:** the field over whatever shows, the received text checked, and opened
+   at once where it opens; where not, the field stays with its reason — what a paste of the same text would have shown.
+   Opened over an open tenant, the guest view offers *Keep* (decision 6), as *Open on its own page* does.
+   - **Android:** `ACTION_SEND` with `EXTRA_TEXT` and no `EXTRA_STREAM` (`ShareIn.textOf`; the manifest's `*/*` share
+     target of ADR 0138 already takes `text/plain`). The text is taken off the intent once read, and a start from the
+     recents list (which hands the task's first intent again) opens nothing — § O's rule for `veyq://`. A file shared
+     with a caption stays a file's share.
+   - **iOS:** the share extension (ADR 0138), whose activation rule already admits a link and a text (`public.url` and
+     `public.plain-text` conform to `public.data`, measured with `UTType.conforms` 2026-11-24). A share whose attachments
+     carry no file (`IncomingFiles.sharedText`: each link's or text's line) opens **in the extension**, as its guest,
+     with the app's own guest screens (the extension compiles them), and the extension closes once the field is
+     cancelled or the link left (`GuestLinks.onDone`). *Open in the browser* is not offered there: an extension opens no
+     URL; the refusal's words say the link is the browser's.
+   - **macOS, Linux, Windows:** no share sheet in scope. A Mac's Share menu would need a macOS share extension, which
+     the project has none of (ADR 0138 built iOS's alone); a desktop's links arrive by the clipboard and *Open a link*.
+3. **Why iOS opens it in the extension** (decided 2026-11-24, logged from the CR's decision log). An extension cannot
+   open its containing app (`NSExtensionContext.open` works for widgets only; `UIApplication` is not extension API). The
+   options measured against the project as it is — the app and the extension already share the app group
+   `group.app.veyq` and the Keychain access group `app.veyq.shared` (`Veyq-iOS.entitlements`, `VeyqShare.entitlements`):
+   - **The guest view in the extension** — no new entitlement, no key on disk: the key lives in the extension's
+     model and goes with it (decision 3). **Chosen.**
+   - **The link waits in the app group for the app** (ADR 0138 decision 6's way for a Memory's files) — no new
+     entitlement, but `K_share` would rest on disk in the group's container until the app opened, against decision 3
+     (the key in memory only), and nothing would tell the person to open the app. Rejected.
+   - **The link to the app through `veyq:`** — § O1 rejects the key in a custom scheme (owned by no one), and an
+     extension cannot open the URL anyway (the responder-chain `openURL:` workaround is no public API, rejected at
+     review). Rejected.
+   - **A universal link** — needs the Associated Domains entitlement and a publisher's file on every self-hosted domain,
+     rejected in § O1 (owner 2026-11-18).
+   **Residual:** a share extension runs under a tighter memory limit than the app; a large guest gallery may hit it
+   (measured on no device yet — the iPhone pass's). A write link's uploads made in the extension run while it is open,
+   as a Pot's receipts there do (ADR 0138 decision 2).
+4. **What the server sees:** nothing new — the link opens as decision 7's guest view does. Nothing of the shared text is
+   logged or kept: the core reads it once and the platforms hand it on.
 
 ## Consequences
 
@@ -331,6 +383,13 @@ den du bekommen hast*, *Open in the browser* / *Im Browser öffnen*, *Keep* / *B
   person's *Keep* reached through the banner (read in the code: *Open a link* stands over the open tenant, measured by
   the Android and Windows phases' own passes, the guest screen after it not); the foreground on Windows when the system
   grants none to the starter.
+- **§ S built** (2026-11-24, inbox #1015): the core's `sharing/SharedText` and `OpenLink.received` (`SharedTextTest`, 7
+  cases: a link alone, in a sentence or a mark-up, the same twice, two never guessed, a foreign one and none; the field's
+  refusals and words); Android's `ShareIn.textOf` and `GuestLinks.receive` (`ShareInTextTest`, Robolectric: the text
+  read and taken off the intent, a file with a caption a file's, a recents start nothing); Apple's
+  `IncomingFiles.sharedText`, `GuestLinks.receive` / `onDone` and the share extension's branch. No entitlement, permission
+  or dependency was added. **Not passed:** a real share from a chat and a browser on Android and on an iPhone (the
+  owner's, with the iPhone's other passes), and a gallery's memory in the extension.
 
 ## Alternatives considered
 
@@ -339,6 +398,7 @@ den du bekommen hast*, *Open in the browser* / *Im Browser öffnen*, *Keep* / *B
 - **The guest's session in `DeviceStore`** (as the web's `localStorage`) — a token that writes as the guest would sit in
   a plain file; decision 3.
 - **The key in the `veyq:` link** — § O1.
+- **iOS: a shared link waiting in the app group, or handed to the app by `veyq:`** — § S3.
 
 Explained for users on the docs site: [Open a link in the app](../../site/src/content/docs/sharing/open-a-link-in-the-app.mdx)
 (the guest view, its gates, *Keep*, the record's notice), [Keep a link someone sent you](../../site/src/content/docs/sharing/keep-a-link.mdx)
