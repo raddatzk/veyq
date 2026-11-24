@@ -1,6 +1,7 @@
 # ADR 0145 — The apps' uploads go on with the app left and show in the gallery; a desktop asks before a quit drops them
 - Status: Accepted
-- Built: yes
+- Built: yes; decisions 4–6 (a guest's uploads) 2026-11-24 on every app, by the core's and the bridge's tests and each
+  app's build — their device passes are the owner's (§ Consequences)
 - Date: 2026-11-18
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -53,8 +54,8 @@ decision (read 2026-11-18, the block's refine):
    app (⌘Q, its menu), while files still upload asks first — "Uploads are still running" / "If you quit now, 3 files will
    not be uploaded." with **Quit anyway** and **Keep uploading** (the default) —; with nothing under way it closes as
    before. A minimized or hidden window keeps uploading, as it always did; the macOS app keeps uploading with its windows
-   closed, since it keeps running. The question counts the tray's active items (`UploadsShown.active` on the bridge,
-   `UploadQueue.State.active` on Apple).
+   closed, since it keeps running. The question counts every file under way in the process, `UploadsUnderway` (the
+   bridge's `Watched.Underway` on Linux and Windows, `ContinuedWork.uploads` on the Mac; decision 6).
 3. **A Memory's gallery shows what this device sends into it as placeholder tiles.** `GalleryModel.State.uploading`
    (`memories/UploadTile`, from `MediaUploads.tiles(nodeId)`): every photo and video queued into the node, in the order
    queued, **first in the grid** (the grid is newest first, and what was just added is what the person looks for) —
@@ -68,6 +69,37 @@ decision (read 2026-11-18, the block's refine):
      tile size, for its preview, and sorts it into the grid by the capture time it will seal; the apps' deriver already
      decodes each file once for its tiers, and a second decode per tile on a phone is the cost the web measured at 1 GiB
      before it bounded it (inbox #785). The glyph and the progress answer "is it coming?", which is what the tile is for.
+
+### A guest's uploads (2026-11-24, inbox #1016)
+
+A link's guest uploads on the app's one queue while its guest view is open (ADR 0150 decision 5); leaving the view zeroed
+`K_share` and the tree's keys and closed the link's client at once, so a guest's upload under way was cut off. Owner
+2026-11-24: a guest's upload goes on with the link and the app left, exactly as a member's.
+
+4. **The link's keys and client are held in memory past the view exactly as long as one of its uploads waits or runs.**
+   `GuestView.close()` ends the pages and the live poll at once; the release — the trees' keys and `K_share` zeroed, the
+   client closed, the gates' in-memory session dropped — waits in core's `sharing/GuestUploadHold` (the platform's, as every
+   application's guest upload closes over core's `GuestAccess`) until none of the
+   view's jobs waits or runs and no settle hook of the view runs (a folder upload's take-back of its empty folders), then
+   runs at once where nothing ever was under way. Nothing is written for it: no plaintext, no sealed copy, no key (the
+   session's credential-store entry is ADR 0150 decision 3's, unchanged). Released, the view's failed items offer no
+   retry (`UploadQueue.endRetries`): what would send them is gone. A process ended meanwhile fails them as decision 1's
+   cut-off upload. Every application's guest upload queues through `GuestAccess.enqueue`, never on the queue itself.
+5. **A guest's batch is no account's.** It is queued by `UploadQueue.enqueueSpared`: `clear()` — a sign-out, a sign-in or
+   unlock that opens the first tenant, a switch, an erasure, the bridge's `closeTenant` — cancels only the account's
+   batches. A lock touches no upload, as before. The same link opened again while its uploads run is a view of its own
+   (its own key copy and client); both read the one stored session, and *Not you?* in the new one leaves the held uploads
+   under the identity they began with.
+6. **The process is held and the question asked as for a member's**, since both read `UploadsUnderway`: Android's
+   `UploadWorker`, iOS's `ContinuedWork` uploads instance, the Mac's quit question — and now Linux's and Windows', which
+   count the bridge's `Watched.Underway` (`Update.Underway(files)`, from the core's start, a tenant open or not) instead of
+   the tray's `UploadsShown.active`, null with no tenant. **The tray** is the shell's, built from a tenant
+   (`DepotUploads` mirrors the whole queue): a guest's uploads show there once signed in; signed out no client has a tray —
+   the phone's notification or system progress and the desktops' question are what shows them (a tray on the sign-in
+   screen: inbox #1250).
+   - **Rejected:** a queue per link — the tray, the worker, the continued task and the question already follow the one
+     queue; a second would need a second tray on every client. Persisting a left link's key or session to resume after a
+     process end — against ADR 0150 decision 3's key in memory only.
 
 ## Consequences
 
@@ -92,6 +124,12 @@ decision (read 2026-11-18, the block's refine):
   files picked through the open dialog, two placeholders (*c1-big.mp4 wird vorbereitet*), closing the window asked
   (*Uploads laufen noch*, *2 Dateien*), *Weiter hochladen* kept them going to *2 Objekte*, and a close with nothing under
   way closed. **Apple:** built for macOS and the iOS Simulator SDK, never run — its passes are the owner's (above).
+- **A guest's uploads (decisions 4–6, 2026-11-24)** are proved by `GuestUploadHoldTest` — held while running, zeroed once
+  in, cancelled or failed, no retry after, a guest's batch spared by `clear()`; each rule bitten: a release at once, none at
+  all, a `clear()` of every batch, no `endRetries` each turned it red — and the bridge's `ReceivedBridgeTest` (`Watched.Underway`
+  with no tenant open). Android and Apple needed no code: their holds and the Mac's question already read
+  `UploadsUnderway`. Owed, the owner's: a guest's upload with the link and the app left on Android and an iPhone, the Mac's
+  ⌘Q, Linux's and Windows' close signed out, and a sign-in over a running guest upload.
 - **What the docs site says:** [Add photos and videos](../../site/src/content/docs/memories/add-photos-and-videos.mdx)
   (EN and DE) § In the app — the placeholders, a phone's uploads with the app left, a desktop's question.
 - **Rejected:** a foreground service started by the app itself rather than WorkManager — WorkManager's typed
