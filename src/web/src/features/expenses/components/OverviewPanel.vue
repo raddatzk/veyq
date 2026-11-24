@@ -16,7 +16,7 @@ import { ownCategoryNames, type PotMeta } from '../domain/potMeta'
 import type { PotLedger, Transfer } from '../domain/ledger'
 import type { PotSession } from '../potSession'
 import type { PotWrite } from '../domain/potApi'
-import { formatMoney } from '../amounts'
+import { formatMoney } from '@veyq/core-js/expenses'
 import { personLabel, shownBalances, standingOf, type MemberDirectory } from '../people'
 import { today } from '../entryForm'
 

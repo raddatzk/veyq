@@ -29,7 +29,7 @@ import { openRevisionWithKey, RevisionUnreadable } from '../domain/codec'
 import { isMoney, type RevisionBody } from '../domain/format'
 import { ENTRY_REVISION_ROLE, RECEIPT_KEY_ROLE } from '../report'
 import { RECEIPT_ROLE, receiptName, receiptSize, type ReceiptSource } from '../receipts'
-import { formatMoney } from '../amounts'
+import { formatMoney } from '@veyq/core-js/expenses'
 import ReceiptView from './ReceiptView.vue'
 
 const props = defineProps<ItemReviewProps>()

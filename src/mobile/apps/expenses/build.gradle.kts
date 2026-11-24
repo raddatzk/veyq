@@ -8,6 +8,15 @@ plugins {
 }
 
 kotlin {
+    // Expenses' runners for `@veyq/core-js`'s check (ADR 0155 decision 6): a binary of this module's own, never an export of
+    // the shipped module — the format's reader of plaintext bytes (`DecodeRun.kt`), which no façade call reaches on its own.
+    // `:composition:jsPackage` writes it into the package's `dist/conformance/expenses/`.
+    js {
+        val main = compilations.getByName("main")
+        val conformance = compilations.create("conformance") { associateWith(main) }
+        binaries.library(conformance)
+    }
+
     sourceSets {
         commonMain.dependencies {
             api(project(":core"))

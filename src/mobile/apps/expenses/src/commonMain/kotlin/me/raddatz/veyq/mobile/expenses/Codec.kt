@@ -17,7 +17,7 @@ class RevisionUnreadable(val reason: Reason) : Exception("revision_unreadable: $
 }
 
 /**
- * The format v1 codec of one Expenses revision, a port of `src/web/src/features/expenses/domain/codec.ts` (ADR 0108
+ * The format v1 codec of one Expenses revision, the web's too (ADR 0155, through `@veyq/core-js/expenses`; ADR 0108
  * decision 4): the plaintext padded to a size class, sealed as an `expense-entry` field under a fresh `K_rev`, and `K_rev`
  * sealed under the Pot's `K_node` as `expense-entry-key`. Both bind the ADDRESS the revision is read by — never a field of
  * the row that carries it — so a body served at another entry, revision or Pot does not open.
@@ -29,9 +29,18 @@ class RevisionCodec(private val suite: V1) {
     private fun bodyContext(a: RevisionAddress) =
         Context("expense-entry", "scopeId" to a.scopeId, "nodeId" to a.nodeId, "entryId" to a.entryId, "revision" to a.revision)
 
-    /** A revision's `K_rev` moved from the Pot's old key to its new one (a re-key, `rekeyPotContent`): the body is untouched. */
+    /** The `K_rev` of one revision (a report hands it over, ADR 0108 decision 6); [RevisionUnreadable] when its wrap does
+     *  not open at [address]. The caller zeroes it. */
+    fun revisionKey(address: RevisionAddress, potKey: ByteArray, wrapped: ByteArray): ByteArray = try {
+        suite.open(keyContext(address), potKey, wrapped)
+    } catch (e: Exception) {
+        throw RevisionUnreadable(RevisionUnreadable.Reason.KEY)
+    }
+
+    /** A revision's `K_rev` moved from the Pot's old key to its new one (a re-key, `rekeyPotContent`): the body is untouched,
+     *  and a wrap that does not open under the old key is [RevisionUnreadable] — nothing is re-wrapped blind. */
     fun rewrapRevisionKey(address: RevisionAddress, oldKey: ByteArray, newKey: ByteArray, wrapped: ByteArray): ByteArray {
-        val kRev = suite.open(keyContext(address), oldKey, wrapped)
+        val kRev = revisionKey(address, oldKey, wrapped)
         try {
             return suite.seal(keyContext(address), newKey, kRev)
         } finally {
@@ -63,6 +72,21 @@ class RevisionCodec(private val suite: V1) {
             throw RevisionUnreadable(RevisionUnreadable.Reason.BODY)
         } finally {
             kRev.fill(0)
+        }
+        return try {
+            RevisionFormat.decode(Pad.unpad(padded))
+        } catch (e: Exception) {
+            throw RevisionUnreadable(RevisionUnreadable.Reason.FORMAT)
+        }
+    }
+
+    /** Opens one revision's body with its `K_rev` alone — a moderator's review, handed the keys a report shared, holds no
+     *  Pot key — bound to [address] as every open is; throws [RevisionUnreadable]. */
+    fun openWithKey(address: RevisionAddress, kRev: ByteArray, sealedBody: ByteArray): RevisionBody {
+        val padded = try {
+            suite.openField(bodyContext(address), kRev, sealedBody)
+        } catch (e: Exception) {
+            throw RevisionUnreadable(RevisionUnreadable.Reason.BODY)
         }
         return try {
             RevisionFormat.decode(Pad.unpad(padded))
@@ -105,7 +129,7 @@ class HeldRevision(
     val purgeAfter: Long? = null,
 ) {
     /** The one id of a revision in a Pot's list. */
-    val id: String get() = "$entryId:$revision"
+    val id: String = revisionIdOf(entryId, revision)
 }
 
 object Revisions {
@@ -123,14 +147,16 @@ object Revisions {
 
     /** The held revisions by record, each record's ascending, the records in the order they first appear. */
     fun byRecord(held: List<HeldRevision>): Map<String, List<HeldRevision>> {
-        val records = LinkedHashMap<String, MutableList<HeldRevision>>()
+        val records = stringMap<MutableList<HeldRevision>>()
         for (r in held) records.getOrPut(r.entryId) { mutableListOf() } += r
-        return records.mapValues { (_, list) -> list.sortedBy { it.revision } }
+        for (list in records.values) if (list.size > 1) list.sortBy { it.revision }
+        return records
     }
 
     /** Every held revision no held revision names as a head. */
     fun currentHeads(held: List<HeldRevision>): List<HeldRevision> {
-        val named = held.flatMap { r -> r.body?.heads.orEmpty().map { "${it.entryId}:${it.revision}" } }.toSet()
+        val named = stringSet()
+        for (r in held) for (h in r.body?.heads.orEmpty()) named += revisionIdOf(h.entryId, h.revision)
         return held.filter { it.id !in named }
     }
 

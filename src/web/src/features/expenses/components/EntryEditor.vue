@@ -63,7 +63,7 @@ import {
   type ProblemAt,
 } from '../entryForm'
 import { crossRate, dayTable } from '../exchangeRates'
-import { formatMoney, knownCurrencies } from '../amounts'
+import { formatMoney, knownCurrencies } from '@veyq/core-js/expenses'
 import { offeredPeople, personLabel, type MemberDirectory } from '../people'
 import EntryHistory from './EntryHistory.vue'
 import EntryReceipts from './EntryReceipts.vue'
@@ -161,7 +161,7 @@ const categoryOptions = computed(() => {
   })
 })
 const currencyOptions = computed(() => {
-  const list = knownCurrencies()
+  const list = [...knownCurrencies()]
   for (const c of [base.value.currency, form.value.currency]) if (!list.includes(c)) list.push(c)
   return list.map((c) => ({ value: c, label: c }))
 })

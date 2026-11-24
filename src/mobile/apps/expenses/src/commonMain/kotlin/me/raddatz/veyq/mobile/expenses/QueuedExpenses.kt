@@ -2,6 +2,8 @@ package me.raddatz.veyq.mobile.expenses
 
 import me.raddatz.veyq.mobile.PlatformApi
 import kotlin.native.HiddenFromObjC
+import me.raddatz.veyq.mobile.json.toKotlinx
+import me.raddatz.veyq.mobile.json.toTree
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import me.raddatz.veyq.mobile.offline.Queued
@@ -42,7 +44,7 @@ object QueuedExpenses {
     fun entry(write: QueuedWrite): Entry? {
         if (write.op != Queued.POT_ENTRY.name) return null
         val i = runCatching { QueuedNodes.decode(EntryIntent.serializer(), write) }.getOrNull() ?: return null
-        val body = runCatching { RevisionFormat.read(i.body) }.getOrNull() ?: return null
+        val body = runCatching { RevisionFormat.read(i.body.toTree()) }.getOrNull() ?: return null
         return Entry(i.entryId, i.basedOn, body.content, i.receipts.size)
     }
 
@@ -103,11 +105,11 @@ object QueuedExpenses {
             val ids = form.receipts + pending.map { it.id }
             val content = form.copy(receipts = ids).contentOf { it in known }.content ?: return null
             // a change of an entry still waiting keeps what the first change saw: the revision and the heads
-            val heads = before?.second?.body?.let { runCatching { RevisionFormat.read(it).heads }.getOrNull() } ?: Revisions.headsToName(session.heldRevisions())
+            val heads = before?.second?.body?.let { runCatching { RevisionFormat.read(it.toTree()).heads }.getOrNull() } ?: Revisions.headsToName(session.heldRevisions())
             val on = if (before != null) before.second.basedOn else basedOn
             val earlier = before?.let { (w, i) -> i.receipts.filter { it.id in ids }.mapNotNull { r -> w.blobs.firstOrNull { it.id == r.blob }?.let { it to r } } }.orEmpty()
             val receipts = earlier + sealed
-            val intent = EntryIntent(id, on, RevisionFormat.toJson(RevisionBody(heads, content)), receipts.map { it.second })
+            val intent = EntryIntent(id, on, RevisionFormat.toJson(RevisionBody(heads, content)).toKotlinx() as JsonObject, receipts.map { it.second })
             val write = QueuedWrite(
                 idOf(id), Queued.POT_ENTRY.name, session.tenantId, session.scopeId, node = session.nodeId,
                 intent = QueuedNodes.encode(EntryIntent.serializer(), intent), blobs = receipts.map { it.first }, at = before?.first?.at ?: nowMs,
@@ -134,8 +136,8 @@ object QueuedExpenses {
             box.remove(before.first.id)
             return true
         }
-        val heads = before?.second?.body?.let { runCatching { RevisionFormat.read(it).heads }.getOrNull() } ?: Revisions.headsToName(session.heldRevisions())
-        val intent = EntryIntent(entryId, before?.second?.basedOn ?: basedOn, RevisionFormat.toJson(RevisionBody(heads, Deleted)))
+        val heads = before?.second?.body?.let { runCatching { RevisionFormat.read(it.toTree()).heads }.getOrNull() } ?: Revisions.headsToName(session.heldRevisions())
+        val intent = EntryIntent(entryId, before?.second?.basedOn ?: basedOn, RevisionFormat.toJson(RevisionBody(heads, Deleted)).toKotlinx() as JsonObject)
         val write = QueuedWrite(
             idOf(entryId), Queued.POT_ENTRY.name, session.tenantId, session.scopeId, node = session.nodeId,
             intent = QueuedNodes.encode(EntryIntent.serializer(), intent), at = before?.first?.at ?: nowMs,
@@ -149,7 +151,7 @@ object QueuedExpenses {
         val i = QueuedNodes.decode(EntryIntent.serializer(), w)
         val box = tenant.account.outbox ?: return@QueuedSender QueuedOutcome.Refused("refused")
         val node = w.node ?: return@QueuedSender QueuedOutcome.Refused("refused")
-        val body = runCatching { RevisionFormat.read(i.body) }.getOrNull() ?: return@QueuedSender QueuedOutcome.Refused("invalid")
+        val body = runCatching { RevisionFormat.read(i.body.toTree()) }.getOrNull() ?: return@QueuedSender QueuedOutcome.Refused("invalid")
         val session = PotSession.open(tenant, w.scope, node) ?: return@QueuedSender QueuedOutcome.Refused(QueuedNodes.NOT_FOUND)
         val receipts = i.receipts.map { r ->
             val blob = w.blobs.firstOrNull { it.id == r.blob } ?: return@QueuedSender QueuedOutcome.Refused(me.raddatz.veyq.mobile.offline.Outbox.FRAME_GONE)

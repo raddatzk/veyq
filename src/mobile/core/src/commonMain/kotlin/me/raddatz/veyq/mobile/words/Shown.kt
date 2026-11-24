@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.words
 
+import me.raddatz.veyq.mobile.text.Pattern
 import me.raddatz.veyq.mobile.PlatformApi
 import kotlin.native.HiddenFromObjC
 import me.raddatz.veyq.mobile.session.LocalDays
@@ -9,7 +10,9 @@ import me.raddatz.veyq.mobile.session.LocalDays
  * a Memory's day and range, an amount of money, a list, a track's length and a line's pieces — each the string the web
  * writes, in the app's [language] (`en`, `de`; any other is written as English, the apps' catalog has only these two),
  * so no platform formats one of its own. Held to `src/mobile/words/format-vectors.json`, which the web's own formatters
- * write (`ShownVectorsTest`); the web stays their source until a move of ADR 0155 brings them into the core.
+ * write (`ShownVectorsTest`), the web staying their source until a move of ADR 0155 brings them into the core — and money
+ * ([money], [number]) did with Expenses: the web draws it from here (`@veyq/core-js/expenses`), and the core writes
+ * `src/mobile/words/money-vectors.json` (`ShownVectorsTest`'s write mode).
  *
  * A [Notice] keeps its words for the platform's catalog; [args] writes its values first, so a platform fills a sentence
  * with strings only.
@@ -167,14 +170,19 @@ object Shown {
     private fun two(n: Int) = n.toString().padStart(2, '0')
 
     private fun isoDay(iso: String): Triple<Int, Int, Int>? {
-        val m = ISO_DAY.matchEntire(iso) ?: return null
-        val (y, mo, d) = m.destructured
+        val m = ISO_DAY.groups(iso) ?: return null
+        val y = m[1]
+        val mo = m[2]
+        val d = m[3]
         val month = mo.toInt()
         val day = d.toInt()
         return if (month in 1..12 && day in 1..31) Triple(y.toInt(), month, day) else null
     }
 
-    private val ISO_DAY = Regex("""(\d{4})-(\d{2})-(\d{2})""")
+    /** A letter (any script's, `Char.isLetter`'s categories) or a full stop, without the standard library's letter tables on JavaScript. */
+    private val LETTER_OR_STOP = Pattern("[\\p{L}.]")
+
+    private val ISO_DAY = Pattern("""(\d{4})-(\d{2})-(\d{2})""")
 
     /**
      * [amount] minor units of [currency] with [minorUnits] digits as the web's `formatMoney` writes it ("€1,234.56",
@@ -190,7 +198,7 @@ object Shown {
         if (german(language)) return "$sign$digits$NBSP${SYMBOLS_DE[currency] ?: currency}"
         val symbol = SYMBOLS_EN[currency] ?: currency
         // `Intl`'s currency spacing: a symbol that ends in a letter (or a full stop) is set apart from the digits
-        val spaced = symbol.last().isLetter() || symbol.last() == '.'
+        val spaced = LETTER_OR_STOP.matches(symbol.last().toString())
         return "$sign$symbol${if (spaced) NBSP.toString() else ""}$digits"
     }
 

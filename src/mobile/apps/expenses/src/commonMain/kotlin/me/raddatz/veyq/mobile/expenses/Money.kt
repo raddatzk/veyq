@@ -1,7 +1,8 @@
 package me.raddatz.veyq.mobile.expenses
 
+import me.raddatz.veyq.mobile.text.Pattern
 /**
- * Expenses' arithmetic, a port of `src/web/src/features/expenses/domain/money.ts` (ADR 0108 decision 9): exact fractions,
+ * Expenses' arithmetic, the web's too (ADR 0155, through `@veyq/core-js/expenses`; ADR 0108 decision 9): exact fractions,
  * never floating point — the rounding rule is part of the format version, so every device computes the same cent from the
  * same entries, and `contracts/expenses/v1-vectors.json` pins it. [convertToBase] converts an entry's total once,
  * [allocate] splits an integer total by weights with the largest-remainder rule.
@@ -21,6 +22,7 @@ class Fraction private constructor(val num: Big, val den: Big) {
 
         /** `num / den`, reduced to a positive denominator; a zero denominator throws. */
         fun of(num: Big, den: Big = Big.ONE): Fraction {
+            if (den == Big.ONE) return Fraction(num, den) // already reduced: no gcd for a whole number (the ledger's weights)
             require(den.signum != 0) { "fraction_zero_denominator" }
             val sign = if (den.signum < 0) -Big.ONE else Big.ONE
             val g = gcd(num, den).let { if (it.signum == 0) Big.ONE else it }
@@ -31,8 +33,8 @@ class Fraction private constructor(val num: Big, val den: Big) {
 
         /** A weight as the vectors write one: `"3"`, `"1/3"`, `"-2/4"`. */
         fun parse(text: String): Fraction {
-            val m = Regex("^(-?[0-9]+)(?:/([0-9]+))?$").matchEntire(text) ?: throw IllegalArgumentException("fraction_malformed")
-            return of(Big.parse(m.groupValues[1]), m.groupValues[2].takeIf { it.isNotEmpty() }?.let { Big.parse(it) } ?: Big.ONE)
+            val m = Pattern("(-?[0-9]+)(?:/([0-9]+))?").groups(text) ?: throw IllegalArgumentException("fraction_malformed")
+            return of(Big.parse(m[1]), m[2].takeIf { it.isNotEmpty() }?.let { Big.parse(it) } ?: Big.ONE)
         }
     }
 }
@@ -50,7 +52,7 @@ internal fun gcd(a: Big, b: Big): Big {
 
 object Money {
     /** The schema's `rate`: a decimal greater than zero, at most 12 digits on either side of the point. */
-    val RATE = Regex("^(?:[1-9][0-9]{0,11}(?:\\.[0-9]{1,12})?|0\\.(?=[0-9]*[1-9])[0-9]{1,12})$")
+    val RATE = Pattern("^(?:[1-9][0-9]{0,11}(?:\\.[0-9]{1,12})?|0\\.(?=[0-9]*[1-9])[0-9]{1,12})$")
 
     /** A rate as an exact fraction — `"1.1725"` is `11725 / 10000`. Throws on anything the schema's pattern refuses. */
     fun parseRate(rate: String): Fraction {
@@ -77,10 +79,15 @@ object Money {
 
     /** An entry's [amount] (minor units of its currency) in minor units of the Pot's base currency: converted once,
      *  rounded a half away from zero. */
-    fun convertToBase(amount: Big, minorUnits: Int, rate: String, baseMinorUnits: Int): Big {
+    fun convertToBase(amount: Big, minorUnits: Int, rate: String, baseMinorUnits: Int): Big =
+        convertToBase(amount, minorUnits, parseRate(rate), baseMinorUnits)
+
+    /** [convertToBase] with the rate already read (a ledger reads each distinct rate once). */
+    internal fun convertToBase(amount: Big, minorUnits: Int, rate: Fraction, baseMinorUnits: Int): Big {
         val shift = baseMinorUnits - minorUnits
+        if (shift == 0 && rate.num == Big.ONE && rate.den == Big.ONE) return amount // the base itself: exactly the amount
         val scale = if (shift >= 0) Fraction.of(Big.pow10(shift)) else Fraction.of(Big.ONE, Big.pow10(-shift))
-        return roundHalfAwayFromZero(Fraction.of(amount) * parseRate(rate) * scale)
+        return roundHalfAwayFromZero(Fraction.of(amount) * rate * scale)
     }
 
     /**
@@ -91,21 +98,31 @@ object Money {
     fun allocate(total: Big, weights: List<Fraction>): List<Big> {
         require(total.signum >= 0) { "allocate_negative_total" }
         require(weights.none { it.num.signum < 0 }) { "allocate_negative_weight" }
+        if (weights.size == 1) { // one person takes it all: `total * w / w`
+            require(weights[0].num.signum != 0) { "allocate_no_weight" }
+            return listOf(total)
+        }
         var common = Big.ONE
-        for (w in weights) common = common * w.den / gcd(common, w.den)
-        val ints = weights.map { it.num * common / it.den }
-        val whole = ints.fold(Big.ZERO) { a, b -> a + b }
+        for (w in weights) if (w.den != Big.ONE) common = common * w.den / gcd(common, w.den)
+        // whole weights (every weight the ledger hands in) are their own integers
+        val ints = if (common == Big.ONE) weights.map { it.num } else weights.map { it.num * common / it.den }
+        var whole = Big.ZERO
+        for (n in ints) whole += n
         require(whole.signum != 0) { "allocate_no_weight" }
-        val shares = ints.map { total * it / whole }.toMutableList()
-        val remainders = ints.map { total * it % whole }
-        var left = total - shares.fold(Big.ZERO) { a, b -> a + b }
-        // Largest remainder first; a tie keeps the given (join) order.
-        val order = remainders.indices.sortedWith { a, b -> if (remainders[a] == remainders[b]) a - b else remainders[b].compareTo(remainders[a]) }
-        for (i in order) {
-            if (left.signum == 0) break
-            shares[i] = shares[i] + Big.ONE
+        val shares = Array(ints.size) { total * ints[it] / whole }
+        val remainders = Array(ints.size) { total * ints[it] % whole }
+        var left = total
+        for (s in shares) left -= s
+        // The units left over, one each to the largest remainder not yet served; a tie keeps the given (join) order —
+        // the earliest index wins, as a stable sort by remainder would place it. Fewer units are left than people.
+        val served = BooleanArray(ints.size)
+        while (left.signum > 0) {
+            var best = -1
+            for (i in remainders.indices) if (!served[i] && (best < 0 || remainders[i] > remainders[best])) best = i
+            served[best] = true
+            shares[best] = shares[best] + Big.ONE
             left -= Big.ONE
         }
-        return shares
+        return shares.asList()
     }
 }

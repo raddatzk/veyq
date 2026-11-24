@@ -75,8 +75,9 @@ carry a second façade without the first one's users paying for it (ADR 0155 § 
   The cost moved, not vanished: a bundler drops nothing of a Kotlin module file (its metadata calls run at load), so the
   platform code a façade needs is paid by every entry importing the platform's file — the parked move put its JSON seam
   and money's formats there. **A miss, handed to the owner** (ADR 0155 decision 2's rule); the split stays for its
-  direction. Before Expenses resumes, that code leaves the platform's file, each entry gets a declaration file of its
-  own, and an application gets a conformance compilation for its own runners.
+  direction. Resolved 2026-11-24 (ADR 0155 § Expenses' move): the owner counts that code against the platform module's
+  running budget, each entry has a declaration file of its own (a name two façades export is refused), and `:apps:expenses`
+  has a conformance compilation of its own for its runners (`dist/conformance/expenses/`).
 - **Build time:** a clean `:composition:jsPackage` 30.5 s against 27.0 s before the split (local, fresh processes); the
   CI `frontend` job and the Apple pre-build step were not timed apart.
 - **The UI guard's core rules retired into this one**; each platform's UI keeps its own rules. Android's core UI named

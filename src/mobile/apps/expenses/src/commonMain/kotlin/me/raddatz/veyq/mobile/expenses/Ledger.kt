@@ -1,7 +1,7 @@
 package me.raddatz.veyq.mobile.expenses
 
 /**
- * What a device computes from a Pot's entries, a port of `src/web/src/features/expenses/domain/ledger.ts` (ADR 0108
+ * What a device computes from a Pot's entries, the web's too (ADR 0155, through `@veyq/core-js/expenses`; ADR 0108
  * decision 9): each entry's effect in the base currency, the balances, the settle-up and the overview. Every rule about
  * money runs on the device, the server holding only ciphertext; `contracts/expenses/v1-vectors.json` pins it.
  *
@@ -54,7 +54,11 @@ object Ledger {
     fun joinOrder(participants: List<Pair<String, Long>>): List<String> =
         participants.sortedWith(compareBy<Pair<String, Long>> { it.second }.thenBy { it.first }).map { it.first }
 
-    fun rankOf(order: List<String>): Map<String, Int> = order.withIndex().associate { (i, id) -> id to i }
+    fun rankOf(order: List<String>): Map<String, Int> {
+        val rank = stringMap<Int>()
+        order.forEachIndexed { i, id -> rank[id] = i }
+        return rank
+    }
 
     /** Whether split [s] breaks [rule] (`named-twice`, `percent-unbalanced`, `amounts-unbalanced`), [part] what an amounts
      *  split must add up to (null: none, a rest of zero) — where the editor says a ledger problem is. */
@@ -76,7 +80,7 @@ object Ledger {
 
     private fun splitsOf(a: Allocation): List<Split> = a.items.map { it.split } + listOfNotNull(a.rest)
     private fun total(xs: List<Long>): Big = xs.fold(Big.ZERO) { acc, x -> acc + Big.of(x) }
-    private fun twice(ids: List<String>) = ids.toSet().size != ids.size
+    private fun twice(ids: List<String>) = ids.hasTwice()
 
     /** `amount - sum(items)`: what the rest split gets (negative: items above the total). */
     fun restOf(amount: Long, allocation: Allocation): Big = Big.of(amount) - total(allocation.items.map { it.amount })
@@ -88,7 +92,7 @@ object Ledger {
         is Refund -> c.receivers.map { it.participant } + allocationPeople(c.allocation)
     }
 
-    private fun allocationPeople(a: Allocation) = splitsOf(a).flatMap(::splitPeople).distinct()
+    private fun allocationPeople(a: Allocation) = splitsOf(a).flatMap(::splitPeople).distinctStrings()
 
     /** Why a money entry may not count — or be saved — or null when its sums add up. */
     fun entryProblem(c: MoneyContent, isParticipant: ((String) -> Boolean)? = null): Problem? {
@@ -123,21 +127,26 @@ object Ledger {
         val rest = restOf(amount, allocation)
         if (rest.signum > 0) parts += rest to allocation.rest!!
         val partBase = Money.allocate(baseTotal, parts.map { Fraction.of(it.first) })
-        val shares = LinkedHashMap<String, Big>()
+        val shares = stringMap<Big>()
         parts.forEachIndexed { i, p -> allocateInto(shares, partBase[i], splitWeights(p.second), rank) }
-        return shares.entries.sortedBy { rank.getValue(it.key) }.associateTo(LinkedHashMap()) { it.key to it.value }
+        val inOrder = stringMap<Big>()
+        for (id in shares.keys.sortedBy { rank.getValue(it) }) inOrder[id] = shares.getValue(id)
+        return inOrder
     }
 
     /** A valid money entry's effect in the base currency. */
-    fun entryEffect(c: MoneyContent, base: BaseCurrency, rank: Map<String, Int>): Effect {
-        val baseTotal = Money.convertToBase(Big.of(c.amount), c.minorUnits, c.rate, base.minorUnits)
+    fun entryEffect(c: MoneyContent, base: BaseCurrency, rank: Map<String, Int>): Effect = entryEffect(c, base, rank, stringMap())
+
+    /** [entryEffect], each distinct rate read once into [rates] (a Pot's entries share a handful). */
+    private fun entryEffect(c: MoneyContent, base: BaseCurrency, rank: Map<String, Int>, rates: MutableMap<String, Fraction>): Effect {
+        val baseTotal = Money.convertToBase(Big.of(c.amount), c.minorUnits, rates.getOrPut(c.rate) { Money.parseRate(c.rate) }, base.minorUnits)
         if (c is Transfer) return Effect(baseTotal, emptyMap(), emptyMap(), emptyMap())
         val (contributors, allocation) = when (c) {
             is Expense -> c.payers to c.allocation
             is Refund -> c.receivers to c.allocation
             else -> error("unreachable")
         }
-        val given = LinkedHashMap<String, Big>()
+        val given = stringMap<Big>()
         allocateInto(given, baseTotal, contributors.map { it.participant to Big.of(it.amount) }, rank)
         val shares = beneficiaryShares(c.amount, allocation, baseTotal, rank)
         return if (c is Expense) Effect(baseTotal, given, emptyMap(), shares) else Effect(baseTotal, emptyMap(), given, shares)
@@ -145,7 +154,7 @@ object Ledger {
 
     /** Every participant's balance over the counting entries. */
     fun balancesOf(participants: List<String>, entries: List<Entry>): Map<String, Big> {
-        val balances = LinkedHashMap<String, Big>()
+        val balances = stringMap<Big>()
         participants.forEach { balances[it] = Big.ZERO }
         fun move(id: String, by: Big) { balances[id] = (balances[id] ?: Big.ZERO) + by }
         for (e in entries) {
@@ -168,8 +177,9 @@ object Ledger {
     /** The settle-up, greedily: the largest debtor pays the largest creditor the smaller amount, both chosen again after
      *  every transfer, ties by join order. */
     fun settleUp(balances: Map<String, Big>, order: List<String>): List<Settlement> {
-        val open = LinkedHashMap(balances.filterValues { it.signum != 0 })
-        val known = order.toSet()
+        val open = stringMap<Big>()
+        for ((id, v) in balances) if (v.signum != 0) open[id] = v
+        val known = stringSet().apply { addAll(order) }
         val walk = order + open.keys.filter { it !in known }.sortedWith(idOrder)
         fun largest(debtor: Boolean): String? {
             var best: String? = null
@@ -198,11 +208,11 @@ object Ledger {
 
     /** The overviews over the counting expenses and refunds (transfers are not costs). */
     fun overviewOf(entries: List<Entry>): Overview {
-        val byCategory = LinkedHashMap<String, Big>()
-        val paid = LinkedHashMap<String, Big>()
-        val share = LinkedHashMap<String, Big>()
-        val people = LinkedHashSet<String>()
-        val byCategoryAndPerson = LinkedHashMap<String, LinkedHashMap<String, Big>>()
+        val byCategory = stringMap<Big>()
+        val paid = stringMap<Big>()
+        val share = stringMap<Big>()
+        val people = stringSet()
+        val byCategoryAndPerson = stringMap<MutableMap<String, Big>>()
         for (e in entries) {
             val content = e.content ?: continue
             val effect = e.effect ?: continue
@@ -217,14 +227,15 @@ object Ledger {
                 people += id
                 paid[id] = (paid[id] ?: Big.ZERO) + sign * v
             }
-            val cat = byCategoryAndPerson.getOrPut(category) { LinkedHashMap() }
+            val cat = byCategoryAndPerson.getOrPut(category) { stringMap() }
             for ((id, v) in effect.shares) {
                 people += id
                 share[id] = (share[id] ?: Big.ZERO) + sign * v
                 cat[id] = (cat[id] ?: Big.ZERO) + sign * v
             }
         }
-        val byPerson = people.associateWith { (paid[it] ?: Big.ZERO) to (share[it] ?: Big.ZERO) }
+        val byPerson = stringMap<Pair<Big, Big>>()
+        for (id in people) byPerson[id] = (paid[id] ?: Big.ZERO) to (share[id] ?: Big.ZERO)
         return Overview(byCategory, byPerson, byCategoryAndPerson)
     }
 
@@ -245,6 +256,7 @@ object Ledger {
         }
         val order = joinOrder(participants.map { it.id to it.joined })
         val rank = rankOf(order)
+        val rates = stringMap<Fraction>()
         val entries = money.map { (id, revisions) ->
             val last = revisions.last()
             val edited = last.revision > 1
@@ -256,15 +268,16 @@ object Ledger {
                 Deleted -> entry(Status.DELETED, revisions.asReversed().firstNotNullOfOrNull { it.body?.content as? MoneyContent })
                 is MoneyContent -> {
                     val problem = entryProblem(body) { it in rank }
-                    if (problem != null) entry(Status.INVALID, body, problem) else entry(Status.LIVE, body, effect = entryEffect(body, base, rank))
+                    if (problem != null) entry(Status.INVALID, body, problem) else entry(Status.LIVE, body, effect = entryEffect(body, base, rank, rates))
                 }
                 else -> entry(Status.UNREADABLE, null)
             }
         }.sortedWith { a, b -> idOrder.compare(a.id, b.id) }
         val balances = balancesOf(order, entries)
-        val byId = participants.associateBy { it.id }
+        val byId = participants.associateByString { it.id }
         val overview = overviewOf(entries)
-        val byPerson = order.filter { it in overview.byPerson }.associateWith { overview.byPerson.getValue(it) }
+        val byPerson = stringMap<Pair<Big, Big>>()
+        for (id in order) overview.byPerson[id]?.let { byPerson[id] = it }
         return Pot(order.map { byId.getValue(it) }, entries, balances, settleUp(balances, order), Overview(overview.byCategory, byPerson, overview.byCategoryAndPerson))
     }
 

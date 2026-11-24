@@ -62,7 +62,7 @@ acceptanceCriteria:
     text: "The member field is optional and additive in the entry format v1: a member participant round-trips, a record without it reads as a name, and unknown fields beside or inside it are dropped."
     coverage:
       web:
-        unit: [src/features/expenses/domain/format.test.ts]
+        unit: [src/features/expenses/vectors.test.ts]
   - id: a-member-id-stays-in-its-tenant
     text: "A member's download carries a member participant's user id with its tenant; an import into the same tenant keeps the member, one into another tenant makes it the sealed name; a link guest's download carries no member id; an archive whose member ids lack their tenant, repeat, or sit on a deleted person is refused."
     coverage:

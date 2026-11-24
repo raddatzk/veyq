@@ -9,7 +9,7 @@ import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import { categoryLabel } from '../domain/categories'
 import { ownCategoryNames, type PotMeta } from '../domain/potMeta'
 import type { LedgerEntry, PotLedger } from '../domain/ledger'
-import { formatMoney } from '../amounts'
+import { formatMoney } from '@veyq/core-js/expenses'
 import { personLabel, type MemberDirectory } from '../people'
 
 /** `directory`: the space's members for a member's view (a member participant by their current name), none for a guest. */

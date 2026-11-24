@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.expenses
 
+import me.raddatz.veyq.mobile.json.toTree
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -32,7 +33,7 @@ class EntryFormTest {
     private val vectors = Json.parseToJsonElement(File(System.getProperty("veyq.repoRoot"), "contracts/expenses/v1-vectors.json").readText()).jsonObject
 
     private fun body(o: JsonObject): MoneyContent =
-        RevisionFormat.read(buildJsonObject { put("v", 1); put("heads", JsonArray(emptyList())); o.forEach { (k, v) -> put(k, v) } }).content as MoneyContent
+        RevisionFormat.read(buildJsonObject { put("v", 1); put("heads", JsonArray(emptyList())); o.forEach { (k, v) -> put(k, v) } }.toTree()).content as MoneyContent
 
     @Test
     fun everyVectorEntryOpenedAndSavedUnchangedIsTheVeryBody() {

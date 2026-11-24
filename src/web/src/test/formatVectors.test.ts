@@ -1,9 +1,8 @@
 // The apps' format vectors are the web's: every case of src/mobile/words/format-vectors.json is what the web's
 // formatters write today (ADR 0154 decision 5). Red when a web formatter changed and the file was not written anew
 // (`pnpm exec tsx scripts/format-vectors.mts`), or when the file was edited by hand. The text depends on the ICU of the
-// Node that runs it (2026-11-21: ICU 78 gave COP, HUF, IDR and PKR no minor digits and RSD two, against 77): the file is
-// written under the ICU of every Node line `engines` names (22, 24 and 26 all ship 78.3), and a run under another ICU
-// major is named first, before the cases it moves.
+// Node that runs it (Intl's month names and spaces): the file is written under the ICU of every Node line `engines` names
+// (22, 24 and 26 all ship 78.3), and a run under another ICU major is named first, before the cases it moves.
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { formatVectors } from './formatVectors'

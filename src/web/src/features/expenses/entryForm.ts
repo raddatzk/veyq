@@ -13,7 +13,12 @@
 // (owner 2026-11-03). "Equally" is no mode of the editor's: shares of 1 each are sealed as the format's `equal` split — the
 // same weights, the form every client already reads for the everyday case, and the one an entry opened again shows as its
 // one line "everyone, equally" (`expanded` false) when it names everyone offered.
-import { amountText, minorUnitsOf, parseAmount, parseRate } from './amounts'
+import { amountText, minorUnitsOf, parseAmount as typedAmount, parseRate as typedRate } from '@veyq/core-js/expenses'
+
+/** What a person typed as an amount, in minor units, or null (the core's `Amounts.parse`). */
+const parseAmount = (text: string, minorUnits: number): bigint | null => typedAmount(text, minorUnits) ?? null
+/** A typed rate as the format seals it, or null (the core's `Amounts.parseRate`). */
+const parseRate = (text: string): string | null => typedRate(text) ?? null
 import { PERCENT_WHOLE, type Allocation, type Contribution, type Item, type MoneyContent, type Split } from './domain/format'
 import { entryEffect, entryProblem, rankOf, restOf, splitBreaks, splitPeople, type BaseCurrency, type EntryEffect, type EntryProblem } from './domain/ledger'
 

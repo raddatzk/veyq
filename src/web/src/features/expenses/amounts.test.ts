@@ -1,7 +1,8 @@
 // Amounts typed and shown exactly — never through a float: a typed "0.10" is 10 minor units, a value past 2^53 prints
-// every digit, and the currencies' digits come from `Intl`.
+// every digit, and the currencies' digits come from the core's table (ADR 0155 decision 7.3: the rules are the Kotlin
+// core's, `@veyq/core-js/expenses`; the vectors' `amounts` section pins them on every client).
 import { describe, it, expect } from 'vitest'
-import { amountText, decimalOf, formatMoney, knownCurrencies, minorUnitsOf, parseAmount, parseRate } from './amounts'
+import { amountText, decimalOf, formatMoney, knownCurrencies, minorUnitsOf, parseAmount, parseRate } from '@veyq/core-js/expenses'
 
 describe('amounts', () => {
   it('reads what a person types, in minor units', () => {
@@ -35,7 +36,7 @@ describe('amounts', () => {
     expect(formatMoney(9007199254740993n, 'EUR', 2, 'en')).toBe('€90,071,992,547,409.93')
   })
 
-  it('takes a currency\'s digits from Intl, and a typed rate with either separator', () => {
+  it('takes a currency\'s digits from the core\'s table, and a typed rate with either separator', () => {
     expect([minorUnitsOf('EUR'), minorUnitsOf('JPY'), minorUnitsOf('BHD')]).toEqual([2, 0, 3])
     expect(knownCurrencies()).toContain('EUR')
     expect(parseRate('1,0825')).toBe('1.0825')

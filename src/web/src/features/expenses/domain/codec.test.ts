@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { openRevision, revisionDigest, revisionKeyOf, rewrapRevisionKey, RevisionUnreadable, sealRevision, SIZE_CLASSES, type RevisionAddress } from './codec'
-import { encodeRevisionBody, type RevisionBody } from './format'
+import { readRevisionBody, type RevisionBody } from './format'
 
 const SCOPE = '22222222-2222-4222-8222-222222222222'
 const POT = '0e000000-0000-4000-b000-000000000001'
@@ -37,7 +37,7 @@ describe('sealing a revision', () => {
   it('pads to a size class whose sealed length is one the contract takes: a transfer to 512 B, an expense with one head to 2 KiB', () => {
     expect(b64std(sealRevision(at(A), potKey, transfer).sealedBody).length).toBe(744)
     // The vectors' Dinner (three people, one payer) with one head: 545 bytes of JSON, past the 508 the 512 B class carries.
-    expect(encodeRevisionBody(expense).length).toBe(545)
+    expect(new TextEncoder().encode(JSON.stringify(readRevisionBody(expense))).length).toBe(545) // the plaintext the writer pads
     expect(b64std(sealRevision(at(A), potKey, expense).sealedBody).length).toBe(2792)
     const big: RevisionBody = { ...expense, allocation: { items: Array.from({ length: 40 }, (_, i) => ({ label: `Item ${i} `.padEnd(120, '·'), amount: 1, split: { mode: 'equal', participants: [P] } })), rest: { mode: 'equal', participants: [P, Q, R] } } }
     const bigLength = b64std(sealRevision(at(A), potKey, big).sealedBody).length

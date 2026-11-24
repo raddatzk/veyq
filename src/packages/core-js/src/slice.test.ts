@@ -70,6 +70,18 @@ const SLICES: { slice: string; deletedGz: number; allowed?: { ratio: number; own
   // FADE_MS and PRESS_FADE_MS - 1,905 B min / 864 B gz, measured on sources. The last of decision 7.2's list.
   { slice: 'the music order and fades', deletedGz: 864 },
 ]
+/** Each application's entry (ADR 0155 decision 7.3): its code its own module's file, which imports the platform's. What else
+ *  it must not carry, and a Kotlin source its map must list. */
+const APPLICATIONS: Record<string, { forbidden?: RegExp; control: string }> = {
+  /** Its codec needs no X-Wing, so no SHA-3. */
+  expenses: { forbidden: /hash-library-sha3|sponges-library-keccak/i, control: 'expenses/Ledger.kt' },
+}
+/** ADR 0155 decision 7.3: an application grows what ships by at most 25 KB gz. Held gross here — what its entry adds over
+ *  every platform entry bundled together, its deleted TypeScript not subtracted, so it can only be stricter than the bound
+ *  (the web's measurement, recorded in the ADR, counts the TypeScript). What the application's façade needs of the
+ *  platform (Expenses' JSON seam, money's formats) is the platform's, held by the running budget below (the owner,
+ *  2026-11-22). */
+const APPLICATION_GZ = 25 * 1024
 const BUDGET_GZ = Math.floor(SEARCH_ALONE_GZ + SLICES.reduce((n, s) => n + (s.allowed?.ratio ?? R) * s.deletedGz, 0))
 
 /** [entries] bundled together, minified, as a web build bundles them: each entry's code is the platform's module file. */
@@ -83,7 +95,10 @@ async function bundle(entries: string[]) {
   const map = JSON.parse(out.outputFiles.find((f) => f.path.endsWith('.map'))!.text) as { sources: string[] }
   const inputs = Object.values(out.metafile.outputs).find((o) => o.entryPoint)!.inputs
   const share = (re: RegExp) => Object.entries(inputs).filter(([m]) => re.test(m)).reduce((n, [, i]) => n + i.bytesInOutput, 0)
-  return { js: js.contents, gz: gzipSync(js.contents, { level: 9 }).length, map, inputs, stdlib: share(/kotlin-kotlin-stdlib/), own: share(/kotlin_veyq_mobile_core\.mjs$/) }
+  return {
+    js: js.contents, gz: gzipSync(js.contents, { level: 9 }).length, map, inputs, stdlib: share(/kotlin-kotlin-stdlib/),
+    own: share(/kotlin_veyq_mobile_core\.mjs$/), apps: share(/kotlin_veyq_mobile_apps_\w+\.mjs$/),
+  }
 }
 
 describe('what an entry ships', () => {
@@ -96,6 +111,25 @@ describe('what an entry ships', () => {
       expect(map.sources.some((src) => src.endsWith(control))).toBe(true)
       console.log(`@veyq/core-js/${entry}: ${js.length} B minified, ${gz} B gz; of the minified: standard library ${stdlib} B, ` +
         `the platform's own ${own} B, other ${js.length - stdlib - own} B`)
+    })
+  }
+})
+
+describe('what an application\'s entry ships', () => {
+  for (const [entry, { forbidden, control }] of Object.entries(APPLICATIONS)) {
+    it(`@veyq/core-js/${entry}: no serialization, coroutines, Ktor or refusal, within 25 KB gz over the platform`, async () => {
+      const { js, gz, map, inputs, stdlib, own, apps } = await bundle([entry])
+      const banned = (src: string) => FORBIDDEN.test(src) || (forbidden?.test(src) ?? false)
+      const modules = Object.entries(inputs).filter(([, i]) => i.bytesInOutput > 0).map(([m]) => m)
+      expect(modules.filter(banned)).toEqual([])
+      expect(map.sources.filter(banned)).toEqual([])
+      expect(map.sources.some((src) => src.endsWith(control))).toBe(true)
+      const platform = await bundle(Object.keys(ENTRIES))
+      const together = await bundle([...Object.keys(ENTRIES), entry])
+      console.log(`@veyq/core-js/${entry}: ${js.length} B minified, ${gz} B gz alone; of the minified: standard library ${stdlib} B, ` +
+        `the platform's own ${own} B, the application's ${apps} B, other ${js.length - stdlib - own - apps} B; ` +
+        `over every platform entry (${platform.gz} B gz) it adds ${together.gz - platform.gz} B gz (bound ${APPLICATION_GZ})`)
+      expect(together.gz - platform.gz).toBeLessThanOrEqual(APPLICATION_GZ)
     })
   }
 })

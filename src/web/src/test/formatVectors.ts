@@ -1,12 +1,13 @@
-// What the web writes for a size, a day, a moment, a Memory's day and range, an amount of money, a list and a track's
-// length, in English and German: the vectors the apps' core is held to (ADR 0154 decision 5,
+// What the web writes for a size, a day, a moment, a Memory's day and range, a list and a track's length, in English and
+// German: the vectors the apps' core is held to (ADR 0154 decision 5,
 // `src/mobile/words/format-vectors.json`, written by `scripts/format-vectors.mts`, re-rendered by this module's test).
 // Each case calls the web's own formatter, or `Intl` with the options its call sites pass where the format is an
 // inline `Intl.DateTimeFormat` (`dateStyle: 'medium'`, with `timeStyle: 'short'` for a moment; `de-DE` / `en-US`). A
 // moment is written in UTC here, so the file is the same in every zone; the core turns an instant into the device's
-// local wall clock first. Test support (`src/test/`, a consumer of core and the applications alike): no app code imports it.
+// local wall clock first. Money and numbers are no longer here: the web draws them from the core (ADR 0155,
+// `@veyq/core-js/expenses`), which writes their vectors itself (`src/mobile/words/money-vectors.json`).
+// Test support (`src/test/`, a consumer of core and the applications alike): no app code imports it.
 import { formatBytes } from '../shared/formatBytes'
-import { decimalOf, formatMoney, knownCurrencies, minorUnitsOf } from '../features/expenses/amounts'
 import { formatClosedRange, formatDay } from '../features/memories/memoryDateRange'
 import { formatTrackLength } from '../features/memories/music/audio'
 import { formatDistance } from '../features/memories/track/trackFacts'
@@ -77,16 +78,12 @@ function lengths(): number[] {
 /** A track's length in metres (`trackFacts.ts`' `formatDistance`): around the kilometre and the decimal's rounding. */
 const DISTANCES = [0, 0.4, 0.5, 1, 849.6, 999.4, 999.5, 1000, 1049, 1050, 1234.5, 12_000, 12_340, 12_350, 99_999, 1_234_567.8]
 
-const AMOUNTS = [123_456_789, -5, 0, 1, 100]
-
 export interface FormatVectors {
   readonly size: readonly ({ bytes: number } & Said)[]
   readonly day: readonly ({ iso: string } & Said)[]
   readonly moment: readonly ({ epochMs: number } & Said)[]
   readonly memoryDay: readonly ({ iso: string } & Said)[]
   readonly dayRange: readonly ({ from: string; to: string } & Said)[]
-  readonly money: readonly ({ amount: number; currency: string; minorUnits: number } & Said)[]
-  readonly number: readonly ({ amount: number; minorUnits: number } & Said)[]
   readonly list: readonly ({ items: string[] } & Said)[]
   readonly length: readonly { ms: number; text: string }[]
   readonly dayLabel: readonly ({ iso: string; withYear: boolean } & Said)[]
@@ -101,25 +98,6 @@ export function formatVectors(): FormatVectors {
     at.setUTCFullYear(y!, m! - 1, d!)
     return new Intl.DateTimeFormat(tag(l), { dateStyle: 'medium', ...(time ? { timeStyle: 'short' } : {}), timeZone: 'UTC' }).format(at)
   }
-  const money: (FormatVectors['money'][number])[] = []
-  for (const currency of knownCurrencies()) {
-    const digits = minorUnitsOf(currency)
-    for (const amount of AMOUNTS) money.push({ amount, currency, minorUnits: digits, ...said((l) => formatMoney(BigInt(amount), currency, digits, l)) })
-  }
-  // an amount sealed with other digits than today's table gives its currency (ADR 0108 decision 9)
-  for (const [currency, digits] of [['EUR', 0], ['EUR', 3], ['JPY', 2], ['KWD', 4], ['USD', 1]] as const) {
-    money.push({ amount: 123_456_789, currency, minorUnits: digits, ...said((l) => formatMoney(123_456_789n, currency, digits, l)) })
-  }
-  const number: (FormatVectors['number'][number])[] = []
-  for (const minorUnits of [0, 1, 2, 3, 4]) {
-    for (const amount of AMOUNTS) {
-      number.push({
-        amount, minorUnits,
-        ...said((l) => new Intl.NumberFormat(l, { minimumFractionDigits: minorUnits, maximumFractionDigits: minorUnits })
-          .format(decimalOf(BigInt(amount), minorUnits) as unknown as number)),
-      })
-    }
-  }
   const ranges: [string, string][] = [['2026-03-12', '2026-03-12'], ['2026-03-12', '2026-04-02'], ['2025-12-30', '2026-01-02'], ['2026-03-12', '']]
   const lists = [['a'], ['a', 'b'], ['a', 'b', 'c'], ['“eins”', '“zwei”', '“drei”', '“vier”']]
   return {
@@ -131,8 +109,6 @@ export function formatVectors(): FormatVectors {
     })),
     memoryDay: days().filter((iso) => !iso.startsWith('0')).map((iso) => ({ iso, ...said((l) => formatDay(iso, l)) })),
     dayRange: ranges.map(([from, to]) => ({ from, to, ...said((l) => formatClosedRange(from, to || undefined, l)) })),
-    money,
-    number,
     list: lists.map((items) => ({ items, ...said((l) => joinList(l, items)) })),
     length: lengths().map((ms) => ({ ms, text: formatTrackLength(ms) })),
     // a gallery filter's day chip (`galleryFilter.ts`' label: the year only where the Memory spans more than one)
