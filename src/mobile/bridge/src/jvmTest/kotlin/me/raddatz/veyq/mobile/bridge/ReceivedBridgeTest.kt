@@ -132,6 +132,29 @@ class ReceivedBridgeTest {
     }
 
     /**
+     * A received link's live poll through the bridge (inbox #1017): while `Watched.ReceivedLive` stands, a folder added to
+     * the link reaches the host on the link's own watch, the poll's watch delivering nothing of its own; an unmoved link is
+     * a `304`.
+     */
+    @Test
+    fun aReceivedLinksLivePollShowsAMovedLinkOnItsOwnWatch() = runBlocking {
+        val share = PlayedShare(p)
+        val b = bridge(share)
+        val opened = assertIs<Answer.ReceivedOpened>(b.ask(Call.ReceivedOpen(share.link)))
+        val w = b.watching(Watched.Received(opened.received))
+        suspend fun until(pick: (ReceivedShown) -> Boolean): ReceivedShown = w.untilJson { j ->
+            (wire.decodeFromJsonElement(Update.serializer(), j) as Update.Received).shown?.takeIf(pick)
+        }
+        assertEquals(emptyList(), until { it.gate == ReceivedGate.READY && it.page != null }.page!!.rows.map { it.name })
+        val live = b.watching(Watched.ReceivedLive(opened.received))
+        share.add(share.uuid(), share.rootId, share.rootKey, "FOLDER", "Anna")
+        assertEquals(listOf("Anna"), until { it.page?.rows?.isNotEmpty() == true }.page!!.rows.map { it.name }, "the moved link did not reach the host")
+        assertNull(live.pending(), "the poll's watch delivered an update of its own")
+        b.unwatch(live.id)
+        b.shutdown()
+    }
+
+    /**
      * The guest-write record's notice (ADR 0093 § 10, inbox #1018): a writing link's update carries the days its instance
      * keeps a writer's address, port, time and `Origin`, and where its privacy notice says more — the host shows them
      * before any write. A link that does not write carries none.

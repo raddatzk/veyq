@@ -40,7 +40,8 @@ class PlayedShare(
     val p: Primitives,
     val role: String = "READ",
     val rootKind: String = "FOLDER",
-    val password: String? = null,
+    /** The link's password; a test changes it as its curator would (the guest's token is then refused). */
+    var password: String? = null,
     /** The note's plaintext JSON (either shape of `shareNote.ts`); null: none. */
     val note: String? = null,
     val termsRevision: Int = 0,
@@ -92,8 +93,32 @@ class PlayedShare(
     private fun MockRequestHandleScope.answer(body: String, status: HttpStatusCode = HttpStatusCode.OK) =
         respond(body, status, headersOf(HttpHeaders.ContentType, "application/json"))
 
-    /** The password token the server expects (`Argon2id(password, pwSalt)`). */
-    val pwToken: String? by lazy { password?.let { b64(suite.sharePasswordToken(it, pwSalt)) } }
+    private val tokens = HashMap<String, String>()
+
+    /** The password token the server expects (`Argon2id(password, pwSalt)`), for the [password] set now. */
+    val pwToken: String? get() = password?.let { pw -> tokens.getOrPut(pw) { b64(suite.sharePasswordToken(pw, pwSalt)) } }
+
+    /** How many resolves were answered `304` (the guest's `If-None-Match` named what it serves). */
+    var notModified = 0
+        private set
+
+    /** The link revoked (expired, its space going): its resolve is the non-enumerable `404`. */
+    var revoked = false
+
+    /** Whether the resolve names an `ETag` (ADR 0081) and answers a matching `If-None-Match` with `304`; off: a server that names none. */
+    var tags = true
+
+    private var sealed: Triple<String, String, String>? = null
+
+    /**
+     * The unlocked resolve's tag and body: sealed once per content (a seal's nonce differs each time, the digest must not),
+     * the tag a digest of what it serves — as the server's is, never a revision.
+     */
+    private fun served(): Pair<String, String> {
+        val content = "$role|$rootKind|$note|${password != null}|$children|$extraResolve"
+        val s = sealed?.takeIf { it.first == content } ?: Triple(content, "\"${hex(p.sha256(utf8(content))).take(32)}\"", resolved().toString()).also { sealed = it }
+        return s.second to s.third
+    }
 
     val handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData = { r ->
         val rec = Recorded(
@@ -112,9 +137,23 @@ class PlayedShare(
             path == base -> {
                 val given = rec.header("X-Share-Password")
                 when {
+                    revoked -> answer("""{"code":"not_found"}""", HttpStatusCode.NotFound)
                     password != null && given == null -> answer("""{"role":"$role","passwordRequired":true,"nodes":[],"pwSalt":"${b64(pwSalt)}"}""")
                     password != null && given != pwToken -> answer("""{"code":"share_password_incorrect"}""", HttpStatusCode.Forbidden)
-                    else -> answer(resolved().toString())
+                    else -> {
+                        val (tag, body) = served()
+                        when {
+                            !tags -> answer(body)
+                            rec.header("If-None-Match") == tag -> {
+                                notModified++
+                                respond("", HttpStatusCode.NotModified, headersOf(HttpHeaders.ETag, tag))
+                            }
+                            else -> respond(body, HttpStatusCode.OK, io.ktor.http.Headers.build {
+                                append(HttpHeaders.ContentType, "application/json")
+                                append(HttpHeaders.ETag, tag)
+                            })
+                        }
+                    }
                 }
             }
             path == "$base/terms" -> answer(
@@ -174,7 +213,16 @@ class PlayedShare(
         return key
     }
 
-    fun client(): GuestClient = GuestClient.of(p, origin) { block -> HttpClient(MockEngine(handler), block) }
+    /**
+     * The guest's client of this instance; on [dispatcher] where given (a test's own, so a poll's requests run in the test's
+     * virtual time rather than on the engine's threads).
+     */
+    fun client(dispatcher: kotlinx.coroutines.CoroutineDispatcher? = null): GuestClient = GuestClient.of(p, origin) { block ->
+        HttpClient(MockEngine(io.ktor.client.engine.mock.MockEngineConfig().apply {
+            addHandler(handler)
+            dispatcher?.let { this.dispatcher = it }
+        }), block)
+    }
 
     /**
      * No request held `K_share` (ADR 0150 decision 3): its path, query, headers and body searched for the key as base64url,

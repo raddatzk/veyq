@@ -2995,6 +2995,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ?: flowOf(Update.DropBox(w.box, null))
         // the page's poll runs inside this watch's own job, as a gallery's: it ends with the watch or the page
         is Watched.DropBoxLive -> flow { dropBoxes[w.box]?.page?.live() }
+        // the link's poll, likewise inside this watch's own job: it ends with the watch or the link (its view's close)
+        is Watched.ReceivedLive -> flow { received[w.received]?.screen?.view?.live() }
         is Watched.Scan -> scans[w.scan]?.let { s -> s.state.map { Update.Scan(w.scan, shownScan(it, linkScans[w.scan])) } }
             ?: flowOf(Update.Scan(w.scan, null))
         is Watched.Received -> received[w.received]?.let { h ->

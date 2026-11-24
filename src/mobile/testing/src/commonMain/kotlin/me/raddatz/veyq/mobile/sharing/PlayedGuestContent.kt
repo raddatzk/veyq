@@ -83,9 +83,16 @@ class PlayedGuestContent(private val share: PlayedShare) {
                     respond("", HttpStatusCode.OK)
                 }
                 path == "$base/files" -> answer("""{"items":${JsonArray(files)}}""")
-                path == "$base/media" && rec.method == "GET" -> answer(
-                    """{"media":${JsonArray(media.filter { it["nodeId"]!!.jsonPrimitive.content == r.url.parameters["nodeId"] })},"more":false,"identities":[]}""",
-                )
+                path == "$base/media" && rec.method == "GET" -> {
+                    val body = """{"media":${JsonArray(media.filter { it["nodeId"]!!.jsonPrimitive.content == r.url.parameters["nodeId"] })},"more":false,"identities":[]}"""
+                    // the listing's tag: a digest of what it serves (ADR 0081 decision 4), a match a `304`
+                    val tag = "\"${me.raddatz.veyq.mobile.crypto.hex(share.p.sha256(body.encodeToByteArray())).take(32)}\""
+                    if (rec.header("If-None-Match") == tag) respond("", HttpStatusCode.NotModified, headersOf(HttpHeaders.ETag, tag))
+                    else respond(body, HttpStatusCode.OK, io.ktor.http.Headers.build {
+                        append(HttpHeaders.ContentType, "application/json")
+                        append(HttpHeaders.ETag, tag)
+                    })
+                }
                 path.startsWith("$base/pots/") -> answer("""{"revisions":[],"more":false}""")
                 path.endsWith("/application-blobs") -> answer("""{"blobs":[],"more":false}""")
                 path == "$base/blob-uploads" -> {

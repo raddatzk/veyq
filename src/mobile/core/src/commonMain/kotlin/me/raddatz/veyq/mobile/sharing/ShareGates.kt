@@ -132,7 +132,8 @@ class ShareGates(
         }
         // the terms, then the note — both decided before the content is offered
         terms = ShareResolve.terms(client, link.shareId)
-        head?.kShare?.fill(0)
+        // the head before is kept, not zeroed: the page a poll's flip left open still holds it until the view rebuilds
+        head?.let { retired += it }
         head = resolved
         advance()
     }
@@ -157,6 +158,70 @@ class ShareGates(
         head?.let { retired += it }
         head = resolved
         return true
+    }
+
+    /** What one tick of the live poll found ([poll]). */
+    internal enum class Polled {
+        /** A `304` (or a `200` that serves exactly what is open): nothing read, nothing changed. */
+        SAME,
+        /** The link serves something else now: [head] is the new one (the one before kept until [close]). */
+        MOVED,
+        /** The link is gone, its password changed or its root went: [state] left [State.Ready] (the page gives way to it). */
+        FLIPPED,
+    }
+
+    /**
+     * One tick of the live poll (the web's `shareGates.poll`, inbox #1017): the link re-resolved CONDITIONALLY on the tag of
+     * the open head ([ShareResolve.poll]) — a `304` costs nothing. A link GONE flips the state as a [load] would: the
+     * non-enumerable `404` to [State.Unavailable], a changed password to the password form ([State.Locked], wrong where
+     * the old token is refused), a root no door renders (trashed from under the link) to [State.Unavailable]. A failure
+     * that says nothing about the link — the network, a `429`, a `5xx` — is thrown to the poll (it backs off) and never
+     * reaches the state. The terms and the note are decided at [load], as the web's are: a poll re-gates neither, it only
+     * carries the new name and banner. Outside [State.Ready], or closed, it asks nothing ([Polled.SAME]).
+     */
+    internal suspend fun poll(): Polled {
+        if (closed || _state.value !is State.Ready) return Polled.SAME
+        val current = head ?: return Polled.SAME
+        val polled = try {
+            ShareResolve.poll(client, link.shareId, kShare, pwToken, current.etag)
+        } catch (e: ShareRefused.PasswordRequired) {
+            if (closed || head !== current) return Polled.SAME
+            pwSalt = e.pwSalt
+            _state.value = State.Locked(wrong = false)
+            // a password handed in memory and not entered yet (a bookmark's): entered once, as the reader would
+            handedPassword?.let { handed ->
+                handedPassword = null
+                submitPassword(handed)
+            }
+            return Polled.FLIPPED
+        } catch (e: ShareRefused.PasswordIncorrect) {
+            if (closed || head !== current) return Polled.SAME
+            _state.value = State.Locked(wrong = true)
+            return Polled.FLIPPED
+        } catch (e: ShareRefused.Unavailable) {
+            if (closed || head !== current) return Polled.SAME
+            _state.value = State.Unavailable(e.unreachable)
+            return Polled.FLIPPED
+        } ?: return Polled.SAME
+        if (closed || head !== current) {
+            polled.kShare.fill(0) // a load or a re-resolve ran meanwhile: what this read saw may predate it
+            return Polled.SAME
+        }
+        if (!renders(polled)) {
+            polled.kShare.fill(0)
+            _state.value = State.Unavailable(false)
+            return Polled.FLIPPED
+        }
+        // a server that names no tag answers every poll in full: the served answer compared, so only a change moves the page
+        if (polled.share == current.share && polled.etag == current.etag) {
+            polled.kShare.fill(0)
+            return Polled.SAME
+        }
+        retired += current
+        head = polled
+        if (polled.share == current.share) return Polled.SAME // the tag alone moved: kept for the next poll
+        _state.value = ready(polled)
+        return Polled.MOVED
     }
 
     /** The guest entered the password: its token derived here, then the link resolved again with it. */
@@ -220,9 +285,14 @@ class ShareGates(
             _state.value = State.Note(ShareResolve.pickLocaleText(h.noteByLocale, lang))
             return
         }
+        _state.value = ready(h)
+    }
+
+    /** The content's state over head [h]: its name, role and root kind, the note as the banner where it asks nothing. */
+    private fun ready(h: ShareHead): State.Ready {
         // a note that asked to be accepted is not repeated as the page's banner: the guest got past its gate
-        val banner = if (digest != null) "" else ShareResolve.pickLocaleText(h.noteByLocale, lang)
-        _state.value = State.Ready(h.name, h.role, h.rootKind, banner)
+        val banner = if (h.noteAcceptance != null) "" else ShareResolve.pickLocaleText(h.noteByLocale, locale())
+        return State.Ready(h.name, h.role, h.rootKind, banner)
     }
 
     // --- the guest's session (a write link's identity) ------------------------------------------------------------------

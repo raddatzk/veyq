@@ -103,6 +103,36 @@ class GuestDoorsTest {
         gallery.close()
     }
 
+    /**
+     * A guest's gallery follows its media live (inbox #1017; the web's guest poll, `readShareMedia` with the tag): the
+     * gallery's poll asks conditionally on the tag of the last listing — a `304` while the link serves the same media, a
+     * moved one once another medium is in.
+     */
+    @Test
+    fun aGuestsGalleryAsksWhetherItsMediaMovedByTheListingsTag() = runTest {
+        val f = fixture("READ")
+        val v = view(f.share)
+        v.load()
+        val access = assertNotNull(v.access)
+        val node = access.tree!!.node(f.memory)!!
+        val door = MemoriesGuest.GuestGalleryDoor(access, node)
+        val listed = assertNotNull(door.gallery())
+        assertFalse(door.moved(listed), "an unmoved listing counted as moved: the gallery would be read in full each tick")
+        val asked = f.share.requests.last { it.path.endsWith("/media") }
+        assertNotNull(asked.header("If-None-Match"), "the poll asked unconditionally")
+        val second = f.share.uuid()
+        val original = f.content.blob(second, "ORIGINAL", node.key, "another photo".encodeToByteArray(), "image/jpeg", "b.jpg")
+        f.content.media += kotlinx.serialization.json.buildJsonObject {
+            put("blockedByOperator", kotlinx.serialization.json.JsonPrimitive(false))
+            put("nodeId", kotlinx.serialization.json.JsonPrimitive(f.memory))
+            put("mediaId", kotlinx.serialization.json.JsonPrimitive(second))
+            for ((k, value) in original) put(k, value)
+        }
+        assertTrue(door.moved(listed), "another medium in the Memory did not move the gallery")
+        assertEquals(2, assertNotNull(door.gallery()).items.size)
+        assertFalse(door.moved(listed), "the listing read anew kept the tag before it")
+    }
+
     @Test
     fun aReadWriteGuestsMemoryOffersUploadAndOwnDeletesOnly() = runTest {
         val f = fixture("READ_WRITE")

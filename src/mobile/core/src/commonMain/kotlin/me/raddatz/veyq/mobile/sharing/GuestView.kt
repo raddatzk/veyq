@@ -9,7 +9,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import me.raddatz.veyq.mobile.session.LivePoll
 import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.blob.UploadQueue
@@ -216,6 +221,8 @@ class GuestView internal constructor(
     private val now: () -> Long,
     private val sharesCopies: Boolean = false,
     private val music: me.raddatz.veyq.mobile.audio.PageMusic? = null,
+    /** A monotonic clock in ms, the [live] poll's (its catch-up on a return to the foreground). */
+    private val clock: () -> Long = monotonicMs(),
 ) {
     /** Where a write's settle reads the link anew ([reloadSoon]); cancelled at [close]. */
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
@@ -243,10 +250,18 @@ class GuestView internal constructor(
         if (gates.state.value is ShareGates.State.Ready) enter()
     }
 
-    /** The gates passed (after a password, the terms, the note): the root's page. */
+    /**
+     * The gates passed (after a password, the terms, the note): the root's page. Passed again after the live poll flipped
+     * them (the link's password changed and the new one entered, [live]): the pages follow the head open now, as a
+     * [reload] does.
+     */
     suspend fun enter() {
-        if (gates.state.value !is ShareGates.State.Ready || access != null) return
+        if (gates.state.value !is ShareGates.State.Ready) return
         val head = gates.head ?: return
+        if (access != null) {
+            if (access?.head !== head) rereading.withLock { rebuild(head, inPlace = false) }
+            return
+        }
         val tree = if (head.role == GuestAccess.WRITE_ONLY) null else runCatching { GuestTree.open(gates.guestClient.suite, head) }.getOrNull()
         val a = GuestAccess(gates, head, tree, queue, deriver, now, sharesCopies, music)
         access = a
@@ -254,24 +269,120 @@ class GuestView internal constructor(
         show(a.root)
     }
 
+    /** One re-read of the link at a time: a guest's write's [reload] and a tick of the [live] poll never overlap. */
+    private val rereading = Mutex()
+
     /**
      * The link read anew behind its passed gates (after a guest's write; the web's share page re-resolves): a fresh tree,
      * the nodes on the back stack that are still served kept, the page on top opened again (a node gone: the deepest one
      * left). The tree before is kept for what still holds its keys until [close]. Nothing where it does not resolve now.
      */
-    suspend fun reload() {
+    suspend fun reload() = rereading.withLock {
+        val old = access ?: return@withLock
+        if (old.tree == null || !gates.reresolve()) return@withLock
+        rebuild(gates.head ?: return@withLock, inPlace = false)
+    }
+
+    /**
+     * The pages over [head], the link as it is served now: a fresh tree and access, the nodes on the back stack that are
+     * still served kept, the page on top opened again (a node gone: the deepest one left). [inPlace] (the live poll): a page
+     * of a kind's own model whose node is still served, under the same role, stays as it is — its own model follows its
+     * content (a gallery's live poll) — and only the stack's names follow; a level is opened again over the new tree. The
+     * tree before is kept for what still holds its keys until [close].
+     */
+    private suspend fun rebuild(head: ShareHead, inPlace: Boolean) {
         val old = access ?: return
-        if (old.tree == null || !gates.reresolve()) return
-        val head = gates.head ?: return
-        val tree = runCatching { GuestTree.open(gates.guestClient.suite, head) }.getOrNull() ?: return
+        val tree = if (head.role == GuestAccess.WRITE_ONLY) null else runCatching { GuestTree.open(gates.guestClient.suite, head) }.getOrNull() ?: return
         val a = GuestAccess(gates, head, tree, queue, deriver, now, sharesCopies, music)
         access = a
-        retired += old.tree
+        old.tree?.let { retired += it }
+        if (tree == null || old.tree == null) {
+            _stack.value = emptyList()
+            show(a.root)
+            return
+        }
         val kept = _stack.value.mapNotNull { at ->
             if (at.nodeId == old.root.nodeId) a.root else tree.node(at.nodeId)?.let { NodeAt(it.scopeId, it.id, it.kind, it.name) }
         }.ifEmpty { listOf(a.root) }
+        val top = kept.last()
+        val shown = _page.value
+        if (inPlace && shown != null && shown !is GuestPage.Level && shown !is GuestPage.NotShown &&
+            shown.node.nodeId == top.nodeId && shown.node.kind == top.kind && old.role == a.role
+        ) {
+            _stack.value = kept
+            return
+        }
         _stack.value = kept.dropLast(1)
-        show(kept.last())
+        show(top)
+    }
+
+    // ---- the live poll (inbox #1017) ----
+
+    private val closed = MutableStateFlow(false)
+    private val poll by lazy { LivePoll(LivePoll.LEVEL, clock) }
+    private val polling = Mutex()
+    private var liveJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * Whether a tick asks nothing now — the web's `paused`, a dialog of the page open: the guest is asked its name
+     * ([GuestNaming.asking]), or a level's Select mode is on (its selection lives in the level the tick would replace).
+     */
+    private fun paused(): Boolean {
+        val a = access ?: return true
+        if (a.naming.asking.value) return true
+        return (_page.value as? GuestPage.Level)?.model?.move?.selection?.value != null
+    }
+
+    /**
+     * One tick of the [live] poll: the link re-resolved conditionally ([ShareGates.poll]) — a `304` is no work —, the
+     * pages rebuilt where it moved ([rebuild], in place), the gates' state flipped where it is gone, its password changed
+     * or its root went (the platform then draws that state, as for a [load]); a failure thrown (the poll backs off). Asks
+     * nothing — [LivePoll.Tick.SKIP] — before the gates passed, for a WRITE_ONLY link (served no tree; the web's drop page
+     * polls none), while [paused] or while a write's own [reload] runs.
+     */
+    internal suspend fun tick(): LivePoll.Tick {
+        val a = access ?: return LivePoll.Tick.SKIP
+        if (a.tree == null || paused()) return LivePoll.Tick.SKIP
+        if (!rereading.tryLock()) return LivePoll.Tick.SKIP
+        try {
+            when (gates.poll()) {
+                ShareGates.Polled.SAME -> Unit
+                ShareGates.Polled.MOVED -> gates.head?.let { rebuild(it, inPlace = true) }
+                // a handed password entered at once: the gates stand open again over the new head
+                ShareGates.Polled.FLIPPED -> if (gates.state.value is ShareGates.State.Ready) gates.head?.let { rebuild(it, inPlace = false) }
+            }
+        } finally {
+            rereading.unlock()
+        }
+        return LivePoll.Tick.DONE
+    }
+
+    /**
+     * The guest's pages' live poll (the web's `useLevelLive` over `shareGates.poll`, ADR 0081; core's [LivePoll] at
+     * [LivePoll.LEVEL]) for as long as the caller runs it — a platform while the link's screen shows and the app is in the
+     * foreground, so nothing is asked in the background ([tick] says what each asks). One at a time; it ends when the view
+     * closes. A gallery's own media follow its own poll (`GalleryModel.live`, which the gallery's screen runs as a member's).
+     */
+    suspend fun live() {
+        if (closed.value) return
+        polling.withLock {
+            coroutineScope {
+                val ticking = launch { poll.run { tick() } }
+                closed.first { it }
+                ticking.cancel()
+            }
+        }
+    }
+
+    /** [live] in the view's own scope, for a platform that cannot run a suspend loop: stopped with [Watch.stop] or [close]. */
+    fun startLive(): Watch {
+        liveJob?.cancel()
+        return Watch(scope.launch { live() }.also { liveJob = it })
+    }
+
+    /** A running [startLive]: [stop] ends it. */
+    class Watch internal constructor(private val job: kotlinx.coroutines.Job) {
+        fun stop() = job.cancel()
     }
 
     /** [block] on this view's own scope (cancelled at [close]). */
@@ -317,6 +428,7 @@ class GuestView internal constructor(
 
     /** The link let go: its key and the tree's keys zeroed, its client closed. */
     fun close() {
+        closed.value = true
         scope.cancel()
         access?.tree?.close()
         retired.forEach { it.close() }
@@ -352,9 +464,15 @@ class GuestView internal constructor(
             handedPassword: String? = null, queue: UploadQueue? = null, deriver: Derivation.Deriver? = null, now: () -> Long = { 0L },
             doors: (kind: String, role: String) -> GuestDoor? = AppKinds::guestDoor,
             music: me.raddatz.veyq.mobile.audio.PageMusic? = null,
+            clock: () -> Long = monotonicMs(),
         ): GuestView {
             val gates = ShareGates(link, guest, store, sessions, locale, handedPassword) { h -> h.rootKind?.let { doors(it, h.role) } != null }
-            return GuestView(gates, doors, queue, deriver, now, music = music)
+            return GuestView(gates, doors, queue, deriver, now, music = music, clock = clock)
+        }
+
+        private fun monotonicMs(): () -> Long {
+            val start = kotlin.time.TimeSource.Monotonic.markNow()
+            return { start.elapsedNow().inWholeMilliseconds }
         }
     }
 }

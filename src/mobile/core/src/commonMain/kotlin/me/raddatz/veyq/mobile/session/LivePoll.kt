@@ -81,5 +81,11 @@ class LivePoll(
     companion object {
         /** An item list's cadence: 20 s ± 20 %, doubling to 2 min on errors, a catch-up at most every 2 s. */
         val ITEMS = Cadence(intervalMs = 20_000, maxBackoffMs = 120_000, jitter = 0.2, minGapMs = 2_000)
+
+        /**
+         * A page of a link's tree's cadence (the web's `LIVE_POLL`, `core/node/useLevelLive.ts`): 5 s ± 20 %, doubling to
+         * 2 min on errors, a catch-up at most every 2 s — an idle link answers each tick with a `304` (ADR 0081).
+         */
+        val LEVEL = Cadence(intervalMs = 5_000, maxBackoffMs = 120_000, jitter = 0.2, minGapMs = 2_000)
     }
 }

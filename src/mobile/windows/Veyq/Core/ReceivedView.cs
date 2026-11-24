@@ -227,6 +227,8 @@ internal sealed class ReceivedView : IDisposable
     private readonly TextBlock _guestText;
     private readonly ContentControl _content = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
     private Watch? _watch;
+    /// <summary>The link's live poll (Watched.ReceivedLive, inbox #1017) while the screen stands: disposed with it.</summary>
+    private Watch? _live;
     private ReceivedShown? _shown;
     private string _drawn = "\0";
     /// <summary>The page of the link's kind, as its application registered it for a guest (Registry's KindPage.Guest).</summary>
@@ -312,6 +314,9 @@ internal sealed class ReceivedView : IDisposable
         if (mode == ReceivedMode.OnItsOwn) _root.Background = (Brush)Application.Current.Resources["SolidBackgroundFillColorBaseBrush"];
         Draw();
         _watch = Core.Watch(new Watched.Received { received = received }, Updated, e => Log.Write($"a received link's update: {e.Message}"));
+        // live while the screen stands: what others change in the link, or the link gone, arrives on the watch above (the
+        // core's poll; this watch delivers nothing of its own)
+        _live = Core.Watch(new Watched.ReceivedLive { received = received }, _ => { }, e => Log.Write($"a received link's poll: {e.Message}"));
     }
 
     private void Updated(Update update)
@@ -334,6 +339,8 @@ internal sealed class ReceivedView : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _live?.Dispose();
+        _live = null;
         _watch?.Dispose();
         _watch = null;
         DropPages();
@@ -353,6 +360,8 @@ internal sealed class ReceivedView : IDisposable
     {
         if (_left) return;
         _left = true;
+        _live?.Dispose();
+        _live = null;
         DropPages();
         var f = _onLeft;
         _onLeft = null;

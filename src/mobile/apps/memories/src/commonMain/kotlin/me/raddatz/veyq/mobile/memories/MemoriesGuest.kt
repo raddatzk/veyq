@@ -68,13 +68,22 @@ object MemoriesGuest {
         private val own = HashSet<String>()
         private val _uploaded = MutableSharedFlow<String>(extraBufferCapacity = 16)
 
+        /**
+         * The tag of the last listing read (its first page's `ETag`: a digest of everything the read serves across its pages,
+         * ADR 0081 decision 4 — never the node's item revision), the live poll's `If-None-Match` ([moved]); null: none named.
+         */
+        private var tag: String? = null
+
         override suspend fun gallery(): MemoryMedia.Gallery? {
             val media = ArrayList<ShareMedia>()
             val identities = HashMap<String, String>()
             var after: String? = null
+            var first: String? = null
             while (true) {
                 val r = api.listShareMedia(access.shareId, access.pwToken, node.id, after, PAGE)
                 if (!r.success) throw IllegalStateException("share media ${r.status}")
+                // the first page's tag, read before its rows: a change committed while the rest is paged moves the server's past it
+                if (after == null) first = r.response.headers[io.ktor.http.HttpHeaders.ETag]
                 val page = r.body()
                 media += page.media
                 page.identities.forEach { identities[it.identityId] = it.wrappedIdentityKey }
@@ -89,7 +98,21 @@ object MemoriesGuest {
                 val key = keyOf(at, m, identities, upKeys) ?: return@mapNotNull null
                 itemOf(m, at, key)
             }
+            tag = first
             return MemoryMedia.Gallery(MemoryMedia.order(items), 0, 0)
+        }
+
+        /**
+         * Whether the node's media moved since the last listing (the web's guest poll, `readShareMedia` with the tag; inbox
+         * #1017): its first page asked conditionally on [tag] — a `304` is no, nothing read —, a throw where the read failed
+         * (the gallery's poll backs off). Without a tag (a server that names none) nothing is asked: no.
+         */
+        override suspend fun moved(since: MemoryMedia.Gallery): Boolean {
+            val t = tag ?: return false
+            val r = api.listShareMedia(access.shareId, access.pwToken, node.id, null, 1, t)
+            if (r.status == 304) return false
+            if (!r.success) throw IllegalStateException("share media ${r.status}")
+            return true
         }
 
         /** The key [m] opens under: its node's, or a WRITE_ONLY uploader's `K_up` through the node's drop key (ADR 0031 point 7). */
