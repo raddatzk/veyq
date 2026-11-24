@@ -16,6 +16,7 @@ import me.raddatz.veyq.mobile.navigation.HeaderAction as H
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.RowDetails
 import me.raddatz.veyq.mobile.navigation.ShareAnswer
+import me.raddatz.veyq.mobile.navigation.ShareSheet
 import me.raddatz.veyq.mobile.offline.PinKinds
 import me.raddatz.veyq.mobile.offline.Queued
 import me.raddatz.veyq.mobile.offline.QueuedSender
@@ -163,6 +164,9 @@ object DepotKinds : ApplicationKinds {
         )
         else -> null
     }
+
+    // a drop box's own links are its WRITE_ONLY ones
+    override fun shareShape(kind: String): ShareSheet.Shape? = if (kind == DROPBOX) ShareSheet.Shape.WRITE_ONLY else null
 
     // a folder — a space's top asks as one — takes shared files into Depot's upload queue
     override fun share(kind: String): ShareAnswer? = if (kind == FOLDER) FolderShare.answer else null

@@ -38,6 +38,10 @@ object DropBoxes {
     /** A drop box made: its node, and its first link's address to hand out once (null where the link was not made). */
     class Created(val outcome: Outcome, val nodeId: String? = null, val url: String? = null, val minted: me.raddatz.veyq.mobile.session.ShareLinks.Outcome? = null)
 
+    /** [created] as the platform's share sheet takes it ("Add files only", `ShareSheet.Door.createDropBox`): its link, or why not. */
+    fun made(created: Created): me.raddatz.veyq.mobile.navigation.ShareSheet.Made =
+        me.raddatz.veyq.mobile.navigation.ShareSheet.Made(created.url, me.raddatz.veyq.mobile.words.Notices.dropBoxRefused(created.outcome))
+
     /**
      * Makes a drop box named [name] under [parentId] (null: the space's top) and its first link — the web's
      * `createDropBoxWithLink`, what a folder's share sheet does for "Add files only": the `DEPOT_DROPBOX` node (its name

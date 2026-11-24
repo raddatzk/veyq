@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.android.R
-import me.raddatz.veyq.mobile.composition.QueuedItem
+import me.raddatz.veyq.mobile.offline.QueuedItem
 import me.raddatz.veyq.mobile.offline.QueuedWrite
 
 /**

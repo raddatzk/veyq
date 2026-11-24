@@ -1,5 +1,8 @@
 package me.raddatz.veyq.mobile.composition
 
+import me.raddatz.veyq.mobile.offline.QueuedItem
+import me.raddatz.veyq.mobile.offline.QueuedShown
+import me.raddatz.veyq.mobile.offline.QueuedTray
 import me.raddatz.veyq.mobile.expenses.potCopyRefused
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.*
@@ -1119,17 +1122,17 @@ class ShellModel(
     private fun shareDoor(node: NodeAt, dropBoxParent: String?, changed: () -> Unit) = object : ShareSheet.Door {
         val uuid = { NodeCreate.uuid(tenant.account) }
         // a drop box lists its upload-only links, a Memory and a chapter every role in one list, any other kind none
-        val writeOnly: Boolean? = when (node.kind) {
-            me.raddatz.veyq.mobile.depot.DepotFiles.DROPBOX -> true
-            me.raddatz.veyq.mobile.memories.MemoryCreate.MEMORY, me.raddatz.veyq.mobile.memories.MemoryCreate.CHAPTER -> null
-            else -> false
+        val writeOnly: Boolean? = when (AppKinds.shareShape(node.kind)) {
+            ShareSheet.Shape.WRITE_ONLY -> true
+            ShareSheet.Shape.UPLOAD_LINK -> null
+            null -> false
         }
         override val rules get() = tenant.linkRules
         override suspend fun list() = ShareLinks.list(tenant, node.scopeId, node.nodeId, writeOnly)
         override suspend fun mint(role: String, label: String, password: String, expiresAt: String?) =
             ShareLinks.mint(tenant, node.scopeId, node.nodeId, role, label, password, expiresAt)
         override suspend fun createDropBox(name: String, password: String, expiresAt: String?) =
-            me.raddatz.veyq.mobile.depot.DropBoxes.create(tenant, node.scopeId, dropBoxParent, name, password, expiresAt)
+            me.raddatz.veyq.mobile.depot.DropBoxes.made(me.raddatz.veyq.mobile.depot.DropBoxes.create(tenant, node.scopeId, dropBoxParent, name, password, expiresAt))
         override suspend fun edit(shareId: String, edit: ShareLinkChanges.Edit) =
             ShareLinkChanges.edit(tenant, node.scopeId, node.nodeId, shareId, edit, now())
         override suspend fun renew(shareId: String) =

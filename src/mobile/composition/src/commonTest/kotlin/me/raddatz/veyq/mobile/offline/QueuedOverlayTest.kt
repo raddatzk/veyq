@@ -1,8 +1,8 @@
 package me.raddatz.veyq.mobile.offline
 
 import me.raddatz.veyq.mobile.media.Derivation
-import me.raddatz.veyq.mobile.composition.QueuedLoss
-import me.raddatz.veyq.mobile.composition.QueuedShown
+import me.raddatz.veyq.mobile.offline.QueuedLoss
+import me.raddatz.veyq.mobile.offline.QueuedShown
 
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch

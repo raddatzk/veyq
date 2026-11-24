@@ -15,7 +15,10 @@ import me.raddatz.veyq.mobile.navigation.RowDetails
 import me.raddatz.veyq.mobile.navigation.ShareAnswer
 import me.raddatz.veyq.mobile.offline.PinKinds
 import me.raddatz.veyq.mobile.offline.Queued
+import me.raddatz.veyq.mobile.offline.QueuedOpen
 import me.raddatz.veyq.mobile.offline.QueuedSender
+import me.raddatz.veyq.mobile.offline.QueuedShownPart
+import me.raddatz.veyq.mobile.offline.QueuedWrite
 import me.raddatz.veyq.mobile.search.KindSearch
 import me.raddatz.veyq.mobile.session.NodeRekey
 import me.raddatz.veyq.mobile.session.OpenNode
@@ -24,6 +27,7 @@ import me.raddatz.veyq.mobile.session.TenantSession
 import me.raddatz.veyq.mobile.sharing.GuestAccess
 import me.raddatz.veyq.mobile.sharing.GuestDoor
 import me.raddatz.veyq.mobile.words.Msg
+import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Piece
 
 /**
@@ -97,6 +101,26 @@ object ExpensesKinds : ApplicationKinds {
     @PlatformApi
     @HiddenFromObjC
     override val kept = ExpensesKept
+
+    // a queued entry is said by its title, opens its editor and saves a receipt under its name in the uploads tray
+    override val queuedShown: QueuedShownPart = object : QueuedShownPart {
+        override val ops = setOf(Queued.POT_ENTRY)
+
+        override fun title(write: QueuedWrite): Notice = when (val c = QueuedExpenses.entry(write)?.content) {
+            Deleted -> Notice(Msg.QUEUED_ENTRY_DELETED)
+            is Expense -> Notice(Msg.QUEUED_ENTRY, c.title)
+            is Refund -> Notice(Msg.QUEUED_ENTRY, c.title)
+            is Transfer -> Notice(Msg.QUEUED_ENTRY, c.title.orEmpty())
+            else -> Notice(Msg.QUEUED_ENTRY, "")
+        }
+
+        override fun opens(write: QueuedWrite): QueuedOpen? {
+            val e = QueuedExpenses.entry(write) ?: return null
+            return QueuedOpen.Entry(write.tenant, write.scope, write.node ?: return null, e.entryId, write.id)
+        }
+
+        override fun copyName(write: QueuedWrite, blobId: String) = QueuedExpenses.receiptOf(write, blobId)
+    }
 
     // a Pot's row says its currency
     override val rowParts: List<RowDetails.Part> = listOf(

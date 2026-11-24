@@ -1,7 +1,7 @@
 package me.raddatz.veyq.mobile.navigation
 
-import me.raddatz.veyq.mobile.composition.ShareSheet
-import me.raddatz.veyq.mobile.composition.LinkAction
+import me.raddatz.veyq.mobile.navigation.ShareSheet
+import me.raddatz.veyq.mobile.navigation.LinkAction
 
 import me.raddatz.veyq.mobile.session.LinkRow
 import me.raddatz.veyq.mobile.session.SessionModel

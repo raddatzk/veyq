@@ -1,18 +1,14 @@
-package me.raddatz.veyq.mobile.composition
+package me.raddatz.veyq.mobile.offline
 
-import me.raddatz.veyq.mobile.offline.*
+import kotlin.native.HiddenFromObjC
 import kotlinx.coroutines.flow.Flow
+import me.raddatz.veyq.mobile.PlatformApi
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import me.raddatz.veyq.mobile.crypto.unb64
-import me.raddatz.veyq.mobile.expenses.Deleted
-import me.raddatz.veyq.mobile.expenses.Expense
-import me.raddatz.veyq.mobile.expenses.QueuedExpenses
-import me.raddatz.veyq.mobile.expenses.Refund
-import me.raddatz.veyq.mobile.expenses.Transfer
 import me.raddatz.veyq.mobile.session.VeyqAccount
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
@@ -58,7 +54,7 @@ data class QueuedItem(
 
 /**
  * Where a held write's *Open* goes (ADR 0153 decision 4: the online conflict's own screen), typed so a platform opens it
- * without reading the write: [Entry] the Pot's entry editor over the person's values ([me.raddatz.veyq.mobile.expenses.PotModel.heldEditor]
+ * without reading the write: [Entry] the Pot's entry editor over the person's values (Expenses' `PotModel.heldEditor`
  * with [write]), [Rename] the node's rename dialog with the person's [name] in it (a rename that lands drops the held one,
  * `ShellModel.rename`), [Place] the page the write was made on (a capture time's Memory, a create's level: [node] null is
  * the space's top), where the person looks and then sends it no more (*Discard*).
@@ -154,7 +150,9 @@ object QueuedShown {
     /** What [write] is, as its tray row names it. */
     fun title(write: QueuedWrite): Notice {
         fun field(k: String) = (write.intent[k] as? JsonPrimitive)?.contentOrNull.orEmpty()
-        return when (Queued.of(write.op)) {
+        val op = Queued.of(write.op)
+        me.raddatz.veyq.mobile.AppKinds.queuedShown(op)?.let { return it.title(write) }
+        return when (op) {
             Queued.FOLDER_CREATE -> Notice(Msg.QUEUED_FOLDER, field("name"))
             Queued.MEMORY_CREATE -> Notice(if (field("kind") == "CHAPTER") Msg.QUEUED_CHAPTER else Msg.QUEUED_MEMORY, field("name"))
             Queued.NODE_RENAME -> Notice(Msg.QUEUED_RENAME, field("name"))
@@ -164,13 +162,8 @@ object QueuedShown {
             Queued.MEDIA_TRASH -> Notice(Msg.QUEUED_MEDIUM_TRASH)
             Queued.MEDIA_MARK -> Notice(Msg.QUEUED_MARK)
             Queued.DEPOT_FILE_ADD -> Notice(Msg.QUEUED_FILE, field("name"))
-            Queued.POT_ENTRY -> when (val c = QueuedExpenses.entry(write)?.content) {
-                Deleted -> Notice(Msg.QUEUED_ENTRY_DELETED)
-                is Expense -> Notice(Msg.QUEUED_ENTRY, c.title)
-                is Refund -> Notice(Msg.QUEUED_ENTRY, c.title)
-                is Transfer -> Notice(Msg.QUEUED_ENTRY, c.title.orEmpty())
-                else -> Notice(Msg.QUEUED_ENTRY, "")
-            }
+            // an Expenses entry is said by its application's part (ExpensesKinds.queuedShown)
+            Queued.POT_ENTRY -> Notice(Msg.QUEUED_ENTRY, "")
             null -> Notice(Msg.OFFLINE_REFUSED_OTHER)
         }
     }
@@ -187,7 +180,9 @@ object QueuedShown {
      * Folder, Memory or chapter create [write] as the node it will be: its id the write's, its parent, kind and name the
      * person's (a folder's intent names no kind: [me.raddatz.veyq.mobile.offline.QueuedNodes.FolderIntent]).
      */
-    internal fun madeNode(write: QueuedWrite): me.raddatz.veyq.mobile.navigation.NodeRef {
+    @PlatformApi
+    @HiddenFromObjC
+    fun madeNode(write: QueuedWrite): me.raddatz.veyq.mobile.navigation.NodeRef {
         fun field(k: String) = (write.intent[k] as? JsonPrimitive)?.contentOrNull
         val kind = if (write.op == Queued.FOLDER_CREATE.name) me.raddatz.veyq.mobile.navigation.NodeRef.FOLDER else field("kind") ?: "MEMORY"
         return me.raddatz.veyq.mobile.navigation.NodeRef(write.scope, write.id, field("parent"), kind, field("name").orEmpty())
@@ -204,7 +199,7 @@ object QueuedShown {
  * The uploads tray's list of writes made offline (ADR 0153 decision 5), over the account's outbox: every
  * write waiting, held or refused, oldest first ([items], read again at each change), and their actions — [discard] (with
  * what waits for it), [saveCopy] (a refused write's file, its plaintext handed only to the host's sink, the path the
- * person chose, ADR 0047). *Open* is the screen's own (the Pot's editor with [QueuedExpenses.entry], the rename dialog).
+ * person chose, ADR 0047). *Open* is the screen's own (the Pot's editor with Expenses' `QueuedExpenses.entry`, the rename dialog).
  * [nameOf] names the place a write goes into, from the trees the app holds (null where it holds none).
  */
 class QueuedTray(private val account: VeyqAccount, private val nameOf: (scope: String, node: String?) -> String? = { _, _ -> null }) {
@@ -236,11 +231,9 @@ class QueuedTray(private val account: VeyqAccount, private val nameOf: (scope: S
     suspend fun opens(id: String): QueuedOpen? {
         val w = box?.write(id)?.takeIf { it.state == QueuedWrite.State.HELD } ?: return null
         fun field(k: String) = (w.intent[k] as? JsonPrimitive)?.contentOrNull
-        return when (Queued.of(w.op)) {
-            Queued.POT_ENTRY -> {
-                val e = QueuedExpenses.entry(w) ?: return null
-                QueuedOpen.Entry(w.tenant, w.scope, w.node ?: return null, e.entryId, w.id)
-            }
+        val op = Queued.of(w.op)
+        me.raddatz.veyq.mobile.AppKinds.queuedShown(op)?.let { return it.opens(w) }
+        return when (op) {
             Queued.NODE_RENAME -> QueuedOpen.Rename(w.tenant, w.scope, w.node ?: return null, field("name").orEmpty())
             Queued.FOLDER_CREATE, Queued.MEMORY_CREATE, Queued.DEPOT_FILE_ADD -> QueuedOpen.Place(w.tenant, w.scope, field("parent"))
             else -> QueuedOpen.Place(w.tenant, w.scope, w.node)
@@ -259,7 +252,7 @@ class QueuedTray(private val account: VeyqAccount, private val nameOf: (scope: S
     suspend fun copyName(id: String, index: Int = 0): Pair<String?, String?>? {
         val w = box?.write(id) ?: return null
         val blob = QueuedShown.carried(w).getOrNull(index) ?: return null
-        QueuedExpenses.receiptOf(w, blob.id)?.let { return it }
+        me.raddatz.veyq.mobile.AppKinds.queuedShown(Queued.of(w.op))?.copyName(w, blob.id)?.let { return it }
         fun field(k: String) = (w.intent[k] as? JsonPrimitive)?.contentOrNull
         return field("name") to field("type")
     }
