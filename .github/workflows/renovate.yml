@@ -21,8 +21,13 @@ on:
   schedule:
     # Saturday 05:00 UTC (cron reads UTC; Dependabot's slot was 06:00 Europe/Berlin, owner 2026-11-07), so its pull
     # requests and their Checks runs are ready on Saturday, and what is merged over the weekend is in the snapshot
-    # publish.yml cuts on Monday at 03:17 UTC.
+    # publish.yml cuts on Monday at 03:17 UTC. Twice more that morning, 07:00 and 09:00: a lookup that fails in a run
+    # (Maven Central answers 429 to GitHub's shared runner addresses) makes Renovate leave every group branch as it was,
+    # in a run that is still green, so a single slot would hold a group back a week; a run with nothing to do is
+    # under a minute and changes nothing (renovate/webp-encoder, 2026-11-24).
     - cron: "0 5 * * 6"
+    - cron: "0 7 * * 6"
+    - cron: "0 9 * * 6"
   workflow_dispatch:
 
 permissions: {}

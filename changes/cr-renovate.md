@@ -412,6 +412,16 @@ Checks job `pins`                   Renovate `--platform=local` (no token, the p
   are what ADR 0158 decision 6 asks for, so the config only turns it on.
 - **2026-11-23, phase 5.** 5d, 5e and phase 6 are one pull request (owner: one pull request per feature); the proofs
   that need Renovate on `main` follow the merge and go into the closing change.
+- **2026-11-24, after phase 6.** The first Emscripten bump (#88) found `build.py --write` refusing the image the
+  Dockerfile had moved to: the write held the pin's old image to the new FROM. Fixed in #89 — the write takes the
+  Dockerfile's image into the pin, the comparison still refuses a mismatch.
+- **2026-11-24, after phase 6.** The cool-down is three days and thirty minutes: Renovate adds its default
+  `minimumReleaseAgeBuffer` (30 minutes, read in 44.258.3's config/options) to `minimumReleaseAge`. Left at the default.
+- **2026-11-24, after phase 6.** A lookup that fails in a run (Maven Central's 429 on the shared runner addresses) makes
+  Renovate leave every group branch unchanged, in a green run. Owner: Renovate runs three times on Saturday morning
+  (05:00, 07:00, 09:00 UTC) — neither a failed lookup nor a failed branch push turns the run red; a mirror registry and
+  a persistent cache were weighed and not taken (a mirror is a second source beside Gradle's own and one vendor's; a
+  weekly run outlives the cache).
 
 ## Definition of done
 
