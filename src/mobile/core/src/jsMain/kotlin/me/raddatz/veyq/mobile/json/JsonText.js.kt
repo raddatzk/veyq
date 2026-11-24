@@ -26,18 +26,9 @@ object JsJson {
             "string" -> JsonValue.Str(v.unsafeCast<String>())
             "number" -> JsonValue.Num(v.unsafeCast<Double>())
             "boolean" -> JsonValue.Bool(v.unsafeCast<Boolean>())
-            "object" -> if (js("Array").isArray(v).unsafeCast<Boolean>()) {
-                val a = v.unsafeCast<Array<dynamic>>()
-                JsonValue.Arr(List(a.size) { fromJs(a[it]) })
-            } else {
-                val keys = js("Object").keys(v).unsafeCast<Array<String>>()
-                val fields = LinkedHashMap<String, JsonValue>(keys.size * 2)
-                for (k in keys) {
-                    val f: dynamic = v[k]
-                    if (f !== undefined) fields[k] = fromJs(f)
-                }
-                JsonValue.Obj(fields)
-            }
+            // views of the JavaScript value, read as a reader asks (no map or list built per object): a reader looks a
+            // body's fields up once each, and copying every object first was most of reading a 10,000-entry Pot
+            "object" -> if (js("Array").isArray(v).unsafeCast<Boolean>()) JsonValue.Arr(ArrayView(v)) else JsonValue.Obj(ObjectView(v))
             else -> throw IllegalArgumentException("json_unrepresentable: $type")
         }
     }
@@ -59,4 +50,29 @@ object JsJson {
             o
         }
     }
+}
+
+/** A JavaScript array as the tree's list, each element walked when it is read. */
+private class ArrayView(private val a: dynamic) : AbstractList<JsonValue>() {
+    override val size: Int get() = a.length.unsafeCast<Int>()
+    override fun get(index: Int): JsonValue {
+        if (index < 0 || index >= size) throw IndexOutOfBoundsException("$index")
+        return JsJson.fromJs(a[index])
+    }
+}
+
+/** A plain JavaScript object as the tree's map: its own fields, an `undefined` one left out, each walked when it is read. */
+private class ObjectView(private val o: dynamic) : AbstractMap<String, JsonValue>() {
+    private fun has(key: String): Boolean =
+        js("Object").prototype.hasOwnProperty.call(o, key).unsafeCast<Boolean>() && o[key] !== undefined
+
+    override fun containsKey(key: String): Boolean = has(key)
+    override fun get(key: String): JsonValue? = if (has(key)) JsJson.fromJs(o[key]) else null
+
+    override val entries: Set<Map.Entry<String, JsonValue>>
+        get() = js("Object").keys(o).unsafeCast<Array<String>>().filter { o[it] !== undefined }
+            .map { k -> object : Map.Entry<String, JsonValue> {
+                override val key: String = k
+                override val value: JsonValue = JsJson.fromJs(o[k])
+            } }.toSet()
 }

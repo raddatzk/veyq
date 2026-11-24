@@ -79,4 +79,18 @@ class ExpensesRulesTest {
             1.5e21 to "1.5e+21", 123456789012345680000.0 to "123456789012345680000", -0.5 to "-0.5", 0.0 to "0", 9007199254740992.0 to "9007199254740992", 1e-6 to "0.000001")
         assertEquals(cases.map { it.second }, cases.map { jsNumberText(it.first) })
     }
+
+    @Test
+    fun theHandWrittenUuidCheckIsTheSchemasPattern() {
+        val valid = "0e000000-0000-4000-8000-0000000000ab"
+        // every one-character change of a valid id, by every character that matters, at every position; and lengths around it
+        val alphabet = "0123456789abcdefABCDEFgz-_ :\u00e9"
+        val cases = buildList {
+            add(valid)
+            for (i in valid.indices) for (c in alphabet) add(valid.substring(0, i) + c + valid.substring(i + 1))
+            add(valid.dropLast(1)); add(valid + "0"); add(""); add(valid.uppercase()); add("-".repeat(36))
+        }
+        assertEquals(cases.map { RevisionFormat.UUID.matches(it) }, cases.map { RevisionFormat.isUuid(it) })
+        assertTrue(cases.count { RevisionFormat.isUuid(it) } > 100, "the cases reach accepted ids too")
+    }
 }

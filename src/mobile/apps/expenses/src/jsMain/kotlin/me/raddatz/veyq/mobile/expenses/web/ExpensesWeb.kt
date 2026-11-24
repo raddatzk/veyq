@@ -117,6 +117,31 @@ fun revisionDigest(sealedBody: Uint8Array): String = codec.digest(sealedBody.byt
 
 // ---- the held revisions and the ledger check ----
 
+/**
+ * A Pot's held revisions as the core reads them (cr-web-expenses-on-the-core decision 5's named fallback): each body read
+ * into the core once, when the web's list of held revisions is new, not on every rule's call. Opaque — no member in its
+ * `.d.ts` — and held `markRaw` beside the list it was made from; the rules below take it.
+ */
+@JsExport
+class PotRevisions internal constructor(internal val rows: List<HeldShape>) {
+    internal val held: List<HeldRevision> = rows.map(::heldOf)
+    internal val at: Map<HeldRevision, Int> by lazy { positions(held) }
+
+    /** Each read content (by identity, a JavaScript `Map`'s own key) to the web's body it was read from: a ledger entry's
+     *  content crosses back as the very object the web holds, as the TypeScript's did. */
+    internal val bodyOf: dynamic = contentBodies(held, rows)
+}
+
+private fun contentBodies(held: List<HeldRevision>, rows: List<HeldShape>): dynamic {
+    val m: dynamic = js("new Map()")
+    held.forEachIndexed { i, h -> h.body?.let { m.set(it.content, rows[i].body) } }
+    return m
+}
+
+/** The handle of [held] (the web's own objects, which the rules hand back where they return revisions). */
+@JsExport
+fun potRevisions(held: JsReadonlyArray<HeldShape>): PotRevisions = PotRevisions(list(held).toList())
+
 /** The one id of a revision in a Pot's list. */
 @JsExport
 fun revisionId(ref: RefShape): String = "${ref.entryId}:${ref.revision.toLong()}"
@@ -143,31 +168,23 @@ fun openServedRevisions(scopeId: String, nodeId: String, potKey: Uint8Array, ser
 
 /** The held revisions grouped by record (the objects given), each record's ascending, in the order records first appear. */
 @JsExport
-fun byRecord(held: JsReadonlyArray<HeldShape>): JsReadonlyMap<String, JsReadonlyArray<HeldShape>> {
-    val rows = list(held)
-    val core = rows.map(::heldOf)
-    val at = positions(core)
-    return map(Revisions.byRecord(core)) { revisions -> array(revisions.map { rows[at.getValue(it)] }) }
-}
+fun byRecord(revisions: PotRevisions): JsReadonlyMap<String, JsReadonlyArray<HeldShape>> =
+    map(Revisions.byRecord(revisions.held)) { record -> array(record.map { revisions.rows[revisions.at.getValue(it)] }) }
 
 /** Every held revision (the objects given) that no held revision names as a head. */
 @JsExport
-fun currentHeads(held: JsReadonlyArray<HeldShape>): JsReadonlyArray<HeldShape> {
-    val rows = list(held)
-    val core = rows.map(::heldOf)
-    val at = positions(core)
-    return array(Revisions.currentHeads(core).map { rows[at.getValue(it)] })
-}
+fun currentHeads(revisions: PotRevisions): JsReadonlyArray<HeldShape> =
+    array(Revisions.currentHeads(revisions.held).map { revisions.rows[revisions.at.getValue(it)] })
 
 /** The heads a revision written now names. */
 @JsExport
-fun headsToName(held: JsReadonlyArray<HeldShape>): JsReadonlyArray<HeadShape> =
-    array(Revisions.headsToName(list(held).map(::heldOf)).map { shape("entryId" to it.entryId, "revision" to it.revision.toDouble(), "digest" to it.digest) })
+fun headsToName(revisions: PotRevisions): JsReadonlyArray<HeadShape> =
+    array(Revisions.headsToName(revisions.held).map { shape("entryId" to it.entryId, "revision" to it.revision.toDouble(), "digest" to it.digest) })
 
 /** The ledger check over everything held for one Pot. */
 @JsExport
-fun checkLedger(held: JsReadonlyArray<HeldShape>): LedgerCheckShape {
-    val check = LedgerCheck.of(list(held).map(::heldOf))
+fun checkLedger(revisions: PotRevisions): LedgerCheckShape {
+    val check = LedgerCheck.of(revisions.held)
     fun refs(l: List<LedgerCheck.Ref>) = array(l.map { shape<RefShape>("entryId" to it.entryId, "revision" to it.revision.toDouble()) })
     return shape(
         "complete" to check.complete, "missing" to refs(check.missing), "altered" to refs(check.altered),
@@ -179,11 +196,11 @@ fun checkLedger(held: JsReadonlyArray<HeldShape>): LedgerCheckShape {
 
 /** The Pot's ledger from every revision held. */
 @JsExport
-fun buildLedger(held: JsReadonlyArray<HeldShape>, base: BaseShape): LedgerShape {
-    val pot = Ledger.build(list(held).map(::heldOf), Ledger.BaseCurrency(base.currency, base.minorUnits))
+fun buildLedger(revisions: PotRevisions, base: BaseShape): LedgerShape {
+    val pot = Ledger.build(revisions.held, Ledger.BaseCurrency(base.currency, base.minorUnits))
     return shape(
         "participants" to array(pot.participants.map(::participantShape)),
-        "entries" to array(pot.entries.map(::entryShape)),
+        "entries" to array(pot.entries.map { entryShape(it, revisions) }),
         "balances" to bigMap(pot.balances),
         "settleUp" to array(pot.settleUp.map(::transferShape)),
         "overview" to shape<OverviewShape>(
@@ -353,9 +370,9 @@ private fun participantShape(p: Ledger.Participant): ParticipantShape = shape(
     "id" to p.id, "name" to p.name, "active" to p.active, "joined" to p.joined.toDouble(), "erased" to p.erased, "member" to p.member,
 )
 
-private fun entryShape(e: Ledger.Entry): EntryShape = shape(
+private fun entryShape(e: Ledger.Entry, revisions: PotRevisions): EntryShape = shape(
     "id" to e.id, "revision" to e.revision.toDouble(), "status" to e.status.name.lowercase(),
-    "content" to e.content?.let { JsJson.toJs(RevisionFormat.contentJson(it)) }, "problem" to problemName(e.problem),
+    "content" to e.content?.let { revisions.bodyOf.get(it) }, "problem" to problemName(e.problem),
     "effect" to e.effect?.let(::effectShape), "edited" to e.edited, "recordedAt" to e.recordedAt.toDouble(),
 )
 

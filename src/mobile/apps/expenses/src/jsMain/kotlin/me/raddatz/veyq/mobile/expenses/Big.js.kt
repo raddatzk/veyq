@@ -29,15 +29,20 @@ actual class Big private constructor(private val v: dynamic) : Comparable<Big> {
         private val MAX: dynamic = big("9223372036854775807")
         actual val ZERO: Big = Big(big("0"))
         actual val ONE: Big = Big(big("1"))
-        actual fun of(v: Long): Big = Big(big(v.toString()))
-        actual fun of(v: Int): Big = Big(big(v.toString()))
+        /** A `Long`'s text is slow on JavaScript (it is emulated): a safe integer crosses as a number, exactly. */
+        actual fun of(v: Long): Big {
+            val d = v.toDouble()
+            return Big(if (d >= -SAFE && d <= SAFE) bigOfNumber(d) else big(v.toString()))
+        }
+        private const val SAFE = 9007199254740991.0
+        actual fun of(v: Int): Big = Big(bigOfNumber(v.toDouble()))
         actual fun parse(text: String): Big {
             require(Regex("^-?[0-9]+$").matches(text)) { "not an integer: $text" }
             return Big(big(text))
         }
         actual fun pow10(n: Int): Big {
             require(n >= 0)
-            return parse("1" + "0".repeat(n))
+            return if (n == 0) ONE else Big(pow10Of(n.toDouble()))
         }
 
         /** A `BigInt` the façade hands in. */
@@ -46,6 +51,8 @@ actual class Big private constructor(private val v: dynamic) : Comparable<Big> {
 }
 
 private fun big(text: String): dynamic = js("BigInt(text)")
+private fun bigOfNumber(n: Double): dynamic = js("BigInt(n)")
+private fun pow10Of(n: Double): dynamic = js("BigInt(\"1\" + \"0\".repeat(n))")
 private fun sign(a: dynamic): Int = js("a > BigInt(0) ? 1 : a < BigInt(0) ? -1 : 0").unsafeCast<Int>()
 private fun neg(a: dynamic): dynamic = js("-a")
 private fun add(a: dynamic, b: dynamic): dynamic = js("a + b")

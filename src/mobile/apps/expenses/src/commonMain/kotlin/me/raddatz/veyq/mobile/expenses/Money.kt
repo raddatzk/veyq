@@ -21,6 +21,7 @@ class Fraction private constructor(val num: Big, val den: Big) {
 
         /** `num / den`, reduced to a positive denominator; a zero denominator throws. */
         fun of(num: Big, den: Big = Big.ONE): Fraction {
+            if (den == Big.ONE) return Fraction(num, den) // already reduced: no gcd for a whole number (the ledger's weights)
             require(den.signum != 0) { "fraction_zero_denominator" }
             val sign = if (den.signum < 0) -Big.ONE else Big.ONE
             val g = gcd(num, den).let { if (it.signum == 0) Big.ONE else it }
@@ -77,10 +78,15 @@ object Money {
 
     /** An entry's [amount] (minor units of its currency) in minor units of the Pot's base currency: converted once,
      *  rounded a half away from zero. */
-    fun convertToBase(amount: Big, minorUnits: Int, rate: String, baseMinorUnits: Int): Big {
+    fun convertToBase(amount: Big, minorUnits: Int, rate: String, baseMinorUnits: Int): Big =
+        convertToBase(amount, minorUnits, parseRate(rate), baseMinorUnits)
+
+    /** [convertToBase] with the rate already read (a ledger reads each distinct rate once). */
+    internal fun convertToBase(amount: Big, minorUnits: Int, rate: Fraction, baseMinorUnits: Int): Big {
         val shift = baseMinorUnits - minorUnits
+        if (shift == 0 && rate.num == Big.ONE && rate.den == Big.ONE) return amount // the base itself: exactly the amount
         val scale = if (shift >= 0) Fraction.of(Big.pow10(shift)) else Fraction.of(Big.ONE, Big.pow10(-shift))
-        return roundHalfAwayFromZero(Fraction.of(amount) * parseRate(rate) * scale)
+        return roundHalfAwayFromZero(Fraction.of(amount) * rate * scale)
     }
 
     /**
@@ -91,21 +97,31 @@ object Money {
     fun allocate(total: Big, weights: List<Fraction>): List<Big> {
         require(total.signum >= 0) { "allocate_negative_total" }
         require(weights.none { it.num.signum < 0 }) { "allocate_negative_weight" }
+        if (weights.size == 1) { // one person takes it all: `total * w / w`
+            require(weights[0].num.signum != 0) { "allocate_no_weight" }
+            return listOf(total)
+        }
         var common = Big.ONE
-        for (w in weights) common = common * w.den / gcd(common, w.den)
-        val ints = weights.map { it.num * common / it.den }
-        val whole = ints.fold(Big.ZERO) { a, b -> a + b }
+        for (w in weights) if (w.den != Big.ONE) common = common * w.den / gcd(common, w.den)
+        // whole weights (every weight the ledger hands in) are their own integers
+        val ints = if (common == Big.ONE) weights.map { it.num } else weights.map { it.num * common / it.den }
+        var whole = Big.ZERO
+        for (n in ints) whole += n
         require(whole.signum != 0) { "allocate_no_weight" }
-        val shares = ints.map { total * it / whole }.toMutableList()
-        val remainders = ints.map { total * it % whole }
-        var left = total - shares.fold(Big.ZERO) { a, b -> a + b }
-        // Largest remainder first; a tie keeps the given (join) order.
-        val order = remainders.indices.sortedWith { a, b -> if (remainders[a] == remainders[b]) a - b else remainders[b].compareTo(remainders[a]) }
-        for (i in order) {
-            if (left.signum == 0) break
-            shares[i] = shares[i] + Big.ONE
+        val shares = Array(ints.size) { total * ints[it] / whole }
+        val remainders = Array(ints.size) { total * ints[it] % whole }
+        var left = total
+        for (s in shares) left -= s
+        // The units left over, one each to the largest remainder not yet served; a tie keeps the given (join) order —
+        // the earliest index wins, as a stable sort by remainder would place it. Fewer units are left than people.
+        val served = BooleanArray(ints.size)
+        while (left.signum > 0) {
+            var best = -1
+            for (i in remainders.indices) if (!served[i] && (best < 0 || remainders[i] > remainders[best])) best = i
+            served[best] = true
+            shares[best] = shares[best] + Big.ONE
             left -= Big.ONE
         }
-        return shares
+        return shares.asList()
     }
 }

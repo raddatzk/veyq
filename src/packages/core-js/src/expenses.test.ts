@@ -34,11 +34,13 @@ const heldOf = (h: any): HeldShape => ({
   entryId: h.entryId, revision: h.revision, createdAt: h.createdAt, sealedBody: new Uint8Array(), wrappedRevisionKey: new Uint8Array(),
   digest: h.digest, body: h.body === null ? null : x.readRevisionBody(h.body), unreadable: h.body === null ? 'body' : null,
 } as HeldShape)
+// an entry's content is the web's own body object it was read from, `v` and `heads` with it, as the TypeScript's was
+const strip = ({ v: _v, heads: _h, ...c }: any) => c
 const pairs = (m: ReadonlyMap<string, any>, f: (v: any) => unknown = (v) => Number(v)) => [...m].map(([k, v]) => [k, f(v)])
 const ledgerJson = (l: LedgerShape) => ({
   participants: l.participants,
   entries: l.entries.map((e) => ({
-    id: e.id, revision: e.revision, status: e.status, problem: e.problem, edited: e.edited, recordedAt: e.recordedAt, content: e.content,
+    id: e.id, revision: e.revision, status: e.status, problem: e.problem, edited: e.edited, recordedAt: e.recordedAt, content: e.content == null ? null : strip(e.content),
     effect: e.effect == null ? null : { base: Number(e.effect.base), paid: pairs(e.effect.paid), received: pairs(e.effect.received), shares: pairs(e.effect.shares) },
   })),
   balances: pairs(l.balances),
@@ -57,12 +59,13 @@ const answers: Record<string, (c: any) => unknown> = {
   read: (c) => readAnswer(() => x.readRevisionBody(c.body)),
   check: (c) => {
     const held = (c.held as any[]).map(heldOf)
-    return { check: x.checkLedger(held), currentHeads: x.currentHeads(held).map((r) => `${r.entryId}:${r.revision}`), headsToName: x.headsToName(held) }
+    const r = x.potRevisions(held)
+    return { check: x.checkLedger(r), currentHeads: x.currentHeads(r).map((h) => `${h.entryId}:${h.revision}`), headsToName: x.headsToName(r) }
   },
   entryProblem: (c) => x.entryProblem(c.content, c.participants ? (id) => (c.participants as string[]).includes(id) : undefined),
   splitBreaks: (c) => x.splitBreaks(c.problem, c.split, c.part === null ? null : BigInt(c.part)),
   named: (c) => x.namedParticipants(c.content),
-  ledger: (c) => ledgerJson(x.buildLedger((c.held as any[]).map(heldOf), c.base)),
+  ledger: (c) => ledgerJson(x.buildLedger(x.potRevisions((c.held as any[]).map(heldOf)), c.base)),
   settleUp: (c) => x.settleUp(new Map((c.balances as [string, number][]).map(([k, v]) => [k, BigInt(v)])), c.order).map((t) => ({ from: t.from, to: t.to, amount: Number(t.amount) })),
   amounts: (c) => {
     switch (c.op) {
@@ -116,7 +119,7 @@ describe('the arithmetic and the whole Pots through the façade', () => {
   })
   ;(vectors.pots as any[]).forEach((pot) => {
     it(`the Pot "${pot.name}"`, () => {
-      const ledger = x.buildLedger(potHeld(pot), pot.base)
+      const ledger = x.buildLedger(x.potRevisions(potHeld(pot)), pot.base)
       expect(ledger.participants.map((p) => p.id)).toEqual(pot.expected.joinOrder)
       for (const [id, want] of Object.entries(pot.expected.entries) as [string, any][]) {
         const e = ledger.entries.find((y) => y.id === id)!
@@ -127,7 +130,7 @@ describe('the arithmetic and the whole Pots through the façade', () => {
       expect(asNumbers(ledger.balances)).toEqual(pot.expected.balances)
       expect(ledger.settleUp.map((t) => ({ from: t.from, to: t.to, amount: Number(t.amount) }))).toEqual(pot.expected.settleUp)
       for (const inv of pot.invalid ?? []) {
-        const withIt = x.buildLedger(potHeld(pot, [inv]), pot.base)
+        const withIt = x.buildLedger(x.potRevisions(potHeld(pot, [inv])), pot.base)
         expect(withIt.entries.find((y) => y.id === inv.id)).toMatchObject({ status: 'invalid', problem: inv.problem, effect: null })
         expect(x.entryProblem(inv.body)).toBe(inv.problem)
         expect(asNumbers(withIt.balances)).toEqual(pot.expected.balances)
@@ -241,8 +244,8 @@ describe('the codec over the web\'s primitives', () => {
       [1, null, 'deleted', 'user:u', true],
       [2, 'key', null, null, true],
     ])
-    expect(x.byRecord(held).get(address.entryId)!.map((h) => h.revision)).toEqual([1, 2])
-    expect(x.byRecord(held).get(address.entryId)![0]).toBe(held[0]) // the caller's own objects come back
+    expect(x.byRecord(x.potRevisions(held)).get(address.entryId)!.map((h) => h.revision)).toEqual([1, 2])
+    expect(x.byRecord(x.potRevisions(held)).get(address.entryId)![0]).toBe(held[0]) // the caller's own objects come back
   })
 })
 
@@ -263,7 +266,7 @@ describe('what the web passes crosses', () => {
     expect(x.decimalOf(9007199254740993n, 2)).toBe('90071992547409.93')
     const held = [{ entryId: '0e000000-0000-4000-8000-000000000001', revision: 1, createdAt: 0, digest: '', sealedBody: new Uint8Array(), wrappedRevisionKey: new Uint8Array(), unreadable: null,
       body: x.readRevisionBody({ v: 1, heads: [], kind: 'participant', name: 'A', active: true, joined: 1 } as JsonShape) }] as HeldShape[]
-    const ledger = x.buildLedger(held, { currency: 'EUR', minorUnits: 2 })
+    const ledger = x.buildLedger(x.potRevisions(held), { currency: 'EUR', minorUnits: 2 })
     expect(typeof ledger.balances.get('0e000000-0000-4000-8000-000000000001')).toBe('bigint')
     expect(x.isSettled(ledger, '0e000000-0000-4000-8000-000000000001')).toBe(true)
     expect(ledger.balances instanceof Map).toBe(true)

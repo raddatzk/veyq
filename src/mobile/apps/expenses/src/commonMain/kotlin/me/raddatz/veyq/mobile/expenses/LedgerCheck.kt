@@ -23,7 +23,7 @@ class LedgerCheck private constructor(
     data class Ref(val entryId: String, val revision: Long)
 
     /** The records any of the three lists touch: what the ledger notice names. */
-    val entries: List<String> = (missing + altered + unreadable).map { it.entryId }.distinct().sorted()
+    val entries: List<String> = (missing + altered + unreadable).map { it.entryId }.distinctStrings().sorted()
 
     /** True only when nothing is missing, altered or unreadable. */
     val complete: Boolean get() = entries.isEmpty()
@@ -32,15 +32,15 @@ class LedgerCheck private constructor(
         private val order = compareBy<Ref>({ it.entryId }, { it.revision })
 
         fun of(held: List<HeldRevision>): LedgerCheck {
-            val present = held.associateBy { it.id }
-            val erasedBelow = HashMap<String, Long>()
+            val present = held.associateByString { it.id }
+            val erasedBelow = stringMap<Long>()
             for (r in held) if (r.body?.content is Erasure) erasedBelow[r.entryId] = maxOf(erasedBelow[r.entryId] ?: 0, r.revision)
             fun covered(entryId: String, revision: Long) = revision < (erasedBelow[entryId] ?: 0)
 
-            val missing = LinkedHashMap<String, Ref>()
-            val altered = LinkedHashMap<String, Ref>()
+            val missing = stringMap<Ref>()
+            val altered = stringMap<Ref>()
             for (r in held) for (h in r.body?.heads.orEmpty()) {
-                val id = "${h.entryId}:${h.revision}"
+                val id = revisionIdOf(h.entryId, h.revision)
                 val found = present[id]
                 if (found != null) {
                     if (found.digest != h.digest) altered[id] = Ref(h.entryId, h.revision)
@@ -51,7 +51,7 @@ class LedgerCheck private constructor(
             for ((entryId, revisions) in Revisions.byRecord(held)) {
                 val latest = revisions.last().revision
                 for (revision in 1 until latest) {
-                    val id = "$entryId:$revision"
+                    val id = revisionIdOf(entryId, revision)
                     if (id !in present && !covered(entryId, revision)) missing[id] = Ref(entryId, revision)
                 }
             }

@@ -129,7 +129,7 @@ class HeldRevision(
     val purgeAfter: Long? = null,
 ) {
     /** The one id of a revision in a Pot's list. */
-    val id: String get() = "$entryId:$revision"
+    val id: String = revisionIdOf(entryId, revision)
 }
 
 object Revisions {
@@ -147,14 +147,16 @@ object Revisions {
 
     /** The held revisions by record, each record's ascending, the records in the order they first appear. */
     fun byRecord(held: List<HeldRevision>): Map<String, List<HeldRevision>> {
-        val records = LinkedHashMap<String, MutableList<HeldRevision>>()
+        val records = stringMap<MutableList<HeldRevision>>()
         for (r in held) records.getOrPut(r.entryId) { mutableListOf() } += r
-        return records.mapValues { (_, list) -> list.sortedBy { it.revision } }
+        for (list in records.values) if (list.size > 1) list.sortBy { it.revision }
+        return records
     }
 
     /** Every held revision no held revision names as a head. */
     fun currentHeads(held: List<HeldRevision>): List<HeldRevision> {
-        val named = held.flatMap { r -> r.body?.heads.orEmpty().map { "${it.entryId}:${it.revision}" } }.toSet()
+        val named = stringSet()
+        for (r in held) for (h in r.body?.heads.orEmpty()) named += revisionIdOf(h.entryId, h.revision)
         return held.filter { it.id !in named }
     }
 

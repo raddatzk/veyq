@@ -133,7 +133,25 @@ object RevisionFormat {
     private fun bool(v: JsonValue?, path: String): Boolean = (v as? JsonValue.Bool)?.value ?: fail(path)
 
     private fun uniq(xs: List<String>, path: String): List<String> = if (xs.toSet().size == xs.size) xs else fail(path)
-    private fun uuid(v: JsonValue?, path: String) = str(v, path, UUID)
+    private fun uuid(v: JsonValue?, path: String): String {
+        val s = (v as? JsonValue.Str)?.value ?: fail(path)
+        return if (isUuid(s)) s else fail(path)
+    }
+
+    /**
+     * Whether [s] matches [UUID] — lowercase hex in 8-4-4-4-12 — by its characters, never a regex: a reader checks one per
+     * person, entry and head, and a regex per check was a hot spot of a 10,000-entry Pot on JavaScript. `ExpensesRulesTest`
+     * holds it to [UUID] over every one-character change of a valid id.
+     */
+    fun isUuid(s: String): Boolean {
+        if (s.length != 36) return false
+        for (i in 0 until 36) {
+            val c = s[i]
+            val ok = if (i == 8 || i == 13 || i == 18 || i == 23) c == '-' else (c in '0'..'9' || c in 'a'..'f')
+            if (!ok) return false
+        }
+        return true
+    }
     private fun minor(v: JsonValue?, path: String) = int(v, path, 1, MAX_SAFE)
     private fun uuids(v: JsonValue?, path: String) = uniq(arr(v, path, 1, MAX_LIST).mapIndexed { i, x -> uuid(x, "$path/$i") }, path)
 
@@ -144,7 +162,7 @@ object RevisionFormat {
 
     private fun category(v: JsonValue?, path: String): String {
         val s = (v as? JsonValue.Str)?.value
-        if (s != null && (s in DEFAULT_CATEGORIES || UUID.matches(s))) return s
+        if (s != null && (s in DEFAULT_CATEGORIES || isUuid(s))) return s
         fail(path)
     }
 
