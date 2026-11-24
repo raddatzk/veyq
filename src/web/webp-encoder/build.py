@@ -7,11 +7,14 @@ Two roles in one file, so the host and the container cannot disagree about a pat
     run this script inside it, and read what it wrote. Then
       `build.py`              compare the build with `libwebp.pin` and the committed files: exit 1 on any difference,
                               listing it (the CI rebuild check, and the reproducibility proof);
-      `build.py --write`      write the build into this directory and its hashes into `libwebp.pin`;
+      `build.py --write`      build with the Dockerfile's image, and write the build into this directory and its
+                              hashes and that image into `libwebp.pin` (an Emscripten bump moves the Dockerfile's FROM
+                              alone; the write is what carries it into the pin);
       `build.py --tag vX.Y.Z --commit <sha> --write`
-                              the same for another tag (the update workflow; the commit is what `git ls-remote` named);
+                              the same for another tag (the Renovate follow's read-only run; the commit is what
+                              `git ls-remote` named);
       `build.py --newest`     print libwebp's newest stable tag, its commit, and whether it is newer than the pin, as
-                              `key=value` lines (the update workflow appends them to `$GITHUB_OUTPUT`). Needs git only.
+                              `key=value` lines. Needs git only.
   - **In the container** (`--inside`): fetch the tag into a fixed path, refuse it unless it is the pinned commit, and
     compile the encoder alone into `/out`.
 
@@ -154,7 +157,7 @@ def build_on_host(tag: str, commit: str, image: str) -> pathlib.Path:
     """Build the image, run the inside role, and return the directory holding the outputs."""
     if dockerfile_image() != image:
         sys.exit(f"{DOCKERFILE.name} builds FROM {dockerfile_image()}, but {PIN_FILE.name} pins {image}. A changed image "
-                 f"changes the output: run `build.py --write` and commit both.")
+                 f"changes the output: run `build.py --write`, which takes the Dockerfile's image, and commit both.")
     run(["docker", "build", "--quiet", "--tag", IMAGE_TAG, "--file", str(DOCKERFILE), str(HERE)], stdout=subprocess.DEVNULL)
     out = pathlib.Path(tempfile.mkdtemp(prefix="webp-encoder-"))
     run([
@@ -187,14 +190,18 @@ def main() -> int:
         sys.exit("--tag and --commit go together")
     if not STABLE_TAG.match(tag) or not COMMIT.match(commit):
         sys.exit(f"not a stable release tag and a full commit: {tag} {commit}")
-    out = build_on_host(tag, commit, pin["image"])
+    # The comparison holds the pin's image to the Dockerfile's (a moved FROM is a difference); the write takes the
+    # Dockerfile's, since that is the line an Emscripten bump moves (Renovate's dockerfile manager), and the pin follows
+    # it. Comparing the pin's here refused the very write that brings it along (renovate/webp-encoder, 2026-11-24).
+    image = dockerfile_image() if args.write else pin["image"]
+    out = build_on_host(tag, commit, image)
     try:
         built = {name: sha256(out / name) for name in OUTPUTS}
         if args.write:
             for name in OUTPUTS:
                 (HERE / name).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(out / name, HERE / name)
-            write_pin(tag, commit, pin["image"], built)
+            write_pin(tag, commit, image, built)
             for name in OUTPUTS:
                 print(f"{built[name]}  {name}")
             return 0
