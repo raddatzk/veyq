@@ -75,6 +75,8 @@ const SLICES: { slice: string; deletedGz: number; allowed?: { ratio: number; own
 const APPLICATIONS: Record<string, { forbidden?: RegExp; control: string }> = {
   /** Its codec needs no X-Wing, so no SHA-3. */
   expenses: { forbidden: /hash-library-sha3|sponges-library-keccak/i, control: 'expenses/Ledger.kt' },
+  /** What an opened file is, a folder upload's plan, an SVG's raster and zoom steps. */
+  depot: { control: 'depot/FolderUpload.kt' },
 }
 /** ADR 0155 decision 7.3: an application grows what ships by at most 25 KB gz. Held gross here — what its entry adds over
  *  every platform entry bundled together, its deleted TypeScript not subtracted, so it can only be stricter than the bound

@@ -593,7 +593,13 @@ A Gradle build of its own, run through its own wrapper.
   façade reaches matches a pattern through `text/Pattern` (the engine's `RegExp` on JavaScript), never Kotlin's `Regex`, and
   writes base64 through `crypto/b64`, never `kotlin.io.encoding.Base64`: either, once reached, ships in the standard
   library's file with every entry (ADR 0155 § Expenses' move); a `Long` on its hot path is emulated (`Big` is the engine's
-  `BigInt` there). Live,
+  `BigInt` there). Depot's rules the web draws (`apps/depot`: `FileView.decided`, what an opened file is; `FolderUpload`'s
+  plan over any entry; `SvgView`'s raster and zoom steps; the web's through `@veyq/core-js/depot`,
+  `apps/depot/src/jsMain/…/depot/web/`) change only with `contracts/depot/v1-vectors.json`: `DepotVectorsTest` (`commonTest`;
+  `VEYQ_WRITE_VECTORS=1 ./gradlew :apps:depot:jvmTest --tests '*DepotVectorsTest*'` rewrites it, a plan's `tokens` from the
+  apps' real foldings), `FileViewTest`, `FolderUploadTest`, `SvgViewTest`, then `@veyq/core-js`'s `depot.test.ts` and the
+  web's `features/depot/vectors.test.ts`; a stdlib collection member the plan reaches first ships with every platform entry
+  (ADR 0155 § Depot's move: +131 B gz). Live,
   `SearchLiveTest` (`VEYQ_LIVE`: a Memory with a date, a place, a participant and a photo searched from another space,
   the photo opened through its gallery's request, a rename seen after a focus, an idle focus one `304` per tree and
   listing; the Memory purged). Its bounds are `SearchVolumeMeasure`'s, opt-in: `VEYQ_MEASURE=1 ./gradlew :apps:memories:jvmTest

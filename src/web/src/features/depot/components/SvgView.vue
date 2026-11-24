@@ -11,6 +11,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
+import * as core from '@veyq/core-js/depot'
 import type { SvgPicture, SvgRaster, SvgRegion } from '../svgRaster'
 
 const props = defineProps<{ picture: SvgPicture; name: string; full: boolean }>()
@@ -18,7 +19,8 @@ const emit = defineEmits<{ failed: [] }>()
 const { t } = useI18n()
 
 /** Zoom factors relative to the fitted size (1): the buttons step through them. */
-const ZOOM_STEPS = [1, 1.5, 2, 3, 4, 6, 8, 12, 16] as const
+/** The zoom steps, ×1 the picture fitted: Depot's Kotlin `SvgView`, one list with the apps (ADR 0155 § Depot's move). */
+const ZOOM_STEPS: readonly number[] = core.depotSvgZoomSteps()
 /** How long the view must stay still before the tile is painted at its new scale. */
 const REPAINT_DELAY = 150
 /** The room where nothing can be measured (no layout, e.g. a test). */
@@ -42,8 +44,8 @@ const fitScale = computed(() => {
 const scale = computed(() => fitScale.value * zoom.value)
 const laidOut = computed(() => ({ width: props.picture.width * scale.value, height: props.picture.height * scale.value }))
 const sizerStyle = computed(() => ({ width: `${laidOut.value.width}px`, height: `${laidOut.value.height}px` }))
-const canZoomOut = computed(() => zoom.value > ZOOM_STEPS[0])
-const canZoomIn = computed(() => zoom.value < ZOOM_STEPS[ZOOM_STEPS.length - 1])
+const canZoomOut = computed(() => zoom.value > ZOOM_STEPS[0]!)
+const canZoomIn = computed(() => zoom.value < ZOOM_STEPS[ZOOM_STEPS.length - 1]!)
 
 /** Device px per CSS px: the screen's ratio (a browser zoom changes it) times a pinch zoom's scale. */
 function readDeviceRatio(): number {
@@ -223,12 +225,12 @@ async function setZoom(next: number): Promise<void> {
   }
 }
 function zoomOut(): void {
-  const next = [...ZOOM_STEPS].reverse().find((z) => z < zoom.value)
-  if (next !== undefined) void setZoom(next)
+  const next = core.depotSvgZoomOut(zoom.value)
+  if (next !== zoom.value) void setZoom(next)
 }
 function zoomIn(): void {
-  const next = ZOOM_STEPS.find((z) => z > zoom.value)
-  if (next !== undefined) void setZoom(next)
+  const next = core.depotSvgZoomIn(zoom.value)
+  if (next !== zoom.value) void setZoom(next)
 }
 function fit(): void {
   void setZoom(1)

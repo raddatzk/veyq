@@ -16,11 +16,13 @@
 //   PNG's `toBlob` refused it before. Every later paint reads one pixel back too and clears the canvas if it throws;
 // - memory: no canvas this module paints holds more than [SVG_MAX_PIXELS] pixels or [SVG_MAX_EDGE] on a side
 //   ([planRaster]); a zoomed view paints only the part in view (`SvgView.vue`), so the zoom does not raise the bound.
+import * as core from '@veyq/core-js/depot'
 
-/** The most pixels one painted canvas holds: 4096 x 4096 (64 MiB RGBA; iOS Safari's own canvas area limit). */
-export const SVG_MAX_PIXELS = 4096 * 4096
+/** The most pixels one painted canvas holds: 4096 x 4096 (64 MiB RGBA; iOS Safari's own canvas area limit) - Depot's Kotlin
+ *  `SvgView`, drawn through `@veyq/core-js/depot` (ADR 0155 decision 7.3, § Depot's move), one cap with the apps. */
+export const SVG_MAX_PIXELS: number = core.depotSvgMaxPixels()
 /** The longest side, in pixels, of one painted canvas. */
-export const SVG_MAX_EDGE = 8192
+export const SVG_MAX_EDGE: number = core.depotSvgMaxEdge()
 /** The size a browser gives an SVG that names none (a replaced element's default). */
 const DEFAULT_WIDTH = 300
 const DEFAULT_HEIGHT = 150
@@ -36,12 +38,8 @@ export type SvgRaster = { width: number; height: number; ratio: number }
  * [SVG_MAX_PIXELS] and [SVG_MAX_EDGE], else the largest ratio that does (the cap wins over sharpness).
  */
 export function planRaster(region: Pick<SvgRegion, 'width' | 'height'>, deviceRatio: number): SvgRaster {
-  const w = Math.max(1, region.width)
-  const h = Math.max(1, region.height)
-  const wanted = Number.isFinite(deviceRatio) && deviceRatio > 0 ? deviceRatio : 1
-  const ratio = Math.min(wanted, Math.sqrt(SVG_MAX_PIXELS / (w * h)), SVG_MAX_EDGE / w, SVG_MAX_EDGE / h)
-  // floor, not round: a rounded-up side could carry the area one row over the cap
-  return { width: Math.max(1, Math.floor(w * ratio)), height: Math.max(1, Math.floor(h * ratio)), ratio }
+  const { width, height, ratio } = core.depotSvgRaster(region.width, region.height, deviceRatio)
+  return { width, height, ratio }
 }
 
 /** A decoded SVG, painted again at each scale; its URL is already gone. */

@@ -78,8 +78,11 @@ object FolderUpload {
     private const val NAME_TRIES = 200
     private const val FOLDER = "FOLDER"
 
-    /** The names one directory gives out: safe and told apart by name, and by slug within its kind's group. */
-    private class Namer(private val tokenInput: (String, String) -> String?, tokens: Collection<String> = emptyList()) {
+    /**
+     * The names one directory gives out: safe and told apart by name, and by slug within its kind's group ([tokens]: the
+     * slugs already held there — the level's siblings, for the top folder). The web draws it through `@veyq/core-js/depot`.
+     */
+    internal class Namer(private val tokenInput: (String, String) -> String?, tokens: Collection<String> = emptyList()) {
         private val taken = HashSet<String>()
         private val slugs = HashSet(tokens)
         fun next(kind: String, name: String): String {
@@ -94,28 +97,46 @@ object FolderUpload {
 
     /** [entries] (paths below a directory named [rootName]) as the tree to make; the top's name not yet numbered. */
     fun plan(rootName: String, entries: List<Entry>, tokenInput: (String, String) -> String?): Plan {
+        val planned = planned(rootName, entries, { it.path }, tokenInput)
+        fun dir(t: Planned<Entry>): Dir = Dir(t.name, t.dirs.map(::dir), t.files)
+        return Plan(dir(planned.root), planned.placed.size, planned.placed.sumOf { it.size })
+    }
+
+    /** A directory of a plan over any entry [E]: its name as it will be made, its subdirectories, its files (name, entry). */
+    internal class Planned<E>(val name: String, val dirs: List<Planned<E>>, val files: List<Pair<String, E>>)
+
+    /** A plan over any entry: its [root] and the entries [placed] in it — an entry whose path names no file is left out. */
+    internal class PlannedTree<E>(val root: Planned<E>, val placed: List<E>)
+
+    /**
+     * The plan's rule over any entry [E] whose path [pathOf] reads (the web's `planFolderUpload`, drawn through
+     * `@veyq/core-js/depot`): each path NFC and split at `/`, an empty segment dropped, one with no segment left out; each
+     * directory's subfolders named before its files through one [Namer]; the top's name NFC, not yet numbered ([Namer] over
+     * the level's siblings numbers it, [made]).
+     */
+    internal fun <E> planned(rootName: String, entries: List<E>, pathOf: (E) -> String, tokenInput: (String, String) -> String?): PlannedTree<E> {
         class Building {
             val dirs = LinkedHashMap<String, Building>()
-            val files = ArrayList<Pair<String, Entry>>()
+            val files = ArrayList<Pair<String, E>>()
         }
         val top = Building()
+        val placed = ArrayList<E>()
         for (e in entries) {
-            val parts = nfc(e.path).split('/').filter { it.isNotEmpty() }
+            val parts = nfc(pathOf(e)).split('/').filter { it.isNotEmpty() }
             if (parts.isEmpty()) continue
             var at = top
             for (segment in parts.dropLast(1)) at = at.dirs.getOrPut(segment) { Building() }
             at.files += parts.last() to e
+            placed += e
         }
-        fun name(b: Building, as_: String): Dir {
+        fun name(b: Building, as_: String): Planned<E> {
             val namer = Namer(tokenInput)
             // the subfolders first, then the files, through one namer (`planFolderUpload`)
             val dirNames = b.dirs.keys.map { it to namer.next(FOLDER, it) }
             val files = b.files.map { (n, e) -> namer.next(DepotFiles.FILE, n) to e }
-            return Dir(as_, dirNames.map { (orig, made) -> name(b.dirs.getValue(orig), made) }, files)
+            return Planned(as_, dirNames.map { (orig, made) -> name(b.dirs.getValue(orig), made) }, files)
         }
-        val root = name(top, nfc(rootName))
-        val count = entries.size
-        return Plan(root, count, entries.sumOf { it.size })
+        return PlannedTree(name(top, nfc(rootName)), placed)
     }
 
     /** What making one folder came to ([Maker.folder]). */

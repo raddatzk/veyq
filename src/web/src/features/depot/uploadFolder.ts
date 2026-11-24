@@ -4,13 +4,15 @@
 // create (a member's `createContentNode`, a guest's `createShareNodeAsGuest`) behind the session's upload door
 // (`source.ts`'s `FilesTreeUpload`).
 //
-// **Names.** Every name goes through core's `archiveName` - the one rule that makes a name safe on every file system - and its
-// clash suffix (`Name (2)`, before the extension), per directory. On top of it, a name whose SLUG a sibling already holds is
-// numbered further, each sibling folded by its own kind into its token input (`registry.tokenInputFor`: a folder `a.b` and a
-// folder `a b` meet, a file `Foto.JPG` and `foto.jpg` meet, a Memory `Trip` meets neither), so the server's uniqueness never
-// refuses a name the plan made. The top folder is numbered
-// among the level's existing siblings the same way (as the import's root is), and a sibling only the server knows (a race, one
-// this session cannot read) moves it to the next suffix.
+// **Names** — Depot's Kotlin `FolderUpload` plan, drawn through `@veyq/core-js/depot` (ADR 0155 decision 7.3, § Depot's move;
+// one rule with the apps, held by `contracts/depot/v1-vectors.json`'s `folderPlan`). Every name goes through the platform's
+// `archiveName` - the one rule that makes a name safe on every file system - and its clash suffix (`Name (2)`, before the
+// extension), per directory. On top of it, a name whose SLUG a sibling already holds is numbered further, each sibling folded
+// by its own kind into its token input (`registry.tokenInputFor`: a folder `a.b` and a folder `a b` meet, a file `Foto.JPG`
+// and `foto.jpg` meet, a Memory `Trip` meets neither), so the server's uniqueness never refuses a name the plan made. The top
+// folder is numbered among the level's existing siblings the same way (as the import's root is), and a sibling only the
+// server knows (a race, one this session cannot read) moves it to the next suffix. `planFolderUpload` holds no rule: it hands
+// the paths to the core and puts each planned name on its `File`.
 //
 // **Order.** The plan is pure (`planFolderUpload`); `createFolders` creates the folders top-down, then hands back one upload job
 // per file for core's queue - so the folders exist before any file is sent, and a file that fails is the queue's per-file
@@ -24,13 +26,12 @@
 // and the server keeps any folder somebody else filled or renamed meanwhile (`not_a_placeholder`).
 //
 // The quota preflight (the tenant's yes or no for the tree's total bytes) is the caller's, before the first write.
-import { toRaw } from 'vue'
+import { markRaw, toRaw } from 'vue'
+import * as core from '@veyq/core-js/depot'
 import { registry } from '../../core/applications/registry'
-import { archiveName } from '../../core/export/archiveName'
 import type { DirectoryInput } from '../../core/export/importSource'
-import { FOLDER_KIND, type NodeKind } from '../../core/node/kind'
+import type { NodeKind } from '../../core/node/kind'
 import { isRetryable, type UploadItem, type UploadJob } from '../../core/blob/queue'
-import { FILE_KIND } from './kinds'
 import type { FilesTreeUpload } from './source'
 import { FileUploadError, type FileJobExtra, type FileUploadResult } from './uploadFile'
 
@@ -43,24 +44,6 @@ export type FolderUploadPlan = { root: FolderPlan; files: number; bytes: number;
 
 type SlugFor = (kind: NodeKind, name: string) => string
 
-/** The names one directory hands out: `archiveName`'s rules and suffix, and a slug no sibling holds yet. */
-function namer(slugFor: SlugFor, slugs: Set<string> = new Set()) {
-  const taken = new Set<string>()
-  return (name: string, kind: NodeKind): string => {
-    // each archiveName call takes its result, so the next one is the next suffix: this ends
-    for (;;) {
-      const candidate = archiveName(name, taken)
-      const slug = slugFor(kind, candidate)
-      if (!slugs.has(slug)) {
-        slugs.add(slug)
-        return candidate
-      }
-    }
-  }
-}
-
-type Draft = { files: { name: string; file: File }[]; folders: Map<string, Draft> }
-
 /**
  * Plan the upload of `dir` under a level whose children are `siblings` (each `{ kind, name }`): the directory becomes the top
  * folder, numbered among them. Paths below it are split at `/`; an empty segment is dropped.
@@ -68,35 +51,18 @@ type Draft = { files: { name: string; file: File }[]; folders: Map<string, Draft
 export function planFolderUpload(
   dir: DirectoryInput, siblings: readonly { kind: NodeKind; name: string }[], slugFor: SlugFor = (k, n) => registry.tokenInputFor(k, n),
 ): FolderUploadPlan {
-  const top: Draft = { files: [], folders: new Map() }
-  let files = 0
-  let bytes = 0
-  for (const { path, file } of dir.files) {
-    const segments = path.normalize('NFC').split('/').filter((s) => s !== '')
-    const fileName = segments.pop()
-    if (fileName === undefined) continue
-    let at = top
-    for (const segment of segments) {
-      let next = at.folders.get(segment)
-      if (!next) at.folders.set(segment, (next = { files: [], folders: new Map() }))
-      at = next
-    }
-    at.files.push({ name: fileName, file })
-    files++
-    bytes += file.size
-  }
-  const build = (draft: Draft, name: string): FolderPlan => {
-    const next = namer(slugFor)
-    // the sub-directories first, then the files: the same tree always gets the same names
-    const folders = [...draft.folders].map(([n, d]) => build(d, next(n, FOLDER_KIND)))
-    const renamed = draft.files.map(({ name: n, file }) => {
-      const safe = next(n, FILE_KIND)
-      return safe === file.name ? file : new File([file], safe, { type: file.type, lastModified: file.lastModified })
-    })
-    return { name, files: renamed, folders }
-  }
-  const rootName = namer(slugFor, new Set(siblings.map((s) => slugFor(s.kind, s.name))))
-  return { root: build(top, rootName(dir.name, FOLDER_KIND)), files, bytes, nextRootName: () => rootName(dir.name, FOLDER_KIND) }
+  const entries = dir.files.map(({ path, file }) => ({ path, size: file.size }))
+  const plan = core.depotFolderPlan(dir.name, entries, siblings.map(({ kind, name }) => ({ kind, name })), slugFor)
+  const names = markRaw(plan.rootNames)
+  const build = (folder: core.PlannedFolderShape): FolderPlan => ({
+    name: folder.name,
+    files: folder.files.map(({ name, entry }) => {
+      const file = dir.files[entry]!.file
+      return name === file.name ? file : new File([file], name, { type: file.type, lastModified: file.lastModified })
+    }),
+    folders: folder.folders.map(build),
+  })
+  return { root: build(plan.root), files: plan.files, bytes: plan.bytes, nextRootName: () => core.depotFolderRootNext(names) }
 }
 
 /** How often the top folder moves to the next suffix on the server's `slug_taken` before the upload gives up. */

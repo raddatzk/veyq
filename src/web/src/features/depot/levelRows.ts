@@ -56,7 +56,6 @@ import { canUploadFolder, depotRights } from './rights'
 import { rowRightsOf, targetOf, type GuestAccess, type TreeSource } from '../../core/access'
 import { pickedDirectory, type DirectoryInput } from '../../core/export/importSource'
 import { tenantStorageFits } from '../tenant/tenantStorage'
-import { createFolders, planFolderUpload, takeBackEmptyFolders } from './uploadFolder'
 import { guestDepotSource, memberDepotSource, sourceRights, type FileUploadEntry, type DepotSource } from './source'
 
 /** The id of Depot's "Upload files" level action (`register.ts` declares the menu entry under it). */
@@ -282,6 +281,8 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
     const upload = source.upload
     if (!upload || !folderReady.value || dir.files.length === 0) return
     const level = ctx.value.folder
+    // the plan is Depot's Kotlin rule (ADR 0155 § Depot's move): its module loads with the first folder upload, never with the rows
+    const { createFolders, planFolderUpload, takeBackEmptyFolders } = await import('./uploadFolder')
     const plan = planFolderUpload(dir, (ctx.value.tree as TreeSource<TreeNode>).children(folderId()))
     // Before anything is written: would the tree fit the tenant's quota? Only a member can ask (a guest's link has a limit of
     // its own, which its uploads meet); a "no" says so and writes nothing, an unanswered question never blocks.

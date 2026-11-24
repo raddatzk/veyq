@@ -123,7 +123,8 @@ reads).
   or drop; any other - a guest's always, its `.veyq/` included as files - is uploaded as its tree (`uploadFolder.ts`):
   `planFolderUpload` makes a `FOLDER` per directory and a `FILE` per file, every name through core's `archiveName` with its
   clash suffix and numbered further where a sibling's slug (each kind's own folding) holds it, the top folder numbered among
-  the level's siblings; then a member's quota preflight for the tree's bytes (core's `tenantStorageFits`: a "no" is a
+  the level's siblings (the plan is Depot's Kotlin `FolderUpload`, drawn through `@veyq/core-js/depot` — one rule with the
+  apps, `contracts/depot/v1-vectors.json`'s `folderPlan`; its module loads with the first folder picked or dropped); then a member's quota preflight for the tree's bytes (core's `tenantStorageFits`: a "no" is a
   notice and writes nothing, an unanswered question never blocks; a guest asks none, its link has its own limit); then
   `createFolders` creates the folders top-down through the session's `FilesUpload.beginTree` (a guest is named first, and
   each folder it creates joins its key chain) and hands one queue job per file to core's queue. A folder that cannot be
@@ -200,8 +201,9 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
 | PDF (`%PDF-` in the first KiB) | drawn page by page onto `<canvas>` elements by pdf.js, in the page (below) | 64 MiB and 1000 pages, then the download |
 | anything else, a text in another encoding, an image the browser cannot decode (`<img>` `error`), a codec it lacks, no usable worker, an unreadable PDF | message + download | — |
 
-- **The bytes decide** (the platform's `blob/Sniff.kt` through `@veyq/core-js/files` behind `core/blob/sniff.ts` — one rule
-  with the apps, `contracts/platform/files/v1-vectors.json` — and `view.ts`): the first chunk is opened and sniffed; the blob's sealed type
+- **The bytes decide** (the platform's `blob/Sniff.kt` and Depot's `FileView.decide`, through `@veyq/core-js/depot` behind
+  `view.ts` — one rule with the apps, `contracts/platform/files/v1-vectors.json` and `contracts/depot/v1-vectors.json`'s
+  `view`; ADR 0155 § Depot's move): the first chunk is opened and sniffed; the blob's sealed type
   and the name only *narrow*. A PNG claimed as `text/plain` is an image; a binary claimed as `image/png` shows nothing;
   an SVG is an image only when its markup (first element `<svg`) **and** the type/extension say so — any other markup is
   text. Legacy 8-bit encodings are not guessed (they are not valid UTF-8, so the file is not shown as text).
@@ -221,7 +223,8 @@ a guest's link presign) with the chunk provider the download uses (`fileChunkPro
   and nothing ran, in the page or in a tab. One the canvas refuses (a `foreignObject` taints it: a one-pixel read-back
   throws, checked before anything is shown and after every paint) is shown as "cannot be shown" with the download.
 - **A zoomed SVG stays sharp** (owner 2026-11-22; ADR 0155 § The file facts' slice D14). The viewer has zoom out / in / fit
-  buttons (×1–×16) for an SVG. A base canvas holds the whole picture at the size that fits (never larger than its own) ×
+  buttons (×1–×16; the steps and the canvas caps are Depot's Kotlin `SvgView`, drawn through `@veyq/core-js/depot`, one list
+  and one cap with the apps) for an SVG. A base canvas holds the whole picture at the size that fits (never larger than its own) ×
   the screen's ratio; zoomed, a tile canvas holds only the part in view, painted again at the zoom's actual scale (zoom ×
   `devicePixelRatio` × a pinch zoom's scale) 150 ms after the last zoom, scroll or resize — the vectors drawn anew, never a
   bitmap enlarged. No canvas holds more than 4096 × 4096 pixels or 8192 px on a side (the ratio is lowered past it), and
