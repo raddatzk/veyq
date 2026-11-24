@@ -12,8 +12,10 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
-// `jsPackage` copies the platform's conformance runner, a binary of the platform module's own.
+// `jsPackage` copies the platform's conformance runner, a binary of the platform module's own, and each application's
+// runners, a binary of that module's own (Expenses' decode runner).
 evaluationDependsOn(":core")
+evaluationDependsOn(":apps:expenses")
 
 kotlin {
     // The package's library (ADR 0155 decision 6): one file per module (Kotlin's per-module granularity), so an entry
@@ -51,7 +53,8 @@ kotlin {
 
 // The compiled modules — one file each, the platform's `kotlin_veyq_mobile_core.mjs`, each application's and this module's —,
 // their TypeScript definitions and source maps, into `@veyq/core-js`'s `dist/` (ADR 0155 decision 6): the one directory
-// where Gradle and pnpm meet. The platform's conformance binary lands in `dist/conformance/`, beside and never inside
+// where Gradle and pnpm meet. The platform's conformance binary lands in `dist/conformance/`, Expenses' runners in
+// `dist/conformance/expenses/`, beside and never inside
 // the shipped modules. The package's `build` runs this task by name (src/packages/core-js/scripts/build.py).
 val coreJsDist = rootDir.resolve("../packages/core-js/dist")
 // The Kotlin version the module was compiled with, for the web's licence file: the standard library is bundled into what
@@ -112,10 +115,13 @@ fun writeEntries(dist: File) {
 }
 val jsPackage = tasks.register<Sync>("jsPackage") {
     group = "veyq"
-    description = "Compiles the core's modules for JavaScript and writes them and the platform's conformance runner into src/packages/core-js/dist."
+    description = "Compiles the core's modules for JavaScript and writes them and the conformance runners (the platform's, Expenses') into src/packages/core-js/dist."
     from(tasks.named<org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrLink>("compileProductionLibraryKotlinJs").flatMap { it.destinationDirectory })
     from(project(":core").tasks.named<org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrLink>("compileConformanceProductionLibraryKotlinJs").flatMap { it.destinationDirectory }) {
         into("conformance")
+    }
+    from(project(":apps:expenses").tasks.named<org.jetbrains.kotlin.gradle.targets.js.ir.KotlinJsIrLink>("compileConformanceProductionLibraryKotlinJs").flatMap { it.destinationDirectory }) {
+        into("conformance/expenses")
     }
     from(jsKotlinVersion)
     into(coreJsDist)

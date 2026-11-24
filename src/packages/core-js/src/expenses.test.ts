@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { randomBytes } from '@noble/hashes/utils.js'
 
 const here = dirname(fileURLToPath(import.meta.url))
-if (!existsSync(resolve(here, '../dist/expenses.mjs'))) {
+if (!existsSync(resolve(here, '../dist/expenses.d.mts'))) {
   throw new Error('dist/ is missing: run `pnpm run build` (the core compiled by Gradle) before the check')
 }
 // The package's own entry, as the web imports it.
@@ -154,7 +154,7 @@ describe('the Expenses vectors through the façade (ADR 0155 decision 6)', () =>
   describe('decode', () => {
     ;(vectors.decode as any[]).forEach((c, i) => {
       it(`#${i} ${c.rule}`, async () => {
-        const conformance = await import('../dist/conformance/veyq-mobile-core-conformance.mjs')
+        const conformance = await import('../dist/conformance/expenses/veyq-mobile-apps-expenses-conformance.mjs')
         expect(JSON.parse(conformance.decodeRevisionPlaintext(bytesOf(c)))).toEqual(c.expected)
       })
     })
