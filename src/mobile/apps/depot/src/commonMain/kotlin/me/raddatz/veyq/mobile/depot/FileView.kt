@@ -61,7 +61,7 @@ object FileView {
     }
 
     /**
-     * What to show: its [kind], the sniffed [mime] and its [fileExtension] (the sniffed type's, never the peer's name), how many [frames] to read for it (all, or a text's first [TEXT_CAP] bytes), and whether a text is [truncated].
+     * What to show: its [kind], the sniffed [mime] (of a [Kind.TOO_LARGE] one too: whose cap it passed) and its [fileExtension] (the sniffed type's, never the peer's name), how many [frames] to read for it (all, or a text's first [TEXT_CAP] bytes), and whether a text is [truncated].
      */
     data class Decision(val kind: Kind, val mime: String? = null, val fileExtension: String? = null, val frames: Int = 0, val truncated: Boolean = false)
 
@@ -69,29 +69,68 @@ object FileView {
      *  may be an image here ([svgAsImage]). */
     fun decide(
         head: ByteArray, chunkCount: Int, total: Long, claimedType: String?, claimedName: String?, svg: Boolean = svgAsImage,
-    ): Decision {
-        if (chunkCount < 1 || head.isEmpty()) return Decision(Kind.EMPTY)
+    ): Decision = decided(head, chunkCount, total, claimedType, claimedName, svg).decision
+
+    /** [decide]'s [decision] with what its sniff said beside it, each read once: a medium's [stream], a text's [encoding]. */
+    internal class Decided(val decision: Decision, val stream: Sniff.Stream? = null, val encoding: String? = null)
+
+    internal fun decided(head: ByteArray, chunkCount: Int, total: Long, claimedType: String?, claimedName: String?, svg: Boolean): Decided {
+        if (chunkCount < 1 || head.isEmpty()) return Decided(Decision(Kind.EMPTY))
         Sniff.image(head)?.let { image ->
-            if (total > IMAGE_CAP) return Decision(Kind.TOO_LARGE)
-            return Decision(Kind.IMAGE, image.mime, image.mime.substringAfter('/').replace("jpeg", "jpg"), chunkCount)
+            if (total > IMAGE_CAP) return Decided(Decision(Kind.TOO_LARGE, image.mime))
+            return Decided(Decision(Kind.IMAGE, image.mime, image.mime.substringAfter('/').replace("jpeg", "jpg"), chunkCount))
         }
         // the web's order (`view.ts`): an SVG only where the claim agrees with the markup, and only where this platform draws one
         if (svg && Sniff.claimsSvg(claimedType, claimedName) && Sniff.svg(head)) {
-            if (total > IMAGE_CAP) return Decision(Kind.TOO_LARGE)
-            return Decision(Kind.IMAGE, SVG, "svg", chunkCount)
+            if (total > IMAGE_CAP) return Decided(Decision(Kind.TOO_LARGE, SVG))
+            return Decided(Decision(Kind.IMAGE, SVG, "svg", chunkCount))
         }
         Sniff.stream(head)?.let { media ->
-            return Decision(Kind.MEDIA, media.mime, EXTENSIONS[media.mime], chunkCount)
+            return Decided(Decision(Kind.MEDIA, media.mime, EXTENSIONS[media.mime], chunkCount), stream = media)
         }
         if (Sniff.pdf(head)) {
-            if (total > PDF_CAP) return Decision(Kind.TOO_LARGE)
-            return Decision(Kind.PDF, "application/pdf", "pdf", chunkCount)
+            if (total > PDF_CAP) return Decided(Decision(Kind.TOO_LARGE, "application/pdf"))
+            return Decided(Decision(Kind.PDF, "application/pdf", "pdf", chunkCount))
         }
-        if (Sniff.claimsText(claimedType, claimedName) && Sniff.isText(head, complete = chunkCount == 1)) {
+        val encoding = if (Sniff.claimsText(claimedType, claimedName)) Sniff.textEncoding(head, complete = chunkCount == 1) else null
+        if (encoding != null) {
             val frames = minOf(chunkCount, ((TEXT_CAP + V1.FRAME_PLAINTEXT - 1) / V1.FRAME_PLAINTEXT))
-            return Decision(Kind.TEXT, "text/plain", "txt", frames, truncated = total > TEXT_CAP)
+            return Decided(Decision(Kind.TEXT, "text/plain", "txt", frames, truncated = total > TEXT_CAP), encoding = encoding)
         }
-        return Decision(Kind.UNSUPPORTED)
+        return Decided(Decision(Kind.UNSUPPORTED))
+    }
+
+    /**
+     * The decision as the web reads it (`@veyq/core-js/depot`'s `depotFileView`; `contracts/depot/v1-vectors.json`'s `view`):
+     * [kind] `image`, `stream`, `pdf`, `text`, `too-large`, `empty` or `unsupported`; an image's and a stream's sniffed
+     * [type], a stream's [element] (`video`, `audio`), a text's [encoding], the [frames] to read, a text's [truncated], and
+     * the cap a `too-large` one passed ([limit], else 0).
+     */
+    internal class Answer(
+        val kind: String, val type: String?, val element: String?, val encoding: String?, val frames: Int, val truncated: Boolean, val limit: Long,
+    )
+
+    /** [decide]'s answer for the web, with what its own sniff said beside it (a stream's element, a text's encoding). */
+    internal fun answer(head: ByteArray, chunkCount: Int, total: Long, claimedType: String?, claimedName: String?, svg: Boolean): Answer {
+        val said = decided(head, chunkCount, total, claimedType, claimedName, svg)
+        val d = said.decision
+        val kind = when (d.kind) {
+            Kind.IMAGE -> "image"
+            Kind.MEDIA -> "stream"
+            Kind.PDF -> "pdf"
+            Kind.TEXT -> "text"
+            Kind.TOO_LARGE -> "too-large"
+            Kind.EMPTY -> "empty"
+            Kind.UNSUPPORTED -> "unsupported"
+        }
+        val element = said.stream?.let { if (it.video) "video" else "audio" }
+        val limit = when {
+            d.kind != Kind.TOO_LARGE -> 0L
+            d.mime == "application/pdf" -> PDF_CAP
+            else -> IMAGE_CAP
+        }
+        val type = if (d.kind == Kind.IMAGE || d.kind == Kind.MEDIA) d.mime else null
+        return Answer(kind, type, element, said.encoding, d.frames, d.truncated, limit)
     }
 
     /** What a file's page shows, read as far as it needs: the [decision], an image's or a PDF's [bytes], a text's [text]. */

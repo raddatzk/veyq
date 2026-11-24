@@ -1,0 +1,2175 @@
+{
+  "description": "Depot's rules every client answers alike (ADR 0155 decision 7.3, § Depot's move): `view` — what an opened file is (the core's FileView.decide as the web reads it: the web draws an SVG, so its `svg` is on), `folderPlan` — a picked directory's plan (FolderUpload: each name safe, told apart by slug per directory, the top numbered among the level's siblings; `tokens` are the folding's answers the plan may ask, [kind, name, token], and a client fails a case where it asks one not listed), `raster` — an SVG's canvas within the caps (SvgView.plan; a null ratio is NaN), `zoom` — the zoom steps. Inputs are kept; every `expected` and a plan's `tokens` are written by the core's DepotVectorsTest (VEYQ_WRITE_VECTORS=1 ./gradlew :apps:depot:jvmTest --tests '*DepotVectorsTest*'). Read through @veyq/core-js/depot by the package's depot.test.ts and through the web's glue by features/depot/vectors.test.ts.",
+  "view": [
+    {
+      "name": "a PNG claimed as text is an image",
+      "head": "iVBORw0KGgoAAAANSUhEUg==",
+      "chunkCount": 1,
+      "total": 16,
+      "type": "text/plain",
+      "claimedName": "notes.txt",
+      "expected": {
+        "kind": "image",
+        "type": "image/png",
+        "element": null,
+        "encoding": null,
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a JPEG under any name",
+      "head": "/9j/4AAQSkZJRgA=",
+      "chunkCount": 1,
+      "total": 11,
+      "type": null,
+      "claimedName": "evil.html",
+      "expected": {
+        "kind": "image",
+        "type": "image/jpeg",
+        "element": null,
+        "encoding": null,
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a GIF",
+      "head": "R0lGODlhAQABAA==",
+      "chunkCount": 1,
+      "total": 10,
+      "type": "image/gif",
+      "claimedName": "a.gif",
+      "expected": {
+        "kind": "image",
+        "type": "image/gif",
+        "element": null,
+        "encoding": null,
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a WebP",
+      "head": "UklGRgAAAABXRUJQVlA4IA==",
+      "chunkCount": 1,
+      "total": 16,
+      "type": null,
+      "claimedName": null,
+      "expected": {
+        "kind": "image",
+        "type": "image/webp",
+        "element": null,
+        "encoding": null,
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a HEIC is tried as an image",
+      "head": "AAAAGGZ0eXBoZWljAAAAAAAAAAA=",
+      "chunkCount": 1,
+      "total": 24,
+      "type": null,
+      "claimedName": "a.heic",
+      "expected": {
+        "kind": "image",
+        "type": "image/heic",
+        "element": null,
+        "encoding": null,
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "an AVIF",
+      "head": "AAAAGGZ0eXBhdmlmAAAAAAAAAAA=",
+      "chunkCount": 1,
+      "total": 24,
+      "type": null,
+      "claimedName": "a.avif",
+      "expected": {
+        "kind": "image",
+        "type": "image/avif",
+        "element": null,
+        "encoding": null,
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a BMP",
+      "head": "Qk0AAAAAAAAAAAAAAAAoAAAAAAAAAAAAAAA=",
+      "chunkCount": 1,
+      "total": 26,
+      "type": null,
+      "claimedName": "a.bmp",
+      "expected": {
+        "kind": "image",
+        "type": "image/bmp",
+        "element": null,
+        "encoding": null,
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a BMP header cut short is nothing shown",
+      "head": "Qk0AAAAAAAAAAAAAAAAoAAAA",
+      "chunkCount": 1,
+      "total": 18,
+      "type": "image/bmp",
+      "claimedName": "a.bmp",
+      "expected": {
+        "kind": "unsupported",
+        "type": null,
+        "element": null,
+        "encoding": null,
+        "frames": 0,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "an image over its cap",
+      "head": "iVBORw0KGgoAAAANSUhEUg==",
+      "chunkCount": 300,
+      "total": 67108865,
+      "type": null,
+      "claimedName": null,
+      "expected": {
+        "kind": "too-large",
+        "type": null,
+        "element": null,
+        "encoding": null,
+        "frames": 0,
+        "truncated": false,
+        "limit": 67108864
+      }
+    },
+    {
+      "name": "an image at its cap",
+      "head": "iVBORw0KGgoAAAANSUhEUg==",
+      "chunkCount": 256,
+      "total": 67108864,
+      "type": null,
+      "claimedName": null,
+      "expected": {
+        "kind": "image",
+        "type": "image/png",
+        "element": null,
+        "encoding": null,
+        "frames": 256,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "an SVG whose claim agrees by its type",
+      "head": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMCIgaGVpZ2h0PSIxMCI+PHJlY3Qgd2lkdGg9IjEwIiBoZWlnaHQ9IjEwIi8+PC9zdmc+",
+      "chunkCount": 1,
+      "total": 99,
+      "type": "image/svg+xml",
+      "claimedName": "x.bin",
+      "expected": {
+        "kind": "image",
+        "type": "image/svg+xml",
+        "element": null,
+        "encoding": null,
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "an SVG whose claim agrees by its name",
+      "head": "PD94bWwgdmVyc2lvbj0iMS4wIj8+CjwhLS0gYSBwaWN0dXJlIC0tPgo8c3ZnIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIvPg==",
+      "chunkCount": 1,
+      "total": 82,
+      "type": null,
+      "claimedName": "logo.svg",
+      "expected": {
+        "kind": "image",
+        "type": "image/svg+xml",
+        "element": null,
+        "encoding": null,
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "an SVG claimed as text is its text",
+      "head": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMCIgaGVpZ2h0PSIxMCI+PHJlY3Qgd2lkdGg9IjEwIiBoZWlnaHQ9IjEwIi8+PC9zdmc+",
+      "chunkCount": 1,
+      "total": 99,
+      "type": "text/plain",
+      "claimedName": "logo.txt",
+      "expected": {
+        "kind": "text",
+        "type": null,
+        "element": null,
+        "encoding": "utf-8",
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "an SVG unclaimed is nothing shown",
+      "head": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMCIgaGVpZ2h0PSIxMCI+PHJlY3Qgd2lkdGg9IjEwIiBoZWlnaHQ9IjEwIi8+PC9zdmc+",
+      "chunkCount": 1,
+      "total": 99,
+      "type": null,
+      "claimedName": "blob",
+      "expected": {
+        "kind": "unsupported",
+        "type": null,
+        "element": null,
+        "encoding": null,
+        "frames": 0,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "an SVG over the image cap",
+      "head": "PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMCIgaGVpZ2h0PSIxMCI+PHJlY3Qgd2lkdGg9IjEwIiBoZWlnaHQ9IjEwIi8+PC9zdmc+",
+      "chunkCount": 300,
+      "total": 67108865,
+      "type": null,
+      "claimedName": "logo.svg",
+      "expected": {
+        "kind": "too-large",
+        "type": null,
+        "element": null,
+        "encoding": null,
+        "frames": 0,
+        "truncated": false,
+        "limit": 67108864
+      }
+    },
+    {
+      "name": "markup that is no SVG claimed as one is its text",
+      "head": "PGh0bWw+PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0PjwvaHRtbD4=",
+      "chunkCount": 1,
+      "total": 38,
+      "type": "image/svg+xml",
+      "claimedName": "x.svg",
+      "expected": {
+        "kind": "text",
+        "type": null,
+        "element": null,
+        "encoding": "utf-8",
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "an MP4 claimed as text is a video",
+      "head": "AAAAGGZ0eXBpc29tAAAAAAAAAAA=",
+      "chunkCount": 1,
+      "total": 24,
+      "type": "text/plain",
+      "claimedName": null,
+      "expected": {
+        "kind": "stream",
+        "type": "video/mp4",
+        "element": "video",
+        "encoding": null,
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "an M4A is audio",
+      "head": "AAAAGGZ0eXBNNEEgAAAAAAAAAAA=",
+      "chunkCount": 3,
+      "total": 600000,
+      "type": null,
+      "claimedName": "song.m4a",
+      "expected": {
+        "kind": "stream",
+        "type": "audio/mp4",
+        "element": "audio",
+        "encoding": null,
+        "frames": 3,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a WebM",
+      "head": "GkXfo59CgoR3ZWJtAAAAAAAAAAA=",
+      "chunkCount": 1,
+      "total": 20,
+      "type": null,
+      "claimedName": null,
+      "expected": {
+        "kind": "stream",
+        "type": "video/webm",
+        "element": "video",
+        "encoding": null,
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "an MP3 by its ID3 tag",
+      "head": "SUQzBAAAAAAAAA==",
+      "chunkCount": 1,
+      "total": 10,
+      "type": null,
+      "claimedName": "a.mp3",
+      "expected": {
+        "kind": "stream",
+        "type": "audio/mpeg",
+        "element": "audio",
+        "encoding": null,
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a WAV",
+      "head": "UklGRgAAAABXQVZFZm10IA==",
+      "chunkCount": 1,
+      "total": 16,
+      "type": null,
+      "claimedName": null,
+      "expected": {
+        "kind": "stream",
+        "type": "audio/wav",
+        "element": "audio",
+        "encoding": null,
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "an Ogg",
+      "head": "T2dnUwACAAAAAAAAAAAAAAAAAAAAAAAAAAABdm9yYmlz",
+      "chunkCount": 1,
+      "total": 33,
+      "type": null,
+      "claimedName": null,
+      "expected": {
+        "kind": "stream",
+        "type": "audio/ogg",
+        "element": "audio",
+        "encoding": null,
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a PDF under any name",
+      "head": "JVBERi0xLjcKJeLjz9MK",
+      "chunkCount": 1,
+      "total": 15,
+      "type": null,
+      "claimedName": "x.bin",
+      "expected": {
+        "kind": "pdf",
+        "type": null,
+        "element": null,
+        "encoding": null,
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a PDF over its cap",
+      "head": "JVBERi0xLjcKJeLjz9MK",
+      "chunkCount": 300,
+      "total": 67108865,
+      "type": "application/pdf",
+      "claimedName": "big.pdf",
+      "expected": {
+        "kind": "too-large",
+        "type": null,
+        "element": null,
+        "encoding": null,
+        "frames": 0,
+        "truncated": false,
+        "limit": 67108864
+      }
+    },
+    {
+      "name": "a text needs its claim: by its name",
+      "head": "aGVsbG8sIHdvcmxkCg==",
+      "chunkCount": 1,
+      "total": 13,
+      "type": null,
+      "claimedName": "readme.md",
+      "expected": {
+        "kind": "text",
+        "type": null,
+        "element": null,
+        "encoding": "utf-8",
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a text needs its claim: by its type",
+      "head": "aGVsbG8sIHdvcmxkCg==",
+      "chunkCount": 1,
+      "total": 13,
+      "type": "text/plain",
+      "claimedName": "blob",
+      "expected": {
+        "kind": "text",
+        "type": null,
+        "element": null,
+        "encoding": "utf-8",
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a text unclaimed is nothing shown",
+      "head": "aGVsbG8sIHdvcmxkCg==",
+      "chunkCount": 1,
+      "total": 13,
+      "type": "application/octet-stream",
+      "claimedName": "blob",
+      "expected": {
+        "kind": "unsupported",
+        "type": null,
+        "element": null,
+        "encoding": null,
+        "frames": 0,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a text claimed as PNG is nothing shown",
+      "head": "aGVsbG8sIHdvcmxkCg==",
+      "chunkCount": 1,
+      "total": 13,
+      "type": "image/png",
+      "claimedName": "a.png",
+      "expected": {
+        "kind": "unsupported",
+        "type": null,
+        "element": null,
+        "encoding": null,
+        "frames": 0,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "markup claimed as HTML is shown as its text",
+      "head": "PGh0bWw+PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0PjwvaHRtbD4=",
+      "chunkCount": 1,
+      "total": 38,
+      "type": "text/html",
+      "claimedName": "x.html",
+      "expected": {
+        "kind": "text",
+        "type": null,
+        "element": null,
+        "encoding": "utf-8",
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "UTF-8 beyond ASCII",
+      "head": "R3LDvMOfZSwg5LiW55WMIPCfjI0K",
+      "chunkCount": 1,
+      "total": 21,
+      "type": null,
+      "claimedName": "a.txt",
+      "expected": {
+        "kind": "text",
+        "type": null,
+        "element": null,
+        "encoding": "utf-8",
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "UTF-8 with its mark",
+      "head": "77u/Qk9NIHRleHQK",
+      "chunkCount": 1,
+      "total": 12,
+      "type": null,
+      "claimedName": "a.txt",
+      "expected": {
+        "kind": "text",
+        "type": null,
+        "element": null,
+        "encoding": "utf-8",
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "UTF-16 little-endian by its mark",
+      "head": "//5oAGkAIAB0AGgAZQByAGUACgA=",
+      "chunkCount": 1,
+      "total": 20,
+      "type": null,
+      "claimedName": "a.txt",
+      "expected": {
+        "kind": "text",
+        "type": null,
+        "element": null,
+        "encoding": "utf-16le",
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "UTF-16 big-endian by its mark",
+      "head": "/v8AaABpACAAdABoAGUAcgBlAAo=",
+      "chunkCount": 1,
+      "total": 20,
+      "type": null,
+      "claimedName": "a.txt",
+      "expected": {
+        "kind": "text",
+        "type": null,
+        "element": null,
+        "encoding": "utf-16be",
+        "frames": 1,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a sequence cut at a frame's end, more frames after",
+      "head": "YWLigg==",
+      "chunkCount": 2,
+      "total": 300000,
+      "type": null,
+      "claimedName": "a.txt",
+      "expected": {
+        "kind": "text",
+        "type": null,
+        "element": null,
+        "encoding": "utf-8",
+        "frames": 2,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a sequence cut where the file ends",
+      "head": "YWLigg==",
+      "chunkCount": 1,
+      "total": 4,
+      "type": null,
+      "claimedName": "a.txt",
+      "expected": {
+        "kind": "unsupported",
+        "type": null,
+        "element": null,
+        "encoding": null,
+        "frames": 0,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "Latin-1 is not guessed",
+      "head": "R3L832UK",
+      "chunkCount": 1,
+      "total": 6,
+      "type": null,
+      "claimedName": "a.txt",
+      "expected": {
+        "kind": "unsupported",
+        "type": null,
+        "element": null,
+        "encoding": null,
+        "frames": 0,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a NUL is no text",
+      "head": "aGVsbG8Ad29ybGQ=",
+      "chunkCount": 1,
+      "total": 11,
+      "type": "text/plain",
+      "claimedName": "a.txt",
+      "expected": {
+        "kind": "unsupported",
+        "type": null,
+        "element": null,
+        "encoding": null,
+        "frames": 0,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a long text reads its first MiB: four frames, truncated",
+      "head": "aGVsbG8sIHdvcmxkCg==",
+      "chunkCount": 10,
+      "total": 2621440,
+      "type": "text/plain",
+      "claimedName": null,
+      "expected": {
+        "kind": "text",
+        "type": null,
+        "element": null,
+        "encoding": "utf-8",
+        "frames": 4,
+        "truncated": true,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a text of exactly one MiB is whole",
+      "head": "aGVsbG8sIHdvcmxkCg==",
+      "chunkCount": 4,
+      "total": 1048576,
+      "type": "text/plain",
+      "claimedName": null,
+      "expected": {
+        "kind": "text",
+        "type": null,
+        "element": null,
+        "encoding": "utf-8",
+        "frames": 4,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "a text one byte over a MiB is truncated",
+      "head": "aGVsbG8sIHdvcmxkCg==",
+      "chunkCount": 5,
+      "total": 1048577,
+      "type": "text/plain",
+      "claimedName": null,
+      "expected": {
+        "kind": "text",
+        "type": null,
+        "element": null,
+        "encoding": "utf-8",
+        "frames": 4,
+        "truncated": true,
+        "limit": 0
+      }
+    },
+    {
+      "name": "binary bytes",
+      "head": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn+AgYKDhIWGh4iJiouMjY6PkJGSk5SVlpeYmZqbnJ2en6ChoqOkpaanqKmqq6ytrq+wsbKztLW2t7i5uru8vb6/wMHCw8TFxsfIycrLzM3Oz9DR0tPU1dbX2Nna29zd3t/g4eLj5OXm5+jp6uvs7e7v8PHy8/T19vf4+fr7/P3+/w==",
+      "chunkCount": 1,
+      "total": 256,
+      "type": null,
+      "claimedName": null,
+      "expected": {
+        "kind": "unsupported",
+        "type": null,
+        "element": null,
+        "encoding": null,
+        "frames": 0,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "an empty first frame",
+      "head": "",
+      "chunkCount": 1,
+      "total": 0,
+      "type": "text/plain",
+      "claimedName": "a.txt",
+      "expected": {
+        "kind": "empty",
+        "type": null,
+        "element": null,
+        "encoding": null,
+        "frames": 0,
+        "truncated": false,
+        "limit": 0
+      }
+    },
+    {
+      "name": "no frames",
+      "head": "",
+      "chunkCount": 0,
+      "total": 0,
+      "type": null,
+      "claimedName": null,
+      "expected": {
+        "kind": "empty",
+        "type": null,
+        "element": null,
+        "encoding": null,
+        "frames": 0,
+        "truncated": false,
+        "limit": 0
+      }
+    }
+  ],
+  "folderPlan": [
+    {
+      "name": "a folder per directory, a file per file; the bytes and the count",
+      "rootName": "Trip",
+      "entries": [
+        {
+          "path": "a.txt",
+          "size": 5
+        },
+        {
+          "path": "Day 1/b.jpg",
+          "size": 2
+        },
+        {
+          "path": "Day 1/Night/c.jpg",
+          "size": 1
+        }
+      ],
+      "siblings": [],
+      "tokens": [
+        [
+          "FOLDER",
+          "Day 1",
+          "day-1"
+        ],
+        [
+          "FILE",
+          "a.txt",
+          "a.txt"
+        ],
+        [
+          "FOLDER",
+          "Night",
+          "night"
+        ],
+        [
+          "FILE",
+          "b.jpg",
+          "b.jpg"
+        ],
+        [
+          "FILE",
+          "c.jpg",
+          "c.jpg"
+        ],
+        [
+          "FOLDER",
+          "Trip",
+          "trip"
+        ],
+        [
+          "FOLDER",
+          "Trip (2)",
+          "trip-2"
+        ],
+        [
+          "FOLDER",
+          "Trip (3)",
+          "trip-3"
+        ],
+        [
+          "FOLDER",
+          "Trip (4)",
+          "trip-4"
+        ]
+      ],
+      "expected": {
+        "root": {
+          "name": "Trip",
+          "folders": [
+            {
+              "name": "Day 1",
+              "folders": [
+                {
+                  "name": "Night",
+                  "folders": [],
+                  "files": [
+                    {
+                      "name": "c.jpg",
+                      "entry": 2
+                    }
+                  ]
+                }
+              ],
+              "files": [
+                {
+                  "name": "b.jpg",
+                  "entry": 1
+                }
+              ]
+            }
+          ],
+          "files": [
+            {
+              "name": "a.txt",
+              "entry": 0
+            }
+          ]
+        },
+        "files": 3,
+        "bytes": 8,
+        "nextRootNames": [
+          "Trip (2)",
+          "Trip (3)",
+          "Trip (4)"
+        ]
+      }
+    },
+    {
+      "name": "subfolders named before files; empty segments dropped, a path of none left out",
+      "rootName": "Trip",
+      "entries": [
+        {
+          "path": "a.txt",
+          "size": 3
+        },
+        {
+          "path": "Photos/x.jpg",
+          "size": 5
+        },
+        {
+          "path": "Photos/Day 1/y.jpg",
+          "size": 7
+        },
+        {
+          "path": "//b.txt",
+          "size": 11
+        },
+        {
+          "path": "Photos//z.jpg",
+          "size": 13
+        },
+        {
+          "path": "",
+          "size": 17
+        },
+        {
+          "path": "/",
+          "size": 19
+        }
+      ],
+      "siblings": [],
+      "tokens": [
+        [
+          "FOLDER",
+          "Photos",
+          "photos"
+        ],
+        [
+          "FILE",
+          "a.txt",
+          "a.txt"
+        ],
+        [
+          "FILE",
+          "b.txt",
+          "b.txt"
+        ],
+        [
+          "FOLDER",
+          "Day 1",
+          "day-1"
+        ],
+        [
+          "FILE",
+          "x.jpg",
+          "x.jpg"
+        ],
+        [
+          "FILE",
+          "z.jpg",
+          "z.jpg"
+        ],
+        [
+          "FILE",
+          "y.jpg",
+          "y.jpg"
+        ],
+        [
+          "FOLDER",
+          "Trip",
+          "trip"
+        ],
+        [
+          "FOLDER",
+          "Trip (2)",
+          "trip-2"
+        ],
+        [
+          "FOLDER",
+          "Trip (3)",
+          "trip-3"
+        ],
+        [
+          "FOLDER",
+          "Trip (4)",
+          "trip-4"
+        ]
+      ],
+      "expected": {
+        "root": {
+          "name": "Trip",
+          "folders": [
+            {
+              "name": "Photos",
+              "folders": [
+                {
+                  "name": "Day 1",
+                  "folders": [],
+                  "files": [
+                    {
+                      "name": "y.jpg",
+                      "entry": 2
+                    }
+                  ]
+                }
+              ],
+              "files": [
+                {
+                  "name": "x.jpg",
+                  "entry": 1
+                },
+                {
+                  "name": "z.jpg",
+                  "entry": 4
+                }
+              ]
+            }
+          ],
+          "files": [
+            {
+              "name": "a.txt",
+              "entry": 0
+            },
+            {
+              "name": "b.txt",
+              "entry": 3
+            }
+          ]
+        },
+        "files": 5,
+        "bytes": 39,
+        "nextRootNames": [
+          "Trip (2)",
+          "Trip (3)",
+          "Trip (4)"
+        ]
+      }
+    },
+    {
+      "name": "hostile names made safe; a case clash numbered before the extension",
+      "rootName": "CON",
+      "entries": [
+        {
+          "path": "a:b.txt",
+          "size": 1
+        },
+        {
+          "path": "IMG.jpg",
+          "size": 1
+        },
+        {
+          "path": "img.JPG",
+          "size": 1
+        },
+        {
+          "path": "name. ",
+          "size": 1
+        },
+        {
+          "path": "../x.txt",
+          "size": 1
+        },
+        {
+          "path": "x/../y.txt",
+          "size": 1
+        }
+      ],
+      "siblings": [],
+      "tokens": [
+        [
+          "FOLDER",
+          "_",
+          "n1oi0h9q"
+        ],
+        [
+          "FOLDER",
+          "x",
+          "x"
+        ],
+        [
+          "FILE",
+          "a_b.txt",
+          "a_b.txt"
+        ],
+        [
+          "FILE",
+          "IMG.jpg",
+          "img.jpg"
+        ],
+        [
+          "FILE",
+          "img (2).JPG",
+          "img (2).jpg"
+        ],
+        [
+          "FILE",
+          "name",
+          "name"
+        ],
+        [
+          "FILE",
+          "x.txt",
+          "x.txt"
+        ],
+        [
+          "FILE",
+          "y.txt",
+          "y.txt"
+        ],
+        [
+          "FOLDER",
+          "_CON",
+          "con"
+        ],
+        [
+          "FOLDER",
+          "_CON (2)",
+          "con-2"
+        ],
+        [
+          "FOLDER",
+          "_CON (3)",
+          "con-3"
+        ],
+        [
+          "FOLDER",
+          "_CON (4)",
+          "con-4"
+        ]
+      ],
+      "expected": {
+        "root": {
+          "name": "_CON",
+          "folders": [
+            {
+              "name": "_",
+              "folders": [],
+              "files": [
+                {
+                  "name": "x.txt",
+                  "entry": 4
+                }
+              ]
+            },
+            {
+              "name": "x",
+              "folders": [
+                {
+                  "name": "_",
+                  "folders": [],
+                  "files": [
+                    {
+                      "name": "y.txt",
+                      "entry": 5
+                    }
+                  ]
+                }
+              ],
+              "files": []
+            }
+          ],
+          "files": [
+            {
+              "name": "a_b.txt",
+              "entry": 0
+            },
+            {
+              "name": "IMG.jpg",
+              "entry": 1
+            },
+            {
+              "name": "img (2).JPG",
+              "entry": 2
+            },
+            {
+              "name": "name",
+              "entry": 3
+            }
+          ]
+        },
+        "files": 6,
+        "bytes": 6,
+        "nextRootNames": [
+          "_CON (2)",
+          "_CON (3)",
+          "_CON (4)"
+        ]
+      }
+    },
+    {
+      "name": "names told apart by slug, each kind its own folding",
+      "rootName": "T",
+      "entries": [
+        {
+          "path": "a.b/1.txt",
+          "size": 1
+        },
+        {
+          "path": "a b/2.txt",
+          "size": 1
+        },
+        {
+          "path": "x/Foto.JPG",
+          "size": 1
+        },
+        {
+          "path": "x/foto_jpg",
+          "size": 1
+        },
+        {
+          "path": "Notes.txt",
+          "size": 1
+        },
+        {
+          "path": "notes.TXT",
+          "size": 1
+        },
+        {
+          "path": "Ma Ma/x",
+          "size": 1
+        },
+        {
+          "path": "ma-ma/y",
+          "size": 1
+        }
+      ],
+      "siblings": [],
+      "tokens": [
+        [
+          "FOLDER",
+          "a.b",
+          "a-b"
+        ],
+        [
+          "FOLDER",
+          "a b",
+          "a-b"
+        ],
+        [
+          "FOLDER",
+          "a b (2)",
+          "a-b-2"
+        ],
+        [
+          "FOLDER",
+          "x",
+          "x"
+        ],
+        [
+          "FOLDER",
+          "Ma Ma",
+          "ma-ma"
+        ],
+        [
+          "FOLDER",
+          "ma-ma",
+          "ma-ma"
+        ],
+        [
+          "FOLDER",
+          "ma-ma (2)",
+          "ma-ma-2"
+        ],
+        [
+          "FILE",
+          "Notes.txt",
+          "notes.txt"
+        ],
+        [
+          "FILE",
+          "notes (2).TXT",
+          "notes (2).txt"
+        ],
+        [
+          "FILE",
+          "1.txt",
+          "1.txt"
+        ],
+        [
+          "FILE",
+          "2.txt",
+          "2.txt"
+        ],
+        [
+          "FILE",
+          "Foto.JPG",
+          "foto.jpg"
+        ],
+        [
+          "FILE",
+          "foto_jpg",
+          "foto_jpg"
+        ],
+        [
+          "FILE",
+          "x",
+          "x"
+        ],
+        [
+          "FILE",
+          "y",
+          "y"
+        ],
+        [
+          "FOLDER",
+          "T",
+          "t"
+        ],
+        [
+          "FOLDER",
+          "T (2)",
+          "t-2"
+        ],
+        [
+          "FOLDER",
+          "T (3)",
+          "t-3"
+        ],
+        [
+          "FOLDER",
+          "T (4)",
+          "t-4"
+        ]
+      ],
+      "expected": {
+        "root": {
+          "name": "T",
+          "folders": [
+            {
+              "name": "a.b",
+              "folders": [],
+              "files": [
+                {
+                  "name": "1.txt",
+                  "entry": 0
+                }
+              ]
+            },
+            {
+              "name": "a b (2)",
+              "folders": [],
+              "files": [
+                {
+                  "name": "2.txt",
+                  "entry": 1
+                }
+              ]
+            },
+            {
+              "name": "x",
+              "folders": [],
+              "files": [
+                {
+                  "name": "Foto.JPG",
+                  "entry": 2
+                },
+                {
+                  "name": "foto_jpg",
+                  "entry": 3
+                }
+              ]
+            },
+            {
+              "name": "Ma Ma",
+              "folders": [],
+              "files": [
+                {
+                  "name": "x",
+                  "entry": 6
+                }
+              ]
+            },
+            {
+              "name": "ma-ma (2)",
+              "folders": [],
+              "files": [
+                {
+                  "name": "y",
+                  "entry": 7
+                }
+              ]
+            }
+          ],
+          "files": [
+            {
+              "name": "Notes.txt",
+              "entry": 4
+            },
+            {
+              "name": "notes (2).TXT",
+              "entry": 5
+            }
+          ]
+        },
+        "files": 8,
+        "bytes": 8,
+        "nextRootNames": [
+          "T (2)",
+          "T (3)",
+          "T (4)"
+        ]
+      }
+    },
+    {
+      "name": "a folder and a file of one slug: the file named after is numbered",
+      "rootName": "Up",
+      "entries": [
+        {
+          "path": "report/x",
+          "size": 1
+        },
+        {
+          "path": "report",
+          "size": 1
+        }
+      ],
+      "siblings": [],
+      "tokens": [
+        [
+          "FOLDER",
+          "report",
+          "report"
+        ],
+        [
+          "FILE",
+          "report (2)",
+          "report (2)"
+        ],
+        [
+          "FILE",
+          "x",
+          "x"
+        ],
+        [
+          "FOLDER",
+          "Up",
+          "up"
+        ],
+        [
+          "FOLDER",
+          "Up (2)",
+          "up-2"
+        ],
+        [
+          "FOLDER",
+          "Up (3)",
+          "up-3"
+        ],
+        [
+          "FOLDER",
+          "Up (4)",
+          "up-4"
+        ]
+      ],
+      "expected": {
+        "root": {
+          "name": "Up",
+          "folders": [
+            {
+              "name": "report",
+              "folders": [],
+              "files": [
+                {
+                  "name": "x",
+                  "entry": 0
+                }
+              ]
+            }
+          ],
+          "files": [
+            {
+              "name": "report (2)",
+              "entry": 1
+            }
+          ]
+        },
+        "files": 2,
+        "bytes": 2,
+        "nextRootNames": [
+          "Up (2)",
+          "Up (3)",
+          "Up (4)"
+        ]
+      }
+    },
+    {
+      "name": "the top numbered among the level's siblings, whatever their kind",
+      "rootName": "Trip",
+      "entries": [
+        {
+          "path": "a.txt",
+          "size": 1
+        }
+      ],
+      "siblings": [
+        {
+          "kind": "FOLDER",
+          "name": "Trip"
+        },
+        {
+          "kind": "FILE",
+          "name": "trip-2"
+        }
+      ],
+      "tokens": [
+        [
+          "FILE",
+          "a.txt",
+          "a.txt"
+        ],
+        [
+          "FOLDER",
+          "Trip",
+          "trip"
+        ],
+        [
+          "FILE",
+          "trip-2",
+          "trip-2"
+        ],
+        [
+          "FOLDER",
+          "Trip (2)",
+          "trip-2"
+        ],
+        [
+          "FOLDER",
+          "Trip (3)",
+          "trip-3"
+        ],
+        [
+          "FOLDER",
+          "Trip (4)",
+          "trip-4"
+        ],
+        [
+          "FOLDER",
+          "Trip (5)",
+          "trip-5"
+        ],
+        [
+          "FOLDER",
+          "Trip (6)",
+          "trip-6"
+        ]
+      ],
+      "expected": {
+        "root": {
+          "name": "Trip (3)",
+          "folders": [],
+          "files": [
+            {
+              "name": "a.txt",
+              "entry": 0
+            }
+          ]
+        },
+        "files": 1,
+        "bytes": 1,
+        "nextRootNames": [
+          "Trip (4)",
+          "Trip (5)",
+          "Trip (6)"
+        ]
+      }
+    },
+    {
+      "name": "a sibling of another route group does not number the top",
+      "rootName": "Trip",
+      "entries": [
+        {
+          "path": "a.txt",
+          "size": 1
+        }
+      ],
+      "siblings": [
+        {
+          "kind": "MEMORY",
+          "name": "Trip"
+        },
+        {
+          "kind": "EXPENSES_POT",
+          "name": "Trip"
+        }
+      ],
+      "tokens": [
+        [
+          "FILE",
+          "a.txt",
+          "a.txt"
+        ],
+        [
+          "MEMORY",
+          "Trip",
+          "memories/trip"
+        ],
+        [
+          "EXPENSES_POT",
+          "Trip",
+          "expenses/trip"
+        ],
+        [
+          "FOLDER",
+          "Trip",
+          "trip"
+        ],
+        [
+          "FOLDER",
+          "Trip (2)",
+          "trip-2"
+        ],
+        [
+          "FOLDER",
+          "Trip (3)",
+          "trip-3"
+        ],
+        [
+          "FOLDER",
+          "Trip (4)",
+          "trip-4"
+        ]
+      ],
+      "expected": {
+        "root": {
+          "name": "Trip",
+          "folders": [],
+          "files": [
+            {
+              "name": "a.txt",
+              "entry": 0
+            }
+          ]
+        },
+        "files": 1,
+        "bytes": 1,
+        "nextRootNames": [
+          "Trip (2)",
+          "Trip (3)",
+          "Trip (4)"
+        ]
+      }
+    },
+    {
+      "name": "a drop box sibling numbers the top as a container",
+      "rootName": "Inbox",
+      "entries": [
+        {
+          "path": "a.txt",
+          "size": 1
+        }
+      ],
+      "siblings": [
+        {
+          "kind": "DEPOT_DROPBOX",
+          "name": "inbox"
+        }
+      ],
+      "tokens": [
+        [
+          "FILE",
+          "a.txt",
+          "a.txt"
+        ],
+        [
+          "DEPOT_DROPBOX",
+          "inbox",
+          "inbox"
+        ],
+        [
+          "FOLDER",
+          "Inbox",
+          "inbox"
+        ],
+        [
+          "FOLDER",
+          "Inbox (2)",
+          "inbox-2"
+        ],
+        [
+          "FOLDER",
+          "Inbox (3)",
+          "inbox-3"
+        ],
+        [
+          "FOLDER",
+          "Inbox (4)",
+          "inbox-4"
+        ],
+        [
+          "FOLDER",
+          "Inbox (5)",
+          "inbox-5"
+        ]
+      ],
+      "expected": {
+        "root": {
+          "name": "Inbox (2)",
+          "folders": [],
+          "files": [
+            {
+              "name": "a.txt",
+              "entry": 0
+            }
+          ]
+        },
+        "files": 1,
+        "bytes": 1,
+        "nextRootNames": [
+          "Inbox (3)",
+          "Inbox (4)",
+          "Inbox (5)"
+        ]
+      }
+    },
+    {
+      "name": "paths read in NFC: a decomposed and a composed spelling are one directory",
+      "rootName": "Café",
+      "entries": [
+        {
+          "path": "Café/a.txt",
+          "size": 1
+        },
+        {
+          "path": "Café/b.txt",
+          "size": 1
+        }
+      ],
+      "siblings": [],
+      "tokens": [
+        [
+          "FOLDER",
+          "Café",
+          "cafe"
+        ],
+        [
+          "FILE",
+          "a.txt",
+          "a.txt"
+        ],
+        [
+          "FILE",
+          "b.txt",
+          "b.txt"
+        ],
+        [
+          "FOLDER",
+          "Café (2)",
+          "cafe-2"
+        ],
+        [
+          "FOLDER",
+          "Café (3)",
+          "cafe-3"
+        ],
+        [
+          "FOLDER",
+          "Café (4)",
+          "cafe-4"
+        ]
+      ],
+      "expected": {
+        "root": {
+          "name": "Café",
+          "folders": [
+            {
+              "name": "Café",
+              "folders": [],
+              "files": [
+                {
+                  "name": "a.txt",
+                  "entry": 0
+                },
+                {
+                  "name": "b.txt",
+                  "entry": 1
+                }
+              ]
+            }
+          ],
+          "files": []
+        },
+        "files": 2,
+        "bytes": 2,
+        "nextRootNames": [
+          "Café (2)",
+          "Café (3)",
+          "Café (4)"
+        ]
+      }
+    },
+    {
+      "name": "a long name kept within 200 bytes, the extension kept",
+      "rootName": "T",
+      "entries": [
+        {
+          "path": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt",
+          "size": 1
+        },
+        {
+          "path": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy.txt",
+          "size": 1
+        }
+      ],
+      "siblings": [],
+      "tokens": [
+        [
+          "FILE",
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt",
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt"
+        ],
+        [
+          "FILE",
+          "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy.txt",
+          "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy.txt"
+        ],
+        [
+          "FOLDER",
+          "T",
+          "t"
+        ],
+        [
+          "FOLDER",
+          "T (2)",
+          "t-2"
+        ],
+        [
+          "FOLDER",
+          "T (3)",
+          "t-3"
+        ],
+        [
+          "FOLDER",
+          "T (4)",
+          "t-4"
+        ]
+      ],
+      "expected": {
+        "root": {
+          "name": "T",
+          "folders": [],
+          "files": [
+            {
+              "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.txt",
+              "entry": 0
+            },
+            {
+              "name": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy.txt",
+              "entry": 1
+            }
+          ]
+        },
+        "files": 2,
+        "bytes": 2,
+        "nextRootNames": [
+          "T (2)",
+          "T (3)",
+          "T (4)"
+        ]
+      }
+    },
+    {
+      "name": "a hidden file and the download's own directory name are plain files here",
+      "rootName": ".veyq",
+      "entries": [
+        {
+          "path": ".veyq/manifest.json",
+          "size": 40
+        },
+        {
+          "path": ".hidden",
+          "size": 2
+        }
+      ],
+      "siblings": [],
+      "tokens": [
+        [
+          "FOLDER",
+          ".veyq",
+          "veyq"
+        ],
+        [
+          "FILE",
+          ".hidden",
+          ".hidden"
+        ],
+        [
+          "FILE",
+          "manifest.json",
+          "manifest.json"
+        ],
+        [
+          "FOLDER",
+          ".veyq (2)",
+          "veyq-2"
+        ],
+        [
+          "FOLDER",
+          ".veyq (3)",
+          "veyq-3"
+        ],
+        [
+          "FOLDER",
+          ".veyq (4)",
+          "veyq-4"
+        ]
+      ],
+      "expected": {
+        "root": {
+          "name": ".veyq",
+          "folders": [
+            {
+              "name": ".veyq",
+              "folders": [],
+              "files": [
+                {
+                  "name": "manifest.json",
+                  "entry": 0
+                }
+              ]
+            }
+          ],
+          "files": [
+            {
+              "name": ".hidden",
+              "entry": 1
+            }
+          ]
+        },
+        "files": 2,
+        "bytes": 42,
+        "nextRootNames": [
+          ".veyq (2)",
+          ".veyq (3)",
+          ".veyq (4)"
+        ]
+      }
+    },
+    {
+      "name": "sizes beyond 32 bits",
+      "rootName": "Big",
+      "entries": [
+        {
+          "path": "a.bin",
+          "size": 5000000000
+        },
+        {
+          "path": "b.bin",
+          "size": 6000000000
+        }
+      ],
+      "siblings": [],
+      "tokens": [
+        [
+          "FILE",
+          "a.bin",
+          "a.bin"
+        ],
+        [
+          "FILE",
+          "b.bin",
+          "b.bin"
+        ],
+        [
+          "FOLDER",
+          "Big",
+          "big"
+        ],
+        [
+          "FOLDER",
+          "Big (2)",
+          "big-2"
+        ],
+        [
+          "FOLDER",
+          "Big (3)",
+          "big-3"
+        ],
+        [
+          "FOLDER",
+          "Big (4)",
+          "big-4"
+        ]
+      ],
+      "expected": {
+        "root": {
+          "name": "Big",
+          "folders": [],
+          "files": [
+            {
+              "name": "a.bin",
+              "entry": 0
+            },
+            {
+              "name": "b.bin",
+              "entry": 1
+            }
+          ]
+        },
+        "files": 2,
+        "bytes": 11000000000,
+        "nextRootNames": [
+          "Big (2)",
+          "Big (3)",
+          "Big (4)"
+        ]
+      }
+    }
+  ],
+  "raster": [
+    {
+      "width": 800,
+      "height": 600,
+      "ratio": 2,
+      "expected": {
+        "width": 1600,
+        "height": 1200,
+        "ratio": 2
+      }
+    },
+    {
+      "width": 800,
+      "height": 600,
+      "ratio": 1,
+      "expected": {
+        "width": 800,
+        "height": 600,
+        "ratio": 1
+      }
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "ratio": 3,
+      "expected": {
+        "width": 5461,
+        "height": 3072,
+        "ratio": 2.8444444444444446
+      }
+    },
+    {
+      "width": 3840,
+      "height": 2160,
+      "ratio": 2,
+      "expected": {
+        "width": 5461,
+        "height": 3072,
+        "ratio": 1.4222222222222223
+      }
+    },
+    {
+      "width": 4096,
+      "height": 4096,
+      "ratio": 1.5,
+      "expected": {
+        "width": 4096,
+        "height": 4096,
+        "ratio": 1
+      }
+    },
+    {
+      "width": 100000,
+      "height": 10,
+      "ratio": 4,
+      "expected": {
+        "width": 8192,
+        "height": 1,
+        "ratio": 0.08192
+      }
+    },
+    {
+      "width": 10,
+      "height": 100000,
+      "ratio": 4,
+      "expected": {
+        "width": 1,
+        "height": 8192,
+        "ratio": 0.08192
+      }
+    },
+    {
+      "width": 100000,
+      "height": 100000,
+      "ratio": 16,
+      "expected": {
+        "width": 4096,
+        "height": 4096,
+        "ratio": 0.04096
+      }
+    },
+    {
+      "width": 10,
+      "height": 10,
+      "ratio": null,
+      "expected": {
+        "width": 10,
+        "height": 10,
+        "ratio": 1
+      }
+    },
+    {
+      "width": 10,
+      "height": 10,
+      "ratio": 0,
+      "expected": {
+        "width": 10,
+        "height": 10,
+        "ratio": 1
+      }
+    },
+    {
+      "width": 10,
+      "height": 10,
+      "ratio": -1,
+      "expected": {
+        "width": 10,
+        "height": 10,
+        "ratio": 1
+      }
+    },
+    {
+      "width": 0,
+      "height": 0,
+      "ratio": 2,
+      "expected": {
+        "width": 2,
+        "height": 2,
+        "ratio": 2
+      }
+    },
+    {
+      "width": 333.3,
+      "height": 211.7,
+      "ratio": 2.625,
+      "expected": {
+        "width": 874,
+        "height": 555,
+        "ratio": 2.625
+      }
+    },
+    {
+      "width": 1,
+      "height": 1,
+      "ratio": 1000000000.0,
+      "expected": {
+        "width": 4096,
+        "height": 4096,
+        "ratio": 4096
+      }
+    }
+  ],
+  "zoom": {
+    "steps": [
+      1,
+      1.5,
+      2,
+      3,
+      4,
+      6,
+      8,
+      12,
+      16
+    ],
+    "cases": [
+      {
+        "zoom": 0,
+        "expected": {
+          "in": 1,
+          "out": 1
+        }
+      },
+      {
+        "zoom": 1,
+        "expected": {
+          "in": 1.5,
+          "out": 1
+        }
+      },
+      {
+        "zoom": 1.25,
+        "expected": {
+          "in": 1.5,
+          "out": 1
+        }
+      },
+      {
+        "zoom": 1.5,
+        "expected": {
+          "in": 2,
+          "out": 1
+        }
+      },
+      {
+        "zoom": 2,
+        "expected": {
+          "in": 3,
+          "out": 1.5
+        }
+      },
+      {
+        "zoom": 5,
+        "expected": {
+          "in": 6,
+          "out": 4
+        }
+      },
+      {
+        "zoom": 12,
+        "expected": {
+          "in": 16,
+          "out": 8
+        }
+      },
+      {
+        "zoom": 16,
+        "expected": {
+          "in": 16,
+          "out": 12
+        }
+      },
+      {
+        "zoom": 20,
+        "expected": {
+          "in": 16,
+          "out": 16
+        }
+      }
+    ]
+  }
+}
