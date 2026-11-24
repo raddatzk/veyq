@@ -993,8 +993,9 @@ impl PdfPages {
                 let Some(page) = this.pdf.page(i) else { break };
                 let (w, h) = page.size();
                 let height = if w > 0.0 { (h * f64::from(PDF_WIDTH) / w).round() as i32 } else { PDF_WIDTH };
-                let frame = PageFrame::new(PDF_WIDTH, height.max(1));
-                frame.picture.update_property(&[gtk::accessible::Property::Label(&format!("{} / {}", i + 1, total))]);
+                let label = words::file_pdf_page(i64::from(i) + 1, i64::from(total));
+                let frame = PageFrame::new(PDF_WIDTH, height.max(1), page, i as usize, &label);
+                frame.picture.update_property(&[gtk::accessible::Property::Label(&label)]);
                 this.column.append(&frame.overlay);
                 pictures.push(frame.picture.clone());
                 frames.push(frame);

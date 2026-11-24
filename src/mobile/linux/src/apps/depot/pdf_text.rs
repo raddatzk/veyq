@@ -8,6 +8,9 @@
 //! clipboard — the one place the text ever goes, and only on that action: nothing of it is logged (a count of
 //! characters only) or written. A page without a text layer (a scan) highlights nothing and copies nothing.
 //!
+//! A press on a page's text also puts the screen reader's caret there and gives that page the focus: each page's area is
+//! a [PageText], its text read aloud ([crate::apps::depot::pdf_reading], inbox #963).
+//!
 //! The geometry is pure ([Frame], [Anchor], [spans]) and tested apart from GTK; the widgets hold no state but [PdfText]'s.
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -15,6 +18,7 @@ use std::rc::Rc;
 use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 
+use crate::apps::depot::pdf_reading::PageText;
 use crate::core_ui::words;
 
 /// How far a selection reaches past the point under the pointer: a glyph (a press and a drag), the word (a double click)
@@ -179,19 +183,23 @@ struct Selection {
     granularity: Granularity,
 }
 
-/// One page's frame on screen: the overlay that holds the rendered picture, and the area the highlight is drawn in.
+/// One page's frame on screen: the overlay that holds the rendered picture, and the area the highlight is drawn in — the
+/// page's text for a screen reader too.
 pub struct PageFrame {
     pub overlay: gtk::Overlay,
     pub picture: gtk::Picture,
-    area: gtk::DrawingArea,
+    area: PageText,
 }
 
 impl PageFrame {
-    /// A frame [width] × [height] for a page; the picture is drawn by [crate::apps::depot::file_page], the highlight here.
-    pub fn new(width: i32, height: i32) -> Self {
+    /// A frame [width] × [height] for [page], the [index]th of the document, named [label]; the picture is drawn by
+    /// [crate::apps::depot::file_page], the highlight here.
+    pub fn new(width: i32, height: i32, page: poppler::Page, index: usize, label: &str) -> Self {
         let picture = gtk::Picture::builder().can_shrink(true).content_fit(gtk::ContentFit::Contain).build();
         picture.set_size_request(width, height);
-        let area = gtk::DrawingArea::builder().can_target(false).build();
+        // the pointer passes through to the column's gestures; the keyboard and a screen reader reach the page
+        let area = PageText::new(page, index, label);
+        area.set_can_target(false);
         let overlay = gtk::Overlay::builder().child(&picture).build();
         overlay.add_overlay(&area);
         overlay.add_css_class("card");
@@ -275,7 +283,7 @@ impl PdfText {
         let weak = Rc::downgrade(self);
         click.connect_pressed(move |_, n, x, y| {
             let Some(this) = weak.upgrade() else { return };
-            this.column.grab_focus();
+            this.focus_at(x, y);
             let selection = hit(&this.layout(), x, y).map(|at| Selection { from: at, to: at, granularity: Granularity::of_press(n) });
             this.set(selection);
         });
@@ -301,7 +309,7 @@ impl PdfText {
         let weak = Rc::downgrade(self);
         menu_click.connect_pressed(move |_, _, x, y| {
             if let Some(this) = weak.upgrade() {
-                this.column.grab_focus();
+                this.focus_at(x, y);
                 this.menu_at(x, y);
             }
         });
@@ -312,6 +320,21 @@ impl PdfText {
                 menu.unparent();
             }
         });
+    }
+
+    /// The focus where a press lands: on a page, that page with the screen reader's caret at the character pressed
+    /// (placed first, so the page's focus scrolls to nothing new); beside the pages, the column.
+    fn focus_at(&self, x: f64, y: f64) {
+        match hit(&self.layout(), x, y) {
+            Some(at) => {
+                let area = &self.frames[at.page].area;
+                area.place_at(at.x, at.y);
+                area.grab_focus();
+            }
+            None => {
+                self.column.grab_focus();
+            }
+        }
     }
 
     fn menu_at(&self, x: f64, y: f64) {
@@ -414,7 +437,7 @@ impl PdfText {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     /// A Letter page's height laid out 720 wide.
@@ -508,7 +531,7 @@ mod tests {
 
     /// A PDF of three Letter pages in Helvetica 20: two lines on the first, one on the second, none on the third (a page
     /// without a text layer, as a scan's).
-    fn fixture() -> poppler::Document {
+    pub(crate) fn fixture() -> poppler::Document {
         let pages: [&[&str]; 3] = [&["Hello veyq world", "Second line here"], &["Page two text"], &[]];
         let mut objects = vec![
             "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),

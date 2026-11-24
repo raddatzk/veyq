@@ -2280,6 +2280,11 @@
     "en": "The first {1} of {2} pages are shown. Download the file to see all of them.",
     "de": "Die ersten {1} von {2} Seiten werden gezeigt. Lade die Datei herunter, um alle zu sehen."
   },
+  "file_pdf_page": {
+    "note": "a PDF file's page as a screen reader names it, and its picture (inbox #963); {1} the page's number, {2} the document's pages",
+    "en": "Page {1:int} of {2:int}",
+    "de": "Seite {1:int} von {2:int}"
+  },
   "file_text_copy": {
     "note": "a shown text's button: copies the whole text to the clipboard (the web's depot.viewer.text.copy)",
     "en": "Copy",
