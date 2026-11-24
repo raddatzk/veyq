@@ -212,6 +212,14 @@ Measured before the decision (2026-11-20):
       view of the guest's kind loads — has a ceiling of its own, measured per move as the eager set is today. Its number
       is set from Depot's move, the first one measured against it, and recorded here with the owner's date. Until then
       the running budget of decision 7.2 and 7.3's application bound hold as written.
+      **Set 2026-11-24 by the owner, from Depot's move:** a Depot link guest's first load at most **704 KiB gz
+      (720,896 B)** — the single-file link measured 702,621 B gz, the folder link 688,070, the drop box 691,778
+      (§ Depot's move, D8 names the method); every other application's ceiling is set at its own next move, from its
+      measurement, since one number does not fit (a Memory's page measured 811,620 B gz the same day). **The platform
+      module has no fixed budget of its own from then on:** it sits on every guest path, so its growth counts against
+      each kind's guest-path ceiling; the package's slice check keeps reporting its size with every move. A move's
+      time corpus is the move's to name where the real use is bounded (Depot's view decision over 1,000 openings,
+      accepted the same day).
     - **A chunk only members load is looser:** it is still measured and recorded with every move, but its growth is
       not a gate; a move reports it, and the owner is asked only where it is unusual for what the move deletes.
     - **Time still binds everywhere:** 7.3's time bound is about running, not loading, and holds for every rule moved.
