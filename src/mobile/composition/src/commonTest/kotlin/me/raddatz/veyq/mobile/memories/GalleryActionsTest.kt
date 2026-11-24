@@ -15,7 +15,7 @@ import me.raddatz.veyq.mobile.crypto.V1
 import me.raddatz.veyq.mobile.memories.MemoryRights.Access
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeRef
-import me.raddatz.veyq.mobile.composition.ShellModel
+import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.LivePoll
 import me.raddatz.veyq.mobile.session.ShareLinks
 import me.raddatz.veyq.mobile.words.Msg

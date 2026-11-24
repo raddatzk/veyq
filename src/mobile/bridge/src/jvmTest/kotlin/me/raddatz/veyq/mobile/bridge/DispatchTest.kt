@@ -1608,7 +1608,7 @@ class DispatchTest {
                     header = { node, facts, _ -> me.raddatz.veyq.mobile.navigation.NodeHeaderModel(node, facts, Played()) },
                     // a node's download as the shell makes it: the kind decides (a file itself, any other node its ZIP)
                     download = { node, _, sink ->
-                        me.raddatz.veyq.mobile.composition.ShellModel.downloadAs(
+                        me.raddatz.veyq.mobile.navigation.ShellModel.downloadAs(
                             node.kind, own = { out -> out(zip); true }, zip = { out -> out("PK-archive".encodeToByteArray()); emptyList() }, sink = sink,
                         )
                     },

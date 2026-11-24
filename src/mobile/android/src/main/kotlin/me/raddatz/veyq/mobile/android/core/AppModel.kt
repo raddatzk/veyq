@@ -134,8 +134,8 @@ sealed interface Screen {
         val levelGroups: List<me.raddatz.veyq.mobile.navigation.Home.Group> get() = lists.groups(shell)
 
         /** The lists as core's shell holds them, for its rules. */
-        private val lists: me.raddatz.veyq.mobile.composition.ShellModel.Lists
-            get() = me.raddatz.veyq.mobile.composition.ShellModel.Lists(spaces, nodes, objects, favorites, applications, filters, drawer, uses)
+        private val lists: me.raddatz.veyq.mobile.navigation.ShellModel.Lists
+            get() = me.raddatz.veyq.mobile.navigation.ShellModel.Lists(spaces, nodes, objects, favorites, applications, filters, drawer, uses)
     }
 }
 
@@ -163,7 +163,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     )
 
     /** The shell over the current tenant (core's `ShellModel`): its lists, where the person is, the actions on a node. */
-    internal var shellModel: me.raddatz.veyq.mobile.composition.ShellModel? = null
+    internal var shellModel: me.raddatz.veyq.mobile.navigation.ShellModel? = null
         private set
     private var shellWatch: kotlinx.coroutines.Job? = null
 
@@ -1002,7 +1002,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         // what each application held open of the tenant before closes (its pages, its dialogs, a profile's section)
         eachHolding { it.leave() }
         rows = me.raddatz.veyq.mobile.navigation.RowDetails.Read.EMPTY
-        val model = me.raddatz.veyq.mobile.composition.ShellModel(t, hidden, recent, System::currentTimeMillis)
+        val model = me.raddatz.veyq.mobile.navigation.ShellModel(t, hidden, recent, System::currentTimeMillis)
         shellWatch?.cancel()
         shellModel = model
         _shell.value = model
@@ -1297,7 +1297,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     // ---- the writes made offline (ADR 0153): core's outbox, its tray, its marks and its notices; the app only draws ----
 
     /** The shell's model as it changes: the outbox's flows follow the tenant shown. */
-    private val _shell = MutableStateFlow<me.raddatz.veyq.mobile.composition.ShellModel?>(null)
+    private val _shell = MutableStateFlow<me.raddatz.veyq.mobile.navigation.ShellModel?>(null)
 
     /** Under the offline banner: how many writes made offline wait (core's `ShellModel.queuedBanner`); null while none does. */
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -1775,7 +1775,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     private var startPending = false
 
     /** The screen over [state], the core shell's, with this device's servers and the tenant shown. */
-    private fun publish(state: me.raddatz.veyq.mobile.composition.ShellModel.State) {
+    private fun publish(state: me.raddatz.veyq.mobile.navigation.ShellModel.State) {
         val gate = session.current as? me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed ?: return
         val signed = session.signedTo ?: return
         if (shellModel?.tenant !== signed.session) return // a switch under way: the shell shown stays until the other one read

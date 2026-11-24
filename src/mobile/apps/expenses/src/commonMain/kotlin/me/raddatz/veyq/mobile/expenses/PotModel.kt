@@ -41,7 +41,7 @@ class PotModel internal constructor(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     /** Whether the account reaches its server ([me.raddatz.veyq.mobile.session.VeyqAccount.reach]); null: always. */
     private val reach: StateFlow<Reach>? = tenant?.account?.reach,
-) {
+) : me.raddatz.veyq.mobile.navigation.OpenCopy {
     constructor(tenant: TenantSession, now: () -> Long) : this(tenant, now, { ref -> PotSession.open(tenant, ref.scopeId, ref.nodeId)?.let(::SessionOpened) })
 
     /**
@@ -512,6 +512,17 @@ class PotModel internal constructor(
         val r = runCatching { PotCopy.duplicate(s, t, ref.scopeId, to, deletedName, uuid) }.getOrDefault(failed)
         shell.reread()
         return r
+    }
+
+    /**
+     * The move sheet's *Copy to…* of the Pot open here ([OpenCopy], the shell's move sheet): [duplicate] where [ref] is the
+     * open Pot, its outcome in the Pot's words; a Pot not open here fails as a copy without a page does.
+     */
+    override suspend fun duplicateOpen(
+        shell: ShellDoor, ref: me.raddatz.veyq.mobile.navigation.NodeAt, to: String?, deletedName: String, uuid: () -> String,
+    ): me.raddatz.veyq.mobile.words.Notice? {
+        val open = current?.ref?.takeIf { it.nodeId == ref.nodeId } ?: return me.raddatz.veyq.mobile.words.Notice(Msg.COPY_FAILED)
+        return me.raddatz.veyq.mobile.words.Notices.potCopyRefused(duplicate(shell, open, to, deletedName, uuid).outcome)
     }
 
     /**

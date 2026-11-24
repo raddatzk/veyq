@@ -143,6 +143,8 @@ object MemoriesKinds : ApplicationKinds {
     // every role in one list, "Add photos only" a link on the node itself
     override fun shareShape(kind: String): ShareSheet.Shape? = if (kind == MEMORY || kind == CHAPTER) ShareSheet.Shape.UPLOAD_LINK else null
 
+    override fun rowPage(row: me.raddatz.veyq.mobile.navigation.NodeRef): me.raddatz.veyq.mobile.navigation.ObjectRef? = GalleryModel.rowPage(row)
+
     // the same dialog as core's, its sentences naming the node shared (Memories' `share.*`)
     override fun shareWords(kind: String): ShareWords? = when (kind) {
         MEMORY -> ShareWords(

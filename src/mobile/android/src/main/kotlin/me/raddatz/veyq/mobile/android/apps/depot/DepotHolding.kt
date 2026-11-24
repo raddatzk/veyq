@@ -1,5 +1,8 @@
 package me.raddatz.veyq.mobile.android.apps.depot
 
+import me.raddatz.veyq.mobile.depot.depotUploads
+import me.raddatz.veyq.mobile.depot.dropBoxPage
+import me.raddatz.veyq.mobile.depot.fileModel
 import me.raddatz.veyq.mobile.blob.DirectoryWalk
 import android.app.Application
 import android.provider.DocumentsContract
@@ -30,7 +33,7 @@ import me.raddatz.veyq.mobile.navigation.AddHere
 import me.raddatz.veyq.mobile.navigation.DropOutcome
 import me.raddatz.veyq.mobile.navigation.DropTarget
 import me.raddatz.veyq.mobile.navigation.Dropped
-import me.raddatz.veyq.mobile.composition.ShellModel
+import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.depot.DepotUploads
 import me.raddatz.veyq.mobile.depot.DropBoxPage
 import me.raddatz.veyq.mobile.depot.FileModel

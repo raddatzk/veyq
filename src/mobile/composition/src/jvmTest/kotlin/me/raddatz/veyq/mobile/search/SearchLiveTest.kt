@@ -1,5 +1,8 @@
 package me.raddatz.veyq.mobile.search
 
+import me.raddatz.veyq.mobile.memories.createMemory
+import me.raddatz.veyq.mobile.memories.galleryModel
+import me.raddatz.veyq.mobile.memories.mediaUploads
 import me.raddatz.veyq.mobile.media.Derivation
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
@@ -22,7 +25,7 @@ import me.raddatz.veyq.mobile.memories.place.MemoryLocation
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.composition.ShellModel
+import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.LiveRun
 import me.raddatz.veyq.mobile.session.NodeRename
 import me.raddatz.veyq.mobile.session.NodeTrash

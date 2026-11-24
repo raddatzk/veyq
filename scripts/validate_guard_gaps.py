@@ -331,11 +331,12 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   132 the web's catalog regaining a one-word copy of a word it reads from words.json (`Queued`, the notices' move
      deleted its `upload.status.queued`) — rejected: `validate_web_words` read-has-no-twin, of any length
   130 a notice's word changed in words.json without `generate_words.py --web` — rejected: generated-fresh
-  133 the composition's `FileDownloads.kt` importing Expenses' `PotExport` again — rejected: `validate_mobile_module_graph`
-     rule (f); a composition file naming one application belongs in it (inbox #1048: the Pot's download moved there)
-  134 a new `:composition` file naming Depot and Memories without a reason in `COMPOSITION_FILES` — rejected: rule (f);
-     the composition's list only shrinks, a new entry needs its written reason
-  135 `NodeDownload.kt` gone while `COMPOSITION_FILES` still lists it — rejected: rule (f), a stale reason is dropped
+  133 Memories' `ShellPages.kt` copied back into the composition's main sources — rejected: `validate_mobile_module_graph`
+     rule (f); the composition holds its root alone, an application's pages over the shell live in its module (#1215)
+  134 a new `:composition` main file beside the root naming Depot and Memories — rejected: rule (f); what reads several
+     applications is the platform's behind a hook or an interface, never a second composition file
+  135 `AppComposition.kt` gone — rejected: rule (f), the root that installs every application's part is the composition
+  136 a stub `:composition` main file naming no application — rejected: rule (f) reads file names, not what they name
 Retired ids, never reused: 38 (a `core/node/` file naming `memories.media` by an inline qualified reference) and 47
 (a `core/spaces/` file importing `memories.media`) pinned the Memories half of `validate_kernel_imports_no_slices`,
 which the Gradle module split retired: `:core` has no edge to an application, so either shape fails
@@ -1294,12 +1295,15 @@ def forge_mobile_platform_api_shown(root: pathlib.Path) -> str:
 COMPOSITION_MAIN = "composition/src/commonMain/kotlin/me/raddatz/veyq/mobile/composition"
 
 
-def forge_mobile_composition_file_names_one_application(root: pathlib.Path) -> str:
-    _mobile_edit(root, "composition/src/appleMain/kotlin/me/raddatz/veyq/mobile/composition/FileDownloads.kt",
-                 "import me.raddatz.veyq.mobile.blob.FileSink\n",
-                 "import me.raddatz.veyq.mobile.blob.FileSink\nimport me.raddatz.veyq.mobile.expenses.PotExport\n")
-    return ("a composition file naming Expenses alone (must be REJECTED — what spans no two applications lives in its "
-            "application or behind a hook in the platform)")
+def forge_mobile_composition_holds_shell_pages(root: pathlib.Path) -> str:
+    src = root / MOBILE_DIR / "apps/memories/src/commonMain/kotlin/me/raddatz/veyq/mobile/memories/ShellPages.kt"
+    if not src.is_file():
+        raise ForgeError(f"{MOBILE_DIR}/apps/memories/…/ShellPages.kt is missing — re-anchor this forgery")
+    f = root / MOBILE_DIR / COMPOSITION_MAIN / "ShellPages.kt"
+    f.write_text(_sub(src.read_text(), "package me.raddatz.veyq.mobile.memories\n",
+                      "package me.raddatz.veyq.mobile.composition\n\nimport me.raddatz.veyq.mobile.memories.*\n"))
+    return ("Memories' ShellPages.kt copied back into the composition (must be REJECTED — the composition holds its root "
+            "alone; an application's pages live in its module)")
 
 
 def forge_mobile_composition_file_unlisted(root: pathlib.Path) -> str:
@@ -1308,15 +1312,23 @@ def forge_mobile_composition_file_unlisted(root: pathlib.Path) -> str:
         raise ForgeError(f"{MOBILE_DIR}/{COMPOSITION_MAIN} is missing — re-anchor this forgery")
     f.write_text("package me.raddatz.veyq.mobile.composition\n\nimport me.raddatz.veyq.mobile.depot.DepotFiles\n"
                  "import me.raddatz.veyq.mobile.memories.MemoryCreate\n\nval probe = DepotFiles.DROPBOX + MemoryCreate.MEMORY\n")
-    return "a new composition file without its reason (must be REJECTED — the composition's list only shrinks)"
+    return "a new composition file beside the root naming two applications (must be REJECTED — the root alone)"
 
 
-def forge_mobile_composition_list_stale(root: pathlib.Path) -> str:
-    f = root / MOBILE_DIR / "composition/src/nativeMain/kotlin/me/raddatz/veyq/mobile/composition/NodeDownload.kt"
+def forge_mobile_composition_root_gone(root: pathlib.Path) -> str:
+    f = root / MOBILE_DIR / COMPOSITION_MAIN / "AppComposition.kt"
     if not f.is_file():
-        raise ForgeError(f"{MOBILE_DIR}/composition/…/NodeDownload.kt is missing — re-anchor this forgery")
+        raise ForgeError(f"{MOBILE_DIR}/{COMPOSITION_MAIN}/AppComposition.kt is missing — re-anchor this forgery")
     f.unlink()
-    return "a COMPOSITION_FILES entry whose file left (must be REJECTED — a stale reason is dropped)"
+    return "the composition without AppComposition.kt (must be REJECTED — its root is gone)"
+
+
+def forge_mobile_composition_stub(root: pathlib.Path) -> str:
+    f = root / MOBILE_DIR / COMPOSITION_MAIN / "GuardGapStub.kt"
+    if not f.parent.is_dir():
+        raise ForgeError(f"{MOBILE_DIR}/{COMPOSITION_MAIN} is missing — re-anchor this forgery")
+    f.write_text("package me.raddatz.veyq.mobile.composition\n\ninternal val stub = 1\n")
+    return "a stub composition file naming no application (must be REJECTED — the root alone, whatever a file names)"
 
 
 ANDROID_UI = "android/src/main/kotlin/me/raddatz/veyq/mobile/android"
@@ -2116,9 +2128,10 @@ CASES = [
     ("113", MOBILE_GRAPH, forge_mobile_convention_widened, False),
     ("114", MOBILE_GRAPH, forge_mobile_module_not_included, False),
     ("115", MOBILE_GRAPH, forge_mobile_platform_api_shown, False),
-    ("133", MOBILE_GRAPH, forge_mobile_composition_file_names_one_application, False),
+    ("133", MOBILE_GRAPH, forge_mobile_composition_holds_shell_pages, False),
     ("134", MOBILE_GRAPH, forge_mobile_composition_file_unlisted, False),
-    ("135", MOBILE_GRAPH, forge_mobile_composition_list_stale, False),
+    ("135", MOBILE_GRAPH, forge_mobile_composition_root_gone, False),
+    ("136", MOBILE_GRAPH, forge_mobile_composition_stub, False),
     ("116", "validate_mobile_ui_direction.py", forge_android_core_ui_names_core_application, False),
     ("117", "validate_mobile_ui_direction.py", forge_android_application_names_other_core_application, False),
     ("118", "validate_mobile_ui_direction.py", forge_apple_core_ui_names_core_application, False),

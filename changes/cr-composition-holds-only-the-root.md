@@ -358,6 +358,52 @@ Built 2026-11-24 on `claude/composition-root-1215` from `0e922e641` (owner go 20
      `LevelUploads` with `GalleryModel`'s and `Contributions`' conformance members, `DepotUploads.Screened` →
      `LevelUploadsScreened`, `rootName(shown:path:)` from `FolderUpload` to `DirectoryWalk`, and the `depot:` parameters
      typed `id<LevelUploads>`; no selector renamed.
+4. **Slice 3 — the shell.** `ShellModel` moved whole to core's `navigation/` (name, constructor, every member that names
+   no application); its 25 application factories (and the private `queuedTiles`, `queuedHere`, `memoryAccess`,
+   `memoryRights`, the private `depotUploads`) are extensions in `memories/ShellPages.kt` and `depot/ShellPages.kt` —
+   same names, parameters, defaults and the three `createMemory` overloads; the wrappers `NodeDownload` (core
+   `nativeMain`), `FileDownloads` (core `appleMain`, `navigation`) and `AppleQueued` (core `appleMain`, `offline`) moved
+   with it. Where reality differed from the CR, decided here:
+   - **No per-shell `part` slot.** `PlaceNames` holds no state of its own (its map services and a language function), so
+     Memories' `placeNames` is an extension property deriving one per read from what the shell keeps of the platform's:
+     `builtMaps` and `mapsLanguage` (set by `mapServices`, whose signature is unchanged). `mapsOffered` and the search's
+     Settings gate read `builtMaps != null` — what `placeNames != null` meant. A slot would have been surface with no user.
+   - **The companion's `galleryAt` is Memories' extension on `ShellModel.Companion`,** not a hook: only Memories and its
+     tests ask it (Swift's category on `ShellModelCompanion` keeps `galleryAt(nodes:scopeId:nodeId:)`). `found` asks the
+     hook `ApplicationKinds.rowPage` (Memories: `GalleryModel.rowPage`); the share sheet's *Add files only* asks
+     `ApplicationKinds.createDropBox` (Depot: `DropBoxes.made(create(…))`; no application holding one → `SHARE_FAILED`).
+     Both `AppKinds` wrappers are `internal`: only the platform's shell calls them.
+   - **`OpenCopy` is a plain interface** (a `fun interface` cannot hold a `suspend` member) with
+     `duplicateOpen(shell, ref: NodeAt, to, deletedName, uuid): Notice?` — `NodeAt`, since `PotModel` already has
+     `duplicate(ShellDoor, ObjectRef, …)` and the move sheet holds a node. `PotModel` implements it with what `moveDoor`
+     did (`Notices.potCopyRefused` moved into Expenses with it).
+   - **The private `queuedHere(nodeId)` became `queuedInGallery`:** as an extension it would sit beside the member
+     property `queuedHere` (the level's flow) under one name.
+   - **The view opened `@PlatformApi @HiddenFromObjC`:** `now`, `readOnly`, `tenantId`, `queues`, `noRoom`, `wallClock`,
+     `queuedMade`, `scopeNodesWithQueued`, `madeOffline`, `offlineNow`, `builtMaps`, `mapsLanguage` — each one a moved
+     page reads, nothing else. `Drops` and `DropOutcome.notHere` are `internal` again.
+   - **Tests stay where they ran.** The composition's tests run over the composed registry and its shared played
+     fixtures (`PlayedTenant`, `PlayedUploads`); none needed a change but imports of the moved extensions (41 files
+     import `ShellModel` across commonTest, jvmTest, appleTest). Executed cases equal to slice 2's (3,187). That about 40
+     composition test files name one application only is older than #1215 and is filed (#1260), not forced here.
+   - **The guard.** Rule (f) is now "the composition's main sources are `AppComposition.kt` alone" (`COMPOSITION_ROOT`;
+     `COMPOSITION_FILES`, its `wraps` flag and the per-file naming count are gone). Guard-gaps 133 (Memories'
+     `ShellPages.kt` copied back into the composition), 134 (a new file naming two applications), 135 (the root gone) and
+     the new 136 (a stub naming nothing) are each rejected (`validate_guard_gaps.py --case 108 … 136`: 12 of 12 hold). An
+     application import put back into `:core` is the compiler's to refuse (measured: `import
+     me.raddatz.veyq.mobile.memories.GalleryModel` in core's `ShellModel.kt` → `:core:compileKotlinJvm` red, `Unresolved
+     reference 'memories'`), and adding the edge that would make it compile is rule (b)'s (case 109) — no text rule beside
+     the build (the retired cases 38/47's reasoning).
+   - **Clients.** Swift: `moveSheet(…pot:…)` → `(…open:…)` at the two sites; no factory call site changed. Android: 5
+     files' imports (`ShellModel`'s path, the extensions in `DepotHolding`/`MemoriesHolding`). Bridge: `Bridge.kt`'s and
+     `Wire.kt`'s import path and the extensions' imports; its tests' imports. Desktops and `bridge.h`: no diff.
+   - **Selector diff (slice 2 → 3):** every factory left `@interface ShellModel` and appears with the identical
+     declaration in `ShellModel (Extensions)` (19 methods, `placeNames`), `galleryAt(nodes:…)` in
+     `ShellModelCompanion (Extensions)`, `moveSheet(…open:…)` typed `id<OpenCopy>`, the protocol `OpenCopy` and
+     `PotModel.duplicateOpen(…)`. Nothing renamed, no `_`-suffixed selector: the category members clash with nothing.
+   - **Phase 4's device passes were not run** (the build brief: no live tests; the AVD `veyq_pixel` is off-limits). What
+     stands for them: the code of every moved path is the same text under a new receiver, Swift's surface is proved
+     identical by the header, and every suite that held those paths ran green with the same cases.
 
 ## Retrospective
 

@@ -152,4 +152,18 @@ interface ApplicationKinds {
 
     /** The job a READ_WRITE guest's upload of [source] into a link's folder makes ([AppKinds.guestLevelUploads]). */
     fun guestLevelUpload(access: GuestAccess, session: GuestSession, parent: OpenNode, source: UploadSource): UploadQueue.Job? = null
+
+    /**
+     * "Add files only" ([AppKinds.createDropBox]): a drop box [name] made under [parentId] (null: the space's top) of
+     * [scopeId] with its first link, what came of it; null where its application makes no drop box (Depot's does).
+     */
+    suspend fun createDropBox(
+        tenant: TenantSession, scopeId: String, parentId: String?, name: String, password: String, expiresAt: String?,
+    ): me.raddatz.veyq.mobile.navigation.ShareSheet.Made? = null
+
+    /**
+     * The object listed node [row] opens as where it is no object itself ([AppKinds.rowPage]: a chapter its page, Memories');
+     * null for a kind not its own.
+     */
+    fun rowPage(row: me.raddatz.veyq.mobile.navigation.NodeRef): me.raddatz.veyq.mobile.navigation.ObjectRef? = null
 }

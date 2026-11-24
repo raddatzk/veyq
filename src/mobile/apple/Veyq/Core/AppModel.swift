@@ -1449,7 +1449,7 @@ final class AppModel {
         }
         // the kind whose copy an application makes answers (a Pot's, by the open Pot); every other the composition's
         return holdings.lazy.compactMap { $0.moveSheet(m, node, copying: copying, changed: changed) }.first
-            ?? m.moveSheet(node: node, copying: copying, pot: nil, deletedName: say(.potDeletedPerson)) { changed() }
+            ?? m.moveSheet(node: node, copying: copying, open: nil, deletedName: say(.potDeletedPerson)) { changed() }
     }
 
     // MARK: The space's trash (core's NodeTrash)

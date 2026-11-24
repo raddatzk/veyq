@@ -1,7 +1,5 @@
 package me.raddatz.veyq.mobile.navigation
 
-import kotlin.native.HiddenFromObjC
-import me.raddatz.veyq.mobile.PlatformApi
 import me.raddatz.veyq.mobile.blob.DirectoryWalk
 import me.raddatz.veyq.mobile.blob.LevelUploads
 import me.raddatz.veyq.mobile.blob.UploadSource
@@ -80,18 +78,13 @@ sealed class DropOutcome {
         override val notices: List<Notice> get() = listOf(notice)
     }
 
-    // open to the composition's ShellModel until it is the platform's (#1215 slice 3), then internal again
-    @PlatformApi
-    @HiddenFromObjC
-    companion object {
+    internal companion object {
         val notHere get() = Refused(Notice(Msg.DROP_NOT_HERE))
     }
 }
 
 /** The drop's one sort and upload, behind `ShellModel.drop` (its gate decided there). */
-@PlatformApi
-@HiddenFromObjC
-object Drops {
+internal object Drops {
     /** What a drop says of the items it does not take whatever the target: those with no local path, those that did not read. */
     private fun unsaid(items: List<Dropped>): List<Notice> =
         items.filterIsInstance<Dropped.NotLocal>().map { Notice(Msg.DEPOT_DROP_NOT_LOCAL, it.name) } +

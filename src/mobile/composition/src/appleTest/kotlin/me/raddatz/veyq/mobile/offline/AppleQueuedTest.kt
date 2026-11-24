@@ -1,7 +1,8 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.memories.mediaUploads
 import me.raddatz.veyq.mobile.media.Derivation
-import me.raddatz.veyq.mobile.composition.AppleQueued
+import me.raddatz.veyq.mobile.offline.AppleQueued
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -14,7 +15,7 @@ import me.raddatz.veyq.mobile.memories.MediaUpload
 import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.composition.ShellModel
+import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.Reach
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice

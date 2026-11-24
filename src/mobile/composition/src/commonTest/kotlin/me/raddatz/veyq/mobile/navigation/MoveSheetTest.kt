@@ -1,6 +1,6 @@
 package me.raddatz.veyq.mobile.navigation
 
-import me.raddatz.veyq.mobile.composition.ShellModel
+import me.raddatz.veyq.mobile.navigation.ShellModel
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
@@ -165,7 +165,7 @@ class MoveSheetTest {
         // said briefly as done, offered as an undo for as long as the window runs (ADR 0154 decision 4)
         assertEquals(me.raddatz.veyq.mobile.words.NoticeKind.SAID, s.current.done?.kind)
         assertEquals(said.living(me.raddatz.veyq.mobile.words.NoticeKind.UNDO), s.current.undo)
-        advanceTimeBy(me.raddatz.veyq.mobile.composition.ShellModel.TRASH_UNDO_MS - 1)
+        advanceTimeBy(me.raddatz.veyq.mobile.navigation.ShellModel.TRASH_UNDO_MS - 1)
         assertNotNull(s.current.undo, "still offered inside the window")
         advanceTimeBy(2)
         assertNull(s.current.undo, "gone once the window passed")
@@ -176,7 +176,7 @@ class MoveSheetTest {
         val again = sheet(rome, door = door)
         again.go("trips")
         again.choose()
-        advanceTimeBy(me.raddatz.veyq.mobile.composition.ShellModel.TRASH_UNDO_MS / 2)
+        advanceTimeBy(me.raddatz.veyq.mobile.navigation.ShellModel.TRASH_UNDO_MS / 2)
         assertNull(again.undo())
         assertEquals<Pair<String, String?>>("rome" to "2026", door.moves.last())
         assertNull(again.current.undo)

@@ -1,11 +1,10 @@
-package me.raddatz.veyq.mobile.composition
+package me.raddatz.veyq.mobile.navigation
 
 import me.raddatz.veyq.mobile.offline.QueuedItem
 import me.raddatz.veyq.mobile.offline.QueuedShown
 import me.raddatz.veyq.mobile.offline.QueuedTray
-import me.raddatz.veyq.mobile.expenses.potCopyRefused
-import me.raddatz.veyq.mobile.navigation.NodeAt
-import me.raddatz.veyq.mobile.navigation.*
+import kotlin.native.HiddenFromObjC
+import me.raddatz.veyq.mobile.PlatformApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -52,12 +51,17 @@ import me.raddatz.veyq.mobile.words.Notices
  * page whose node went leaves for its parent, a folder on Home's path that went or moved shows where it is now.
  *
  * A UI observes [state] (or [watch]) and calls the actions; what it draws and the device's words stay its own.
+ *
+ * The platform's (ADR 0156, inbox #1215): it names no application. Each application's pages over this shell — a gallery,
+ * a file page, the uploads, a Memory made — are extensions in its own module (`memories/ShellPages.kt`,
+ * `depot/ShellPages.kt`), reading the shell through the members opened to them below ([PlatformApi], hidden from
+ * Objective-C); Swift calls them as before, as methods of a category on this class.
  */
 class ShellModel(
     val tenant: TenantSession,
     private val hidden: Hidden,
     private val recent: RecentUses,
-    private val now: () -> Long,
+    @PlatformApi @HiddenFromObjC val now: () -> Long,
 ) : ShellDoor {
     /** What the shell lists, this device's hidden spaces taken out. */
     @Serializable
@@ -298,69 +302,53 @@ class ShellModel(
     val online: Boolean get() = tenant.account.reach.value == Reach.Online
 
     /** The notice a write offline is refused with. */
-    private val readOnly get() = Notice(Msg.OFFLINE_READ_ONLY)
+    @PlatformApi
+    @HiddenFromObjC
+    val readOnly get() = Notice(Msg.OFFLINE_READ_ONLY)
 
     // ---- writes made offline (ADR 0153) ----
 
-    private val tenantId: String get() = tenant.tenant.tenantId
+    @PlatformApi
+    @HiddenFromObjC
+    val tenantId: String get() = tenant.tenant.tenantId
 
     /** Whether a write of [q] made now is queued rather than sent: offline, where this device keeps the account's store. */
-    private fun queues(q: me.raddatz.veyq.mobile.offline.Queued): Boolean = !online && tenant.account.queues(q)
+    @PlatformApi
+    @HiddenFromObjC
+    fun queues(q: me.raddatz.veyq.mobile.offline.Queued): Boolean = !online && tenant.account.queues(q)
 
     /** A write not queued for want of room on this device (ADR 0140's floor). */
-    private val noRoom get() = Notice(Msg.OFFLINE_NO_ROOM_HERE)
+    @PlatformApi
+    @HiddenFromObjC
+    val noRoom get() = Notice(Msg.OFFLINE_NO_ROOM_HERE)
 
     /** The wall clock (epoch ms): when a write made offline was made, as the tray says it. */
-    private fun wallClock(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
-
-    /** The media added offline into [nodeId], as its gallery's placeholder tiles marked *Waiting to send* (failed: refused). */
-    private fun queuedTiles(nodeId: String): kotlinx.coroutines.flow.Flow<List<me.raddatz.veyq.mobile.memories.UploadTile>> {
-        val box = tenant.account.outbox ?: return kotlinx.coroutines.flow.flowOf(emptyList())
-        return box.changes.map {
-            box.writes().filter { it.op == me.raddatz.veyq.mobile.offline.Queued.MEDIA_ADD.name && it.node == nodeId }.map { w ->
-                val name = (w.intent["name"] as? kotlinx.serialization.json.JsonPrimitive)?.content.orEmpty()
-                val type = (w.intent["type"] as? kotlinx.serialization.json.JsonPrimitive)?.content
-                val status = if (w.state == me.raddatz.veyq.mobile.offline.QueuedWrite.State.WAITING) me.raddatz.veyq.mobile.blob.UploadQueue.Status.QUEUED
-                else me.raddatz.veyq.mobile.blob.UploadQueue.Status.FAILED
-                me.raddatz.veyq.mobile.memories.UploadTile(w.id, name, me.raddatz.veyq.mobile.memories.MediaUpload.claimsVideo(type, name), status, 0.0, w.id, waiting = true)
-            }
-        }
-    }
-
-    /**
-     * What the outbox holds for gallery [nodeId]: the media whose trash waits, the marks and the capture times set offline,
-     * and the chapters made in it offline, each with what it says (ADR 0153 decision 5, #1040).
-     */
-    private suspend fun queuedHere(nodeId: String): me.raddatz.veyq.mobile.memories.GalleryModel.QueuedHere {
-        val all = tenant.account.outbox?.writes().orEmpty().filter { it.tenant == tenantId }
-        val writes = all.filter { it.node == nodeId && it.state == me.raddatz.veyq.mobile.offline.QueuedWrite.State.WAITING }
-        fun field(w: me.raddatz.veyq.mobile.offline.QueuedWrite, k: String) = (w.intent[k] as? kotlinx.serialization.json.JsonPrimitive)?.content
-        return me.raddatz.veyq.mobile.memories.GalleryModel.QueuedHere(
-            trashed = writes.filter { it.op == me.raddatz.veyq.mobile.offline.Queued.MEDIA_TRASH.name }.mapNotNull { field(it, "mediaId") }.toSet(),
-            marks = writes.filter { it.op == me.raddatz.veyq.mobile.offline.Queued.MEDIA_MARK.name }.mapNotNull { w -> field(w, "mediaId")?.let { it to (field(w, "marked") == "true") } }.toMap(),
-            times = writes.filter { it.op == me.raddatz.veyq.mobile.offline.Queued.MEDIA_CAPTURE_TIME.name }.associate { w ->
-                me.raddatz.veyq.mobile.offline.QueuedNodes.decode(me.raddatz.veyq.mobile.memories.QueuedMemories.TimeIntent.serializer(), w).let { it.mediaId to it.overrideMs }
-            },
-            chapters = queuedMade(all).filter { it.first.parentId == nodeId }.associate { (n, w) -> n.nodeId to QueuedShown.said(w) },
-        )
-    }
+    @PlatformApi
+    @HiddenFromObjC
+    fun wallClock(): Long = kotlin.time.Clock.System.now().toEpochMilliseconds()
 
     /**
      * The Memories and chapters made offline among [writes] and not sent yet, each as the node it will be (its id the
      * write's, ADR 0153 decision 3) with its write: what a level's row opens and a Memory's chapters list (#1040).
      */
-    private fun queuedMade(writes: List<me.raddatz.veyq.mobile.offline.QueuedWrite>): List<Pair<NodeRef, me.raddatz.veyq.mobile.offline.QueuedWrite>> =
+    @PlatformApi
+    @HiddenFromObjC
+    fun queuedMade(writes: List<me.raddatz.veyq.mobile.offline.QueuedWrite>): List<Pair<NodeRef, me.raddatz.veyq.mobile.offline.QueuedWrite>> =
         writes.filter { it.op == me.raddatz.veyq.mobile.offline.Queued.MEMORY_CREATE.name }.map { w -> QueuedShown.madeNode(w) to w }
 
     /** [scopeId]'s nodes as [scopeNodes] reads them, with the Memories and chapters made there offline and not sent yet. */
-    private suspend fun scopeNodesWithQueued(scopeId: String): List<NodeRef> {
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun scopeNodesWithQueued(scopeId: String): List<NodeRef> {
         val read = scopeNodes(scopeId)
         val made = queuedMade(tenant.account.outbox?.writes().orEmpty().filter { it.tenant == tenantId && it.scope == scopeId }).map { it.first }
         return read + made.filter { m -> read.none { it.nodeId == m.nodeId } }
     }
 
     /** Whether [nodeId] is a Memory or a chapter made offline and not sent yet: its page opens empty, as of now (#1040). */
-    private suspend fun madeOffline(nodeId: String): Boolean =
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun madeOffline(nodeId: String): Boolean =
         tenant.account.outbox?.write(nodeId)?.op == me.raddatz.veyq.mobile.offline.Queued.MEMORY_CREATE.name
 
     /** The name of [nodeId] (null: the space) as the lists hold it: where a queued write goes, as the tray groups it. */
@@ -421,7 +409,9 @@ class ShellModel(
     suspend fun queuedLost(): Notice? = QueuedShown.lost(tenant.account.queuedCount())
 
     /** What the shell shows offline: as of when its lists were last confirmed by the server; null online. */
-    private fun offlineNow(): me.raddatz.veyq.mobile.session.OfflineAsOf? = when (val r = tenant.account.reach.value) {
+    @PlatformApi
+    @HiddenFromObjC
+    fun offlineNow(): me.raddatz.veyq.mobile.session.OfflineAsOf? = when (val r = tenant.account.reach.value) {
         Reach.Online -> null
         is Reach.Offline -> me.raddatz.veyq.mobile.session.OfflineAsOf(tenant.offline?.asOf ?: r.asOf)
         is Reach.Ended -> me.raddatz.veyq.mobile.session.OfflineAsOf(tenant.offline?.asOf)
@@ -518,18 +508,6 @@ class ShellModel(
 
     /** Person [userId]'s frame: named by the tenant's directory as read, with the sections of the applications on. */
     fun profile(userId: String): PersonProfile = PersonProfile.of(userId, tenant.people, tenant.applicationsOff())
-
-    /**
-     * Memories' section of person [userId]'s profile (ADR 0144 decisions 12–13): over the tenant's participants index, a
-     * row or a pin opening its Memory with its use recorded ([open]).
-     */
-    fun personMemories(userId: String): me.raddatz.veyq.mobile.memories.people.PersonMemories =
-        me.raddatz.veyq.mobile.memories.people.PersonMemories(userId, object : me.raddatz.veyq.mobile.memories.people.PersonMemories.Door {
-            override val chosen get() = me.raddatz.veyq.mobile.memories.people.PersonMemories.View.valueOf(viewModes.of(tenant.account.userId, ViewMode.PERSON).name)
-            override fun chose(view: me.raddatz.veyq.mobile.memories.people.PersonMemories.View) = viewModes.set(tenant.account.userId, ViewMode.valueOf(view.name))
-            override suspend fun index() = me.raddatz.veyq.mobile.memories.people.ParticipantIndex.of(tenant)
-            override fun open(ref: ObjectRef) = this@ShellModel.open(ref)
-        })
 
     private fun opened(ref: ObjectRef, move: (Shell) -> Shell) {
         recent.record(ref, now())
@@ -839,7 +817,7 @@ class ShellModel(
 
     /** Whether the tenant's map services were built: the Settings page offers the maps' consent
      *  ([me.raddatz.veyq.mobile.session.AccountSettings.State.sections]). */
-    val mapsOffered: Boolean get() = placeNames != null
+    val mapsOffered: Boolean get() = builtMaps != null
 
     /**
      * The plan of the level [shell] shows (ADR 0154 decision 2, [LevelPlan]); null where it shows none (an object, a
@@ -1077,24 +1055,23 @@ class ShellModel(
     }
 
     /**
-     * The move or copy sheet of [node] over this shell ([MoveSheet]): its copy by the kind's way — an open Pot by [pot] (the
-     * Pot model its page holds; none: the copy fails), everything else with what is under it —, [deletedName] how a copied
+     * The move or copy sheet of [node] over this shell ([MoveSheet]): its copy by the kind's way — an object that copies by
+     * its open model by [open] (the model its page holds, [OpenCopy]: Expenses' Pot; none: the copy fails), everything else
+     * with what is under it —, [deletedName] how a copied
      * Pot names an erased person (each new id a UUID from the suite's randomness); [changed] after each write.
      */
     fun moveSheet(
-        node: NodeAt, copying: Boolean, pot: me.raddatz.veyq.mobile.expenses.PotModel?, deletedName: String, changed: () -> Unit,
-    ): MoveSheet = MoveSheet(node, copying, moveDoor(pot, deletedName, changed))
+        node: NodeAt, copying: Boolean, open: OpenCopy?, deletedName: String, changed: () -> Unit,
+    ): MoveSheet = MoveSheet(node, copying, moveDoor(open, deletedName, changed))
 
-    private fun moveDoor(pot: me.raddatz.veyq.mobile.expenses.PotModel?, deletedName: String, changed: () -> Unit) = object : MoveSheet.Door {
+    private fun moveDoor(open: OpenCopy?, deletedName: String, changed: () -> Unit) = object : MoveSheet.Door {
         val uuid = { NodeCreate.uuid(tenant.account) }
         override suspend fun tree(scopeId: String) = scopeNodes(scopeId)
         override val placement get() = AppKinds.placement
         override fun rootName(scopeId: String) = ShellWords.space(current?.lists?.spaces?.firstOrNull { it.scopeId == scopeId })
         override suspend fun move(ref: NodeAt, to: String?) = this@ShellModel.move(ref, to).result.outcome
-        override suspend fun duplicateOpen(ref: NodeAt, to: String?): Notice? {
-            val open = pot?.current?.ref?.takeIf { it.nodeId == ref.nodeId } ?: return Notice(Msg.COPY_FAILED)
-            return Notices.potCopyRefused(pot.duplicate(this@ShellModel, open, to, deletedName, uuid).outcome)
-        }
+        override suspend fun duplicateOpen(ref: NodeAt, to: String?): Notice? =
+            if (open == null) Notice(Msg.COPY_FAILED) else open.duplicateOpen(this@ShellModel, ref, to, deletedName, uuid)
         override suspend fun duplicateSubtree(ref: NodeAt, to: String?) = duplicate(ref, to, deletedName, uuid)
         override suspend fun preview(ref: NodeAt) = SubtreeCopy.preview(tenant, ref.scopeId, ref.nodeId, AppKinds.copies(deletedName, uuid))
         override suspend fun noRoom(ref: NodeAt) = StorageFit.noRoomForCopy(tenant, ref.scopeId, ref.nodeId, AppKinds.exports(deletedName))
@@ -1132,7 +1109,7 @@ class ShellModel(
         override suspend fun mint(role: String, label: String, password: String, expiresAt: String?) =
             ShareLinks.mint(tenant, node.scopeId, node.nodeId, role, label, password, expiresAt)
         override suspend fun createDropBox(name: String, password: String, expiresAt: String?) =
-            me.raddatz.veyq.mobile.depot.DropBoxes.made(me.raddatz.veyq.mobile.depot.DropBoxes.create(tenant, node.scopeId, dropBoxParent, name, password, expiresAt))
+            AppKinds.createDropBox(tenant, node.scopeId, dropBoxParent, name, password, expiresAt)
         override suspend fun edit(shareId: String, edit: ShareLinkChanges.Edit) =
             ShareLinkChanges.edit(tenant, node.scopeId, node.nodeId, shareId, edit, now())
         override suspend fun renew(shareId: String) =
@@ -1174,171 +1151,8 @@ class ShellModel(
             walked.skipped
         }, sink = sink)
 
-    /**
-     * The file [ref]'s page shows over this tenant ([FileModel]): the file read anew on each [FileModel.reload], its content
-     * in frames and ranges, its uploader, its replace as a job of the upload queue; [shares] where the platform has a
-     * share sheet ("Send a copy").
-     */
-    fun fileModel(ref: NodeAt, shares: Boolean): me.raddatz.veyq.mobile.depot.FileModel =
-        me.raddatz.veyq.mobile.depot.FileModel(ref, object : me.raddatz.veyq.mobile.depot.FileModel.Door {
-            override suspend fun file(node: NodeAt) = me.raddatz.veyq.mobile.depot.DepotFiles.one(tenant, node.scopeId, node.nodeId)
-            override fun inIdentityFolder(node: NodeAt) = this@ShellModel.inIdentityFolder(node)
-            override suspend fun read(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, first: Int, until: Int, sink: suspend (ByteArray) -> Unit) =
-                me.raddatz.veyq.mobile.depot.DepotFiles.read(tenant, file, first, until, sink)
-            override fun reader(file: me.raddatz.veyq.mobile.depot.DepotFiles.File) = me.raddatz.veyq.mobile.depot.DepotFiles.reader(tenant, file)
-            override suspend fun uploader(file: me.raddatz.veyq.mobile.depot.DepotFiles.File) = me.raddatz.veyq.mobile.depot.Uploaders.of(tenant, file)
-            override fun replaceJob(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, source: me.raddatz.veyq.mobile.blob.UploadSource, expectedBlobId: String?) =
-                me.raddatz.veyq.mobile.depot.DepotFiles.ReplaceJob(tenant, file, source, expectedBlobId, source.name)
-            override fun online() = this@ShellModel.online
-        }, shares)
-
-    /**
-     * The uploads of this tenant over the app's [queue] ([me.raddatz.veyq.mobile.depot.DepotUploads]): files and folders
-     * uploaded into a level, a file's replace, the settle's offer; [changed] after each write (the app reads its lists anew).
-     * A download is uploaded as the file it is: the phones offer no import for now (owner 2026-11-19).
-     */
-    fun depotUploads(queue: me.raddatz.veyq.mobile.blob.UploadQueue, changed: () -> Unit): me.raddatz.veyq.mobile.depot.DepotUploads =
-        depotUploads(queue, imports = false, deriver = null, changed = changed)
-
-    /**
-     * [depotUploads] where the platform offers a download's import at its uploads (ADR 0152 decision 1: the desktops),
-     * each imported medium's tiers made by its [deriver].
-     */
-    fun depotUploadsImporting(
-        queue: me.raddatz.veyq.mobile.blob.UploadQueue, deriver: me.raddatz.veyq.mobile.media.Derivation.Deriver?, changed: () -> Unit,
-    ): me.raddatz.veyq.mobile.depot.DepotUploads = depotUploads(queue, imports = true, deriver = deriver, changed = changed)
-
-    private fun depotUploads(
-        queue: me.raddatz.veyq.mobile.blob.UploadQueue, imports: Boolean,
-        deriver: me.raddatz.veyq.mobile.media.Derivation.Deriver?, changed: () -> Unit,
-    ): me.raddatz.veyq.mobile.depot.DepotUploads =
-        me.raddatz.veyq.mobile.depot.DepotUploads(queue, object : me.raddatz.veyq.mobile.depot.DepotUploads.Door {
-            override fun uploadJob(scopeId: String, parentId: String?, source: me.raddatz.veyq.mobile.blob.UploadSource, name: String) =
-                me.raddatz.veyq.mobile.depot.DepotFiles.UploadJob(tenant, scopeId, parentId, source, AppKinds::tokenInput, name)
-            override suspend fun prepareFolder(scopeId: String, parentId: String?, rootName: String, entries: List<me.raddatz.veyq.mobile.depot.FolderUpload.Entry>) =
-                me.raddatz.veyq.mobile.depot.FolderUpload.prepare(tenant, scopeId, parentId, rootName, entries, AppKinds::tokenInput)
-            override suspend fun file(scopeId: String, nodeId: String) = me.raddatz.veyq.mobile.depot.DepotFiles.one(tenant, scopeId, nodeId)
-            override fun replaceJob(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, source: me.raddatz.veyq.mobile.blob.UploadSource, expectedBlobId: String?) =
-                me.raddatz.veyq.mobile.depot.DepotFiles.ReplaceJob(tenant, file, source, expectedBlobId, source.name)
-            override fun changed() = changed()
-            override fun online() = this@ShellModel.online
-            override val queues get() = tenant.account.queues(me.raddatz.veyq.mobile.offline.Queued.DEPOT_FILE_ADD)
-            override suspend fun queue(
-                scopeId: String, parentId: String?, source: me.raddatz.veyq.mobile.blob.UploadSource, name: String,
-                left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit,
-            ) = queues(me.raddatz.veyq.mobile.offline.Queued.DEPOT_FILE_ADD) &&
-                me.raddatz.veyq.mobile.depot.QueuedDepot.file(tenant.account, tenantId, scopeId, parentId, source, wallClock(), left, name) != null
-            // a member's level: a space's top, or a folder that is no guest's (the web's `folderRights` createFolder)
-            override fun mayImport(scopeId: String, parentId: String?) =
-                this@ShellModel.online && (parentId == null || !tenant.inIdentityFolder(scopeId, parentId))
-            override fun importDialog(
-                scopeId: String, parentId: String?, target: String, input: me.raddatz.veyq.mobile.export.ImportInput,
-                asFile: (() -> Unit)?, closed: () -> Unit, deletedName: String,
-            ) = me.raddatz.veyq.mobile.export.ImportDialog(
-                input, target, scopeId, parentId, me.raddatz.veyq.mobile.export.SubtreeImport.Server(tenant, scopeId),
-                AppKinds.imports(deletedName, { NodeCreate.uuid(tenant.account) }, deriver, now), AppKinds::tokenInput, asFile, closed,
-                { tenant.forgetTree(); changed() },
-            ).also { it.start() }
-        }, importOffered = imports)
-
-    /**
-     * Memories' uploads of this tenant over the app's [queue] ([me.raddatz.veyq.mobile.memories.MediaUploads]): each picked
-     * medium a job whose tiers the platform's [deriver] makes, a gallery told when its medium is in, [changed] at a batch's
-     * end (the app reads its lists anew), [left] once the queue is done with a picked file.
-     */
-    fun mediaUploads(
-        queue: me.raddatz.veyq.mobile.blob.UploadQueue, deriver: me.raddatz.veyq.mobile.media.Derivation.Deriver,
-        left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit, changed: () -> Unit,
-    ): me.raddatz.veyq.mobile.memories.MediaUploads =
-        me.raddatz.veyq.mobile.memories.MediaUploads(queue, object : me.raddatz.veyq.mobile.memories.MediaUploads.Door {
-            override fun job(scopeId: String, nodeId: String, source: me.raddatz.veyq.mobile.blob.UploadSource) =
-                me.raddatz.veyq.mobile.memories.MediaUpload.Job(tenant, scopeId, nodeId, source, deriver, now)
-            override fun musicJob(scopeId: String, nodeId: String, track: me.raddatz.veyq.mobile.memories.music.MusicUpload.Check.Taken) =
-                me.raddatz.veyq.mobile.memories.music.MusicUpload.Job(tenant, scopeId, nodeId, track)
-            override fun trackJob(
-                scopeId: String, nodeId: String, track: me.raddatz.veyq.mobile.memories.tracks.TrackUpload.Check.Taken,
-                label: me.raddatz.veyq.mobile.memories.music.TrackLabel.Label,
-            ) = me.raddatz.veyq.mobile.memories.tracks.TrackUpload.Job(tenant, scopeId, nodeId, track, label)
-            // the batch's settle (ADR 0143 D5): where this member may edit the node's meta, online
-            override suspend fun settled(scopeId: String, nodeId: String) {
-                if (!online) return
-                val node = tenant.node(scopeId, nodeId) ?: return
-                val at = NodeAt(scopeId, nodeId, node.kind, node.name)
-                if (!memoryRights(at).editMeta) return
-                val items = me.raddatz.veyq.mobile.memories.MemoryMedia.list(tenant, scopeId, nodeId)?.takeIf { it.offline == null }?.items ?: return
-                me.raddatz.veyq.mobile.memories.place.MemoryFacts.reconcile(tenant, scopeId, nodeId, items, placeNames)
-            }
-            override fun changed() = changed()
-            override fun left(source: me.raddatz.veyq.mobile.blob.UploadSource) = left(source)
-            override suspend fun queue(scopeId: String, nodeId: String, sources: List<me.raddatz.veyq.mobile.blob.UploadSource>): Int {
-                if (!queues(me.raddatz.veyq.mobile.offline.Queued.MEDIA_ADD)) return 0
-                return me.raddatz.veyq.mobile.memories.QueuedMemories.media(tenant.account, tenantId, scopeId, nodeId, sources, deriver, now, left).size
-            }
-        })
-
-    /**
-     * A Memory or a chapter ([kind], `MemoryCreate.offered` where the shell is) named [name] made in [scopeId] under
-     * [parentId] (null: the space's top): the node made, to open, or why not; the lists are read anew. [wasThere]: the
-     * maker listed as a Memory's participant from its birth, where [offersWasThere] (ADR 0144 decision 2); [autoPlace]: its
-     * place armed to come from its photos, where [offersAutoPlace] (uc.memory.place A1).
-     */
-    suspend fun createMemoryNode(
-        scopeId: String, parentId: String?, kind: String, name: String, wasThere: Boolean = false, autoPlace: Boolean = false,
-    ): me.raddatz.veyq.mobile.memories.MemoryCreate.Made {
-        if (queues(me.raddatz.veyq.mobile.offline.Queued.MEMORY_CREATE)) {
-            // offline it waits to be sent: nothing to open yet, it shows where it was made ([queuedAt])
-            if (name.isBlank()) return me.raddatz.veyq.mobile.memories.MemoryCreate.Made(null, Notice(Msg.FOLDER_NAME_EMPTY))
-            val queued = me.raddatz.veyq.mobile.memories.QueuedMemories.create(tenant.account, tenantId, scopeId, parentId, kind, name, wallClock(), wasThere, autoPlace && offersAutoPlace())
-            return if (queued != null) me.raddatz.veyq.mobile.memories.MemoryCreate.Made(null, Notice(Msg.OFFLINE_WAITING), queued = true)
-            else me.raddatz.veyq.mobile.memories.MemoryCreate.Made(null, noRoom)
-        }
-        if (!online) return me.raddatz.veyq.mobile.memories.MemoryCreate.Made(null, readOnly)
-        val armed = autoPlace && offersAutoPlace()
-        val made = me.raddatz.veyq.mobile.memories.MemoryCreate.create(tenant, scopeId, parentId, kind, name, wasThere, armed)
-        refresh()
-        return made
-    }
-
-    /** A Memory [name] made in [scopeId] under [parentId] (null: the space's top); the node made, to open, or why not. */
-    suspend fun createMemory(scopeId: String, parentId: String?, name: String): me.raddatz.veyq.mobile.memories.MemoryCreate.Made =
-        createMemory(scopeId, parentId, name, wasThere = false)
-
-    /**
-     * [createMemory] with *I was there* ticked or not ([wasThere], ADR 0144 decision 2). An overload, not a default: Swift
-     * sees no Kotlin default, and the Apple app calls the three-argument form.
-     */
-    suspend fun createMemory(scopeId: String, parentId: String?, name: String, wasThere: Boolean): me.raddatz.veyq.mobile.memories.MemoryCreate.Made =
-        createMemoryNode(scopeId, parentId, me.raddatz.veyq.mobile.memories.MemoryCreate.MEMORY, name, wasThere)
-
-    /** [createMemory] with *Determine location automatically* ticked or not ([autoPlace], uc.memory.place A1); Swift's form, as above. */
-    suspend fun createMemory(scopeId: String, parentId: String?, name: String, wasThere: Boolean, autoPlace: Boolean): me.raddatz.veyq.mobile.memories.MemoryCreate.Made =
-        createMemoryNode(scopeId, parentId, me.raddatz.veyq.mobile.memories.MemoryCreate.MEMORY, name, wasThere, autoPlace)
-
-    /**
-     * Whether New Memory offers *Determine location automatically*, unticked (uc.memory.place A1): where this tenant's map services are
-     * shown on this device ([mapServices] built, offered and consented) — the web's `mapsAvailable`.
-     */
-    fun offersAutoPlace(): Boolean = me.raddatz.veyq.mobile.memories.MemoryCreate.offersAutoPlace(
-        me.raddatz.veyq.mobile.memories.MemoryCreate.MEMORY, placeNames?.maps?.available == true,
-    )
-
-    /** Whether New Memory in [scopeId] offers *I was there*, ticked (ADR 0144 decision 2: a tenant or group scope). */
-    fun offersWasThere(scopeId: String): Boolean =
-        me.raddatz.veyq.mobile.memories.MemoryCreate.offersWasThere(me.raddatz.veyq.mobile.memories.MemoryCreate.MEMORY, tenant.scopeKind(scopeId))
-
     /** Node [nodeId]'s cover as a list row draws it, the host holding the frame [held] (`NodeCover.row`); null: none. */
     suspend fun rowCover(nodeId: String, held: String?): NodeCover.Row? = runCatching { NodeCover.row(tenant, nodeId, held) }.getOrNull()
-
-    /**
-     * Memory or chapter [nodeId] of space [scopeId] as the lists hold it now — what a page opened by its ids alone opens (a
-     * Mac's lightbox window, whose restorable value carries ids, never a name) —; null where it is not listed or is no
-     * Memory or chapter.
-     */
-    fun galleryAt(scopeId: String, nodeId: String): NodeAt? = galleryAt(current?.lists?.nodes.orEmpty(), scopeId, nodeId)
-
-    /** A Memory's or a chapter's Contributions view over this tenant (`Contributions.of`, ADR 0149 decision 6). */
-    fun contributions(gallery: me.raddatz.veyq.mobile.memories.GalleryModel): me.raddatz.veyq.mobile.memories.Contributions =
-        me.raddatz.veyq.mobile.memories.Contributions.of(tenant, gallery)
 
     /** The account's view choice on this device (ADR 0149 decision 8): every level's and a person's Memories'. */
     val viewModes: ViewModes get() = ViewModes(tenant.account.deviceStore)
@@ -1348,93 +1162,6 @@ class ShellModel(
 
     /** A level's view chosen: kept for every level and a person's Memories. */
     fun chooseView(mode: ViewMode) = viewModes.set(tenant.account.userId, mode)
-
-    /**
-     * Memory or chapter [ref]'s page over this tenant ([me.raddatz.veyq.mobile.memories.GalleryModel]), opened as a member:
-     * its media read anew on every revision of these lists, when a medium [uploads] sent into it is in and when its live
-     * poll finds them moved; what it adds goes through [uploads]; a medium trashed and restored, a chapter made.
-     */
-    fun galleryModel(
-        ref: NodeAt, uploads: me.raddatz.veyq.mobile.memories.MediaUploads, music: me.raddatz.veyq.mobile.audio.PageMusic? = null,
-        calendar: me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar = me.raddatz.veyq.mobile.memories.GalleryFilter.Calendar.UTC,
-    ): me.raddatz.veyq.mobile.memories.GalleryModel =
-        me.raddatz.veyq.mobile.memories.GalleryModel(ref, object : me.raddatz.veyq.mobile.memories.GalleryModel.Door {
-            override suspend fun gallery() =
-                // made offline and not sent yet: nothing listed, nothing asked of the server — what waits to go into it shows
-                if (madeOffline(ref.nodeId)) me.raddatz.veyq.mobile.memories.MemoryMedia.Gallery(emptyList(), 0, 0, offlineNow() ?: me.raddatz.veyq.mobile.session.OfflineAsOf(null))
-                else me.raddatz.veyq.mobile.memories.MemoryMedia.list(tenant, ref.scopeId, ref.nodeId)
-            override suspend fun scopeNodes() = scopeNodesWithQueued(ref.scopeId)
-            override fun shownOffline(at: me.raddatz.veyq.mobile.session.OfflineAsOf?) = tenant.pagesOffline.shown(ref.nodeId, at)
-            override suspend fun read(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, blob: me.raddatz.veyq.mobile.memories.MemoryMedia.Blob) =
-                me.raddatz.veyq.mobile.memories.MemoryMedia.read(tenant, item, blob)
-            override fun reader(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item) =
-                me.raddatz.veyq.mobile.memories.MemoryMedia.reader(tenant, item, item.original)
-            override suspend fun stream(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, sink: suspend (ByteArray) -> Unit) =
-                me.raddatz.veyq.mobile.memories.MemoryMedia.stream(tenant, item, item.original, sink = sink)
-            override suspend fun exif(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item) = me.raddatz.veyq.mobile.memories.MediaDetails.exif(tenant, item)
-            override suspend fun uploaders(items: List<me.raddatz.veyq.mobile.memories.MemoryMedia.Item>) =
-                me.raddatz.veyq.mobile.memories.MediaDetails.uploaders(tenant, ref.scopeId, items)
-            override fun upload(sources: List<me.raddatz.veyq.mobile.blob.UploadSource>) = uploads.upload(ref.scopeId, ref.nodeId, ref.name, sources)
-            override fun upload(sources: List<me.raddatz.veyq.mobile.blob.UploadSource>, filed: suspend (mediaId: String) -> Unit) =
-                uploads.upload(ref.scopeId, ref.nodeId, ref.name, sources, filed)
-            // each read of the lists is a new one (a rebuild after a refresh); a move of the shell alone keeps them
-            override val revisions = state.map { it?.lists }.distinctUntilChanged { a, b -> a === b }
-            override val uploaded = uploads.uploaded
-            override val uploading = kotlinx.coroutines.flow.combine(uploads.tiles(ref.nodeId), queuedTiles(ref.nodeId)) { a, b -> b + a }
-            override val queues get() = tenant.account.queues(me.raddatz.veyq.mobile.offline.Queued.MEDIA_ADD)
-            override suspend fun queueMedia(sources: List<me.raddatz.veyq.mobile.blob.UploadSource>) = uploads.queue(ref.scopeId, ref.nodeId, sources)
-            override suspend fun queueMark(mediaId: String, marked: Boolean) =
-                queues(me.raddatz.veyq.mobile.offline.Queued.MEDIA_MARK) &&
-                    me.raddatz.veyq.mobile.memories.QueuedMemories.mark(tenant.account, tenantId, ref.scopeId, ref.nodeId, mediaId, marked, wallClock())
-            override suspend fun queuedHere() = this@ShellModel.queuedHere(ref.nodeId)
-            override suspend fun moved(since: me.raddatz.veyq.mobile.memories.MemoryMedia.Gallery) =
-                me.raddatz.veyq.mobile.memories.MemoryMedia.moved(tenant, ref.scopeId, ref.nodeId, since)
-            override suspend fun treeMoved() = tenant.treeMoved(ref.scopeId).also { if (it) refresh() }
-            override suspend fun trash(mediaId: String) =
-                if (queues(me.raddatz.veyq.mobile.offline.Queued.MEDIA_TRASH)) {
-                    if (me.raddatz.veyq.mobile.memories.QueuedMemories.trash(tenant.account, tenantId, ref.scopeId, ref.nodeId, mediaId, wallClock())) me.raddatz.veyq.mobile.memories.GalleryModel.Removal.DONE
-                    else me.raddatz.veyq.mobile.memories.GalleryModel.Removal.FAILED
-                } else me.raddatz.veyq.mobile.memories.MemoryMedia.trash(tenant, ref.scopeId, mediaId)
-            override suspend fun restore(mediaId: String) = me.raddatz.veyq.mobile.memories.MemoryMedia.restore(tenant, ref.scopeId, mediaId)
-            override suspend fun createChapter(name: String) =
-                createMemoryNode(ref.scopeId, ref.nodeId, me.raddatz.veyq.mobile.memories.MemoryCreate.CHAPTER, name)
-            override suspend fun cover(nodeId: String) = NodeCover.openNode(tenant, nodeId)
-            override val online = tenant.account.reach.map { it == Reach.Online }.distinctUntilChanged()
-            override suspend fun facts() = me.raddatz.veyq.mobile.memories.place.MemoryFacts.of(tenant, ref.scopeId, ref.nodeId)
-            override suspend fun settle(items: List<me.raddatz.veyq.mobile.memories.MemoryMedia.Item>) =
-                me.raddatz.veyq.mobile.memories.place.MemoryFacts.reconcile(tenant, ref.scopeId, ref.nodeId, items, placeNames)
-            override suspend fun placeName(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, mayWrite: Boolean, slideshow: Boolean) =
-                me.raddatz.veyq.mobile.memories.place.PhotoPlace.resolve(tenant, item, placeNames, mayWrite, slideshow)
-            override val personal = tenant.scopeKind(ref.scopeId) == "PERSONAL"
-            override fun marks() = me.raddatz.veyq.mobile.memories.ItemMarks.of(tenant, ref.scopeId, ref.nodeId)
-            override suspend fun report(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, category: String, reason: String, contact: String) =
-                me.raddatz.veyq.mobile.memories.MediumReport.report(tenant, item, category, reason, contact)
-            override suspend fun reportOffered() = this@ShellModel.reportOffered()
-            override val origin get() = tenant.origin
-            override suspend fun members() = tenant.scopeMembers(ref.scopeId)
-            override suspend fun setParticipants(wanted: List<String>, openedWith: List<String>) =
-                me.raddatz.veyq.mobile.memories.Participants.set(tenant, ref.scopeId, ref.nodeId, wanted, openedWith).also { runCatching { refresh() } }
-            override suspend fun captureTime(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, overrideMs: Long?) =
-                if (queues(me.raddatz.veyq.mobile.offline.Queued.MEDIA_CAPTURE_TIME)) {
-                    // offline it waits to be sent, the field the person saw stated (ADR 0153 decision 4)
-                    if (me.raddatz.veyq.mobile.memories.QueuedMemories.captureTime(tenant.account, tenantId, item, overrideMs, wallClock()))
-                        me.raddatz.veyq.mobile.memories.CaptureTime.Outcome.Done(overrideMs?.let(me.raddatz.veyq.mobile.memories.CaptureTime::minute))
-                    else me.raddatz.veyq.mobile.memories.CaptureTime.Outcome.Failed("no_room")
-                } else if (overrideMs == null) me.raddatz.veyq.mobile.memories.CaptureTime.reset(tenant, item)
-                else me.raddatz.veyq.mobile.memories.CaptureTime.set(tenant, item, overrideMs)
-            override suspend fun bannerPicture() =
-                tenant.node(ref.scopeId, ref.nodeId)?.let { me.raddatz.veyq.mobile.memories.banner.Banner.picture(tenant, it) }
-            override suspend fun bannerReader() =
-                tenant.node(ref.scopeId, ref.nodeId)?.let { me.raddatz.veyq.mobile.memories.banner.Banner.reader(tenant, it) }
-            override suspend fun setBanner(
-                openedWith: me.raddatz.veyq.mobile.memories.banner.Banner.Slots, picked: me.raddatz.veyq.mobile.memories.banner.BannerWrite.Picked,
-                items: List<me.raddatz.veyq.mobile.memories.MemoryMedia.Item>, progress: (Double) -> Unit,
-            ) = me.raddatz.veyq.mobile.memories.banner.BannerWrite.set(tenant, ref.scopeId, ref.nodeId, openedWith, picked, items, progress)
-                .also { runCatching { refresh() } }
-            override suspend fun removeBanner(openedWith: me.raddatz.veyq.mobile.memories.banner.Banner.Slots) =
-                me.raddatz.veyq.mobile.memories.banner.BannerWrite.remove(tenant, ref.scopeId, ref.nodeId, openedWith).also { runCatching { refresh() } }
-        }, access = memoryAccess(ref), now = now, music = music,
-            search = me.raddatz.veyq.mobile.memories.GalleryModel.Search(openRequests, searchContributions), calendar = calendar)
 
     // ---- the search (ADR 0146) ----
 
@@ -1474,7 +1201,7 @@ class ShellModel(
             // the page's own gates: the storage section where a store is kept or why none is said (AccountSettings.Over)
             val storage = account.offline != null || (account.thisDevice.offlineRoot != null && account.trusted == null)
             return me.raddatz.veyq.mobile.search.SettingsSection.offered(
-                me.raddatz.veyq.mobile.search.SettingsSection.Gates(addDevice = linking, storage = storage, maps = placeNames != null, appearance = appearance),
+                me.raddatz.veyq.mobile.search.SettingsSection.Gates(addDevice = linking, storage = storage, maps = builtMaps != null, appearance = appearance),
             )
         }
         override fun where(): me.raddatz.veyq.mobile.search.Results.SearchContext {
@@ -1504,149 +1231,44 @@ class ShellModel(
         if (obj != null) opened(obj) { moved } else update { moved }
     }
 
-    /** Who looks at Memory or chapter [ref] from this shell: a member, as the tenant's switches and the folder say. */
-    private fun memoryAccess(ref: NodeAt) = me.raddatz.veyq.mobile.memories.MemoryRights.Access.Member(
-        memoriesOn = "memories" !in tenant.applicationsOff(), inIdentityFolder = inIdentityFolder(ref),
-    )
-
-    /** What a member may do on Memory or chapter [ref] here. */
-    private fun memoryRights(ref: NodeAt) = me.raddatz.veyq.mobile.memories.MemoryRights.of(memoryAccess(ref), ref.kind)
-
     /**
-     * Where this shell's place names come from ([mapServices] sets it): a settle's `auto` place and a photo's name. Null
-     * before the map services are built: no name is looked up then (a settle still re-medoids).
+     * This tenant's map services once the platform built them ([mapServices]); null before. What a Memory's place names
+     * are looked up through (Memories' `placeNames`, derived from it with [mapsLanguage]), and whether Settings offers the
+     * maps' consent ([mapsOffered]).
      */
-    var placeNames: me.raddatz.veyq.mobile.memories.place.PlaceNames? = null
+    @PlatformApi
+    @HiddenFromObjC
+    var builtMaps: me.raddatz.veyq.mobile.map.MapServices? = null
+        private set
+
+    /** The app's language the map services were built with (the geocoder's `accept-language`). */
+    @PlatformApi
+    @HiddenFromObjC
+    var mapsLanguage: () -> String = { "" }
         private set
 
     /**
      * This tenant's map services on this device ([me.raddatz.veyq.mobile.map.MapServices.of], ADR 0143 D2): one per signed-in
-     * tenant in the process, built beside [mediaUploads] by the platform ([recipient] Apple Maps on Apple; [lang] the app's
-     * language, the geocoder's `accept-language`) and closed where the tenant closes (a lock, a sign-out, a switch) — its
-     * tiles dropped, its geocoder's queue cleared. The shell's place names come from it from then on ([placeNames]).
+     * tenant in the process, built beside the media uploads by the platform ([recipient] Apple Maps on Apple; [lang] the
+     * app's language, the geocoder's `accept-language`) and closed where the tenant closes (a lock, a sign-out, a switch) —
+     * its tiles dropped, its geocoder's queue cleared. The shell's place names come from it from then on ([builtMaps]).
      */
     fun mapServices(recipient: me.raddatz.veyq.mobile.map.TileRecipient, lang: () -> String): me.raddatz.veyq.mobile.map.MapServices =
-        me.raddatz.veyq.mobile.map.MapServices.of(tenant, recipient).also { placeNames = me.raddatz.veyq.mobile.memories.place.PlaceNames(it, lang) }
-
-    /**
-     * Memory or chapter [gallery]'s date editor (ADR 0143 D5), where whoever looks may edit its meta and online; null
-     * otherwise. A save re-reads the page's facts line and the lists (a row shows the range).
-     */
-    fun dateEditor(gallery: me.raddatz.veyq.mobile.memories.GalleryModel): me.raddatz.veyq.mobile.memories.place.DateEditor? {
-        val g = gallery.current
-        if (!g.editsFacts) return null
-        return me.raddatz.veyq.mobile.memories.place.DateEditor(g.facts?.date, g.autoRange) { date ->
-            me.raddatz.veyq.mobile.memories.place.MemoryFacts.setDate(tenant, gallery.node.scopeId, gallery.node.nodeId, date).also {
-                gallery.factsChanged()
-                runCatching { refresh() }
-            }
+        me.raddatz.veyq.mobile.map.MapServices.of(tenant, recipient).also {
+            mapsLanguage = lang
+            builtMaps = it
         }
-    }
-
-    /**
-     * Memory or chapter [gallery]'s place editor (ADR 0143 D5) over the shell's map services ([placeNames]; none: the name
-     * field alone), where whoever looks may edit its meta and online; null otherwise.
-     */
-    fun placeEditor(gallery: me.raddatz.veyq.mobile.memories.GalleryModel): me.raddatz.veyq.mobile.memories.place.PlaceEditor? {
-        val names = placeNames
-        val g = gallery.current
-        if (!g.editsFacts) return null
-        val points = g.gpsPoints
-        return me.raddatz.veyq.mobile.memories.place.PlaceEditor(
-            g.facts?.location, me.raddatz.veyq.mobile.memories.place.MemoryLocation.medoid(points), points, names,
-            save = { place ->
-                me.raddatz.veyq.mobile.memories.place.MemoryFacts.setLocation(tenant, gallery.node.scopeId, gallery.node.nodeId, place).also {
-                    gallery.factsChanged()
-                    runCatching { refresh() }
-                }
-            },
-        )
-    }
-
-    /** The Memories bar's Map tab over [memories] (its All tab's set, ADR 0143 D6): every located one a pin. */
-    suspend fun memoriesMap(memories: List<NodeRef>): me.raddatz.veyq.mobile.memories.place.MemoriesMap =
-        me.raddatz.veyq.mobile.memories.place.MemoriesMap.of(tenant, memories)
-
-    /** The date of every Memory and chapter this tenant opens, by node id: a Memories row's second line (ADR 0143 D5). */
-    suspend fun memoryDates(): Map<String, me.raddatz.veyq.mobile.memories.place.MemoryDate> =
-        runCatching { me.raddatz.veyq.mobile.memories.place.MemoryFacts.dates(tenant) }.getOrDefault(emptyMap())
-
-    /**
-     * Memory or chapter [gallery]'s Map view's tracks over this tenant ([me.raddatz.veyq.mobile.memories.tracks.TrackList],
-     * ADR 0143 D8): picked GPX files checked, queued through [uploads] with their labels, a file not taken handed to [left];
-     * a track relabelled, reported as an ITEM.
-     */
-    fun trackList(
-        gallery: me.raddatz.veyq.mobile.memories.GalleryModel, uploads: me.raddatz.veyq.mobile.memories.MediaUploads,
-        left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit,
-    ): me.raddatz.veyq.mobile.memories.tracks.TrackList =
-        me.raddatz.veyq.mobile.memories.tracks.TrackList(gallery, object : me.raddatz.veyq.mobile.memories.tracks.TrackList.Door {
-            override suspend fun check(source: me.raddatz.veyq.mobile.blob.UploadSource, held: Int) =
-                me.raddatz.veyq.mobile.memories.tracks.TrackUpload.check(source, held)
-            override fun queue(tracks: List<Pair<me.raddatz.veyq.mobile.memories.tracks.TrackUpload.Check.Taken, me.raddatz.veyq.mobile.memories.music.TrackLabel.Label>>) =
-                uploads.uploadTracks(gallery.node.scopeId, gallery.node.nodeId, gallery.node.name, tracks)
-            override fun left(source: me.raddatz.veyq.mobile.blob.UploadSource) = left(source)
-            override suspend fun relabel(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, label: me.raddatz.veyq.mobile.memories.music.TrackLabel.Label) =
-                me.raddatz.veyq.mobile.memories.music.TrackLabel.relabel(tenant, item, label)
-            override suspend fun report(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, category: String, reason: String, contact: String) =
-                me.raddatz.veyq.mobile.memories.MediumReport.report(tenant, item, category, reason, contact)
-            override suspend fun reportOffered() = this@ShellModel.reportOffered()
-            override val origin get() = tenant.origin
-        })
 
     /**
      * The account's music player over the platform's two decks ([newDeck], ADR 0142 decision 2) and its system controls
      * ([controls], decision 3), its order's randomness the suite's (ADR 0142 decision 1). One per signed-in account in the
-     * process, built beside [mediaUploads] and stopped where the tenant closes (a lock, a sign-out, a switch).
+     * process, built beside the media uploads and stopped where the tenant closes (a lock, a sign-out, a switch).
      */
     fun musicPlayer(
         newDeck: (me.raddatz.veyq.mobile.audio.Deck.Events) -> me.raddatz.veyq.mobile.audio.Deck,
         controls: me.raddatz.veyq.mobile.audio.SystemControls?,
     ): me.raddatz.veyq.mobile.audio.MusicPlayer =
         me.raddatz.veyq.mobile.audio.MusicPlayer(newDeck, controls, me.raddatz.veyq.mobile.audio.randomIntOf { tenant.account.suite.p.randomBytes(it) })
-
-    /**
-     * Memory or chapter [gallery]'s Music view over this tenant ([me.raddatz.veyq.mobile.memories.music.MusicModel]): a
-     * picked file checked with the platform's [measure] of its length, the tracks queued through [uploads], a picked file
-     * not taken handed to [left]; a track renamed, reported as an ITEM.
-     */
-    fun musicModel(
-        gallery: me.raddatz.veyq.mobile.memories.GalleryModel, uploads: me.raddatz.veyq.mobile.memories.MediaUploads,
-        measure: me.raddatz.veyq.mobile.memories.music.MusicUpload.Measure, left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit,
-    ): me.raddatz.veyq.mobile.memories.music.MusicModel =
-        me.raddatz.veyq.mobile.memories.music.MusicModel(gallery, object : me.raddatz.veyq.mobile.memories.music.MusicModel.Door {
-            override suspend fun check(source: me.raddatz.veyq.mobile.blob.UploadSource) =
-                me.raddatz.veyq.mobile.memories.music.MusicUpload.check(
-                    source,
-                    endsOf = { type, durationMs, limitMs ->
-                        kotlinx.coroutines.suspendCancellableCoroutine { c -> measure.ends(source, type, durationMs, limitMs) { ends -> c.resume(ends) { _, _, _ -> } } }
-                    },
-                ) { type ->
-                    kotlinx.coroutines.suspendCancellableCoroutine { c -> measure.durationMs(source, type) { ms -> c.resume(ms) { _, _, _ -> } } }
-                }
-            override fun queue(tracks: List<me.raddatz.veyq.mobile.memories.music.MusicUpload.Check.Taken>) =
-                uploads.uploadMusic(gallery.node.scopeId, gallery.node.nodeId, gallery.node.name, tracks)
-            override fun left(source: me.raddatz.veyq.mobile.blob.UploadSource) = left(source)
-            override suspend fun rename(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, name: String?) =
-                me.raddatz.veyq.mobile.memories.music.TrackLabel.rename(tenant, item, name)
-            override suspend fun report(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, category: String, reason: String, contact: String) =
-                me.raddatz.veyq.mobile.memories.MediumReport.report(tenant, item, category, reason, contact)
-            override suspend fun reportOffered() = this@ShellModel.reportOffered()
-            override val origin get() = tenant.origin
-        })
-
-    /**
-     * Drop box [ref]'s page over this tenant ([me.raddatz.veyq.mobile.depot.DropBoxPage]): its guests' folders, read anew on
-     * every revision of these lists.
-     */
-    fun dropBoxPage(ref: NodeAt): me.raddatz.veyq.mobile.depot.DropBoxPage =
-        me.raddatz.veyq.mobile.depot.DropBoxPage(ref, object : me.raddatz.veyq.mobile.depot.DropBoxPage.Door {
-            override suspend fun folders() = me.raddatz.veyq.mobile.depot.DropBoxes.folders(tenant, ref.scopeId, ref.nodeId)
-            // each read of the lists is a new one (a rebuild after a refresh); a move of the shell alone keeps them
-            override val revisions = state.map { it?.lists }.distinctUntilChanged { a, b -> a === b }
-            // a guest's new folder: the scope's tree moved, the lists are read anew and the page with them
-            override suspend fun treeMoved() = tenant.treeMoved(ref.scopeId).also { if (it) refresh() }
-        })
 
     companion object {
         /** The bar's tab that shows the Memories map, no list (`Applications.kt`): a level there offers no view switch. */
@@ -1658,12 +1280,6 @@ class ShellModel(
             AppKinds.Create.MEMORY to me.raddatz.veyq.mobile.offline.Queued.MEMORY_CREATE,
             AppKinds.Create.UPLOAD_FILES to me.raddatz.veyq.mobile.offline.Queued.DEPOT_FILE_ADD,
         )
-
-        /** Memory or chapter [nodeId] of space [scopeId] among [nodes]; null where it is not among them or is another kind. */
-        fun galleryAt(nodes: List<NodeRef>, scopeId: String, nodeId: String): NodeAt? =
-            nodes.firstOrNull { it.scopeId == scopeId && it.nodeId == nodeId }
-                ?.takeIf { it.kind == me.raddatz.veyq.mobile.memories.GalleryModel.MEMORY || it.kind == me.raddatz.veyq.mobile.memories.GalleryModel.CHAPTER }
-                ?.let { NodeAt(it.scopeId, it.nodeId, it.kind, it.name) }
 
         /**
          * A node of [kind]'s download into [sink]: its [own] content where the kind downloads itself
@@ -1706,7 +1322,7 @@ class ShellModel(
             val seen = HashSet<String>()
             var n = byId[nodeId]
             while (n != null && seen.add(n.nodeId)) {
-                val obj = n.asObject() ?: if (n.nodeId == nodeId) me.raddatz.veyq.mobile.memories.GalleryModel.rowPage(n) else null
+                val obj = n.asObject() ?: if (n.nodeId == nodeId) AppKinds.rowPage(n) else null
                 if (obj != null) return shell.open(obj).copy(space = scopeId) to obj
                 if (n.isFolder) return shell.switchSpace(scopeId).at(inSpace, n.nodeId) to null
                 n = n.parentId?.let { byId[it] }

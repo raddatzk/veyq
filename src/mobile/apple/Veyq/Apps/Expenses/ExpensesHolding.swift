@@ -43,7 +43,7 @@ final class ExpensesHolding: Holding {
     /// A Pot's copy is made by the open Pot (`AppKinds.copiesByOpenModel` gives a Pot alone).
     func moveSheet(_ shell: ShellModel, _ node: NodeAt, copying: Bool, changed: @escaping @Sendable () -> Void) -> MoveSheet? {
         guard node.kind == PotSession.companion.KIND else { return nil }
-        return shell.moveSheet(node: node, copying: copying, pot: potModel, deletedName: say(.potDeletedPerson)) { changed() }
+        return shell.moveSheet(node: node, copying: copying, open: potModel, deletedName: say(.potDeletedPerson)) { changed() }
     }
 
     /// Files dropped on the app while a Pot that takes them is open open its new expense with them at once.

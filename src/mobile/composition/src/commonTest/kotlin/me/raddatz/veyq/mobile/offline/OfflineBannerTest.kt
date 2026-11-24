@@ -1,5 +1,8 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.memories.galleryAt
+import me.raddatz.veyq.mobile.memories.galleryModel
+import me.raddatz.veyq.mobile.memories.mediaUploads
 import me.raddatz.veyq.mobile.media.Derivation
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.blob.UploadQueue
@@ -12,7 +15,7 @@ import me.raddatz.veyq.mobile.navigation.ApplicationId
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 import me.raddatz.veyq.mobile.navigation.RecentUses
-import me.raddatz.veyq.mobile.composition.ShellModel
+import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.OfflineAsOf
 import me.raddatz.veyq.mobile.session.TenantSession
 import me.raddatz.veyq.mobile.session.VeyqAccount

@@ -18,7 +18,7 @@ import me.raddatz.veyq.mobile.navigation.Home
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.navigation.ObjectRef
-import me.raddatz.veyq.mobile.composition.ShellModel
+import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.SessionModel
@@ -257,7 +257,7 @@ internal sealed class Call {
     @Serializable @SerialName("Settings.CancelRemoveAll") data class SettingsCancelRemoveAll(val settings: Long) : Call()
 
     /**
-     * The notices of items no longer available offline ([me.raddatz.veyq.mobile.composition.ShellModel.State]'s `gone`,
+     * The notices of items no longer available offline ([me.raddatz.veyq.mobile.navigation.ShellModel.State]'s `gone`,
      * each named where the shell held its name) said: not said again (`goneSeen`).
      */
     @Serializable @SerialName("Shell.OfflineGoneSeen") data object ShellOfflineGoneSeen : Call()

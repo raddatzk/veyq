@@ -6,7 +6,7 @@ import me.raddatz.veyq.mobile.navigation.AddHere
 import me.raddatz.veyq.mobile.navigation.DropOutcome
 import me.raddatz.veyq.mobile.navigation.DropTarget
 import me.raddatz.veyq.mobile.navigation.Dropped
-import me.raddatz.veyq.mobile.composition.ShellModel
+import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.media.Derivation
 import me.raddatz.veyq.mobile.navigation.MoveSheet
 import me.raddatz.veyq.mobile.navigation.NodeAt

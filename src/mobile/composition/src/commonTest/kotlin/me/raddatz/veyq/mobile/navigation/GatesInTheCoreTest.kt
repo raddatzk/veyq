@@ -1,8 +1,11 @@
 package me.raddatz.veyq.mobile.navigation
 
+import me.raddatz.veyq.mobile.memories.galleryAt
+import me.raddatz.veyq.mobile.memories.galleryModel
+import me.raddatz.veyq.mobile.memories.mediaUploads
 import me.raddatz.veyq.mobile.blob.DirectoryWalk
 import me.raddatz.veyq.mobile.media.Derivation
-import me.raddatz.veyq.mobile.composition.ShellModel
+import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.navigation.DropOutcome
 import me.raddatz.veyq.mobile.navigation.DropTarget
 import me.raddatz.veyq.mobile.navigation.Dropped
