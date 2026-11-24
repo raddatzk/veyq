@@ -34,6 +34,13 @@ platform, never the reverse and never another application, read from the build f
 - **(e) What opens stays hidden from Objective-C.** Every `@PlatformApi` declaration of a common or native main source
   set of the platform or an application also carries `@HiddenFromObjC`, so Swift sees what it saw while it was
   `internal` (a JVM or JavaScript set has no such annotation).
+- **(f) The composition holds only what spans applications** (inbox #1048, ADR 0156 entries 67–72). Every main source file
+  of `:composition` is listed in `COMPOSITION_FILES` (by `<source set>/<file name>`) with its written reason; a file not
+  listed is red, and so is an entry whose file left — the list only shrinks. A listed file that names exactly one
+  application (its package `…mobile.<application>` or `…mobile.api.<application>`, in code: comments masked) belongs in
+  that application, or in the platform behind a hook the application registers; one that names none belongs in the
+  platform, unless its entry marks it as wrapping a composition type (`wraps=True`: it holds or extends `ShellModel`).
+  The web's model (`applications.ts` and `registry.ts`): the platform asks the registry, the root only installs.
 
 **The defect that bought it.** None: built with the core's split (ADR 0155 decision 7.1), which replaced
 `validate_mobile_ui_direction.py`'s import rules over one module and its allow-list of 18 files that named
@@ -45,7 +52,8 @@ dependency written another way than `project(":x")` (a variable, a type-safe acc
 declared outside a `<set>.dependencies { }` block is not modelled — the last reads as a main edge (red, never a false
 green); the others are invisible. (d) reads the module test of the convention by its spelled paths, not Gradle's
 evaluation; (e) reads the annotation lines before a declaration, not the compiler's view (an annotation in a block
-comment is masked; one carried by a type alias is not seen).
+comment is masked; one carried by a type alias is not seen). (f) counts an application by its package's name: a kind
+named by its string literal (`"MEMORY"`) or reached through a platform type an application implements is not counted.
 """
 from __future__ import annotations
 
@@ -276,13 +284,61 @@ def rule_e(projects: list[str]) -> list[str]:
     return errors
 
 
+# Every main source file of `:composition`, by `<source set>/<file name>`, with why it is the composition's (rule f). An
+# entry `wraps=False` names two applications or more: what spans them has no one application to live in. `wraps=True`
+# names none, but holds or extends a composition type that does, so it cannot live in the platform either.
+COMPOSITION_FILES: dict[str, tuple[str, bool]] = {
+    "commonMain/AppComposition.kt": ("the composition root: installs every application's part into AppKinds", False),
+    "commonMain/ShellModel.kt": ("the shell's model hands each application's page its model over the shell's state "
+                                  "(a gallery, a file page, a Pot's copy, Depot's and Memories' uploads); its hooks wait "
+                                  "for a design of their own (inbox #1048's hand-back)", False),
+    "commonMain/Drop.kt": ("a drop's targets are a level (Depot's upload) and a page (Memories' gallery and buckets)", False),
+    "commonMain/AddHere.kt": ("Add here's places are a level (Depot's upload) and a page (Memories' gallery)", False),
+    "appleMain/AppleSharing.kt": ("Swift's share-extension handoff over Depot's file page and Memories' upload", False),
+    "appleMain/AppleQueued.kt": ("Swift's view of the shell's queued flows and the QueuedTray", True),
+    "appleMain/FileDownloads.kt": ("Swift's subtree download over ShellModel.download", True),
+    "nativeMain/NodeDownload.kt": ("ShellModel.download into a path, an extension of the composition's ShellModel", True),
+}
+
+
+def rule_f(projects: list[str], apps: list[str]) -> list[str]:
+    """(f) What the composition holds spans applications: every main source file of `:composition` is listed in
+    COMPOSITION_FILES with its reason, and none names a single application (it belongs in that application) or, unless
+    it wraps a composition type, none (it belongs in the platform). A listed file gone is red too: the list only shrinks."""
+    if ":composition" not in projects or not apps:
+        return []
+    errors = []
+    src = repo_layout.mobile_project_dir(":composition") / "src"
+    named = re.compile(r"\b" + re.escape(PKG) + r"\.(?:api\.)?(" + "|".join(map(re.escape, apps)) + r")\b")
+    seen = set()
+    for f in main_sources(":composition"):
+        key = f"{f.relative_to(src).parts[0]}/{f.name}"
+        seen.add(key)
+        entry = COMPOSITION_FILES.get(key)
+        if entry is None:
+            errors.append(f"(f) {rel(f)}: a composition file without its reason in COMPOSITION_FILES — what spans no two "
+                          f"applications lives in the platform or in its one application, behind a registry hook")
+            continue
+        names = sorted(set(named.findall(mask(f.read_text(encoding="utf-8")))))
+        if len(names) == 1:
+            errors.append(f"(f) {rel(f)}: names the application `{names[0]}` alone — it belongs in :apps:{names[0]} "
+                          f"(or the platform, behind a hook `{names[0]}` registers)")
+        elif not names and not entry[1]:
+            errors.append(f"(f) {rel(f)}: names no application — it belongs in :core (or mark it as wrapping a composition type)")
+        elif names and entry[1]:
+            errors.append(f"(f) {rel(f)}: listed as a wrapper yet names {', '.join(names)} — its reason no longer holds")
+    for key in sorted(set(COMPOSITION_FILES) - seen):
+        errors.append(f"(f) COMPOSITION_FILES lists `{key}`, which :composition no longer holds — drop the entry")
+    return errors
+
+
 def main() -> int:
     projects = repo_layout.mobile_projects()
     if not projects:
         print(f"MOBILE MODULE GRAPH VALIDATION FAILED:\n  - {rel(repo_layout.MOBILE_SETTINGS)} includes no project — the rules read nothing.")
         return 1
     apps = applications()
-    errors = rule_a(projects, apps) + rule_b(projects) + rule_c(projects, apps) + rule_d(projects) + rule_e(projects)
+    errors = rule_a(projects, apps) + rule_b(projects) + rule_c(projects, apps) + rule_d(projects) + rule_e(projects) + rule_f(projects, apps)
     if errors:
         print("MOBILE MODULE GRAPH VALIDATION FAILED:")
         for e in errors:
