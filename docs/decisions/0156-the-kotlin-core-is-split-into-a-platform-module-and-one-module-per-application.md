@@ -620,3 +620,45 @@ names were the implementation session's and are not kept.
     6 runs red). Fixed in the test: it waits for the gallery's first read (`rows != null`) before counting — 30 of 30
     green after, the Windows VM and the JVM green. A first fix that filtered GETs out raced the list itself
     (`ConcurrentModificationException`, 1 of 20) and was dropped.
+
+67. **2026-11-24 — Inbox #1048 measured against the branch.** The row's 17 `CORE_ROOTS` were gone since entry 26: the
+    split moved them into `:composition` (decision 3), and `:core` names no application by the build (measured:
+    `validate_mobile_module_graph.py` OK, `grep -rE 'mobile\.(depot|expenses|memories)' src/mobile/core/src` only a KDoc
+    line). What the row still meant: the composition was the old allow-list under another name — eleven files beside
+    `AppComposition.kt`, not the web's `applications.ts` that only installs. So #1048 became: each composition file that
+    spans no two applications leaves it, for its one application or for the platform behind a hook the application
+    registers, and a guard holds the rest (entry 72).
+68. **2026-11-24 — A directory's walk is the platform's.** `FolderUpload.Found`/`Kind` were Depot's although a directory
+    is dropped onto any page (`Dropped.Folder`) and walked by every platform's door; they move to core's
+    `blob.DirectoryWalk`, Depot keeps what it keeps of a walk (`FolderUpload.keeps`/`walked`). Then `PickedPaths` (the
+    desktops' walk) and `ApplePlatform` (Swift's) name no application and return to core (`blob/` nativeMain,
+    appleMain). `FilesTest` moved with `PickedPaths` and asserts the walk by kind; Depot's `FolderUploadTest` holds the
+    keep rule. Swift and the bridge see the same members (`DirectoryWalkFound` for `FolderUploadFound`, a name no Swift
+    file spells). Alternative rejected: a `typealias` in Depot — Kotlin has no nested type alias.
+69. **2026-11-24 — A Pot's Apple download is Expenses'.** `FileDownloads.pot` becomes `AppleSessions.downloadPot`, a
+    category in Expenses' `appleMain` beside its `openPot`/`openReceipt` (entry 3's pattern); one Swift call site changed.
+70. **2026-11-24 — The rows' details, the tray's lines and the share sheet's shape are hooks.** `RowDetails` reads
+    `ApplicationKinds.rowParts` (Depot's files and drop boxes, Expenses' Pots; each part read on its own, a failed part
+    keeping its rows as before; its unused `Read.files` dropped). `QueuedTray` asks `ApplicationKinds.queuedShown` for the
+    writes that carry an application's content (Expenses' entry: its title, Open, a receipt's save name). `ShareSheet`
+    asks `ApplicationKinds.shareShape` (a drop box `WRITE_ONLY`, a Memory and a chapter `UPLOAD_LINK`) — it also replaced
+    the literals `"MEMORY"`/`"CHAPTER"` the sheet held — and its door's *Add files only* answers `ShareSheet.Made` (the
+    link, or why not), Depot's mapping `DropBoxes.made`. All three now live in core (`navigation/`, `offline/`). Each
+    registration a forgotten one could break is held: `RowPartsTest`; `AppKinds.install` refuses a row part's key or a
+    tray op claimed twice; `ShareSheetTest`/`KindsContractTest` read the shapes through the composed registry. Behaviour:
+    every existing test green unchanged but the doors' return type (entry 72's checks).
+71. **2026-11-24 — What stays in the composition, and why.** `ShellModel` (it hands each application's page its model
+    over the shell's private state — a gallery, a file page, Depot's and Memories' uploads, a Pot's copy; moving those
+    means either opening the shell's state to the applications as `@PlatformApi` or turning ~40 factories into hooks,
+    and changes every client's call sites, the desktops' through the bridge); `Drop` and `AddHere` (their targets are a
+    level, Depot's upload, and a page, Memories' gallery: a hook needs a platform "page intake" both implement, which
+    changes `DropTarget`/`AddHere`'s public shape on every client); `AppleSharing` (Swift's share handoff over Depot's
+    file page and Memories' upload); and the wrappers of composition types `AppleQueued`, `FileDownloads.subtree`,
+    `NodeDownload`. Each is a design of its own and is handed back (inbox #1215), not forced here.
+72. **2026-11-24 — The guard: rule (f) of `validate_mobile_module_graph.py`.** Every main file of `:composition` is
+    listed in `COMPOSITION_FILES` with its reason; an unlisted file is red, an entry whose file left is red, a listed file
+    naming exactly one application is red ("belongs in :apps:x"), and one naming none unless marked as wrapping a
+    composition type. Measured first against the tree before the tray and sheet moved: red on exactly `QueuedTray.kt`
+    (expenses alone) and `ShareSheet.kt` (depot alone) — what entry 70 then moved. Pinned as `validate_guard_gaps.py`
+    cases 133 (Expenses' `PotExport` imported into `FileDownloads.kt` again), 134 (a new unlisted file), 135 (a listed
+    file deleted).
