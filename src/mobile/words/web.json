@@ -152,6 +152,7 @@
     "file_empty": ["depot.viewer.unsupported.empty"],
     "file_open_failed": ["depot.viewer.error"],
     "file_opening": ["depot.viewer.loading"],
+    "file_pdf_page": ["pdf.page", "pdf.pageOf"],
     "file_pdf_password_declined": ["depot.viewer.unsupported.pdf-password"],
     "file_pdf_password_hint": ["depot.viewer.pdf.passwordHint"],
     "file_pdf_password_title": ["depot.viewer.pdf.passwordTitle"],

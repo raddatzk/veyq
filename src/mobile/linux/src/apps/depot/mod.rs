@@ -4,6 +4,7 @@
 //! each page to the core UI's registry.
 pub mod drop_box;
 pub mod file_page;
+pub mod pdf_reading;
 pub mod pdf_text;
 pub mod replace;
 

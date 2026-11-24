@@ -11,8 +11,10 @@ license = "AGPL-3.0-only"
 
 [dependencies]
 # GTK 4.22 and libadwaita 1.9 are what Fedora 44 carries (gtk4-4.22.5, libadwaita-1.9.4, measured 2026-11-10); 1.9 for
-# AdwSidebar, the shell's sidebar.
-gtk = { package = "gtk4", version = "0.11", features = ["v4_20"] }
+# AdwSidebar, the shell's sidebar. v4_22 for a PDF page's `GtkAccessibleText` caret a screen reader sets (inbox #963; the
+# interface is 4.14's, its extents 4.16's): Fedora 44's 4.22.5 and the Flatpak's org.gnome.Platform//51 (GTK 4.24.1,
+# measured 2026-11-24) both carry it.
+gtk = { package = "gtk4", version = "0.11", features = ["v4_22"] }
 adw = { package = "libadwaita", version = "0.9", features = ["v1_9"] }
 # A receipt's PDF (ADR 0123's Consequences, Expenses whole): poppler-glib's bindings, kept in GNOME's World/Rust group beside gtk-rs
 # (0.26.0 of 2026-02-21 on crates.io, its repository active, measured 2026-11-12); it binds the glib and cairo gtk4 0.11 uses.

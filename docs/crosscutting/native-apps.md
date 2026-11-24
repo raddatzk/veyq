@@ -710,7 +710,16 @@ pages, a double click a word and a triple a line, Ctrl+A every page shown, Ctrl+
 of the text logged (a count of characters) or written. Passed in Broadway against the dev instance the same day: a
 heading of the 25-page report highlighted by a drag (25 characters), Ctrl+C, a word by a double click and the menu's
 *Copy* (10), Ctrl+A over the 25 pages (43,115), each read back from the clipboard in the app's debug build as the
-selection; `jpx.pdf` (a picture, no text layer) highlighted nothing and offered no Copy. On Windows a PDF opens in WebView2's own PDF viewer, served from memory, InPrivate, in a
+selection; `jpx.pdf` (a picture, no text layer) highlighted nothing and offered no Copy. Built 2026-11-24 (inbox #963,
+Orca's pass owed): a screen reader reads each page — its area over the picture (`pdf_reading.rs`'s `PageText`) implements
+GTK's `GtkAccessibleText` over poppler's text of that page (`poppler_page_get_text` and, for the extents and the
+character under a point, `poppler_page_get_text_layout`, unbound in poppler-rs 0.26 and called through its `ffi`), a
+read-only multi-line text box named "Page N of M", focusable: Tab from page to page, the arrows move its caret (Ctrl by
+word, Home/End the line, Ctrl+Home/End the page), a press puts the caret at the character pressed. The text is read when
+an assistive technology first asks, held in memory with the page, never logged (a count) or written. The pointer's
+selection is not told as the text's selection (it lives in page points, not offsets); a paragraph is told as its line
+(a PDF's text names none). Built on gtk4-rs 0.11's `v4_22` (the caret a screen reader sets; Fedora 44 carries 4.22.5,
+org.gnome.Platform//51 4.24.1). On Windows a PDF opens in WebView2's own PDF viewer, served from memory, InPrivate, in a
 user-data folder deleted after it, offline by its arguments — taken after a measurement found no byte of the PDF or its
 text on disk and nothing off the device, and held to it by `PdfWebTest` ([ADR 0123](../decisions/0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md)'s
 Windows Depot; [src/mobile/CLAUDE.md](../../src/mobile/CLAUDE.md) § Nothing on disk the app did not choose). Passed on the
