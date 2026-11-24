@@ -6381,6 +6381,16 @@
     "en": "The link is missing its key (the part after #k=). Copy the whole link again.",
     "de": "Dem Link fehlt sein Schlüssel (der Teil nach #k=). Kopiere den ganzen Link noch einmal."
   },
+  "link_problem_no_link_in_text": {
+    "en": "What was shared with veyq holds no link.",
+    "de": "Was mit veyq geteilt wurde, enthält keinen Link.",
+    "note": "A text shared to the app from another app (Android's share sheet, iOS's share extension) with no http(s) link in it (inbox #1015)."
+  },
+  "link_problem_several_links": {
+    "en": "What was shared with veyq holds more than one share link. Share or paste only the one you want to open.",
+    "de": "Was mit veyq geteilt wurde, enthält mehr als einen Freigabelink. Teile nur den Link, den du öffnen willst, oder füge ihn ein.",
+    "note": "A shared text with two or more different veyq share links: which one was meant is never guessed (inbox #1015)."
+  },
   "link_problem_moderation": {
     "en": "This is a moderator’s review link. It opens only in the browser.",
     "de": "Das ist ein Prüflink für die Moderation. Er öffnet nur im Browser."
