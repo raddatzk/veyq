@@ -54,6 +54,8 @@ class MediaMetadataFixtureTest {
             Triple("exif-sample-xmp.heic", "image/heic", json(bundle)),
             Triple("exif-sample-compressed.png", "image/png", json(bundle)),
             Triple("exif-sample-extended.jpg", "image/jpeg", json(bundle)),
+            // inbox #1185: a TIFF laid out as macOS writes one (IFD0 last), its XMP in tag 700
+            Triple("exif-sample-xmp.tif", "image/tiff", json(bundle)),
         )) {
             val read = MediaMetadata.read(photo(name), type, NOW)
             assertEquals(taken, read.capturedAt, name)
@@ -88,9 +90,12 @@ class MediaMetadataFixtureTest {
 
     @Test
     fun theDigitisedDateAndAnIptcObjectNameAreTaken() = runTest {
-        val read = MediaMetadata.read(photo("exif-sample-iptc.jpg"), "image/jpeg", NOW)
-        assertEquals(local(2019, 3, 4, 5, 6, 7), read.capturedAt)
-        assertEquals(json("""{"v":1,"title":"Hofgarten"}"""), read.exif)
+        // inbox #1185: the PNG's IPTC a raw profile, as exiftool writes one
+        for ((name, type) in listOf("exif-sample-iptc.jpg" to "image/jpeg", "exif-sample-iptc.png" to "image/png")) {
+            val read = MediaMetadata.read(photo(name), type, NOW)
+            assertEquals(local(2019, 3, 4, 5, 6, 7), read.capturedAt, name)
+            assertEquals(json("""{"v":1,"title":"Hofgarten"}"""), read.exif, name)
+        }
     }
 
     @Test

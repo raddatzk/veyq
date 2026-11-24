@@ -905,6 +905,71 @@ Measured before the decision (2026-11-20):
     `media.test.ts` and the web's `media.vectors.test.ts` (6, 2, 2, 1 and 3 of them), and the web's
     `readExif.fixture.test.ts` red for the HEIC and the PNG fixture.
 
+  D11's residual, inbox #1185 (built 2026-11-24, branch `claude/media-1185`; the trigger: what the row named, measured
+  against the writers a user has — macOS's `sips`, exiftool 13.44, ImageMagick 7 — rather than remembered). The core's
+  `ExifReader` now reads a TIFF block's own **XMP** (IFD0's tag 700, `XMLPacket`) and **IPTC** (tag 33723, `IPTC-NAA`)
+  where the container carries none of its own, walks a **bare TIFF by its IFDs' offsets** past its first MiB (macOS and
+  ImageMagick write IFD0 behind the pixels), and reads a PNG's **raw IPTC profile** (`Raw profile type iptc`) in
+  exiftool's and ImageMagick's forms; two fixtures (`exif-sample-xmp.tif`, `exif-sample-iptc.png`,
+  `scripts/make_exif_fixture.py`) and 24 tag cases (`… (#1185)`, 165 in all) hold it, and `ExifReaderDamageTest` cuts and
+  flips both fixtures as it does #1141's three. Its gate, against `7bb824054`:
+
+  | Criterion | Measured | Bound |
+  |---|---|---|
+  | size: the platform module, every entry | 69,251 → 70,175 B gz (+924) | the running budget, 80,094 |
+  | size: the eager set | +864 B gz (661,319 → 662,183: the Kotlin in the `review` chunk +852, `main` +13); the slice's +9,694 and #1141's +1,508 with it +12,066 | 14,427 at R (the slice's) |
+  | size: any lazy chunk | +5 B gz at most (`PersonMemories`) | ≤ 1,024 |
+  | time (Node 22, #1141's bench with three corpora more, its old reader over happy-dom's `DOMParser`; median of 15 after 3 warm-ups, three runs at a load of 9–13 from other agents) | `all` over 50 TIFFs with IFD0, its XMP and its IPTC behind 4 MB of pixels 1.10× (≤ 8.6 ms; the old reader read nothing of them), `date` over them 1.51–1.67× (≤ 9.6 ms); `all` over 50 TIFFs with IFD0 and tag 700 at the head 0.66–0.68× (answers identical); `all` over 50 PNGs with a raw IPTC profile behind 3 MB of `IDAT` 0.54–0.57× (≤ 8.9 ms); the slice's rules unchanged (`imageSizeFromHeader` 1.34–1.41×, `date` over JPEGs 0.99–1.36×, `all` 0.31–0.32×, `date` over HEICs 0.63–0.64×) | ≤ 2.5× and ≤ 100 ms |
+  | answers | the writers' own files through the built package (D15): a 4.5 MB `sips` TIFF its title, rating, IPTC object name and EXIF (before: nothing), ImageMagick's and exiftool's 4.5 MB TIFFs their XMP (before: nothing), the small ones their XMP and IPTC (before: a `sips` one its EXIF alone), the three PNGs their IPTC object name; every new fixture as `exiftool` 13.44 reads it | — |
+  | tests | bitten (D20) | — |
+
+  - **D15 — What the library read, measured.** *Q:* the row said the library read a TIFF's tag 700 ("remembered from its
+    source") and a PNG's raw IPTC profile. *Evidence:* the slice's old reader (ExifReader 4.54.0, the deleted
+    `exifTags.ts`, under happy-dom's `DOMParser`) and the core at `7bb824054`, through the built package, over each
+    writer's file (`scratchpad/m1185/probe-old.mjs`, `probe.mjs`): the library read tag 700 and 33723 of a TIFF within its
+    first MiB — a small `sips`, exiftool or ImageMagick TIFF — and **nothing** of a camera-sized one from `sips` or
+    ImageMagick (the web handed it the first MiB, and IFD0 lies behind the pixels: 4,500,450 of 4,505,644 bytes); and **no
+    PNG raw IPTC profile in either writer's form** — ImageMagick's is named `iptc` but holds the datasets bare, which the
+    library's resource walk refuses, exiftool's holds Photoshop's resources but is named `IPTC profile`, which its header
+    check refuses: the row's "the library read it" was wrong. The core read none of these, of a small `sips` TIFF its
+    EXIF alone. *Choice:* tag 700 and 33723 restore what the library read; the walk by offsets and the PNG's IPTC profile
+    read what neither did, the forms every TIFF macOS exports and every PNG exiftool tags carry.
+  - **D16 — A bare TIFF walked by its offsets.** *Q:* IFD0, its values and the sub-IFDs may lie anywhere in the file.
+    *Options:* (a) read more of the head (no bound holds a file whose IFD0 is last); (b) a walk over a `suspend` reader
+    (every TIFF read twice over, the in-memory blocks of a JPEG or a HEIF too); (c) the walk unchanged over the windows it
+    holds, noting each range it misses, run again once they are read. *Choice:* (c): the head stays the first
+    `TIFF_PREFIX` (1 MiB); each miss is read as a window of `WINDOW` (128 KiB) (or the value's length) from where it is wanted, at most 64
+    windows and `SLICED_MAX` (4 MiB) bytes beyond the head, in at most 8 rounds; each round reads what the last did and more, so
+    the last one's tags stand. IFD offsets are `Double`s now (a TIFF past 2 GiB). *Evidence:* the vectors' IFD0 behind 2 MB
+    of pixels, an Exif IFD and a tag 700 behind them (each ≤ 1 MiB + 2 windows read); the probe's 4.5 MB `sips` TIFF read
+    in 1,053,782 bytes. *Cost:* a walk run up to 8 times (an IFD is ≤ 12 KB), a TIFF whose tags lie in more than 64
+    places reads what the first 64 hold.
+  - **D17 — A TIFF block's own XMP and IPTC give way to the container's**, as the library gave a carried block way: tag
+    700 and 33723 are read from IFD0 alone (the Exif IFD's are not the image's), in any TIFF block — a bare TIFF, a JPEG's,
+    a PNG's, a WebP's or a HEIF's Exif — and applied once the container is read, unless it holds an XMP block of its own
+    (a JPEG's XMP segment, even one that does not scan, as the library's did; a PNG's XMP `iTXt` or raw XMP profile; a
+    WebP's `XMP `; a HEIF's XMP item) or an IPTC block (a JPEG's `APP13`, a PNG's raw IPTC profile). Tag 700 as `BYTE` or
+    `UNDEFINED` (the library's number arrays), not `ASCII`; tag 33723 also as `LONG`, its bytes as they lie (exiftool
+    writes it so; the library cut each `LONG` to a byte). A value up to `SLICED_MAX` (4 MiB), not the 64 KiB of an ordinary tag: a
+    Lightroom packet with its develop history passes that.
+  - **D18 — A PNG's raw IPTC profile.** The keyword in any case, as the other raw profiles; the profile's name line any
+    line of at most 64 bytes (`iptc`, ImageMagick's; `IPTC profile`, exiftool's); its bytes Photoshop's resources (an
+    `8BIM` first: exiftool) or the datasets bare (ImageMagick). ImageMagick's `Raw profile type 8bim` beside it is not
+    read: it writes the `iptc` one whenever it has IPTC.
+  - **D19 — Left, with no writer seen** (inbox #1240): an IPTC character set other than UTF-8 or Latin-1 — `sips` writes
+    `1:90` as UTF-8 (ESC % G), exiftool names UTF-8 or nothing, and a set the record does not name is read as before
+    (UTF-8, else Latin-1); and a HEIF item with a `content_encoding` — libheif's metadata compression is an option its
+    encoder leaves off, Apple's and Android's HEICs carry the XMP plain (#1141's `sips` HEIC), and such an item's bytes
+    do not scan as XMP, so it reads as none rather than as something wrong.
+  - **D20 — The bites** (each mutation alone on the JVM, then all at once through the package and the web, restored with
+    `/bin/cp -f`): tag 700 not read (B1: 8 vector cases red and the damage test's fixture check), the walk run once
+    over the head alone (B2: 3), the carried XMP read over the container's own (B3: 3), tag 33723 refused as `LONG` (B4:
+    1), the raw IPTC profile's keyword misspelt (B5: 4 and the fixture check), the name line held to 4 bytes (B6: 2 and
+    the fixture check), the resources read as bare datasets (B7: 2 and the fixture check), a carried value held to 64 KiB
+    (B8: 1) — in the core's `MediaVectorsTest`; all eight at once (B1 hiding B3's three) 13 cases red in the package's
+    `media.test.ts` and the web's `media.vectors.test.ts` alike, and the web's `readExif.fixture.test.ts` red for both new
+    fixtures.
+
 - **The export archive's slice** (decision 7.2's sixth, built 2026-11-23, branch `claude/export-archive-slice`). A download's
   store-only ZIP — written (`export/ZipWriter`), its exact length before the first byte (`ZipWriter.length`), read and
   distrusted (`export/ZipReader`), the CRC-32 both run (`export/Crc32`) — and the manifest's check and payload walk

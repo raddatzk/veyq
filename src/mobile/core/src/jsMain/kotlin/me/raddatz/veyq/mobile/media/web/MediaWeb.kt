@@ -134,6 +134,6 @@ private fun project(t: ExifTags?, scope: String): ExifShape? {
 @JsExport
 fun exifChunkedPrefix(): Int = ExifReader.CHUNKED_PREFIX
 
-/** The most of a bare TIFF the tags are read from ([ExifReader.TIFF_PREFIX]). */
+/** A bare TIFF's head the tags are read from first ([ExifReader.TIFF_PREFIX]); what its IFDs point at beyond it is read where it is. */
 @JsExport
 fun exifTiffPrefix(): Int = ExifReader.TIFF_PREFIX

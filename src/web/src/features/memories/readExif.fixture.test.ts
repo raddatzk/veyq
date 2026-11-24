@@ -61,6 +61,8 @@ describe('media.ts over the real EXIF reader', () => {
     ['exif-sample-xmp.heic', 'image/heic', BUNDLE],
     ['exif-sample-compressed.png', 'image/png', BUNDLE],
     ['exif-sample-extended.jpg', 'image/jpeg', BUNDLE],
+    // inbox #1185: a TIFF laid out as macOS writes one (IFD0 last), its XMP in tag 700 - the title is XMP-only
+    ['exif-sample-xmp.tif', 'image/tiff', BUNDLE],
   ])('%s: the date and the position in the listed tier, the rest in the panel bundle', async (name, mediaType, exif) => {
     expect(await sealedFrom(name, mediaType)).toEqual({
       meta: { dims: null, ...SAMPLE, exif },
@@ -88,9 +90,13 @@ describe('media.ts over the real EXIF reader', () => {
     })
   })
 
-  it('takes the digitised date when there is no original one, and an IPTC object name for a title', async () => {
+  it.each([
+    ['exif-sample-iptc.jpg', 'image/jpeg'],
+    // inbox #1185: the same tags in a PNG, its IPTC a raw profile as exiftool writes one
+    ['exif-sample-iptc.png', 'image/png'],
+  ])('%s: takes the digitised date when there is no original one, and an IPTC object name for a title', async (name, mediaType) => {
     const digitised = new Date(2019, 2, 4, 5, 6, 7).getTime()
-    expect(await sealedFrom('exif-sample-iptc.jpg', 'image/jpeg')).toEqual({
+    expect(await sealedFrom(name, mediaType)).toEqual({
       meta: { dims: null, capturedAt: digitised, exif: { v: 1, title: 'Hofgarten' } },
       captureTime: { capturedAt: digitised, capturedAtSource: 'exif' },
     })
