@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { readRevisionBody, RevisionFormatInvalid, type MoneyContent } from './domain/format'
-import { buildLedger, entryProblem, namedParticipants, settleUp, splitBreaks, type PotLedger } from './domain/ledger'
+import { buildLedger, convertToBase, entryEffect, entryProblem, namedParticipants, settleUp, splitBreaks, type PotLedger } from './domain/ledger'
 import { checkLedger, currentHeads, headsToName } from './domain/heads'
 import type { HeldRevision } from './domain/revisions'
 import { amountText, decimalOf, formatMoney, parseAmount, parseRate } from '@veyq/core-js/expenses'
@@ -47,9 +47,24 @@ const ledgerJson = (l: PotLedger) => ({
     byCategoryAndPerson: pairs(l.overview.byCategoryAndPerson, (m) => pairs(m)),
   },
 })
+// `rounding` through what the web calls: an expense split by shares in join order is the allocation, its weights scaled
+// to integers (the package's `expenses.test.ts` does the same)
+const P = (i: number) => `0e000000-0000-4000-8000-${String(i).padStart(12, '0')}`
+const gcd = (a: bigint, b: bigint): bigint => (b === 0n ? a : gcd(b, a % b))
+function allocated(total: number, weights: string[]): number[] {
+  const fr = weights.map((w) => w.split('/').map(BigInt) as [bigint, bigint?])
+  const common = fr.reduce((acc, [, d = 1n]) => (acc * d) / gcd(acc, d), 1n)
+  const shares = fr.map(([n, d = 1n], i) => ({ participant: P(i + 1), shares: Number((n * common) / d) }))
+  const content = { kind: 'expense', title: 'x', category: 'other', date: '2026-01-01', currency: 'EUR', minorUnits: 2, rate: '1', amount: total, receipts: [],
+    payers: [{ participant: P(0), amount: total }], allocation: { items: [], rest: { mode: 'shares', shares } } } as MoneyContent
+  const effect = entryEffect(content, { currency: 'EUR', minorUnits: 2 }, new Map(shares.map((y, i) => [y.participant, i])))
+  return shares.map((y) => Number(effect.shares.get(y.participant)))
+}
 const big = (n: bigint | null) => (n === null ? null : n.toString())
 
 const answers: Record<string, (c: any) => unknown> = {
+  conversion: (c) => Number(convertToBase(BigInt(c.amount), c.minorUnits, c.rate, c.baseMinorUnits)),
+  rounding: (c) => allocated(c.total, c.weights),
   read: (c) => readAnswer(() => readRevisionBody(c.body)),
   check: (c) => {
     const held = (c.held as any[]).map(heldOf)

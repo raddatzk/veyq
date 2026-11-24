@@ -1156,6 +1156,8 @@ Measured before the decision (2026-11-20):
   | time: `checkLedger`, the same | 5.3–5.9 ms against 4.9–5.3 (1.11×) | ≤ 2.5× and ≤ 100 ms |
   | answers | identical (one digest over balances, settle-up, the category overview and the check) | identical |
   | behaviour | the web's tests pass with their imports changed; the twins' tests of the ledger, the heads, the codec, the member participants and the amounts stay and pass through the glue unchanged but one line (codec's padding case reads the plaintext's length without the deleted writer) | identical |
+  | delivery | three clean builds (`dist/` removed, `./gradlew --no-daemon --rerun-tasks :composition:jsPackage`), one digest over `dist/`'s 225 files: `e8feaecc…562372ce`; `verify:csp`, `verify:license-sources` green | identical |
+  | tests | a +1 in `Ledger.settleUp` turns 18 cases of the package's `expenses.test.ts` and 15 of the web's `vectors.test.ts` red (the `ledger`, `settleUp` and Pot sections); half-even in `Money.roundHalfAwayFromZero` 3 and 3 (`conversion` #2, #5, #8) — the web's run gained the `conversion` and `rounding` sections for it: without them the half-even bite passed the web's vectors (measured first) | each red |
 
   The move's decision log, kept by its implementer (question, choice and why, evidence, cost):
   - *Replayed, not rebuilt.* The parked commits (`claude/p2-impl`: the vectors, the JSON seam and the pure homes, the
