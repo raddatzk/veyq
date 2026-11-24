@@ -75,8 +75,16 @@ class MainActivity : ComponentActivity() {
         if (DeepLink.parse(uri) is DeepLink.Link && model.guests.asking.value == null) model.guests.ask()
     }
 
-    /** What another app shared, read now (its permission is this intent's) and handed to the model to be placed. */
+    /**
+     * What another app shared, read now (its permission is this intent's): a text alone opens the link in it as *Open a
+     * link* does (inbox #1015, ADR 0150 § S); files are handed to the model to be placed.
+     */
     private fun receive(intent: android.content.Intent?) {
+        val text = ShareIn.textOf(intent)
+        if (text != null) {
+            model.guests.receive(text)
+            return
+        }
         ShareIn.from(this, intent)?.let(model::receiveShare)
     }
 

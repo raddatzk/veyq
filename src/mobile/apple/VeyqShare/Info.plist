@@ -3,7 +3,8 @@
 <plist version="1.0">
 <dict>
 	<!-- veyq's share extension (ADR 0138): offered for every share whose attachments are data (decision 1: a folder takes
-	     any file; a text or a link shared says nothing could be taken). -->
+	     any file). public.url and public.plain-text conform to public.data, so a link or a text shared reaches it too, and opens
+	     as its guest (inbox #1015, ADR 0150 § S). -->
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionPointIdentifier</key>

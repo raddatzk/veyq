@@ -77,6 +77,17 @@ class GuestLinks(
         }
     }
 
+    /**
+     * A text another app shared (inbox #1015, ADR 0150 § S): *Open a link*'s field over whatever shows, its link checked
+     * ([OpenLink.received]) and opened at once where it opens; where not, the field stays with its reason (and, for a
+     * moderator's review, *Open in the browser*) — what a paste of the same text would have shown.
+     */
+    fun receive(text: String) {
+        ask()
+        _asking.value?.received(text)
+        if (_asking.value?.state?.value?.canOpen == true) openAsked()
+    }
+
     fun cancelAsk() {
         _asking.value = null
     }

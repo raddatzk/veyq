@@ -43,6 +43,24 @@ class OpenLink(private val opener: (ReceivedLink.ShareLink, report: Boolean) -> 
         )
     }
 
+    /**
+     * A text another app shared to veyq (inbox #1015, ADR 0150 § S): the one link in it ([SharedText.linkIn]) checked as a
+     * pasted one is ([text]) — the platform then opens it where [State.canOpen], as *Open a link* does. A text with no link,
+     * or with several, leaves the field empty with its reason: nothing of a text that is no link to open stays on screen.
+     */
+    fun received(shared: String) {
+        when (val found = SharedText.linkIn(shared)) {
+            is SharedText.Found.One -> text(found.text)
+            SharedText.Found.None -> refuse(Msg.LINK_PROBLEM_NO_LINK_IN_TEXT)
+            SharedText.Found.Several -> refuse(Msg.LINK_PROBLEM_SEVERAL_LINKS)
+        }
+    }
+
+    private fun refuse(problem: Msg) {
+        parsed = null
+        _state.value = State(problem = problem)
+    }
+
     /** The link opened as its guest: a fresh guest view, not loaded yet ([GuestScreen.load]). Null while the text is no link. */
     fun open(): GuestView? {
         val ok = parsed ?: return null
