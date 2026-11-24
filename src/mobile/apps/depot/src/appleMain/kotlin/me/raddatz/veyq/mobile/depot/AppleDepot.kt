@@ -10,6 +10,15 @@ import me.raddatz.veyq.mobile.session.TenantSession
 import platform.Foundation.NSData
 import platform.Foundation.NSURL
 import platform.Foundation.create
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import me.raddatz.veyq.mobile.blob.FileSave
+import me.raddatz.veyq.mobile.blob.FileSink
+import me.raddatz.veyq.mobile.sharing.AppleSharing
+import me.raddatz.veyq.mobile.sharing.GuestLevel
+import me.raddatz.veyq.mobile.words.Msg
+import me.raddatz.veyq.mobile.words.Notice
 
 /**
  * Depot's files for the Apple app: what Swift cannot hand core itself — an upload reads the picked file at any offset a
@@ -56,4 +65,35 @@ object AppleDepot {
         is FileModel.Shown.Pdf -> shown.bytes.toNSData()
         else -> null
     }
+}
+
+// Depot's part of Swift's door into a received link ([AppleSharing]): a guest's folder uploaded, a guest's file saved, as
+// extensions of it, so Swift calls them where it did (`AppleSharing.shared.saveFile(…)`, a category of `AppleSharing`;
+// ADR 0156, the pattern of Expenses' `AppleSessions` extensions).
+
+/**
+ * A READ_WRITE guest's folder upload into [level] ([DepotGuest.uploadFolder]), off the caller's thread: what it says, each
+ * line — one that threw says the folder failed, never nothing.
+ */
+suspend fun AppleSharing.guestUploadFolder(level: GuestLevel, path: String, found: List<DirectoryWalk.Found>): List<Notice> =
+    withContext(Dispatchers.Default) {
+        try {
+            DepotGuest.uploadFolder(level, null, path, found).said
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            listOf(Notice(Msg.DEPOT_FOLDER_FAILED, FolderUpload.rootName(null, path)))
+        }
+    }
+
+/**
+ * A guest's file saved at [path] (`FileModel.save` into core's [FileSink], which leaves nothing at [path] when it did not
+ * finish), awaited to its end; null where there is nothing to save.
+ */
+@Throws(Exception::class)
+suspend fun AppleSharing.saveFile(file: FileModel, path: String): FileSave.End? {
+    val save = file.save { produce ->
+        withContext(Dispatchers.Default) { FileSink.write(path, kept = { it }) { sink -> produce(sink) } }
+    } ?: return null
+    return save.state.first { it.end != null }.end
 }

@@ -316,6 +316,21 @@ passes recorded; ADR 0156, `src/mobile/CLAUDE.md`, `docs/apps/README.md`, `docs/
 coverage YAMLs updated; no `satisfies:` use case (structural, no acceptance criterion changes) and no `site/` page
 affected (none names these types).
 
+## Decision log
+
+Built 2026-11-24 on `claude/composition-root-1215` from `0e922e641` (owner go 2026-11-24: "alle drei, los").
+
+1. **Phase 0 — baseline measured.** `./gradlew --continue compileKotlinJs compileTestKotlinJs jvmTest macosArm64Test
+   :composition:assembleVeyqCoreDebugXCFramework` exit 0 (28 min, a fresh worktree builds libsodium and libwebp);
+   3,177 executed JVM and macOS test cases saved, and the header's selectors (every `@interface`/`@protocol` member of
+   `VeyqCore.h`, 22,922 lines) — the whole header, not only the touched classes, so an unplanned rename anywhere shows.
+2. **Slice 1 — `AppleSharing` to the platform.** The guard bit first: with the unused Memories import dropped alone,
+   rule (f) went red on exactly `AppleSharing.kt: names the application depot alone`. Moved to core's `appleMain`
+   (`sharing/AppleSharing.kt`, with `GuestOpener`, `AppleOpenLink`, `KeychainGuestSessions`); `guestUploadFolder` and
+   `saveFile` became extensions on it in Depot's `AppleDepot.kt`. Selector diff: exactly those two members moved from
+   `AppleSharing` to the category `AppleSharing (Extensions)`, same Swift names; nothing else in the header moved.
+   macOS app build green; no Swift edit.
+
 ## Retrospective
 
 (filled at implement)

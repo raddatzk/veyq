@@ -1,19 +1,13 @@
-package me.raddatz.veyq.mobile.composition
+package me.raddatz.veyq.mobile.sharing
 
 import me.raddatz.veyq.mobile.media.Derivation
-import me.raddatz.veyq.mobile.sharing.*
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import me.raddatz.veyq.mobile.blob.FileSink
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.crypto.LibsodiumPrimitives
-import me.raddatz.veyq.mobile.depot.FileModel
-import me.raddatz.veyq.mobile.blob.FileSave
-import me.raddatz.veyq.mobile.memories.MediaUpload
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.session.TenantSession
@@ -32,7 +26,9 @@ import platform.posix.memcpy
  * The Apple app's door into a received link (ADR 0150 decisions 3–5): a guest view over libsodium and URLSession (the core's
  * ephemeral, nothing-on-disk session, `appleHttpClient`), this installation's `UserDefaults` for the terms' and the note's
  * acceptances (no secret, under the core's hashed names) and the Keychain for a write link's guest session
- * ([KeychainGuestSessions]); a guest's file saved where the person chose.
+ * ([KeychainGuestSessions]). Depot's part — a guest's folder uploaded, a guest's file saved where the person chose — is
+ * Depot's, as extensions of this object (`AppleDepot.kt`: Swift calls `AppleSharing.shared.saveFile(…)` as before, a
+ * category; ADR 0156).
  */
 object AppleSharing {
     /**
@@ -69,21 +65,6 @@ object AppleSharing {
     fun opener(
         store: DeviceStore, sessions: GuestSessions, language: String, queue: UploadQueue?, deriver: Derivation.Deriver?,
     ): GuestOpener = GuestOpener(store, sessions, language, queue, deriver)
-
-    /**
-     * A READ_WRITE guest's folder upload into [level] ([me.raddatz.veyq.mobile.depot.DepotGuest.uploadFolder]), off the
-     * caller's thread: what it says, each line — one that threw says the folder failed, never nothing.
-     */
-    suspend fun guestUploadFolder(level: GuestLevel, path: String, found: List<me.raddatz.veyq.mobile.blob.DirectoryWalk.Found>): List<me.raddatz.veyq.mobile.words.Notice> =
-        withContext(Dispatchers.Default) {
-            try {
-                me.raddatz.veyq.mobile.depot.DepotGuest.uploadFolder(level, null, path, found).said
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                listOf(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.DEPOT_FOLDER_FAILED, me.raddatz.veyq.mobile.depot.FolderUpload.rootName(null, path)))
-            }
-        }
 
     /** A kept link's row's share report ([BookmarkPage.reportSharedFromRow]): its meta read off the caller's thread. */
     suspend fun reportSharedFromRow(page: BookmarkPage) = withContext(Dispatchers.Default) { page.reportSharedFromRow() }
@@ -134,18 +115,6 @@ object AppleSharing {
     /** The bookmark's save ([BookmarkCreate.save]); whether it was made. */
     @Throws(Exception::class)
     suspend fun save(create: BookmarkCreate): Boolean = withContext(Dispatchers.Default) { create.save() }
-
-    /**
-     * A guest's file saved at [path] (`FileModel.save` into core's [FileSink], which leaves nothing at [path] when it did not
-     * finish), awaited to its end; null where there is nothing to save.
-     */
-    @Throws(Exception::class)
-    suspend fun saveFile(file: FileModel, path: String): FileSave.End? {
-        val save = file.save { produce ->
-            withContext(Dispatchers.Default) { FileSink.write(path, kept = { it }) { sink -> produce(sink) } }
-        } ?: return null
-        return save.state.first { it.end != null }.end
-    }
 }
 
 /**
