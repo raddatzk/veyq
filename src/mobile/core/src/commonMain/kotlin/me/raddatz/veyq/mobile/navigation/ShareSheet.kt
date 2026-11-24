@@ -55,7 +55,7 @@ class ShareSheet(
         /** The node's links (a drop box's: its WRITE_ONLY ones), newest first; null when they do not list. */
         suspend fun list(): List<ShareLinks.Link>?
         suspend fun mint(role: String, label: String, password: String, expiresAt: String?): ShareLinks.Minted
-        /** "Add files only" on a folder: a drop box [name] in it with its first link (Depot's, through the composition). */
+        /** "Add files only" on a folder: a drop box [name] in it with its first link (Depot's, through `AppKinds.createDropBox`). */
         suspend fun createDropBox(name: String, password: String, expiresAt: String?): Made
         suspend fun edit(shareId: String, edit: ShareLinkChanges.Edit): ShareLinkChanges.Changed
         suspend fun renew(shareId: String): ShareLinkChanges.Changed

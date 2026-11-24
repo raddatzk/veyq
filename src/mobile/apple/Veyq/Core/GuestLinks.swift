@@ -571,7 +571,7 @@ private struct GuestLevelView: View {
         .background(EmptyView().fileImporter(isPresented: $pickingFolder, allowedContentTypes: [.folder]) { result in
             guard case .success(let url) = result else { return }
             Task {
-                let lines = await model.levelUploads?.guestUploadFolder(url, level: level) ?? []
+                let lines = await model.levelUploads?.uploadFolderAsGuest(url, level: level) ?? []
                 if !lines.isEmpty { model.notice = AppModel.Notice(text: lines.map { say(notice: $0) }.joined(separator: "\n")) }
             }
         })

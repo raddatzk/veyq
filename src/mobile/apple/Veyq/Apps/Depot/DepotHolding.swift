@@ -146,7 +146,7 @@ final class DepotHolding: Holding, LevelUploads {
 
     /// A guest's *Upload folder*: the directory at `url` walked as a member's is and handed to core's
     /// `DepotGuest.uploadFolder` (through `AppleSharing`, off the main actor); what it says, each line.
-    func guestUploadFolder(_ url: URL, level: GuestLevel) async -> [VeyqCore.Notice] {
+    func uploadFolderAsGuest(_ url: URL, level: GuestLevel) async -> [VeyqCore.Notice] {
         let scoped = url.startAccessingSecurityScopedResource()
         let files = AppModel.folderFiles(url)
         if scoped { url.stopAccessingSecurityScopedResource() }

@@ -96,5 +96,5 @@ protocol LevelUploads: AnyObject {
     func uploadFolder(_ url: URL) async
     /// A READ_WRITE link guest's *Upload folder* (core's `GuestLevel.creates`, owner 2026-11-22): the directory at `url`
     /// uploaded whole into `level` as the guest; what it says, each line.
-    func guestUploadFolder(_ url: URL, level: GuestLevel) async -> [VeyqCore.Notice]
+    func uploadFolderAsGuest(_ url: URL, level: GuestLevel) async -> [VeyqCore.Notice]
 }
