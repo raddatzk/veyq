@@ -20,7 +20,9 @@ A Gradle build of its own, run through its own wrapper.
   shared dependencies and the generated client are one convention in `build.gradle.kts`. An application reaches what the
   platform keeps `internal` from the clients only behind `@PlatformApi`, opted into by the core's modules alone and hidden
   from Objective-C; `scripts/validate_mobile_module_graph.py` holds the direction. A test of one application runs in its
-  module over `TestApplications.install(<its part>)`, one across applications or of the composition in `composition/`.
+  module over `TestApplications.install(<its part>)` and the played server's platform half (`:testing`'s `PlayedTenant`,
+  `PlayedUploads`), one across applications or of the composition in `composition/`; a composition test naming one
+  application alone is red in the guard's rule (g) unless listed with why it stays.
 - `core/` — the shared base: the v1 suite (`crypto/`), the generated API client (`build/generated/openapi`, from
   `contracts/api`, never edited), the session (`session/`), the navigation model (`navigation/`), the search (`search/`: ported rule by rule from the web's `core/search`, which draws it from the core since ADR 0155, and held to `contracts/platform/search/v1-vectors.json`, [ADR 0146](../../docs/decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md); it names no application — `scripts/validate_mobile_search_names_no_application.py` —, each application's part reaches it through `AppKinds.search`), the music player (`audio/`, ADR 0142 decisions 1–3 and 13: the order, the fades, `MusicPlayer` with its interruption, and the two ports each platform implements — `Deck` and `SystemControls`: Android's `MusicPlayback.kt` — `MediaDeck`, `AndroidMusicControls` with its `MusicService` —, Apple's through `appleMain`'s `AppleAudio` — `MusicPlayback.swift`; carried over the bridge as host requests for Linux's `music_host` and Windows' decks with SMTC), a photo's and a video's metadata read from their bytes (`media/`),
   the uploads under way that a phone holds its process for, `blob/UploadsUnderway` (Android's `UploadWork.kt`, Apple's
@@ -569,7 +571,7 @@ A Gradle build of its own, run through its own wrapper.
   The search (`search/`, ADR 0146) changes only with the vectors that pin it, and is the web's too (ADR 0155: the web
   draws it through `@veyq/core-js/search`, `jsMain/…/search/web/`): a rule of the fold, the query or the order by
   `SearchVectorsTest` (`contracts/platform/search/v1-vectors.json`; a changed rule rewrites the file from the core's own
-  answers, `VEYQ_WRITE_VECTORS=1 ./gradlew :composition:jvmTest --tests '*SearchVectorsTest*'`, byte for byte where nothing
+  answers, `VEYQ_WRITE_VECTORS=1 ./gradlew :apps:memories:jvmTest --tests '*SearchVectorsTest*'`, byte for byte where nothing
   changed) and `SearchRulesTest` (the web's former unit cases: chip edges, ranks, the matcher's memory by identity,
   `firstRanked`), then `@veyq/core-js`'s check (the façade over the same vectors, the web's collator crossing, the slice
   check) and the web's `vectors.test.ts`; the field's model by
@@ -594,8 +596,8 @@ A Gradle build of its own, run through its own wrapper.
   `BigInt` there). Live,
   `SearchLiveTest` (`VEYQ_LIVE`: a Memory with a date, a place, a participant and a photo searched from another space,
   the photo opened through its gallery's request, a rename seen after a focus, an idle focus one `304` per tree and
-  listing; the Memory purged). Its bounds are `SearchVolumeMeasure`'s, opt-in: `VEYQ_MEASURE=1 ./gradlew :composition:jvmTest
-  --tests '*SearchVolumeMeasure*' --rerun` (and `:composition:macosArm64Test`), printed as `veyq-measure:`.
+  listing; the Memory purged). Its bounds are `SearchVolumeMeasure`'s, opt-in: `VEYQ_MEASURE=1 ./gradlew :apps:memories:jvmTest
+  --tests '*SearchVolumeMeasure*' --rerun` (and `:apps:memories:macosArm64Test`), printed as `veyq-measure:`.
 - `./gradlew :bridge:jvmTest` — the bridge (ADR 0123's Consequences, the bridge):
   - `DispatchTest` covers the way in, over a door the test plays: the host reached by a reply that arrives before the
     start returned (`Started`, `veyq_init`'s order) and a silent host's ask failed (`Host.Silent`, a call answered

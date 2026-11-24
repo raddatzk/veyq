@@ -136,7 +136,8 @@ library that owns nothing is allowed, never required; an application's rights an
   are the drop and *Add here*, over the interfaces an application implements (`PageIntake`, `blob/LevelUploads`); each
   application's pages over the shell are its extensions in its module (`<application>/ShellPages.kt`). What an application needs of the platform's `internal` is `@PlatformApi`, an
   opt-in only the core's modules take, hidden from Objective-C. A test of one application runs in its module over
-  `TestApplications.install(<its part>)`; one across applications or of the composition in `:composition`.
+  `TestApplications.install(<its part>)`; one across applications or of the composition in `:composition` — one there
+  naming a single application is listed with its reason (`validate_mobile_module_graph.py` rule (g)).
 
 ### The seams core asks
 

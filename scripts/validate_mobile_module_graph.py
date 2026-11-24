@@ -40,6 +40,12 @@ platform, never the reverse and never another application, read from the build f
   implements (the shell's model `navigation/ShellModel`, the drop's `PageIntake` and `blob/LevelUploads`), and each
   application's pages over the shell are its own extensions in its module (`<application>/ShellPages.kt`). Any other main
   file of `:composition` is red, whatever it names; so is a composition without its root.
+- **(g) A test of one application lives in its module** (inbox #1260; ADR 0156 decision 6, entry 78). A test source of
+  `:composition` (`src/*Test/kotlin`) that names exactly one application — an import or qualified reference to
+  `…mobile.<application>` or `…mobile.api.<application>`, or its own package — is red unless
+  `COMPOSITION_ONE_APPLICATION_TESTS` lists it with why it cannot run over that application alone; an entry whose file
+  left or no longer names one application alone is red too. Tests naming none (the platform's over the composed registry)
+  or several are the composition's by the rule itself.
 
 **The defect that bought it.** None: built with the core's split (ADR 0155 decision 7.1), which replaced
 `validate_mobile_ui_direction.py`'s import rules over one module and its allow-list of 18 files that named
@@ -53,7 +59,10 @@ green); the others are invisible. (d) reads the module test of the convention by
 evaluation; (e) reads the annotation lines before a declaration, not the compiler's view (an annotation in a block
 comment is masked; one carried by a type alias is not seen). (f) reads file names alone: what the root itself
 names is the compiler's and (b)'s to hold, and an application's import in the platform is refused by the build (`:core`
-has no edge to an application, rule (b)), not by a text rule here (`validate_guard_gaps.py`'s retired 38 and 47).
+has no edge to an application, rule (b)), not by a text rule here (`validate_guard_gaps.py`'s retired 38 and 47). (g)
+reads what a test names in code, not what it depends on: another application reached only by a kind literal
+(`"DEPOT_DROPBOX"`) or through the composed registry is not seen — which is why such a test needs a listed reason, and
+why one that passes over its application alone is no proof it never needed another (a live case is not run here).
 """
 from __future__ import annotations
 
@@ -308,13 +317,80 @@ def rule_f(projects: list[str]) -> list[str]:
     return errors
 
 
+# The composition's test files that name exactly one application (rule g), by `<source set>/<path below the package root>`,
+# each with why it is not its application's test.
+COMPOSITION_ONE_APPLICATION_TESTS: dict[str, str] = {
+    "commonTest/depot/ImportScreenTest.kt":
+        "counts a web download's nodes with every application's import hook (ADR 0156 entry 16)",
+    "commonTest/navigation/ShareSheetTest.kt":
+        "reads each application's share shape (a Pot, a Memory, a drop box) through the composed registry, so a shape "
+        "AppComposition forgets is red (ADR 0156 entry 70); it names Depot alone by import, the others by kind",
+    "commonTest/sharing/GuestReportTest.kt":
+        "an upload link's guest reports a Depot drop box (`DEPOT_DROPBOX` by kind): over Memories composed alone the "
+        "report sheet is absent (measured 2026-11-24, `anUploadLinksGuestReportsTheLink` red in :apps:memories)",
+    "jvmTest/KindsContractTest.kt":
+        "asks every kind of contracts/platform/kinds through the composed registry (ADR 0156 § Consequences, #1061)",
+    "jvmTest/memories/ScopeRelockLiveTest.kt":
+        "a new lock re-seals every root entry of the throwaway's space, whatever application owns it: Memories composed "
+        "alone cannot relock a space holding a Pot (measured 2026-11-23, `no slug rule for the kind EXPENSES_POT`)",
+    "commonTest/offline/PlayedPots.kt":
+        "Expenses' half of the played server, read by tests across Expenses and another application (QueuedTest, "
+        "QueuedOverlayTest, QueuedDepotExpensesTest, OfflinePotPinsTest, OfflineBannerTest); no module both reach names "
+        "an application (ADR 0156 entry 78)",
+    "commonTest/offline/OfflinePotTest.kt":
+        "rides PlayedPots.kt, the played server's Expenses half the spanning tests here share — one copy of it rather "
+        "than a second in :apps:expenses (ADR 0156 entry 78)",
+}
+TEST_PACKAGE_ROOT = "kotlin/me/raddatz/veyq/mobile/"
+
+
+def named_applications(raw: str, apps: list[str]) -> set[str]:
+    """The applications a Kotlin source names in code — an import or a qualified reference to `…mobile.<application>` or
+    `…mobile.api.<application>`, or its own package — comments and literals masked."""
+    if not apps:
+        return set()
+    names = re.compile(r"\b" + re.escape(PKG) + r"\s*\.\s*(?:api\s*\.\s*)?(" + "|".join(map(re.escape, apps)) + r")\b")
+    return {m.group(1) for m in names.finditer(mask(raw))}
+
+
+def rule_g(projects: list[str], apps: list[str]) -> list[str]:
+    """(g) A test of one application lives in its module: every test source of `:composition` naming exactly one
+    application is red unless COMPOSITION_ONE_APPLICATION_TESTS lists it with a reason; an entry whose file left, or no
+    longer names one application alone, is red too."""
+    if ":composition" not in projects:
+        return []
+    errors = []
+    src = repo_layout.mobile_project_dir(":composition") / "src"
+    seen = set()
+    files = sorted(f for s in src.glob("*Test") for f in (s / "kotlin").rglob("*.kt")) if src.is_dir() else []
+    for f in files:
+        key = f"{f.relative_to(src).parts[0]}/" + f.relative_to(src).as_posix().split("/", 1)[1].removeprefix(TEST_PACKAGE_ROOT)
+        named = named_applications(f.read_text(encoding="utf-8"), apps)
+        if key in COMPOSITION_ONE_APPLICATION_TESTS:
+            seen.add(key)
+            if len(named) != 1:
+                errors.append(f"(g) COMPOSITION_ONE_APPLICATION_TESTS lists {key}, which names "
+                              f"{', '.join(sorted(named)) or 'no application'} — not one application alone: drop the entry")
+            elif not COMPOSITION_ONE_APPLICATION_TESTS[key].strip():
+                errors.append(f"(g) COMPOSITION_ONE_APPLICATION_TESTS lists {key} without a reason")
+        elif len(named) == 1:
+            (a,) = named
+            errors.append(f"(g) {rel(f)}: a composition test naming `{a}` alone — an application's test lives in :apps:{a} "
+                          f"over TestApplications.install (ADR 0156 decision 6); where it cannot, list it in "
+                          f"COMPOSITION_ONE_APPLICATION_TESTS with the reason")
+    for key in sorted(set(COMPOSITION_ONE_APPLICATION_TESTS) - seen):
+        errors.append(f"(g) COMPOSITION_ONE_APPLICATION_TESTS lists {key}, which is no test source of :composition — drop the entry")
+    return errors
+
+
 def main() -> int:
     projects = repo_layout.mobile_projects()
     if not projects:
         print(f"MOBILE MODULE GRAPH VALIDATION FAILED:\n  - {rel(repo_layout.MOBILE_SETTINGS)} includes no project — the rules read nothing.")
         return 1
     apps = applications()
-    errors = rule_a(projects, apps) + rule_b(projects) + rule_c(projects, apps) + rule_d(projects) + rule_e(projects) + rule_f(projects)
+    errors = (rule_a(projects, apps) + rule_b(projects) + rule_c(projects, apps) + rule_d(projects) + rule_e(projects) + rule_f(projects)
+              + rule_g(projects, apps))
     if errors:
         print("MOBILE MODULE GRAPH VALIDATION FAILED:")
         for e in errors:
