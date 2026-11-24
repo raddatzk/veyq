@@ -68,7 +68,7 @@ import me.raddatz.veyq.mobile.words.Notice
  * Each app draws [state] (or [watch]); [close] when the page goes (a lightbox on it closes with it).
  */
 class GalleryModel(
-    val node: NodeAt,
+    override val node: NodeAt,
     private val door: Door,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     /** Where an original's save runs ([Lightbox.save]): not the page's own [scope], so a save outlives its page. */
@@ -83,7 +83,7 @@ class GalleryModel(
     private val calendar: GalleryFilter.Calendar = GalleryFilter.Calendar.UTC,
     /** A clock in milliseconds for the live poll's catch-up gap (only its differences count). */
     private val now: () -> Long = monotonicMs(),
-) {
+) : me.raddatz.veyq.mobile.navigation.PageIntake {
     /**
      * The tenant's search as a page meets it (ADR 0146 decision 8; the web's `contribution.ts` and `openRequest.ts`): the
      * page contributes its media as documents at no fetch of their own ([contributions]), and takes a request the search
@@ -907,7 +907,7 @@ class GalleryModel(
      * The picked [sources] added to this Memory or chapter (the app's one upload queue), where the rights let whoever looks
      * upload; how many were queued.
      */
-    fun upload(sources: List<UploadSource>): Int {
+    override fun upload(sources: List<UploadSource>): Int {
         if (!takesUploads) return 0
         if (current.offline == null) return door.upload(sources)
         // offline each is sealed at once and waits to be sent (ADR 0153 decision 1): a placeholder tile marked waiting
@@ -941,6 +941,28 @@ class GalleryModel(
 
     /** Whether this page takes an upload now: the rights let whoever looks upload, online or queued offline. */
     val takesUploads: Boolean get() = rights.upload && (current.offline == null || current.queues)
+
+    // ---- the page's intake: a drop and *Add here* (core's `PageIntake`, ADR 0156) ----
+
+    /** What a drop or a share keeps here: photos and videos ([MemoryShare.answer]). */
+    override val answer: me.raddatz.veyq.mobile.navigation.ShareAnswer get() = MemoryShare.answer
+
+    /** A drop lands here where the page takes uploads ([takesUploads]), else it is not taken here. */
+    override fun dropIntake(): me.raddatz.veyq.mobile.navigation.PageIntake.Intake =
+        if (takesUploads) me.raddatz.veyq.mobile.navigation.PageIntake.Intake.Takes else me.raddatz.veyq.mobile.navigation.PageIntake.Intake.NotHere
+
+    /** A dropped folder is said by name, never walked into one Memory, which would flatten it (owner 2026-11-13). */
+    override fun foldersNotTaken(names: List<String>): List<Notice> = names.map { Notice(Msg.MEMORY_DROP_FOLDER, it) }
+
+    /** Dropped files that are no photo or video, said by count ([MediaUploads.notTaken]). */
+    override fun filesNotTaken(count: Int): Notice? = MediaUploads.notTaken(count)
+
+    /** *Add here* on this page ([MemoryShare.offered]). */
+    override fun offersShare(inbox: me.raddatz.veyq.mobile.navigation.ShareInbox): Boolean = MemoryShare.offered(inbox, this)
+
+    /** *Add here* pressed on this page ([MemoryShare.addHere]). */
+    override fun takeShare(inbox: me.raddatz.veyq.mobile.navigation.ShareInbox): me.raddatz.veyq.mobile.navigation.ShareInbox.Taken? =
+        MemoryShare.addHere(inbox, this)
 
     // ---- a chapter made ----
 

@@ -292,8 +292,6 @@ COMPOSITION_FILES: dict[str, tuple[str, bool]] = {
     "commonMain/ShellModel.kt": ("the shell's model hands each application's page its model over the shell's state "
                                   "(a gallery, a file page, a Pot's copy, Depot's and Memories' uploads); its hooks wait "
                                   "for a design of their own (inbox #1048's hand-back)", False),
-    "commonMain/Drop.kt": ("a drop's targets are a level (Depot's upload) and a page (Memories' gallery and buckets)", False),
-    "commonMain/AddHere.kt": ("Add here's places are a level (Depot's upload) and a page (Memories' gallery)", False),
     "appleMain/AppleQueued.kt": ("Swift's view of the shell's queued flows and the QueuedTray", True),
     "appleMain/FileDownloads.kt": ("Swift's subtree download over ShellModel.download", True),
     "nativeMain/NodeDownload.kt": ("ShellModel.download into a path, an extension of the composition's ShellModel", True),

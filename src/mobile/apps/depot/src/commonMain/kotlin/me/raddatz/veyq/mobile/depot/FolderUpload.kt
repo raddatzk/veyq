@@ -47,15 +47,6 @@ object FolderUpload {
         unreadable = found.filter { it.kind == Kind.UNREADABLE || (it.kind == Kind.FILE && it.source == null) }.map { it.path },
     )
 
-    /**
-     * The name the uploaded folder takes: the picked directory's own ([shown], what the platform's picker names it), else
-     * the last part of its [path] (a path's or a document id's, parted at `/`, a backslash and `:`) — never a word of the app's own.
-     */
-    fun rootName(shown: String?, path: String): String {
-        shown?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
-        return path.split('/', '\\', ':').lastOrNull { it.isNotBlank() }?.trim().orEmpty()
-    }
-
     /** A directory of the plan: its name as it will be made, its subdirectories and its files (each its name and entry). */
     class Dir(val name: String, val dirs: List<Dir>, val files: List<Pair<String, Entry>>)
 

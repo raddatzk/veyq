@@ -1065,14 +1065,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * What *Add here* puts the waiting files into on [shell] (core's `ShellModel.addHere`): [page]'s place, the open
      * Memory's or chapter's, or the level shown — a folder or a space's top — where this member may put files; null elsewhere.
      */
-    internal fun addHereTarget(shell: Shell, page: AddHerePage?): me.raddatz.veyq.mobile.composition.AddHere? =
+    internal fun addHereTarget(shell: Shell, page: AddHerePage?): me.raddatz.veyq.mobile.navigation.AddHere? =
         if (page != null) page.at(shell) else shellModel?.addHere(shareInbox, shell, null)
 
     /**
      * *Add here* on [target]: what its place takes queued there — a gallery's photos and videos, a level's files into
      * Depot's queue under [label] —, the share ended; what was left out said. The place's application answers it.
      */
-    fun addHere(target: me.raddatz.veyq.mobile.composition.AddHere, label: String): me.raddatz.veyq.mobile.words.Notice? =
+    fun addHere(target: me.raddatz.veyq.mobile.navigation.AddHere, label: String): me.raddatz.veyq.mobile.words.Notice? =
         holdings.values.firstNotNullOfOrNull { it.addHere(target, label) }?.notice
 
     /**
@@ -1080,23 +1080,23 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * uploads (`ShellModel.drop`), and says what it did not take. A level that takes none leaves the files waiting in the pick
      * mode, as a share's do (the open Pot among the places, [receiveDrop]); a gallery's or a row's refusal is said.
      */
-    fun drop(target: me.raddatz.veyq.mobile.composition.DropTarget, drop: ShareIn.Drop) {
+    fun drop(target: me.raddatz.veyq.mobile.navigation.DropTarget, drop: ShareIn.Drop) {
         val m = shellModel
         if (m == null) {
-            if (target is me.raddatz.veyq.mobile.composition.DropTarget.Level) receiveDrop(drop.incoming) else drop.release()
+            if (target is me.raddatz.veyq.mobile.navigation.DropTarget.Level) receiveDrop(drop.incoming) else drop.release()
             return
         }
         viewModelScope.launch {
             // the target's application answers (a gallery's Memories, a level's or a folder row's Depot)
             val outcome = holdings.values.firstNotNullOfOrNull { it.drop(m, target, drop.items) }
                 ?: m.drop(target, drop.items, null, ShareIn::release)
-            if (outcome is me.raddatz.veyq.mobile.composition.DropOutcome.Refused && target is me.raddatz.veyq.mobile.composition.DropTarget.Level) {
+            if (outcome is me.raddatz.veyq.mobile.navigation.DropOutcome.Refused && target is me.raddatz.veyq.mobile.navigation.DropTarget.Level) {
                 receiveDrop(drop.incoming)
                 return@launch
             }
-            if (outcome is me.raddatz.veyq.mobile.composition.DropOutcome.Refused) drop.release()
+            if (outcome is me.raddatz.veyq.mobile.navigation.DropOutcome.Refused) drop.release()
             // the phones' Depot offers no import (core's `DepotUploads` built so, owner 2026-11-19): never offered here
-            if (outcome is me.raddatz.veyq.mobile.composition.DropOutcome.Offered) outcome.offer.uploadAsFile()
+            if (outcome is me.raddatz.veyq.mobile.navigation.DropOutcome.Offered) outcome.offer.uploadAsFile()
             outcome.notices.forEach(::said)
         }
     }

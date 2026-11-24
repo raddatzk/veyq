@@ -566,12 +566,13 @@ class ShellModel(
     )
 
     /**
-     * The page in [shell] that offers *Add here* for what waits in [inbox] (ADR 0138 decision 3, [AddHere.at]): [gallery],
-     * the open Memory's or chapter's page, or the level shown — a folder or a space's top, which asks as a folder — where
-     * this member may put files here. Null anywhere else. Every platform asks this; none branches on kinds.
+     * The page in [shell] that offers *Add here* for what waits in [inbox] (ADR 0138 decision 3, [AddHere.at]): [page],
+     * the open page that takes files ([PageIntake]: a Memory's or a chapter's), or the level shown — a folder or a space's
+     * top, which asks as a folder — where this member may put files here. Null anywhere else. Every platform asks this;
+     * none branches on kinds.
      */
-    fun addHere(inbox: ShareInbox, shell: Shell, gallery: me.raddatz.veyq.mobile.memories.GalleryModel?): AddHere? =
-        AddHere.at(inbox, shell, gallery, ::levelPlace)
+    fun addHere(inbox: ShareInbox, shell: Shell, page: PageIntake?): AddHere? =
+        AddHere.at(inbox, shell, page, ::levelPlace)
 
     /**
      * The level [shell] shows where a file dropped onto it is uploaded at once (ADR 0138 decision 9, [AddHere.shown]): a
@@ -611,19 +612,18 @@ class ShellModel(
 
     /**
      * Files and folders dropped onto [target] (ADR 0154 decision 1, ADR 0138 decision 9), the platforms' one drop: judged —
-     * the level shown ([dropLevel]), a folder's row ([dropTarget]), a gallery (its rights, `GalleryModel.takesUploads`), a
-     * Contributions view's bucket (`Contributions.intake`) —,
-     * sorted through the target's answer, and uploaded into [depot] (a level's) or the gallery at once; a level's veyq
+     * the level shown ([dropLevel]), a folder's row ([dropTarget]), a page that takes files (its own [PageIntake.dropIntake]:
+     * a gallery's rights, a Contributions view's bucket) —,
+     * sorted through the target's answer, and uploaded into [depot] (a level's [LevelUploads]) or the page at once; a level's veyq
      * download offered as an import, one per drop. Each file a target does not keep is handed to [left] once no run reads
      * it again; [deletedName] names an imported Pot's erased person. A target that takes none is [DropOutcome.Refused] and
      * keeps nothing.
      */
     suspend fun drop(
-        target: DropTarget, items: List<Dropped>, depot: me.raddatz.veyq.mobile.depot.DepotUploads?,
+        target: DropTarget, items: List<Dropped>, depot: me.raddatz.veyq.mobile.blob.LevelUploads?,
         left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit = {}, deletedName: String = "",
     ): DropOutcome = when (target) {
-        is DropTarget.Gallery -> target.drop(items, left)
-        is DropTarget.Bucket -> target.drop(items, left)
+        is DropTarget.Page -> target.drop(items, left)
         is DropTarget.Level -> {
             val level = shell?.let(::dropLevel)
             if (level == null || depot == null) DropOutcome.notHere

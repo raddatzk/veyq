@@ -260,9 +260,9 @@ internal class Tenant(
      * uploads (null: none), a file not kept handed to its `left`; a test's tenant plays one.
      */
     val drop: (suspend (
-        target: me.raddatz.veyq.mobile.composition.DropTarget, items: List<me.raddatz.veyq.mobile.composition.Dropped>,
+        target: me.raddatz.veyq.mobile.navigation.DropTarget, items: List<me.raddatz.veyq.mobile.navigation.Dropped>,
         depot: me.raddatz.veyq.mobile.depot.DepotUploads?, left: (me.raddatz.veyq.mobile.blob.UploadSource) -> Unit, deletedName: String,
-    ) -> me.raddatz.veyq.mobile.composition.DropOutcome)? = shell?.let { s ->
+    ) -> me.raddatz.veyq.mobile.navigation.DropOutcome)? = shell?.let { s ->
         { target, items, depot, left, deletedName -> s.drop(target, items, depot, left, deletedName) }
     },
     /** A node's move or copy sheet (`ShellModel.moveSheet`), a Pot's copy by the open Pot model handed in. */
@@ -3530,21 +3530,21 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private suspend fun drop(parts: Composition<A, T>, call: Call.Drop): Answer {
         // a gallery's drop needs no tenant (a signed-out link's guest has none): judged by the gallery's rights alone; a
         // Contributions view's bucket by the view alone (`Contributions.intake`)
-        val gallery = (call.on as? DropOn.Gallery)?.let { on -> me.raddatz.veyq.mobile.composition.DropTarget.Gallery(galleries[on.gallery] ?: return noGallery) }
-        val bucket = (call.on as? DropOn.Buckets)?.let { on -> me.raddatz.veyq.mobile.composition.DropTarget.Bucket(buckets[on.buckets]?.model ?: return noBuckets) }
+        val gallery = (call.on as? DropOn.Gallery)?.let { on -> me.raddatz.veyq.mobile.navigation.DropTarget.Page(galleries[on.gallery] ?: return noGallery) }
+        val bucket = (call.on as? DropOn.Buckets)?.let { on -> me.raddatz.veyq.mobile.navigation.DropTarget.Page(buckets[on.buckets]?.model ?: return noBuckets) }
         val drop = if (gallery != null || bucket != null) null else tenant.value?.models?.drop ?: return noTenant
         val target = when (val on = call.on) {
-            is DropOn.Level -> me.raddatz.veyq.mobile.composition.DropTarget.Level(on.label)
-            is DropOn.Row -> me.raddatz.veyq.mobile.composition.DropTarget.Row(on.folder)
+            is DropOn.Level -> me.raddatz.veyq.mobile.navigation.DropTarget.Level(on.label)
+            is DropOn.Row -> me.raddatz.veyq.mobile.navigation.DropTarget.Row(on.folder)
             is DropOn.Gallery -> gallery!!
             is DropOn.Buckets -> bucket!!
         }
         val items = call.items.map { item ->
             when (item) {
-                is DropItem.File -> parts.files.source(item.path)?.let { me.raddatz.veyq.mobile.composition.Dropped.File(PathSource(item.path, it)) }
-                    ?: me.raddatz.veyq.mobile.composition.Dropped.Unread(pathName(item.path))
-                is DropItem.Folder -> me.raddatz.veyq.mobile.composition.Dropped.Folder(item.path, null, parts.files.walk(item.path))
-                is DropItem.NotLocal -> me.raddatz.veyq.mobile.composition.Dropped.NotLocal(item.name)
+                is DropItem.File -> parts.files.source(item.path)?.let { me.raddatz.veyq.mobile.navigation.Dropped.File(PathSource(item.path, it)) }
+                    ?: me.raddatz.veyq.mobile.navigation.Dropped.Unread(pathName(item.path))
+                is DropItem.Folder -> me.raddatz.veyq.mobile.navigation.Dropped.Folder(item.path, null, parts.files.walk(item.path))
+                is DropItem.NotLocal -> me.raddatz.veyq.mobile.navigation.Dropped.NotLocal(item.name)
             }
         }
         // a desktop reads each file in place at its path: one the drop does not keep is closed, nothing else to hand back
@@ -3555,10 +3555,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             else -> drop!!(target, items, uploads.value, left, call.deletedName)
         }
         return when (outcome) {
-            is me.raddatz.veyq.mobile.composition.DropOutcome.Uploaded -> Answer.Dropped(outcome.queued, outcome.notices)
-            is me.raddatz.veyq.mobile.composition.DropOutcome.Offered -> Answer.Dropped(outcome.queued, outcome.notices, holdImport(outcome.offer))
-            is me.raddatz.veyq.mobile.composition.DropOutcome.Refused -> {
-                items.filterIsInstance<me.raddatz.veyq.mobile.composition.Dropped.File>().forEach { left(it.source) }
+            is me.raddatz.veyq.mobile.navigation.DropOutcome.Uploaded -> Answer.Dropped(outcome.queued, outcome.notices)
+            is me.raddatz.veyq.mobile.navigation.DropOutcome.Offered -> Answer.Dropped(outcome.queued, outcome.notices, holdImport(outcome.offer))
+            is me.raddatz.veyq.mobile.navigation.DropOutcome.Refused -> {
+                items.filterIsInstance<me.raddatz.veyq.mobile.navigation.Dropped.File>().forEach { left(it.source) }
                 Answer.Dropped(0, outcome.notices, refused = true)
             }
         }

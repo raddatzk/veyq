@@ -82,7 +82,7 @@ suspend fun AppleSharing.guestUploadFolder(level: GuestLevel, path: String, foun
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
-            listOf(Notice(Msg.DEPOT_FOLDER_FAILED, FolderUpload.rootName(null, path)))
+            listOf(Notice(Msg.DEPOT_FOLDER_FAILED, DirectoryWalk.rootName(null, path)))
         }
     }
 

@@ -67,24 +67,24 @@ final class MemoriesHolding: Holding {
     /// The Memory's or chapter's page on screen as *Add here*'s place, where it is the shell's open object.
     func addHereTarget(_ shell: ShellModel, inbox: ShareInbox, at: Shell) -> AddHere? {
         guard let shown = galleryShown, let g = openGallery?.model, g.node == shown.node, at.openObject?.nodeId == shown.node.nodeId else { return nil }
-        return shell.addHere(inbox: inbox, shell: at, gallery: g)
+        return shell.addHere(inbox: inbox, shell: at, page: g)
     }
 
     /// *Add here* on a gallery: its photos and videos queued into its node — in the share extension handed to the app
     /// through the app group (ADR 0138 decision 6) —, what it left out said.
     func addHere(_ target: AddHere, label: String) -> Bool {
-        guard let g = target as? AddHere.Gallery else { return false }
+        guard let page = target as? AddHere.Page, let gallery = page.intake as? GalleryModel else { return false }
         let inbox = model.inbox
         if model.inExtension {
-            guard g.gallery.takesUploads else { return true }
-            let node = g.gallery.node
+            guard gallery.takesUploads else { return true }
+            let node = gallery.node
             let taken = inbox.queue(answer: target.answer) { sources in
                 KotlinInt(int: Int32(ShareHandoff.write(sources, kind: node.kind, scopeId: node.scopeId, nodeId: node.nodeId, label: node.name)))
             }
             model.shareTaken(taken, notice: taken.flatMap { MediaUploads.companion.notTaken(count: $0.refused) })
             return true
         }
-        let taken = target.take(inbox: inbox, label: g.gallery.node.name, depot: nil) { source in
+        let taken = target.take(inbox: inbox, label: gallery.node.name, depot: nil) { source in
             if let url = ApplePlatform.shared.urlOf(source: source) { AppModel.removePicked(url) }
         }
         model.shareTaken(taken, notice: taken.flatMap { MediaUploads.companion.notTaken(count: $0.refused) })
@@ -94,7 +94,7 @@ final class MemoriesHolding: Holding {
     /// Files dropped onto a Memory's or chapter's gallery, or onto the bucket its Contributions view shows: its photos and
     /// videos uploaded there (core's one drop).
     func drop(_ shell: ShellModel, _ target: DropTarget, _ items: [Dropped]) async -> DropOutcome? {
-        guard target is DropTarget.Gallery || target is DropTarget.Bucket else { return nil }
+        guard target is DropTarget.Page else { return nil }
         return try? await shell.drop(target: target, items: items, depot: nil, left: { @Sendable source in
             if let url = ApplePlatform.shared.urlOf(source: source) { AppModel.removePicked(url) }
         }, deletedName: say(.potDeletedPerson))

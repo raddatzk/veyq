@@ -180,10 +180,10 @@ object DepotGuest {
      * tenant's room (the web's skips it too), the upload's own refusal decides. Once the batch settled, the folders that hold
      * nothing are taken back (a guest cannot trash; the web's `takeBackEmptyFolders`), none below which a retry could still
      * land a file.
-     * [shownName] and [path] name the top folder ([FolderUpload.rootName]).
+     * [shownName] and [path] name the top folder ([DirectoryWalk.rootName]).
      */
     suspend fun uploadFolder(level: GuestLevel, shownName: String?, path: String, found: List<DirectoryWalk.Found>): FolderUploaded {
-        val rootName = FolderUpload.rootName(shownName, path)
+        val rootName = DirectoryWalk.rootName(shownName, path)
         val walked = FolderUpload.walked(found)
         val leftOut = me.raddatz.veyq.mobile.words.Notices.folderLeftOut(walked)
         val plan = FolderUpload.plan(rootName, walked.entries, me.raddatz.veyq.mobile.AppKinds::tokenInput)

@@ -3,9 +3,9 @@ package me.raddatz.veyq.mobile.navigation
 import me.raddatz.veyq.mobile.blob.DirectoryWalk
 import me.raddatz.veyq.mobile.media.Derivation
 import me.raddatz.veyq.mobile.composition.ShellModel
-import me.raddatz.veyq.mobile.composition.DropOutcome
-import me.raddatz.veyq.mobile.composition.DropTarget
-import me.raddatz.veyq.mobile.composition.Dropped
+import me.raddatz.veyq.mobile.navigation.DropOutcome
+import me.raddatz.veyq.mobile.navigation.DropTarget
+import me.raddatz.veyq.mobile.navigation.Dropped
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
@@ -169,7 +169,7 @@ class GatesInTheCoreTest {
             Dropped.Folder("/x/Holiday", null, emptyList()),
             Dropped.NotLocal("Cloud.jpg"),
         )
-        val outcome = assertIs<DropOutcome.Uploaded>(o.shell.drop(DropTarget.Gallery(gallery), items, null, { left += it.name }))
+        val outcome = assertIs<DropOutcome.Uploaded>(o.shell.drop(DropTarget.Page(gallery), items, null, { left += it.name }))
         assertEquals(1, outcome.queued)
         assertEquals(
             listOf(Notice(Msg.MEMORY_DROP_FOLDER, "Holiday"), Notice(Msg.DEPOT_DROP_NOT_LOCAL, "Cloud.jpg"), Notice(Msg.MEMORY_NOT_MEDIA, 1)),

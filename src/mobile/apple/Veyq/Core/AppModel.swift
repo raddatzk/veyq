@@ -910,7 +910,7 @@ final class AppModel {
         _ = spaces // observed: a level's rights move with the lists
         // a page an application holds on screen answers first (a Memory's gallery), else the level shown
         return holdings.lazy.compactMap { $0.addHereTarget(m, inbox: self.inbox, at: self.shell) }.first
-            ?? m.addHere(inbox: inbox, shell: shell, gallery: nil)
+            ?? m.addHere(inbox: inbox, shell: shell, page: nil)
     }
 
     /// *Add here*: what `target` takes of the waiting files goes there — a gallery's photos and videos, a level's files into

@@ -74,13 +74,4 @@ class FolderUploadTest {
             me.raddatz.veyq.mobile.words.Notices.folderLeftOut(w),
         )
     }
-
-    @Test
-    fun theRootIsTheDirectorysOwnName() {
-        assertEquals("Trip", FolderUpload.rootName("Trip", "primary:Download/Other"), "the name the picker shows wins")
-        assertEquals("Trip", FolderUpload.rootName(null, "/Users/me/Trip/"))
-        assertEquals("Trip", FolderUpload.rootName(" ", "primary:Download/Trip"))
-        assertEquals("Download", FolderUpload.rootName(null, "primary:Download"))
-        assertEquals("Reise 2026", FolderUpload.rootName(null, "C:\\Users\\me\\Reise 2026"))
-    }
 }

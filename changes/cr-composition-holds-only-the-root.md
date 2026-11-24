@@ -330,6 +330,34 @@ Built 2026-11-24 on `claude/composition-root-1215` from `0e922e641` (owner go 20
    `saveFile` became extensions on it in Depot's `AppleDepot.kt`. Selector diff: exactly those two members moved from
    `AppleSharing` to the category `AppleSharing (Extensions)`, same Swift names; nothing else in the header moved.
    macOS app build green; no Swift edit.
+3. **Slice 2 — the intake.** The bite first: `PageIntake`/`LevelUploads` in core and `Drop.kt`'s imports re-pointed to
+   them while it still sat in `:composition` → rule (f) red on exactly `Drop.kt: names no application`; green once moved.
+   Where reality differed from the CR, decided here:
+   - **`PageIntake`'s members are named for the interface, not after Contributions'.** `Contributions` already has
+     `intake(): Contributions.Intake` (its four-way enum, read by the apps); one class cannot hold a second `intake()`
+     with another return type, so the platform's is `dropIntake(): PageIntake.Intake` (`Takes`, `Refused(notice)`,
+     `NotHere`). `notTaken(files, folders)` split into `foldersNotTaken(names)` and `filesNotTaken(count)`: the drop says
+     the folders first, then what did not read, then what the answer left — one merged call would have reordered the
+     notices. `offers`/`take` are `offersShare`/`takeShare` (a bare `take` reads as the drop's).
+   - **`Drops` and `DropOutcome.notHere` opened `@PlatformApi @HiddenFromObjC` for this slice only:** the composition's
+     `ShellModel` still calls them; slice 3 makes them `internal` again.
+   - **`DropTarget.Page` judges by the page's `dropIntake()` and sorts by its `answer`** — the gallery's and the bucket's
+     answer both `MemoryShare.answer`, as `Drops.sorted` used for both; the outcome and its notices' order unchanged.
+   - **Tests.** `BucketDropTest` named Memories and the drop alone, so it moved to `:apps:memories`. The platform's drop
+     and *Add here* are held in core by `PageIntakeTest` over a fake page and a fake level (sorting, notice order, a
+     refusal that keeps and hands back nothing, an unqueued file handed back, a level's screen then each folder, *Add
+     here* only on the open page). `FolderUploadTest.theRootIsTheDirectorysOwnName` moved with `rootName` to core's
+     `DirectoryWalkTest`. Executed cases before/after: the same 3,177 plus the five new `PageIntakeTest` cases (×2
+     targets), the moved one renamed — nothing dropped.
+   - **Clients.** The bridge's `DropOn` maps to `DropTarget.Page` (2 lines), its `DispatchTest` tells gallery from bucket
+     by `intake is GalleryModel`; Android 7 files (import paths, `MemoriesHolding`'s claims as `AddHere.Page` with a
+     `GalleryModel` intake), Swift 3 files (`DropTarget.Page(intake:)`, `addHere(…page:)`, the holding's claim through
+     `page.intake as? GalleryModel`). Desktops and `bridge.h`: no diff.
+   - **Selector diff:** exactly the planned set — `DropTarget.Gallery`/`Bucket` → `DropTarget.Page(intake:)`,
+     `AddHere.Gallery` → `AddHere.Page(intake:)`, `addHere(…gallery:)` → `(…page:)`, the protocols `PageIntake` and
+     `LevelUploads` with `GalleryModel`'s and `Contributions`' conformance members, `DepotUploads.Screened` →
+     `LevelUploadsScreened`, `rootName(shown:path:)` from `FolderUpload` to `DirectoryWalk`, and the `depot:` parameters
+     typed `id<LevelUploads>`; no selector renamed.
 
 ## Retrospective
 

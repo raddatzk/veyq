@@ -471,7 +471,7 @@ private fun HomeScreen(s: Screen.Signed, model: AppModel, onEnter: (me.raddatz.v
         }
     }) { list, bottom ->
     // a file dropped onto the level goes through core's one drop (ADR 0154 decision 1): uploaded here where it takes it, else a share
-    Column(Modifier.fillMaxSize().sharedFilesDrop { drop -> model.drop(me.raddatz.veyq.mobile.composition.DropTarget.Level(levelLabel), drop) }) {
+    Column(Modifier.fillMaxSize().sharedFilesDrop { drop -> model.drop(me.raddatz.veyq.mobile.navigation.DropTarget.Level(levelLabel), drop) }) {
         if (s.filters.size > 1) {
             val selected = s.filters.indexOf(s.shell.filter).coerceAtLeast(0)
             androidx.compose.material3.PrimaryScrollableTabRow(
@@ -682,7 +682,7 @@ private fun me.raddatz.veyq.mobile.navigation.NodeRef.at() = me.raddatz.veyq.mob
 @Composable
 private fun Modifier.rowDrop(node: me.raddatz.veyq.mobile.navigation.NodeRef, model: AppModel): Modifier {
     val at = me.raddatz.veyq.mobile.navigation.NodeAt(node.scopeId, node.nodeId, node.kind, node.name)
-    return if (model.dropTarget(at)) sharedFilesDrop { drop -> model.drop(me.raddatz.veyq.mobile.composition.DropTarget.Row(at), drop) } else this
+    return if (model.dropTarget(at)) sharedFilesDrop { drop -> model.drop(me.raddatz.veyq.mobile.navigation.DropTarget.Row(at), drop) } else this
 }
 
 /**

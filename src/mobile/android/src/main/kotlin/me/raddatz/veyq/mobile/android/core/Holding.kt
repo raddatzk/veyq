@@ -2,10 +2,10 @@ package me.raddatz.veyq.mobile.android.core
 
 import kotlinx.coroutines.flow.StateFlow
 import me.raddatz.veyq.mobile.blob.UploadQueue
-import me.raddatz.veyq.mobile.composition.AddHere
-import me.raddatz.veyq.mobile.composition.DropOutcome
-import me.raddatz.veyq.mobile.composition.DropTarget
-import me.raddatz.veyq.mobile.composition.Dropped
+import me.raddatz.veyq.mobile.navigation.AddHere
+import me.raddatz.veyq.mobile.navigation.DropOutcome
+import me.raddatz.veyq.mobile.navigation.DropTarget
+import me.raddatz.veyq.mobile.navigation.Dropped
 import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.media.Derivation
 import me.raddatz.veyq.mobile.navigation.MoveSheet

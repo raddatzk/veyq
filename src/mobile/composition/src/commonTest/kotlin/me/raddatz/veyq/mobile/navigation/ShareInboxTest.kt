@@ -1,6 +1,6 @@
 package me.raddatz.veyq.mobile.navigation
 
-import me.raddatz.veyq.mobile.composition.AddHere
+import me.raddatz.veyq.mobile.navigation.AddHere
 
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.AppKinds

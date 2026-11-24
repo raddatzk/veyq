@@ -26,10 +26,10 @@ import me.raddatz.veyq.mobile.android.core.TrayShown
 import me.raddatz.veyq.mobile.android.core.text
 import me.raddatz.veyq.mobile.android.words
 import me.raddatz.veyq.mobile.blob.UploadSource
-import me.raddatz.veyq.mobile.composition.AddHere
-import me.raddatz.veyq.mobile.composition.DropOutcome
-import me.raddatz.veyq.mobile.composition.DropTarget
-import me.raddatz.veyq.mobile.composition.Dropped
+import me.raddatz.veyq.mobile.navigation.AddHere
+import me.raddatz.veyq.mobile.navigation.DropOutcome
+import me.raddatz.veyq.mobile.navigation.DropTarget
+import me.raddatz.veyq.mobile.navigation.Dropped
 import me.raddatz.veyq.mobile.composition.ShellModel
 import me.raddatz.veyq.mobile.depot.DepotUploads
 import me.raddatz.veyq.mobile.depot.DropBoxPage

@@ -1,4 +1,4 @@
-package me.raddatz.veyq.mobile.composition
+package me.raddatz.veyq.mobile.memories
 
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -6,11 +6,9 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.blob.UploadSource
-import me.raddatz.veyq.mobile.memories.Buckets
-import me.raddatz.veyq.mobile.memories.Contributions
-import me.raddatz.veyq.mobile.memories.GalleryModel
-import me.raddatz.veyq.mobile.memories.MediaDetails
-import me.raddatz.veyq.mobile.memories.MemoryMedia
+import me.raddatz.veyq.mobile.navigation.DropOutcome
+import me.raddatz.veyq.mobile.navigation.DropTarget
+import me.raddatz.veyq.mobile.navigation.Dropped
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.words.Msg
@@ -20,10 +18,10 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 /**
- * A drop onto the bucket a Memory's Contributions view shows (inbox #1065, [DropTarget.Bucket]): its photos and videos go
+ * A drop onto the bucket a Memory's Contributions view shows (inbox #1065, [DropTarget.Page] over [Contributions]): its photos and videos go
  * into that bucket — through the view's own upload, filed by a move into a sub-bucket — the rest said as a gallery's drop
  * says it; another uploader's root refuses it in its own words; nothing is handed back from a refusal. The apps used to
- * upload such a drop into the gallery (`DropTarget.Gallery`), not into the bucket shown.
+ * upload such a drop into the gallery (`DropTarget.Page` over the gallery), not into the bucket shown.
  */
 class BucketDropTest {
     private val me = "u-me"
@@ -77,7 +75,7 @@ class BucketDropTest {
         c.pick("s-me")
         val left = mutableListOf<String>()
         val items = listOf(file("beach.jpg", "image/jpeg"), file("notes.pdf", "application/pdf"), Dropped.Folder("/x/Holiday", null, emptyList()))
-        val outcome = assertIs<DropOutcome.Uploaded>(DropTarget.Bucket(c).drop(items) { left += it.name })
+        val outcome = assertIs<DropOutcome.Uploaded>(DropTarget.Page(c).drop(items) { left += it.name })
         assertEquals(1, outcome.queued)
         assertEquals(listOf(listOf("beach.jpg") to true), page.uploads, "into the bucket, filed — not the gallery's plain upload")
         assertEquals(listOf(Notice(Msg.MEMORY_DROP_FOLDER, "Holiday"), Notice(Msg.MEMORY_NOT_MEDIA, 1)), outcome.notices)
@@ -90,7 +88,7 @@ class BucketDropTest {
         val c = open(page)
         c.pick("p-other")
         val left = mutableListOf<String>()
-        val outcome = assertIs<DropOutcome.Refused>(DropTarget.Bucket(c).drop(listOf(file("beach.jpg", "image/jpeg"))) { left += it.name })
+        val outcome = assertIs<DropOutcome.Refused>(DropTarget.Page(c).drop(listOf(file("beach.jpg", "image/jpeg"))) { left += it.name })
         assertEquals(Notice(Msg.MEMORY_BUCKETS_DROP_NOT_OWN), outcome.notice)
         assertEquals(emptyList(), page.uploads)
         assertEquals(emptyList(), left, "a refusal keeps nothing and hands nothing back: the files are the caller's still")

@@ -1,16 +1,11 @@
-package me.raddatz.veyq.mobile.composition
+package me.raddatz.veyq.mobile.navigation
 
+import kotlin.native.HiddenFromObjC
+import me.raddatz.veyq.mobile.PlatformApi
 import me.raddatz.veyq.mobile.blob.DirectoryWalk
-import me.raddatz.veyq.mobile.navigation.NodeAt
-import me.raddatz.veyq.mobile.navigation.*
+import me.raddatz.veyq.mobile.blob.LevelUploads
 import me.raddatz.veyq.mobile.blob.UploadSource
-import me.raddatz.veyq.mobile.depot.DepotUploads
-import me.raddatz.veyq.mobile.depot.FolderUpload
 import me.raddatz.veyq.mobile.export.ImportDialog
-import me.raddatz.veyq.mobile.memories.Contributions
-import me.raddatz.veyq.mobile.memories.GalleryModel
-import me.raddatz.veyq.mobile.memories.MediaUploads
-import me.raddatz.veyq.mobile.memories.MemoryShare
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Notices
@@ -29,7 +24,7 @@ sealed class Dropped {
      */
     class Folder(val path: String, val shownName: String?, val found: List<DirectoryWalk.Found>?) : Dropped() {
         /** The folder's name as it is said and made. */
-        val name: String get() = FolderUpload.rootName(shownName, path)
+        val name: String get() = DirectoryWalk.rootName(shownName, path)
     }
 
     /** An item with no local path (a phone's or a cloud's virtual item, a remote location unmounted): refused by its [name]. */
@@ -47,27 +42,19 @@ sealed class DropTarget {
     /** The row of [folder] on the level shown: a drop target only where `ShellModel.dropTarget` says so, never by its kind. */
     class Row(val folder: NodeAt) : DropTarget()
 
-    /** A Memory's or a chapter's gallery (its page open). */
-    class Gallery(val gallery: GalleryModel) : DropTarget() {
-        /**
-         * The drop onto this gallery, judged by its rights alone (`GalleryModel.takesUploads`): the same answer with or
-         * without a tenant's shell — a link's guest, signed out, has none ([ShellModel.drop] asks this too).
-         */
-        fun drop(items: List<Dropped>, left: (UploadSource) -> Unit = {}): DropOutcome =
-            if (!gallery.takesUploads) DropOutcome.notHere else Drops.ontoGallery(gallery, items, left)
-    }
-
     /**
-     * The bucket a Memory's or a chapter's Contributions view shows (inbox #1065; the web's `MemoryBuckets.vue` drop): its
-     * photos and videos go into that bucket — one of the caller's own root alone, as the web's takes them.
+     * A page that takes files put onto it ([PageIntake]: a Memory's or a chapter's gallery, its page open; the bucket a
+     * Contributions view shows, inbox #1065).
      */
-    class Bucket(val contributions: Contributions) : DropTarget() {
-        /** The drop onto this bucket, judged by the view alone (`Contributions.intake`), with or without a tenant's shell. */
-        fun drop(items: List<Dropped>, left: (UploadSource) -> Unit = {}): DropOutcome = when (contributions.intake()) {
-            Contributions.Intake.TAKES -> Drops.sorted(items, left, contributions::upload)
-            Contributions.Intake.NOT_OWN -> DropOutcome.Refused(Notice(Msg.MEMORY_BUCKETS_DROP_NOT_OWN))
-            Contributions.Intake.OFFLINE -> DropOutcome.Refused(Notice(Msg.OFFLINE_READ_ONLY))
-            Contributions.Intake.NONE -> DropOutcome.notHere
+    class Page(val intake: PageIntake) : DropTarget() {
+        /**
+         * The drop onto this page, judged by the page alone ([PageIntake.dropIntake]): the same answer with or without a
+         * tenant's shell — a link's guest, signed out, has none ([ShellModel.drop] asks this too).
+         */
+        fun drop(items: List<Dropped>, left: (UploadSource) -> Unit = {}): DropOutcome = when (val i = intake.dropIntake()) {
+            PageIntake.Intake.Takes -> Drops.ontoPage(intake, items, left)
+            is PageIntake.Intake.Refused -> DropOutcome.Refused(i.notice)
+            PageIntake.Intake.NotHere -> DropOutcome.notHere
         }
     }
 }
@@ -93,13 +80,18 @@ sealed class DropOutcome {
         override val notices: List<Notice> get() = listOf(notice)
     }
 
-    internal companion object {
+    // open to the composition's ShellModel until it is the platform's (#1215 slice 3), then internal again
+    @PlatformApi
+    @HiddenFromObjC
+    companion object {
         val notHere get() = Refused(Notice(Msg.DROP_NOT_HERE))
     }
 }
 
 /** The drop's one sort and upload, behind `ShellModel.drop` (its gate decided there). */
-internal object Drops {
+@PlatformApi
+@HiddenFromObjC
+object Drops {
     /** What a drop says of the items it does not take whatever the target: those with no local path, those that did not read. */
     private fun unsaid(items: List<Dropped>): List<Notice> =
         items.filterIsInstance<Dropped.NotLocal>().map { Notice(Msg.DEPOT_DROP_NOT_LOCAL, it.name) } +
@@ -107,11 +99,11 @@ internal object Drops {
 
     /**
      * A drop onto a level of [scopeId] under [parentId], named [label]: folders out first, the files sorted through the
-     * folder's answer ([FolderShare]'s: any file), the files screened as one batch, then each folder — one import offered
+     * folder's answer (Depot's `FolderShare`: any file), the files screened as one batch, then each folder — one import offered
      * per drop at most (the web's): once one is, the rest is the ordinary upload.
      */
     suspend fun ontoLevel(
-        scopeId: String, parentId: String?, label: String, items: List<Dropped>, depot: DepotUploads,
+        scopeId: String, parentId: String?, label: String, items: List<Dropped>, depot: LevelUploads,
         answer: ShareAnswer, left: (UploadSource) -> Unit, deletedName: String,
     ): DropOutcome {
         val notices = unsaid(items).toMutableList()
@@ -142,21 +134,17 @@ internal object Drops {
     }
 
     /**
-     * A drop onto [gallery]: its photos and videos queued into it at once ([MemoryShare]'s answer), each other file said
+     * A drop onto [page]: what its answer keeps (Memories': photos and videos) uploaded into it at once, each other file said
      * by count and handed back, each folder said by name — not walked into one Memory, which would flatten it (owner
      * 2026-11-13).
      */
-    fun ontoGallery(gallery: GalleryModel, items: List<Dropped>, left: (UploadSource) -> Unit): DropOutcome =
-        sorted(items, left, gallery::upload)
-
-    /** A drop's photos and videos sorted out ([MemoryShare]'s answer) and handed to [upload], the rest said as [ontoGallery] says it. */
-    fun sorted(items: List<Dropped>, left: (UploadSource) -> Unit, upload: (List<UploadSource>) -> Int): DropOutcome {
-        val sorted = MemoryShare.answer.sort(items.filterIsInstance<Dropped.File>().map { it.source })
+    fun ontoPage(page: PageIntake, items: List<Dropped>, left: (UploadSource) -> Unit): DropOutcome {
+        val sorted = page.answer.sort(items.filterIsInstance<Dropped.File>().map { it.source })
         sorted.left.forEach { runCatching { left(it) } }
-        val queued = if (sorted.taken.isEmpty()) 0 else upload(sorted.taken)
+        val queued = if (sorted.taken.isEmpty()) 0 else page.upload(sorted.taken)
         if (queued == 0) sorted.taken.forEach { runCatching { left(it) } }
-        val notices = items.filterIsInstance<Dropped.Folder>().map { Notice(Msg.MEMORY_DROP_FOLDER, it.name) } +
-            unsaid(items) + listOfNotNull(MediaUploads.notTaken(sorted.left.size))
+        val notices = page.foldersNotTaken(items.filterIsInstance<Dropped.Folder>().map { it.name }) +
+            unsaid(items) + listOfNotNull(page.filesNotTaken(sorted.left.size))
         return DropOutcome.Uploaded(queued, notices)
     }
 }

@@ -1915,8 +1915,8 @@ class DispatchTest {
         val trip = java.io.File(dir, "Trip").apply { mkdirs(); java.io.File(this, "x.txt").writeText("x") }
         val seen = java.util.Collections.synchronizedList(ArrayList<String>())
         val closed = java.util.Collections.synchronizedList(ArrayList<String>())
-        var outcome: (me.raddatz.veyq.mobile.composition.DropTarget) -> me.raddatz.veyq.mobile.composition.DropOutcome = { _ ->
-            me.raddatz.veyq.mobile.composition.DropOutcome.Uploaded(1, listOf(Notice(Msg.DEPOT_DROP_NOT_LOCAL, "Phone")))
+        var outcome: (me.raddatz.veyq.mobile.navigation.DropTarget) -> me.raddatz.veyq.mobile.navigation.DropOutcome = { _ ->
+            me.raddatz.veyq.mobile.navigation.DropOutcome.Uploaded(1, listOf(Notice(Msg.DEPOT_DROP_NOT_LOCAL, "Phone")))
         }
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
@@ -1925,21 +1925,20 @@ class DispatchTest {
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
                     drop = { target, items, _, left, deletedName ->
                         seen += when (target) {
-                            is me.raddatz.veyq.mobile.composition.DropTarget.Level -> "level:${target.label}"
-                            is me.raddatz.veyq.mobile.composition.DropTarget.Row -> "row:${target.folder.nodeId}"
-                            is me.raddatz.veyq.mobile.composition.DropTarget.Gallery -> "gallery"
-                            is me.raddatz.veyq.mobile.composition.DropTarget.Bucket -> "bucket"
+                            is me.raddatz.veyq.mobile.navigation.DropTarget.Level -> "level:${target.label}"
+                            is me.raddatz.veyq.mobile.navigation.DropTarget.Row -> "row:${target.folder.nodeId}"
+                            is me.raddatz.veyq.mobile.navigation.DropTarget.Page -> if (target.intake is me.raddatz.veyq.mobile.memories.GalleryModel) "gallery" else "bucket"
                         }
                         seen += items.map {
                             when (it) {
-                                is me.raddatz.veyq.mobile.composition.Dropped.File -> "file:${it.source.name}"
-                                is me.raddatz.veyq.mobile.composition.Dropped.Folder -> "folder:${it.name}:${it.found?.size}"
-                                is me.raddatz.veyq.mobile.composition.Dropped.NotLocal -> "notLocal:${it.name}"
-                                is me.raddatz.veyq.mobile.composition.Dropped.Unread -> "unread:${it.name}"
+                                is me.raddatz.veyq.mobile.navigation.Dropped.File -> "file:${it.source.name}"
+                                is me.raddatz.veyq.mobile.navigation.Dropped.Folder -> "folder:${it.name}:${it.found?.size}"
+                                is me.raddatz.veyq.mobile.navigation.Dropped.NotLocal -> "notLocal:${it.name}"
+                                is me.raddatz.veyq.mobile.navigation.Dropped.Unread -> "unread:${it.name}"
                             }
                         }
                         seen += "deleted:$deletedName"
-                        items.filterIsInstance<me.raddatz.veyq.mobile.composition.Dropped.File>().forEach { f ->
+                        items.filterIsInstance<me.raddatz.veyq.mobile.navigation.Dropped.File>().forEach { f ->
                             val src = f.source
                             left(object : me.raddatz.veyq.mobile.blob.UploadSource(src.name, src.size, src.type, src.modifiedAt) {
                                 override suspend fun read(from: Long, length: Int) = src.read(from, length)
@@ -1958,7 +1957,7 @@ class DispatchTest {
         assertEquals(listOf("level:Home", "file:a.txt", "folder:Trip:1", "notLocal:Phone", "unread:gone.txt", "deleted:Deleted"), seen.toList())
         assertEquals(listOf("a.txt"), closed.toList(), "a file the drop did not keep was not closed")
         seen.clear()
-        outcome = { _ -> me.raddatz.veyq.mobile.composition.DropOutcome.Refused(Notice(Msg.DROP_NOT_HERE)) }
+        outcome = { _ -> me.raddatz.veyq.mobile.navigation.DropOutcome.Refused(Notice(Msg.DROP_NOT_HERE)) }
         val row = me.raddatz.veyq.mobile.navigation.NodeAt("s", "identity", "FOLDER", "Ben")
         assertEquals(
             Answer.Dropped(0, listOf(Notice(Msg.DROP_NOT_HERE)), refused = true),
