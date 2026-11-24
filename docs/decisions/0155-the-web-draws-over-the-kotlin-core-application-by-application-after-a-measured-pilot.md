@@ -20,7 +20,10 @@
   (2026-11-24: Expenses' rules, `@veyq/core-js/expenses` from `:apps:expenses`' own module file, decision 4's JSON seam
   with it, § Expenses' move); the owner (2026-11-22) counts the platform code its façade needs against the platform
   module's running budget and retired the search-alone budget. Its second (2026-11-24: Depot's rules, `@veyq/core-js/depot`
-  from `:apps:depot`'s own module file, a lazy chunk, § Depot's move). Decision 8 is not built
+  from `:apps:depot`'s own module file, a lazy chunk, § Depot's move). Its third (2026-11-24: Memories' pure rules,
+  `@veyq/core-js/memories` from `:apps:memories`' own module file, never in the eager set, § Memories' move). Decision 8 is
+  not built; its gate was measured with Memories' move (§ Memories' move, D7: the gallery's model as it is would put
+  ~285 KB gz on every first load — an owner question, inbox #1323)
 - Date: 2026-11-20
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -194,6 +197,10 @@ Measured before the decision (2026-11-20):
    measurement of its own. The web then observes a model as Swift and the bridge do, through its `watch(listener)`
    and the `Watch` it returns (`blob/UploadQueue.kt`), behind one composable that replaces a `shallowRef` per state
    and cancels the watch when its scope ends; never Vue's deep reactivity over a Kotlin object.
+   **Measured 2026-11-24** (§ Memories' move, D7; not built, an owner question, inbox #1323): coroutines alone add
+   4,680 B gz to the platform's module file and 15,239 B gz to the application's own code; Memories' gallery model as it
+   is reaches the session, the generated API client and with them Ktor and kotlinx.serialization, which then ship in the
+   platform's module file with every entry — +284,612 B gz on every first load.
 
 9. **The crypto suite and admin-web stay TypeScript.** `@veyq/crypto` and the Kotlin suite are two implementations
    answering to one set of vectors; that is a check worth more than the bytes it costs. A Kotlin `V1` runs in the web
@@ -220,6 +227,9 @@ Measured before the decision (2026-11-20):
       each kind's guest-path ceiling; the package's slice check keeps reporting its size with every move. A move's
       time corpus is the move's to name where the real use is bounded (Depot's view decision over 1,000 openings,
       accepted the same day).
+      **Proposed for Memories, not set** (§ Memories' move, its measurement 2026-11-24; inbox #1324): a Memory link guest's
+      first load at most **816 KiB gz (835,584 B)** — a Memory's page measured 814,770 B gz after the move, its share body
+      718,798; the larger plus Depot's relative headroom (2.6%). The owner sets it.
     - **A chunk only members load is looser:** it is still measured and recorded with every move, but its growth is
       not a gate; a move reports it, and the owner is asked only where it is unusual for what the move deletes.
     - **Time still binds everywhere:** 7.3's time bound is about running, not loading, and holds for every rule moved.
@@ -1275,6 +1285,83 @@ Measured before the decision (2026-11-20):
     static imports of the chunk a link's share view mounts — `FileDetail` for a single file's link, `DropBoxShareBody` for a
     drop box's; a folder's link draws core's level and Depot's rows, both eager. For the record, the other kinds' at the
     same build: a Memory's share body 715,671, a Memory's page 811,620, a Pot's page 718,724 B gz.
+
+- **Memories' move** (decision 7.3's third application, built 2026-11-24, branch `claude/memories-web-core`, the work order
+  cr-web-memories-on-the-core, deleted at harvest). The web's Memories rules that were pure and had a whole Kotlin twin on
+  variant B — the justified grid's geometry and a medium's display aspect (`mediaGridLayout.ts`), a Memory's medoid
+  (`computeMedoid`, now `medoid.ts`), the participants' merge (`mergeParticipants`, now `participantsWrite.ts` with the
+  write), the MP3 and ADTS frame headers, the first frame chain and a raw ADTS file's count (`music/frames.ts`), a WAV's
+  header, samples and ends (`music/wav.ts`) — are `:apps:memories`' (`MediaGridLayout`, `MemoryLocation.medoid`,
+  `Participants.merge`, `music/Frames`, `music/Wav`), drawn through `@veyq/core-js/memories`
+  (`apps/memories/src/jsMain/…/memories/web/`), its code Memories' own module file (`kotlin_veyq_mobile_apps_memories.mjs`),
+  which the web's bundler inlines into the lazy `media` chunk a Memory's page and share body load: never in the eager set.
+  `contracts/memories/v1-vectors.json` holds every side (20 aspects, 15 grids, 10 medoid sets, 8 merges, 35 frame headers
+  and chains, 8 count steps and 6 ends, 21 WAV headers, 7 sample sets, 6 end lengths): `MemoriesVectorsTest` writes it, the
+  package's `memories.test.ts` and the web's `features/memories/vectors.test.ts` answer it. What stays TypeScript, and why:
+  the sealed meta's readers (`normalizeLocation`, `normalizeDate`, `normalizeParticipants`, `boundPlaceName`) — their twins
+  read kotlinx's tree (variant A) and the web reads them eagerly (inbox #1320); the rules whose twin answers apart or takes
+  another shape (the gallery filter, the rights, the GPX track, the track label and facts, the audio facts, the music
+  queue, the space map's clusters, the stored match, the banner; inbox #1321); `isGalleryMedium` (D4); and every model
+  with a flow or I/O (decision 8, its gate measured below, D7). Its gate (each number against `b53b952f0`, the tree before
+  the move, its own build; the machine at a load of 4–7 from other agents):
+
+  | Criterion | Measured | Bound |
+  |---|---|---|
+  | size: Memories over every platform entry (the package's `slice.test.ts`, gross, `@noble/*` external) | +4,249 B gz (its module's own 10,572 B minified) | ≤ 25,600 |
+  | size: the platform module, every entry | 79,874 B gz (79,768 before: +106 — `Float.fromBits`' companion and `floatFromBits`, `roundToLong`, an `IntArray.getOrNull`) | reported (decision 10); the slice check still holds the running budget, 80,094 |
+  | size: the deleted TypeScript (each set's exports bundled alone, every other import external, gzip -9) | 2,512 B gz before (grid 613, medoid 385, merge 242, frames 765, wav 969), 1,010 B gz of glue after — 1,502 net | — |
+  | size: the stop rule (the guest path grows by at most the deleted TypeScript × 3.0 plus the façade's floor) | +3,150 B gz at most (a Memory's page) | 7,536 + the floor |
+  | size: the web's eager set (`vite build`, gzip -9 per chunk) | 688,070 → 688,246 (+176: `main` −215 with the medoid and the merge gone from it, `review` +302 the platform's growth, the rest rechunked) | — |
+  | size: a link guest's first load (decision 10, D8 of Depot's move) | a Memory's share body 715,671 → 718,798 (+3,127); a Memory's page 811,620 → 814,770 (+3,150); a Depot file 702,621 → 702,776 (+155, inside its 720,896); a folder 688,246, a drop box 691,948, a Pot's page 718,924 (the eager set's +176 each) | Memories': proposed 816 KiB, decision 10 |
+  | size: the chunks Memories loads | `media` 8,448 → 11,730 (+3,282: Memories' module inlined), `useOptimisticTiles` −351, `MemoryDetailHost` −25, `source` +35 | — |
+  | size: a chunk only members load (`PersonMemories`, `MemoryNodeDialog`, `SpaceMap`, `exportImport`) | +3, +4, +1, −44 B gz | measured, not gated (decision 10) |
+  | time: the grid, a 10,000-photo gallery laid out at 360, 1,280 and 2,560 px (Node 22.23.4, median of 15 after 3 warm-ups, the glue as it ships against the deleted TypeScript) | 2.65–2.75 ms against 1.21–1.33 (2.07–2.19×), two runs | ≤ 2.5× and ≤ 100 ms |
+  | time: the medoid of a trip's 500 points | 3.60–3.63 ms against 3.33–3.47 (1.05–1.08×) | ≤ 2.5× and ≤ 100 ms |
+  | time: a WAV end's samples, 30 s of 48 kHz stereo | 16 bit 12.52–12.56 ms against 7.44–7.49 (1.67–1.69×); 24 bit 11.45–11.47 against 9.08–9.14 (1.26×) | ≤ 2.5× and ≤ 100 ms |
+  | time: the first frame chain over a 4 MiB tail, the chain at its end | MP3 11.96–11.97 ms against 7.15–7.26 (1.65–1.67×); ADTS 20.80–20.89 against 20.49–21.51 (0.97–1.02×) | ≤ 2.5× and ≤ 100 ms |
+  | time: a 10-minute raw ADTS file counted | 1.00–1.09 ms against 0.73–0.74 (1.36–1.49×) | ≤ 2.5× and ≤ 100 ms |
+  | answers | identical (a digest over each corpus' answers) | identical |
+  | behaviour | the web's tests pass (592 files, 8,435 tests) with the twins' tests unchanged but their import lines (`memoryLocation.test.ts`, `memoryLocation.e2e.test.ts`, `memoryParticipants.test.ts`: the medoid and the write in their new files) | identical |
+  | delivery | three `--no-daemon --rerun-tasks :composition:jsPackage` builds from a removed `dist/`, one digest over its 227 files (`117d728e…6a1022b`); the web's `pnpm run check` with `verify:csp` and `verify:license-sources` green | identical |
+  | tests | one bite per hot rule, each red on all three sides and restored: `>` for `>=` closing a grid row — the core's `grid` (2 cases), the package (2), the web (2); `<=` for `<` in the medoid — 1, 1, 2 (`memoryLocation.test.ts`' tie too); a 16-bit sample over 32,767 — 2, 2, 2; a chain of two read as three — 4, 4, 7 (`frames.test.ts` too); the count reading past a cut slice — 2, 2, 1 (the web's whole-file case through `adtsDurationMs`, added for it: without it the bite passed the web, measured first) | each red |
+
+  The move's decision log, kept by its implementer (question, choice and why, evidence, cost):
+  - **D1 — The set: five rules with a whole twin on variant B, nothing else.** Decision 1 deletes a twin; the meta's readers
+    take kotlinx's tree and are eager, the other rules have no whole twin — each is its own work (#1320, #1321). The move is
+    small in bytes (1,502 B gz net); its point is one rule each.
+  - **D2 — Memories' module stays off the eager set.** `memoryLocation.ts` and `memoryParticipants.ts` are eager (the level's
+    rows, the search's facets; the medoid measured in `main`), so the medoid's glue is a file of its own (`medoid.ts`, the
+    place's composable its one caller) and the participants' write moved with its merge into `participantsWrite.ts` (a
+    Memory's page its one caller). A dynamic import in the write was tried first: one more await before the PATCH, and a
+    test's pending write landed on the next test's mock (measured), so the write moved instead. *Cost:* three test files'
+    import lines.
+  - **D3 — The pure parts are `internal`.** The façade lives in the module's own `jsMain`, so what it needs —
+    `MediaGridLayout.justifyInto`/`displayAspectOf`, `medoidAt`, `Frames.adtsCount`/`adtsEnd`/`adtsMs`, `Wav.endBytes` — is
+    `internal`, and the apps' public functions run them; no public Kotlin signature changed, so the Apple framework's header
+    is unchanged and no Xcode build was owed.
+  - **D4 — `isGalleryMedium` stays:** a type test on one object per item; a crossing per item for three comparisons.
+  - **D5 — Where the core and the web answered apart, the web's answer won** (ADR 0154's rule): the medoid's radians are
+    the web's `(d * π) / 180`, not `d * (π / 180)` — an ulp apart, enough to flip a near tie.
+  - **D6 — The squeeze, behaviour-neutral.** The first façade grew the platform by +462 B gz: the grid's `Layout` (its lazy
+    rows, the standard library's sublists) and the medoid's `List<LatLng>` (the companion's world view ships core's `LatLng`
+    with every entry). The façade places tiles without a `Layout` (`justifyInto`) and the medoid reads two arrays at file
+    level (`medoidAt`): +106. `Float.fromBits` (a float WAV's samples) stays — its companion is the remainder.
+  - **D7 — Decision 8's gate, measured, not crossed** (a throwaway probe façade, never committed; every platform entry
+    bundled with and without Memories' as the slice check bundles them, gzip -9). *The candidate:* `GalleryModel`, the page
+    every Memory's guest and member opens (the share body and the page both draw it), its TypeScript twin the largest of the
+    application (`useMediaGalleryLive`, `useOptimisticTiles`, `useMediaTrash`, `useThumbnailPipeline`, `optimisticUpload`,
+    `useUploaderNames`, `mediaRevisionPolling`, `itemFavoritesStore`: 1,411 lines, 6,603 B gz bundled, and much of
+    `MemoryDetail.vue`). *Measured:* the coroutines floor alone (a `StateFlow`, a launched watch, a `Promise` action) — the
+    platform 79,874 → 84,554 B gz (+4,680, every first load), Memories +4,249 → +19,488 (+15,239, the coroutines library in
+    its lazy code); the gallery's model behind a door the web writes (every call a `Promise`), watched, its three reads —
+    the platform **364,486 (+284,612)**, Memories +26,120 over it; every action the page calls — 381,625 (+301,751) and
+    +36,746. *Why so much:* the model reaches 450 platform classes — `TenantSession`, the generated API client
+    (`ContentApi`, `ScopesApi`, …), the rekey, the outbox, the offline pages — and with them Ktor and kotlinx.serialization,
+    which then ship in the platform's one module file with every entry; a bundler drops none of it. *What it would buy:*
+    the 6.6 KB gz above deleted and one gallery for every client. *Answer:* not crossed; the owner question (inbox #1323)
+    is whether to cut the model from the session first (its reads only through its `Door`) and measure again.
+  - **D8 — Memories' guest-path ceiling, proposed:** 816 KiB gz (835,584 B), a Memory's page's 814,770 plus Depot's relative
+    headroom (decision 10; inbox #1324).
 
 - **The operator-served web is unchanged in kind** ([ADR 0026](0026-client-trust-tiers.md)): still same-origin,
   content-hashed chunks, no new CSP source, no Subresource Integrity in use before or after; the Kotlin output is one
