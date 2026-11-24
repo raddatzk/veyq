@@ -286,7 +286,9 @@ A Gradle build of its own, run through its own wrapper.
   and one module per screen (`sign_in` with the unlock, `shell` with Search, `home` (every row with its cover, `Shell.RowCover`, a folder's level with its head), `pot` with its download,
   `pot_settings` (a Pot's Settings place, editable in place) and `pot_create` (New pot),
   `entry_editor` (an entry's editor; `typed`: when a text field is set from the state), `receipt_viewer` (a receipt
-  shown from memory: a picture through GTK, a PDF through poppler-rs, its pages drawn by the core UI's `pdf_render`) and `entry_history`, `file_page` (a Depot file's page
+  shown from memory: a picture through GTK, a PDF through poppler-rs, its pages drawn by the core UI's `pdf_render`, their
+  text selected and copied by the core UI's `pdf_text` and read by a screen reader through `pdf_reading`'s `PageText`, as a
+  Depot file's, inbox #1220) and `entry_history`, `file_page` (a Depot file's page
   and its Save a copy with its toast; a medium played by `player` — `gtk::Video` over a `gtk::MediaFile` reading `reader_stream`, a
   seekable `gio::InputStream` whose reads are `Reader.Read` ranges, `bridge::call_blocking` on GStreamer's thread),
   `memory_page` (a Memory's or a chapter's page: its chapters with their covers, the justified grid the core lays out and
@@ -340,8 +342,9 @@ A Gradle build of its own, run through its own wrapper.
   `AvatarsHeld` (`Held<T>`, no control, Linux's `avatars::Held` rule for rule; `AvatarsTest`) and `Avatars` (decodes
   each picture through `BitmapImage` by `PictureDecode`, a WebP WIC refuses by the core; sets it on every `PersonPicture` of that id), `Act` (sends a
   call, logs its answer), `ScreenSecrets` (the window out of capture while a secret shows, § Secrets on screen), `PotSettingsView` (a Pot's Settings place, editable in place), `PotCreateDialog` (New pot),
-  `FilePage` (a Depot file's page; a PDF in WebView2's own viewer through `PdfWeb` — its text selected and copied —, a
-  protected one or one without WebView2's runtime through `PdfPages`; `PdfWebTest`; its Save a copy's `InfoBar` is `ShellView.Saving`; a medium in `MediumPlayer`: a
+  `FilePage` (a Depot file's page; a PDF in WebView2's own viewer through `PdfWeb` and `PdfWebView` — its text selected,
+  copied and read by Narrator, a protected one's password asked by the viewer —, one on a device without WebView2's
+  runtime through `PdfPages`; `PdfWeb.Route` decides, `PdfRouteTest`; `PdfWebTest`; its Save a copy's `InfoBar` is `ShellView.Saving`; a medium in `MediumPlayer`: a
   `MediaPlayerElement` over `MediaSource.CreateFromStream` of `ReaderStream`, a seekable .NET `Stream` whose reads are
   `Reader.Read` ranges, through `AsRandomAccessStream`; `ReaderStreamTest`), `MemoryPage` (a Memory's or a chapter's page:
   its chapters with their covers, the justified grid the core lays out and windows — `Gallery.Layout`, only the rows near
@@ -374,7 +377,8 @@ A Gradle build of its own, run through its own wrapper.
   its rules without a widget in `ReceivedText`, `ReceivedTextTest`), `BookmarkPage` (a kept link's page, in place or on its
   own, while the shell's state names it) and `BookmarkCreateDialog` (New → Bookmark), `ListScrolls` (where each list was
   scrolled to; `ListScrollsTest`), `EntryEditorPage` (an entry's editor, a page in place of the Pot's places) with
-  `ReceiptViewerDialog` and `PdfPages` (a receipt's PDF through `Windows.Data.Pdf`, from memory; `PdfPagesTest`), `TypedText`
+  `ReceiptViewerDialog` (a receipt's PDF in `PdfWebView` as a file's, inbox #964, a protected one only offered for saving;
+  without WebView2's runtime through `PdfPages`' `Windows.Data.Pdf`, from memory; `PdfPagesTest`), `TypedText`
   (when a text box is set from the state; `TypedTextTest`), `Words`/`MrtWords` and `SaidNotice` (the words), `Said` (money, days and sizes the system's
   way), `CreateAction`, `Log` (`log.txt` in the data folder), and in a debug build `DevLogin` and `DebugEnv`
   (`VEYQ_THEME`, `VEYQ_LANGUAGE`). `Veyq.Tests` holds the words and formats against the app's `.pri`. `Veyq.Drive` is the

@@ -702,9 +702,10 @@ first cut.
 **Depot**: a READ_WRITE guest's own name as uploader; a download's import on the phones (not built, owner 2026-11-19),
 its macOS click pass and a drop from Files or Explorer ([ADR 0152](../decisions/0152-the-apps-import-a-download-as-the-web-does-the-webs-reader-and-walk-in-the-core-each-kinds-import-its-applications-recognised-by-every-depot-upload.md)'s
 Consequences, inbox #985); multi-select and dragging a node onto a folder to move
-it (inbox #421); Send a copy and "Open with" on the desktops (not offered, see Built). A password-protected PDF's text
-selected and copied on Windows (drawn by `Windows.Data.Pdf`, which has no text API). Built 2026-11-18 (inbox #955): on
-Linux an overlay of its own over poppler's rendered pages (`src/mobile/linux/src/apps/depot/pdf_text.rs`; GTK has no view that
+it (inbox #421); Send a copy and "Open with" on the desktops (not offered, see Built); a PDF's text on a Windows device
+without WebView2's runtime (drawn by `Windows.Data.Pdf`, which has no text API). Built 2026-11-18 (inbox #955): on
+Linux an overlay of its own over poppler's rendered pages (`src/mobile/linux/src/core_ui/pdf_text.rs`, the core UI's
+since inbox #1220, which an Expenses receipt's PDF uses too; GTK has no view that
 selects a PDF's text) — poppler's `selected_region` for the highlight and `selected_text` for the copy, a drag across
 pages, a double click a word and a triple a line, Ctrl+A every page shown, Ctrl+C and the context menu's *Copy*; nothing
 of the text logged (a count of characters) or written. Passed in Broadway against the dev instance the same day: a
@@ -727,7 +728,13 @@ Windows VM the same day against the dev instance (`run.py drive`): a 25-page rep
 Print or the More menu, a line selected by a mouse drag and Ctrl+C read back from the clipboard in the logged-on session,
 Ctrl+S and Ctrl+P opening nothing, `jpx.pdf` shown (a picture, no text to select); after the page was left no browser of
 the viewer ran, its folder was gone, and no file written under `%TEMP%`, `%LOCALAPPDATA%` or `%APPDATA%` during the pass
-held the selected words (ASCII, UTF-16). Built 2026-11-18 (V2 block C): a
+held the selected words (ASCII, UTF-16). Built 2026-11-24 (inbox #964, Narrator's pass owed): every PDF Windows' reader
+opens goes to that viewer (`PdfWeb.Route`, `PdfRouteTest`) — a password-protected one too, handed over encrypted, its
+password asked by the viewer itself, once (asked in the page first, the viewer asked again), and an Expenses receipt's
+(`PdfWebView`, shared by both applications; a protected receipt offered for saving, never asked, as the web's
+`ReceiptView`); `Windows.Data.Pdf` draws the pages only without WebView2's runtime. `PdfWebTest` holds the protected case
+as the plain one: a PDF encrypted with a canary password (RC4, revision 2), the password typed into the viewer's prompt,
+its text copied, and no canary — the password among them — on disk, nothing on the network. Built 2026-11-18 (V2 block C): a
 text's *Copy* and *Wrap lines* on every app; a PDF's password asked in the page on every app (Android from Android 15,
 `LoadParams`; below it said with the download); its text selectable and copied on Apple (PDFKit's `PDFView`) and Android 15
 (`PdfRenderer.Page.selectContent`, a long press and a drag). Passed on a throwaway API 36 emulator the same day: a text's

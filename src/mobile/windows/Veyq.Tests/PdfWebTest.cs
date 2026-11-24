@@ -25,18 +25,28 @@ namespace Veyq.Tests;
 /// started: <c>VEYQ_PDF_NETLOG=&lt;path&gt;</c> keeps it beside that path in full (<c>.1.json</c>, <c>.2.json</c>).
 /// <c>VEYQ_PDF_BARE=1</c> starts the browser without PdfWeb's arguments and not InPrivate: the measurement's baseline and
 /// this test's bite, red (the PDF's title in <c>History</c>; Edge's configuration fetched).
+/// A password-protected PDF (inbox #964) is handed to the viewer as it is, encrypted: the viewer asks for its password
+/// itself, the password (a canary too) is typed into it, and the same holds — its text copied, none of it, nor the
+/// password, on disk, nothing on the network.
 /// </summary>
 [TestClass]
 public sealed class PdfWebTest
 {
     [TestMethod]
     [Timeout(180_000)]
-    public void TheViewerCopiesTheTextAndKeepsNoneOfItOnDisk()
+    public void TheViewerCopiesTheTextAndKeepsNoneOfItOnDisk() => Measure(null);
+
+    [TestMethod]
+    [Timeout(180_000)]
+    public void TheViewerAsksAProtectedPdfsPasswordAndKeepsNoneOfItOnDisk() => Measure(Canary());
+
+    /// <summary>The measurement over a PDF of canaries, protected by <paramref name="password"/> where one is given.</summary>
+    private static void Measure(string? password)
     {
         var text = Canary();
         var title = Canary();
         var marker = Canary();
-        var (pdf, stream) = Pdf(text, title, marker);
+        var (pdf, stream) = password is null ? Pdf(text, title, marker) : Pdf(text, title, marker, password);
         var since = DateTime.UtcNow.AddSeconds(-2);
         var folder = PdfWeb.NewFolder();
         var seen = new ConcurrentQueue<string>();
@@ -73,6 +83,13 @@ public sealed class PdfWebTest
                 await Task.Delay(3000);
                 Clipboard.Clear(window.Handle);
                 controller.MoveFocus(CoreWebView2MoveFocusReason.Programmatic);
+                if (password is not null)
+                {
+                    // the viewer's own prompt holds the focus: the password typed into it, then Enter
+                    await core.CallDevToolsProtocolMethodAsync("Input.insertText", $"{{\"text\":\"{password}\"}}");
+                    await Enter(core);
+                    await Task.Delay(3000);
+                }
                 await Click(core, 450, 300);
                 await Keys(core, 'A', "selectAll");
                 await Keys(core, 'C', "copy");
@@ -96,7 +113,9 @@ public sealed class PdfWebTest
             Say($"requests: {string.Join(" ", seen)}");
             Say($"copied: {(copied is null ? "nothing" : copied.Contains(text) ? "the text" : $"other text ({copied.Length} chars)")}");
             var needles = new Dictionary<string, byte[]>();
-            foreach (var (name, value) in new[] { ("text", text), ("title", title), ("marker", marker) })
+            var canaries = new List<(string, string)> { ("text", text), ("title", title), ("marker", marker) };
+            if (password is not null) canaries.Add(("password", password));
+            foreach (var (name, value) in canaries)
             {
                 needles[$"{name} (ASCII)"] = Encoding.ASCII.GetBytes(value);
                 needles[$"{name} (UTF-16LE)"] = Encoding.Unicode.GetBytes(value);
@@ -210,6 +229,95 @@ public sealed class PdfWebTest
         foreach (var o in offsets) Put($"{o:D10} 00000 n \n");
         Put($"trailer\n<< /Size {offsets.Count + 1} /Root 1 0 R /Info 6 0 R >>\nstartxref\n{xref}\n%%EOF\n");
         return (pdf.ToArray(), stream);
+    }
+
+    /// <summary>The fixture of <see cref="Pdf(string, string, string)"/> encrypted by PDF's standard security handler,
+    /// revision 2 (RC4, 40-bit: ISO 32000-1 § 7.6.3, algorithms 2, 3 and 4), <paramref name="password"/> its user
+    /// password: its content stream and its title encrypted with the object's key, the encryption dictionary beside them;
+    /// and the encrypted stream. Every PDF reader opens it with the password and none without (PdfPagesTest).</summary>
+    internal static (byte[] Pdf, byte[] Stream) Pdf(string text, string title, string marker, string password)
+    {
+        var content = Encoding.ASCII.GetBytes($"BT /F1 24 Tf 40 300 Td ({text}) Tj ET");
+        using var packed = new MemoryStream();
+        using (var z = new ZLibStream(packed, CompressionLevel.Optimal, leaveOpen: true)) z.Write(content);
+        var id = RandomNumberGenerator.GetBytes(16);
+        const int permissions = -4;
+        var owner = Rc4(Md5(Padded(Canary()))[..5], Padded(password));
+        var key = Md5([.. Padded(password), .. owner, .. BitConverter.GetBytes(permissions), .. id])[..5];
+        var user = Rc4(key, Padding);
+        byte[] Sealed(int obj, byte[] plain) => Rc4(Md5([.. key, (byte)obj, (byte)(obj >> 8), (byte)(obj >> 16), 0, 0])[..10], plain);
+        var stream = Sealed(4, packed.ToArray());
+        var hexTitle = Convert.ToHexString(Sealed(6, [0xFE, 0xFF, .. Encoding.BigEndianUnicode.GetBytes(title)]));
+        var pdf = new MemoryStream();
+        void Put(string s) => pdf.Write(Encoding.ASCII.GetBytes(s));
+        Put($"%PDF-1.4\n%{marker}\n");
+        var offsets = new List<long>();
+        void Obj(string body)
+        {
+            offsets.Add(pdf.Position);
+            Put($"{offsets.Count} 0 obj\n{body}\nendobj\n");
+        }
+        Obj("<< /Type /Catalog /Pages 2 0 R >>");
+        Obj("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+        Obj("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 400] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>");
+        offsets.Add(pdf.Position);
+        Put($"4 0 obj\n<< /Length {stream.Length} /Filter /FlateDecode >>\nstream\n");
+        pdf.Write(stream);
+        Put("\nendstream\nendobj\n");
+        Obj("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+        Obj($"<< /Title <{hexTitle}> >>");
+        Obj($"<< /Filter /Standard /V 1 /R 2 /Length 40 /O <{Convert.ToHexString(owner)}> /U <{Convert.ToHexString(user)}> /P {permissions} >>");
+        var xref = pdf.Position;
+        Put($"xref\n0 {offsets.Count + 1}\n0000000000 65535 f \n");
+        foreach (var o in offsets) Put($"{o:D10} 00000 n \n");
+        var hexId = Convert.ToHexString(id);
+        Put($"trailer\n<< /Size {offsets.Count + 1} /Root 1 0 R /Info 6 0 R /Encrypt 7 0 R /ID [<{hexId}> <{hexId}>] >>\nstartxref\n{xref}\n%%EOF\n");
+        return (pdf.ToArray(), stream);
+    }
+
+    /// <summary>The standard security handler's padding (ISO 32000-1 § 7.6.3.3, algorithm 2 step a).</summary>
+    private static readonly byte[] Padding =
+    [
+        0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x41, 0x64, 0x00, 0x4E, 0x56, 0xFF, 0xFA, 0x01, 0x08,
+        0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80, 0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A,
+    ];
+
+    /// <summary>A password as the handler reads it: its bytes, padded (and cut) to 32.</summary>
+    private static byte[] Padded(string password) => [.. Encoding.ASCII.GetBytes(password).Concat(Padding).Take(32)];
+
+    // MD5 and RC4 are what the format's revision 2 names, for a test's fixture only
+#pragma warning disable CA5351
+    private static byte[] Md5(byte[] data) => MD5.HashData(data);
+#pragma warning restore CA5351
+
+    private static byte[] Rc4(byte[] key, byte[] data)
+    {
+        var box = Enumerable.Range(0, 256).Select(i => (byte)i).ToArray();
+        for (int i = 0, j = 0; i < 256; i++)
+        {
+            j = (j + box[i] + key[i % key.Length]) & 255;
+            (box[i], box[j]) = (box[j], box[i]);
+        }
+        var output = new byte[data.Length];
+        for (int k = 0, i = 0, j = 0; k < data.Length; k++)
+        {
+            i = (i + 1) & 255;
+            j = (j + box[i]) & 255;
+            (box[i], box[j]) = (box[j], box[i]);
+            output[k] = (byte)(data[k] ^ box[(box[i] + box[j]) & 255]);
+        }
+        return output;
+    }
+
+    /// <summary>Enter pressed in the view (DevTools' Input domain): a prompt's submit.</summary>
+    private static async Task Enter(CoreWebView2 core)
+    {
+        await core.CallDevToolsProtocolMethodAsync("Input.dispatchKeyEvent",
+            "{\"type\":\"rawKeyDown\",\"windowsVirtualKeyCode\":13,\"key\":\"Enter\",\"code\":\"Enter\"}");
+        await core.CallDevToolsProtocolMethodAsync("Input.dispatchKeyEvent", "{\"type\":\"char\",\"text\":\"\\r\",\"key\":\"Enter\"}");
+        await core.CallDevToolsProtocolMethodAsync("Input.dispatchKeyEvent",
+            "{\"type\":\"keyUp\",\"windowsVirtualKeyCode\":13,\"key\":\"Enter\",\"code\":\"Enter\"}");
+        await Task.Delay(300);
     }
 
     private static async Task<bool> Within(Task<bool> task, int seconds) =>

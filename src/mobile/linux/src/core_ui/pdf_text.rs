@@ -1,6 +1,8 @@
-//! A PDF's text selected and copied on a file's page (inbox #955; Apple's `PDFView` and Android 15's `selectContent` do
-//! this themselves, GTK has no view that does): poppler reads the text — `Page::selected_region` for the highlight,
-//! `Page::selected_text` for what is copied — and this overlay over [crate::apps::depot::file_page]'s rendered pages does the rest.
+//! A PDF's text selected and copied (inbox #955; Apple's `PDFView` and Android 15's `selectContent` do this themselves,
+//! GTK has no view that does): poppler reads the text — `Page::selected_region` for the highlight, `Page::selected_text`
+//! for what is copied — and this overlay over the rendered pages does the rest. Every application's PDF has it: a Depot
+//! file's page (`apps::depot::file_page`) and an Expenses receipt (`apps::expenses::receipt_viewer`, inbox #1220), each
+//! drawing its pages' pictures itself (through [crate::core_ui::pdf_render]) and naming itself in the log ([PdfText::attach]'s `what`).
 //!
 //! A drag over the pages selects, from the page it starts on to the page it is over, a page between them whole; a double
 //! click selects a word and a triple click a line (poppler's `Word` and `Line` styles, the drag then extends by them).
@@ -9,7 +11,7 @@
 //! characters only) or written. A page without a text layer (a scan) highlights nothing and copies nothing.
 //!
 //! A press on a page's text also puts the screen reader's caret there and gives that page the focus: each page's area is
-//! a [PageText], its text read aloud ([crate::apps::depot::pdf_reading], inbox #963).
+//! a [PageText], its text read aloud ([crate::core_ui::pdf_reading], inbox #963).
 //!
 //! The geometry is pure ([Frame], [Anchor], [spans]) and tested apart from GTK; the widgets hold no state but [PdfText]'s.
 use std::cell::{Cell, RefCell};
@@ -18,7 +20,7 @@ use std::rc::Rc;
 use gtk::prelude::*;
 use gtk::{gdk, gio, glib};
 
-use crate::apps::depot::pdf_reading::PageText;
+use crate::core_ui::pdf_reading::PageText;
 use crate::core_ui::words;
 
 /// How far a selection reaches past the point under the pointer: a glyph (a press and a drag), the word (a double click)
@@ -191,14 +193,17 @@ pub struct PageFrame {
     area: PageText,
 }
 
+/// What a PDF's log lines name it by — `veyq: <what> PDF …` —, never its name or text.
+pub type What = &'static str;
+
 impl PageFrame {
-    /// A frame [width] × [height] for [page], the [index]th of the document, named [label]; the picture is drawn by
-    /// [crate::apps::depot::file_page], the highlight here.
-    pub fn new(width: i32, height: i32, page: poppler::Page, index: usize, label: &str) -> Self {
+    /// A frame [width] × [height] for [page], the [index]th of the document, named [label], of the PDF the log calls
+    /// [what]; the picture is drawn by the application, the highlight here.
+    pub fn new(width: i32, height: i32, page: poppler::Page, index: usize, label: &str, what: What) -> Self {
         let picture = gtk::Picture::builder().can_shrink(true).content_fit(gtk::ContentFit::Contain).build();
         picture.set_size_request(width, height);
         // the pointer passes through to the column's gestures; the keyboard and a screen reader reach the page
-        let area = PageText::new(page, index, label);
+        let area = PageText::new(page, index, label, what);
         area.set_can_target(false);
         let overlay = gtk::Overlay::builder().child(&picture).build();
         overlay.add_overlay(&area);
@@ -212,6 +217,7 @@ impl PageFrame {
 /// The selection over a PDF's pages in [column]: the gestures, the keys, the context menu and the highlight.
 pub struct PdfText {
     pdf: poppler::Document,
+    what: What,
     column: gtk::Box,
     frames: Vec<PageFrame>,
     selection: Cell<Option<Selection>>,
@@ -220,17 +226,18 @@ pub struct PdfText {
 }
 
 impl PdfText {
-    /// The selection over [frames], the pages of [pdf] laid out in [column] in order.
-    pub fn attach(pdf: &poppler::Document, column: &gtk::Box, frames: Vec<PageFrame>) -> Rc<Self> {
+    /// The selection over [frames], the pages of [pdf] laid out in [column] in order; the column named [label] for a
+    /// screen reader, the PDF called [what] in the log.
+    pub fn attach(pdf: &poppler::Document, column: &gtk::Box, frames: Vec<PageFrame>, label: &str, what: What) -> Rc<Self> {
         let copy = gio::SimpleAction::new("copy", None);
         copy.set_enabled(false);
-        let this = Rc::new(Self { pdf: pdf.clone(), column: column.clone(), frames, selection: Cell::new(None), copy, menu: RefCell::new(None) });
+        let this = Rc::new(Self { pdf: pdf.clone(), what, column: column.clone(), frames, selection: Cell::new(None), copy, menu: RefCell::new(None) });
         column.set_focusable(true);
         // the column takes the focus at a press; its viewport would scroll the whole column to it, mid-drag
         if let Some(viewport) = column.ancestor(gtk::Viewport::static_type()).and_downcast::<gtk::Viewport>() {
             viewport.set_scroll_to_focus(false);
         }
-        column.update_property(&[gtk::accessible::Property::Label(&words::tab_depot_file())]);
+        column.update_property(&[gtk::accessible::Property::Label(label)]);
         for (i, frame) in this.frames.iter().enumerate() {
             let weak = Rc::downgrade(&this);
             frame.area.set_draw_func(move |_, cr, _, _| {
@@ -389,7 +396,7 @@ impl PdfText {
     fn said(&self) {
         let Some(s) = self.selection.get() else { return };
         let count = text(&self.pdf, s.from, s.to, s.granularity).chars().count();
-        eprintln!("veyq: file PDF selection: pages {}–{}, {count} characters", s.from.page.min(s.to.page) + 1, s.from.page.max(s.to.page) + 1);
+        eprintln!("veyq: {} PDF selection: pages {}–{}, {count} characters", self.what, s.from.page.min(s.to.page) + 1, s.from.page.max(s.to.page) + 1);
         if count == 0 {
             self.set(None);
         }
@@ -400,20 +407,21 @@ impl PdfText {
         let Some(s) = self.selection.get() else { return };
         let selected = text(&self.pdf, s.from, s.to, s.granularity);
         if selected.is_empty() {
-            eprintln!("veyq: file PDF copy: no text selected");
+            eprintln!("veyq: {} PDF copy: no text selected", self.what);
             return;
         }
         let clipboard = self.column.clipboard();
         clipboard.set_text(&selected);
         let count = selected.chars().count();
-        eprintln!("veyq: file PDF text copied: {count} characters");
+        eprintln!("veyq: {} PDF text copied: {count} characters", self.what);
         // no `announce` of the copy: GTK 4.22's ended the app with SIGSEGV in the container (src/mobile/CLAUDE.md)
         if cfg!(debug_assertions) {
             // a debug build reads the clipboard back, for a pass to prove what it holds: whether it is the selection,
             // never what it says
+            let what = self.what;
             glib::spawn_future_local(async move {
                 let back = clipboard.read_text_future().await.ok().flatten().map(|t| t.to_string());
-                eprintln!("veyq: file PDF clipboard read back: {} characters, the selection: {}", back.as_ref().map_or(0, |t| t.chars().count()), back.as_deref() == Some(selected.as_str()));
+                eprintln!("veyq: {what} PDF clipboard read back: {} characters, the selection: {}", back.as_ref().map_or(0, |t| t.chars().count()), back.as_deref() == Some(selected.as_str()));
             });
         }
     }

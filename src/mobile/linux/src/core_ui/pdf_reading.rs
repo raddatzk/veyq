@@ -1,5 +1,5 @@
-//! A PDF page's text for a screen reader (inbox #963): each page of [crate::apps::depot::file_page]'s PDF is a
-//! [PageText], the area [crate::apps::depot::pdf_text] draws its highlight in, which implements GTK's `GtkAccessibleText`
+//! A PDF page's text for a screen reader (inbox #963): each page of a PDF shown with [crate::core_ui::pdf_text] — a Depot
+//! file's, an Expenses receipt's (inbox #1220) — is a [PageText], the area [crate::core_ui::pdf_text] draws its highlight in, which implements GTK's `GtkAccessibleText`
 //! (GTK 4.14, its extents 4.16, its caret set 4.22) over poppler's text of that page — so Orca reads the page, moves
 //! through it by character, word, sentence and line, and finds the character under the pointer. Apple's `PDFView` and
 //! Edge's viewer on Windows expose their text themselves; GTK has no PDF view that does.
@@ -23,7 +23,7 @@ use gtk::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{gdk, glib, graphene, gsk};
 
-use crate::apps::depot::pdf_text::Frame;
+use crate::core_ui::pdf_text::{Frame, What};
 
 /// What a query or a move steps by: GTK's granularities as this page can tell them. A PDF's text names no paragraph, so
 /// a paragraph is told as its line.
@@ -245,6 +245,8 @@ mod imp {
         pub page: RefCell<Option<poppler::Page>>,
         /// The page's place in the document, from 0: what the log names.
         pub index: Cell<usize>,
+        /// What the log calls the PDF.
+        pub what: Cell<&'static str>,
         pub reading: OnceCell<PageReading>,
         pub caret: Cell<u32>,
     }
@@ -255,7 +257,8 @@ mod imp {
                 let reading = self.page.borrow().as_ref().map(read).unwrap_or_else(|| PageReading::new(String::new(), Vec::new()));
                 // a count, never the text
                 eprintln!(
-                    "veyq: file PDF page {} read for assistive technologies: {} characters, boxes: {}",
+                    "veyq: {} PDF page {} read for assistive technologies: {} characters, boxes: {}",
+                    self.what.get(),
                     self.index.get() + 1,
                     reading.len(),
                     reading.has_boxes()
@@ -402,7 +405,7 @@ mod imp {
 }
 
 glib::wrapper! {
-    /// A PDF page's area over its picture: the highlight [crate::apps::depot::pdf_text] draws, and the page's text for a
+    /// A PDF page's area over its picture: the highlight [crate::core_ui::pdf_text] draws, and the page's text for a
     /// screen reader.
     pub struct PageText(ObjectSubclass<imp::PageText>)
         @extends gtk::DrawingArea, gtk::Widget,
@@ -410,11 +413,13 @@ glib::wrapper! {
 }
 
 impl PageText {
-    /// The area of [page], the [index]th of the document, named [label] (its place among the pages).
-    pub fn new(page: poppler::Page, index: usize, label: &str) -> Self {
+    /// The area of [page], the [index]th of the document, named [label] (its place among the pages), of the PDF the log
+    /// calls [what].
+    pub fn new(page: poppler::Page, index: usize, label: &str, what: What) -> Self {
         let this: Self = glib::Object::new();
         this.imp().page.replace(Some(page));
         this.imp().index.set(index);
+        this.imp().what.set(what);
         this.update_property(&[gtk::accessible::Property::Label(label)]);
         this
     }
@@ -457,7 +462,7 @@ impl PageText {
     }
 
     /// Scrolls the caret's line into view (the page's top where it has none): the column's viewport does not scroll to
-    /// the focus ([crate::apps::depot::pdf_text] turns it off), so Tab and the arrows would leave the view behind.
+    /// the focus ([crate::core_ui::pdf_text] turns it off), so Tab and the arrows would leave the view behind.
     fn reveal(&self) {
         let Some(scroll) = self.ancestor(gtk::ScrolledWindow::static_type()).and_downcast::<gtk::ScrolledWindow>() else { return };
         let Some(content) = scroll.child().and_then(|viewport| viewport.first_child()) else { return };
@@ -607,7 +612,7 @@ mod tests {
 
     #[test]
     fn poppler_gives_a_box_for_every_character_of_a_pages_text() {
-        let pdf = crate::apps::depot::pdf_text::tests::fixture();
+        let pdf = crate::core_ui::pdf_text::tests::fixture();
         let r = read(&pdf.page(0).expect("page one"));
         assert!(r.has_boxes(), "poppler's layout matches its text one to one");
         let text = r.slice(0, u32::MAX).to_owned();

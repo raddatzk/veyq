@@ -1,11 +1,10 @@
-//! Depot on Linux (ADR 0154 decision 3): a file's page ([file_page], a PDF's text selected through [pdf_text]) and a
+//! Depot on Linux (ADR 0154 decision 3): a file's page ([file_page], a PDF's text selected and read through the core UI's
+//! `pdf_text`) and a
 //! drop box's page for a member ([drop_box]), a file's Replace, a member's and a link guest's ([replace]). Depot's uploads,
 //! its drop and a download's import are the core UI's (the tray, New's uploads, a drop onto any level). [register] hands
 //! each page to the core UI's registry.
 pub mod drop_box;
 pub mod file_page;
-pub mod pdf_reading;
-pub mod pdf_text;
 pub mod replace;
 
 use adw::prelude::*;

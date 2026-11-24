@@ -5,8 +5,11 @@
 // PDF and deleted when its browser has exited; what it may write there was measured to hold none of the PDF's bytes and
 // none of its text (PdfWebTest, the regression; native-apps.md § A PDF's text on Windows). Its toolbar keeps no item
 // that writes the plaintext (Save, Save as, Print, the More menu), a download or a Save as dialog is cancelled, and the
-// context menu holds Copy alone. No XAML here: the app hosts it in a WebView2 control (FilePage), the test on a window
-// of its own.
+// context menu holds Copy alone. No XAML here: the app hosts it in a WebView2 control (PdfWebView, for a Depot file and an
+// Expenses receipt), the test on a window of its own. Route decides where a PDF is shown (inbox #964): every PDF Windows'
+// own reader opens goes to the viewer, a password-protected one too — the viewer asks its password itself, once — where
+// the application asks for one (Depot; a receipt never does, as the web's ReceiptView); Windows.Data.Pdf draws the pages
+// only on a device without WebView2's runtime.
 
 namespace Veyq.Core;
 
@@ -19,6 +22,38 @@ using Microsoft.Web.WebView2.Core;
 
 internal static class PdfWeb
 {
+    /// <summary>What opening a PDF with Windows.Data.Pdf came to: opened, shut by its password, or no PDF it reads.</summary>
+    public enum Opening
+    {
+        Opened,
+        Locked,
+        Failed,
+    }
+
+    /// <summary>Where a PDF is shown: WebView2's viewer (its text selectable, copyable and read by Narrator), the pages
+    /// drawn by Windows.Data.Pdf, the application's own password prompt before those pages, only offered for saving, or
+    /// said not to be shown.</summary>
+    public enum Shown
+    {
+        Viewer,
+        Pages,
+        AskHere,
+        OnlySaved,
+        NotShown,
+    }
+
+    /// <summary>Where a PDF that opened as <paramref name="opening"/> is shown, on a device that has WebView2's runtime
+    /// (<paramref name="viewer"/>) or not, by an application that asks a protected PDF's password
+    /// (<paramref name="asksPassword"/>: Depot, as the web's FileViewer) or offers it for saving (a receipt, as the web's
+    /// ReceiptView). A protected PDF goes to the viewer unasked: it asks for the password itself, once — asked here first,
+    /// the viewer would ask again, as it reads the bytes as they are (inbox #964).</summary>
+    public static Shown Route(Opening opening, bool viewer, bool asksPassword) => opening switch
+    {
+        Opening.Opened => viewer ? Shown.Viewer : Shown.Pages,
+        Opening.Locked => !asksPassword ? Shown.OnlySaved : viewer ? Shown.Viewer : Shown.AskHere,
+        Opening.Failed => asksPassword ? Shown.NotShown : Shown.OnlySaved,
+    };
+
     /// <summary>The host the document is served under: `.invalid` resolves nowhere (RFC 6761), so a request that escaped
     /// WebResourceRequested would fail on the device, never reach another host.</summary>
     public const string Host = "pdf.veyq.invalid";

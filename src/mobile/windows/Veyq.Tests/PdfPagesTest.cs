@@ -64,6 +64,28 @@ public sealed class PdfPagesTest
     }
 
     [TestMethod]
+    public async Task AProtectedPdfOpensWithItsPasswordAndNotWithout()
+    {
+        // the fixture PdfWebTest hands WebView2's viewer (inbox #964): Windows' reader tells it apart as protected
+        var (bytes, _) = PdfWebTest.Pdf("hello veyq", "a title", "a marker", "fixturepassword");
+        Exception? shut = null;
+        try
+        {
+            await PdfPages.OpenAsync(bytes);
+        }
+        catch (Exception e)
+        {
+            shut = e;
+        }
+        Assert.IsNotNull(shut, "a protected PDF opened without its password");
+        Assert.IsTrue(PdfPages.NeedsPassword(shut), $"not refused for its password: {shut.HResult:X8}");
+        var pdf = await PdfPages.OpenAsync(bytes, "fixturepassword");
+        Assert.AreEqual(1u, pdf.PageCount);
+        using var png = await PdfPages.RenderAsync(pdf, 0, 300);
+        Assert.IsTrue(png.Size > 0, "its page did not render");
+    }
+
+    [TestMethod]
     public async Task BytesThatAreNoPdfThrow()
     {
         var opened = true;

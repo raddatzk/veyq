@@ -4,7 +4,9 @@
 //! and are shown from memory, never written to disk: a picture decoded by GTK (`gdk::Texture::from_bytes`, glycin's
 //! loaders), a PDF by GNOME's own PDF stack (poppler-glib through poppler-rs, from the bytes; each page rendered onto a
 //! cairo surface at the dialog's width and shown as a `gdk::MemoryTexture`) — as many pages as the core says
-//! (`Receipt.Pages`), and what it says when that is not all. Any other file is offered for saving only. Save a copy asks
+//! (`Receipt.Pages`), and what it says when that is not all. A PDF's pages are the core UI's, as a Depot file's are
+//! (inbox #1220): their text selected and copied ([crate::core_ui::pdf_text]) and read by a screen reader, each page a
+//! read-only text box over poppler's text ([crate::core_ui::pdf_reading]). Any other file is offered for saving only. Save a copy asks
 //! GTK's save dialog for a path and the core writes the receipt there (`Receipt.Save`). Offline (ADR 0153 decision 6) a
 //! receipt this device does not keep — never shown here, nor fetched by the Pot's pin — is refused `NotKeptOffline` and
 //! says so, not that it is unreadable; one shown before opens from the store.
@@ -13,6 +15,7 @@ use gtk::{gdk, glib};
 
 use crate::bridge::{self, wire::Answer, wire::Call, wire::Why};
 use crate::core_ui::home::glib_escape;
+use crate::core_ui::pdf_text::{PageFrame, PdfText};
 use crate::core_ui::{pdf_render, said, words};
 
 /// The width a receipt is laid out at in the dialog, in logical pixels.
@@ -43,7 +46,7 @@ pub fn open(parent: &impl IsA<gtk::Widget>, pot: i64, receipt: &str, name: &str)
     let (d, t) = (dialog.clone(), toasts.clone());
     save.connect_clicked(move |_| save_copy(&d, &t, pot_id, &receipt_id, &file_name));
 
-    let receipt = receipt.to_owned();
+    let (receipt, label) = (receipt.to_owned(), name.to_owned());
     let (b, s, scale) = (body.clone(), save.clone(), parent.scale_factor().max(1));
     glib::spawn_future_local(async move {
         let answered = bridge::call(&Call::ReceiptOpen { pot, receipt }).await;
@@ -53,7 +56,7 @@ pub fn open(parent: &impl IsA<gtk::Widget>, pot: i64, receipt: &str, name: &str)
                 s.set_sensitive(true);
                 eprintln!("veyq: receipt opened: {} B, {}", bytes.len(), media_type.as_deref().unwrap_or("no receipt type"));
                 match media_type.as_deref() {
-                    Some("application/pdf") => show_pdf(&b, bytes, scale).await,
+                    Some("application/pdf") => show_pdf(&b, bytes, scale, &label).await,
                     Some(t) if t.starts_with("image/") => show_picture(&b, bytes),
                     _ => b.append(&only_saved()),
                 }
@@ -85,9 +88,11 @@ fn show_picture(body: &gtk::Box, bytes: Vec<u8>) {
     }
 }
 
-/// A PDF's pages, as many as the core says, each rendered once at the dialog's width in device pixels ([scale]); the main
-/// loop draws between two pages.
-async fn show_pdf(body: &gtk::Box, bytes: Vec<u8>, scale: i32) {
+/// A PDF's pages, as many as the core says, each rendered once at the dialog's width in device pixels ([scale]) into a
+/// page frame of the core UI's, whose text is selected, copied and read aloud over [body] (named [label], the receipt's
+/// name); the main loop draws between two pages. A page that does not render ends the pages shown: the frames are the
+/// document's first pages in order, as the selection counts them.
+async fn show_pdf(body: &gtk::Box, bytes: Vec<u8>, scale: i32, label: &str) {
     let pdf = match poppler::Document::from_bytes(&glib::Bytes::from_owned(bytes), None) {
         Ok(pdf) => pdf,
         Err(e) => {
@@ -104,22 +109,31 @@ async fn show_pdf(body: &gtk::Box, bytes: Vec<u8>, scale: i32) {
             return;
         }
     };
-    let mut drawn = 0;
+    let mut frames = Vec::new();
     for i in 0..shown {
         let Some(page) = pdf.page(i) else { break };
-        match pdf_render::render(&page, WIDTH * scale) {
-            Some(r) => {
-                // cairo's ARGB32 is native-endian premultiplied: B, G, R, A in memory on every target the app is built for
-                let texture = gdk::MemoryTexture::new(r.width, r.height, gdk::MemoryFormat::B8g8r8a8Premultiplied, &glib::Bytes::from_owned(r.data), r.stride);
-                body.append(&fitted(&texture));
-                drawn += 1;
-            }
-            None => eprintln!("veyq: page {} of the receipt's PDF did not render", i + 1),
-        }
+        let Some(r) = pdf_render::render(&page, WIDTH * scale) else {
+            eprintln!("veyq: page {} of the receipt's PDF did not render", i + 1);
+            break;
+        };
+        // cairo's ARGB32 is native-endian premultiplied: B, G, R, A in memory on every target the app is built for
+        let texture = gdk::MemoryTexture::new(r.width, r.height, gdk::MemoryFormat::B8g8r8a8Premultiplied, &glib::Bytes::from_owned(r.data), r.stride);
+        let page_label = words::file_pdf_page(i64::from(i) + 1, i64::from(total));
+        let frame = PageFrame::new(WIDTH, frame_height(r.width, r.height), page, i as usize, &page_label, "receipt");
+        frame.picture.set_paintable(Some(&texture));
+        frame.picture.update_property(&[gtk::accessible::Property::Label(&page_label)]);
+        body.append(&frame.overlay);
+        frames.push(frame);
         // the page shown before the next is rendered
         glib::timeout_future(std::time::Duration::ZERO).await;
     }
+    let drawn = frames.len();
     eprintln!("veyq: receipt PDF: {drawn} of {total} pages drawn");
+    if drawn > 0 {
+        // the selection's handlers hold it weakly: the body holds it, until the dialog lets go of the body
+        let held = std::cell::RefCell::new(Some(PdfText::attach(&pdf, body, frames, label, "receipt")));
+        body.connect_destroy(move |_| drop(held.borrow_mut().take()));
+    }
     if let Some(cut) = cut {
         let note = gtk::Label::builder().label(said::notice(&cut)).wrap(true).xalign(0.0).build();
         note.add_css_class("dim-label");
@@ -143,6 +157,14 @@ fn fitted(texture: &impl IsA<gdk::Paintable>) -> gtk::Picture {
     picture.set_size_request(width, (f64::from(th) * f64::from(width) / f64::from(tw)).round() as i32);
     picture.set_halign(gtk::Align::Center);
     picture
+}
+
+/// A page frame's height at [WIDTH] for a page rendered [width] × [height] device pixels: its aspect kept.
+fn frame_height(width: i32, height: i32) -> i32 {
+    if width <= 0 {
+        return WIDTH;
+    }
+    ((f64::from(height) * f64::from(WIDTH) / f64::from(width)).round() as i32).max(1)
 }
 
 /// A file shown only as a copy to save (no picture, no PDF, or one that does not decode here).
@@ -190,4 +212,20 @@ fn save_copy(dialog: &adw::Dialog, toasts: &adw::ToastOverlay, pot: i64, receipt
             said::word_toast("receipts_not_saved", &words::receipts_not_saved())
         });
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_pages_frame_keeps_its_aspect_at_the_dialogs_width() {
+        // a Letter page rendered at twice the width: 1280 × 1656 device pixels, a frame 640 × 828
+        assert_eq!(frame_height(1280, 1656), 828);
+        // a landscape page, at one pixel to one
+        assert_eq!(frame_height(640, 400), 400);
+        // a page rendered at no width: a square frame, never one of no height
+        assert_eq!(frame_height(0, 0), WIDTH);
+        assert_eq!(frame_height(5000, 1), 1);
+    }
 }
