@@ -9,7 +9,9 @@ import me.raddatz.veyq.mobile.session.LocalDays
  * a Memory's day and range, an amount of money, a list, a track's length and a line's pieces — each the string the web
  * writes, in the app's [language] (`en`, `de`; any other is written as English, the apps' catalog has only these two),
  * so no platform formats one of its own. Held to `src/mobile/words/format-vectors.json`, which the web's own formatters
- * write (`ShownVectorsTest`); the web stays their source until a move of ADR 0155 brings them into the core.
+ * write (`ShownVectorsTest`), the web staying their source until a move of ADR 0155 brings them into the core — and money
+ * ([money], [number]) did with Expenses: the web draws it from here (`@veyq/core-js/expenses`), and the core writes
+ * `src/mobile/words/money-vectors.json` (`ShownVectorsTest`'s write mode).
  *
  * A [Notice] keeps its words for the platform's catalog; [args] writes its values first, so a platform fills a sentence
  * with strings only.

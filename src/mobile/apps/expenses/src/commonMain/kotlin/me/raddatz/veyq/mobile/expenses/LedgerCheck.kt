@@ -1,8 +1,8 @@
 package me.raddatz.veyq.mobile.expenses
 
 /**
- * What a read of a Pot found wrong with its ledger (ADR 0108 decision 5), a port of `checkLedger` in
- * `src/web/src/features/expenses/domain/heads.ts`. A seal binds a revision to its own address, not to its neighbours, so
+ * What a read of a Pot found wrong with its ledger (ADR 0108 decision 5), the web's too (ADR 0155, through
+ * `@veyq/core-js/expenses`). A seal binds a revision to its own address, not to its neighbours, so
  * a server could serve the list with a revision left out and every balance would come out wrong unseen; each revision
  * therefore names the heads its writer read, with their digests, and every read checks them.
  *

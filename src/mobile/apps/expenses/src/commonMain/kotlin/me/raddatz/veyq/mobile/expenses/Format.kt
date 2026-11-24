@@ -1,18 +1,16 @@
 package me.raddatz.veyq.mobile.expenses
 
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
+import me.raddatz.veyq.mobile.json.JsonText
+import me.raddatz.veyq.mobile.json.JsonValue
+import me.raddatz.veyq.mobile.json.jsonArray
+import me.raddatz.veyq.mobile.json.jsonObject
+import me.raddatz.veyq.mobile.json.jsonString
 
-// The plaintext of one Expenses revision, format v1, a port of `src/web/src/features/expenses/domain/format.ts`;
-// `contracts/expenses/entry.v1.schema.json` is the source of truth (ADR 0108 decisions 3-5). Readers drop unknown fields
-// and refuse any other `v`; the JSON's key order carries no meaning (a reader parses, never compares).
+// The plaintext of one Expenses revision, format v1 — the web's and the apps' one reader and writer (ADR 0155: the web
+// draws it through `@veyq/core-js/expenses`); `contracts/expenses/entry.v1.schema.json` is the source of truth (ADR 0108
+// decisions 3-5) and `contracts/expenses/v1-vectors.json` pins it. Readers drop unknown fields and refuse any other `v`;
+// the JSON's key order carries no meaning (a reader parses, never compares). It reads and writes the core's own JSON tree
+// (`json/JsonTree.kt`), never a kotlinx type, so a façade reaches no serializer.
 
 /** One revision the Pot's heads name: its address and the SHA-256 of its sealed body (base64url, no padding). */
 data class Head(val entryId: String, val revision: Long, val digest: String)
@@ -95,13 +93,11 @@ object RevisionFormat {
     private const val MAX_SHARES = 1_000_000L
     const val PERCENT_WHOLE = 10_000L
 
-    private val JSON = Json
-
     // ---- reading ----
 
     private fun fail(path: String): Nothing = throw RevisionFormatInvalid(path)
 
-    private fun obj(v: JsonElement?, path: String): JsonObject = v as? JsonObject ?: fail(path)
+    private fun obj(v: JsonValue?, path: String): JsonValue.Obj = v as? JsonValue.Obj ?: fail(path)
 
     /** Length in code points, as `[...s].length` counts it. */
     fun codePoints(s: String): Int {
@@ -114,61 +110,53 @@ object RevisionFormat {
         return n
     }
 
-    private fun str(v: JsonElement?, path: String, pattern: Regex? = null, min: Int = 0, max: Int = Int.MAX_VALUE): String {
-        val p = v as? JsonPrimitive
-        if (p == null || !p.isString) fail(path)
-        val s = p.content
+    private fun str(v: JsonValue?, path: String, pattern: Regex? = null, min: Int = 0, max: Int = Int.MAX_VALUE): String {
+        val s = (v as? JsonValue.Str)?.value ?: fail(path)
         val n = codePoints(s)
         if (n < min || n > max || (pattern != null && !pattern.matches(s))) fail(path)
         return s
     }
 
-    /** An integer as JSON numbers carry one: `1`, also `1.0` or `1e2` (JS reads them as the same number). */
-    private fun int(v: JsonElement?, path: String, min: Long, max: Long): Long {
-        val p = v as? JsonPrimitive
-        if (p == null || p.isString || p is JsonNull) fail(path)
-        val n = p.content.toLongOrNull() ?: p.content.toDoubleOrNull()?.takeIf { it % 1.0 == 0.0 && kotlin.math.abs(it) <= MAX_SAFE }?.toLong() ?: fail(path)
-        if (n < min || n > max) fail(path)
-        return n
+    /** An integer as JSON numbers carry one: a double with no fraction (`1`, `1.0`, `1e2` are one number). */
+    private fun int(v: JsonValue?, path: String, min: Long, max: Long): Long {
+        val d = (v as? JsonValue.Num)?.value ?: fail(path)
+        if (d % 1.0 != 0.0 || d < min.toDouble() || d > max.toDouble()) fail(path)
+        return d.toLong()
     }
 
-    private fun arr(v: JsonElement?, path: String, min: Int, max: Int): JsonArray {
-        val a = v as? JsonArray ?: fail(path)
+    private fun arr(v: JsonValue?, path: String, min: Int, max: Int): List<JsonValue> {
+        val a = (v as? JsonValue.Arr)?.items ?: fail(path)
         if (a.size < min || a.size > max) fail(path)
         return a
     }
 
-    private fun bool(v: JsonElement?, path: String): Boolean {
-        val p = v as? JsonPrimitive
-        if (p == null || p.isString) fail(path)
-        return when (p.content) { "true" -> true; "false" -> false; else -> fail(path) }
-    }
+    private fun bool(v: JsonValue?, path: String): Boolean = (v as? JsonValue.Bool)?.value ?: fail(path)
 
     private fun uniq(xs: List<String>, path: String): List<String> = if (xs.toSet().size == xs.size) xs else fail(path)
-    private fun uuid(v: JsonElement?, path: String) = str(v, path, UUID)
-    private fun minor(v: JsonElement?, path: String) = int(v, path, 1, MAX_SAFE)
-    private fun uuids(v: JsonElement?, path: String) = uniq(arr(v, path, 1, MAX_LIST).mapIndexed { i, x -> uuid(x, "$path/$i") }, path)
+    private fun uuid(v: JsonValue?, path: String) = str(v, path, UUID)
+    private fun minor(v: JsonValue?, path: String) = int(v, path, 1, MAX_SAFE)
+    private fun uuids(v: JsonValue?, path: String) = uniq(arr(v, path, 1, MAX_LIST).mapIndexed { i, x -> uuid(x, "$path/$i") }, path)
 
-    private fun contributions(v: JsonElement?, path: String) = arr(v, path, 1, MAX_LIST).mapIndexed { i, x ->
+    private fun contributions(v: JsonValue?, path: String) = arr(v, path, 1, MAX_LIST).mapIndexed { i, x ->
         val o = obj(x, "$path/$i")
         Contribution(uuid(o["participant"], "$path/$i/participant"), minor(o["amount"], "$path/$i/amount"))
     }
 
-    private fun category(v: JsonElement?, path: String): String {
-        val s = (v as? JsonPrimitive)?.takeIf { it.isString }?.content
+    private fun category(v: JsonValue?, path: String): String {
+        val s = (v as? JsonValue.Str)?.value
         if (s != null && (s in DEFAULT_CATEGORIES || UUID.matches(s))) return s
         fail(path)
     }
 
-    private fun weights(o: JsonObject, list: String, key: String, path: String, max: Long, min: Long = 1) =
+    private fun weights(o: JsonValue.Obj, list: String, key: String, path: String, max: Long, min: Long = 1) =
         arr(o[list], "$path/$list", 1, MAX_LIST).mapIndexed { i, x ->
             val s = obj(x, "$path/$list/$i")
             uuid(s["participant"], "$path/$list/$i/participant") to int(s[key], "$path/$list/$i/$key", min, max)
         }
 
-    private fun split(v: JsonElement?, path: String): Split {
+    private fun split(v: JsonValue?, path: String): Split {
         val o = obj(v, path)
-        return when ((o["mode"] as? JsonPrimitive)?.takeIf { it.isString }?.content) {
+        return when ((o["mode"] as? JsonValue.Str)?.value) {
             "equal" -> Split.Equal(uuids(o["participants"], "$path/participants"))
             "shares" -> Split.Shares(weights(o, "shares", "shares", path, MAX_SHARES))
             "percent" -> Split.Percent(weights(o, "percents", "percent", path, PERCENT_WHOLE))
@@ -177,18 +165,18 @@ object RevisionFormat {
         }
     }
 
-    private fun allocation(v: JsonElement?, path: String): Allocation {
+    private fun allocation(v: JsonValue?, path: String): Allocation {
         val o = obj(v, path)
         val items = arr(o["items"], "$path/items", 0, MAX_LIST).mapIndexed { i, x ->
             val it = obj(x, "$path/items/$i")
             Item(str(it["label"], "$path/items/$i/label", null, 1, 200), minor(it["amount"], "$path/items/$i/amount"), split(it["split"], "$path/items/$i/split"))
         }
-        return Allocation(items, if (o.containsKey("rest")) split(o["rest"], "$path/rest") else null)
+        return Allocation(items, if (o.has("rest")) split(o["rest"], "$path/rest") else null)
     }
 
     private class MoneyFields(val date: String, val currency: String, val minorUnits: Int, val rate: String, val amount: Long, val receipts: List<String>)
 
-    private fun money(o: JsonObject) = MoneyFields(
+    private fun money(o: JsonValue.Obj) = MoneyFields(
         date = str(o["date"], "/date", DATE),
         currency = str(o["currency"], "/currency", CURRENCY),
         minorUnits = int(o["minorUnits"], "/minorUnits", 0, 4).toInt(),
@@ -197,9 +185,9 @@ object RevisionFormat {
         receipts = uniq(arr(o["receipts"], "/receipts", 0, MAX_RECEIPTS).mapIndexed { i, x -> uuid(x, "/receipts/$i") }, "/receipts"),
     )
 
-    private fun title(v: JsonElement?) = str(v, "/title", null, 1, 200)
+    private fun title(v: JsonValue?) = str(v, "/title", null, 1, 200)
 
-    private fun content(o: JsonObject): RevisionContent = when ((o["kind"] as? JsonPrimitive)?.takeIf { it.isString }?.content) {
+    private fun content(o: JsonValue.Obj): RevisionContent = when ((o["kind"] as? JsonValue.Str)?.value) {
         "expense" -> {
             val t = title(o["title"]); val c = category(o["category"], "/category"); val m = money(o)
             Expense(t, c, m.date, m.currency, m.minorUnits, m.rate, m.amount, m.receipts, contributions(o["payers"], "/payers"), allocation(o["allocation"], "/allocation"))
@@ -208,18 +196,18 @@ object RevisionFormat {
             val t = title(o["title"]); val c = category(o["category"], "/category"); val m = money(o)
             Refund(
                 t, c, m.date, m.currency, m.minorUnits, m.rate, m.amount, m.receipts, contributions(o["receivers"], "/receivers"),
-                allocation(o["allocation"], "/allocation"), if (o.containsKey("refunds")) uuid(o["refunds"], "/refunds") else null,
+                allocation(o["allocation"], "/allocation"), if (o.has("refunds")) uuid(o["refunds"], "/refunds") else null,
             )
         }
         "transfer" -> {
             val m = money(o)
-            Transfer(if (o.containsKey("title")) title(o["title"]) else null, m.date, m.currency, m.minorUnits, m.rate, m.amount, m.receipts, uuid(o["from"], "/from"), uuid(o["to"], "/to"))
+            Transfer(if (o.has("title")) title(o["title"]) else null, m.date, m.currency, m.minorUnits, m.rate, m.amount, m.receipts, uuid(o["from"], "/from"), uuid(o["to"], "/to"))
         }
         "participant" -> ParticipantBody(
             name = str(o["name"], "/name", null, 1, 100),
             active = bool(o["active"], "/active"),
             joined = int(o["joined"], "/joined", 0, MAX_SAFE),
-            member = if (o.containsKey("member")) uuid(obj(o["member"], "/member")["userId"], "/member/userId") else null,
+            member = if (o.has("member")) uuid(obj(o["member"], "/member")["userId"], "/member/userId") else null,
         )
         "deleted" -> Deleted
         "erasure" -> Erasure(int(o["joined"], "/joined", 0, MAX_SAFE))
@@ -227,10 +215,9 @@ object RevisionFormat {
     }
 
     /** A parsed plaintext held to the v1 schema, or [RevisionFormatInvalid] at the first rule it breaks. */
-    fun read(parsed: JsonElement): RevisionBody {
+    fun read(parsed: JsonValue): RevisionBody {
         val o = obj(parsed, "")
-        // a number as JSON.parse reads one: `1.0` and `1e0` are 1 (contracts/expenses/v1-vectors.json `decode`)
-        if ((o["v"] as? JsonPrimitive)?.let { !it.isString && it !is JsonNull && it.content.toDoubleOrNull() == VERSION.toDouble() } != true) fail("/v")
+        if ((o["v"] as? JsonValue.Num)?.value != VERSION.toDouble()) fail("/v")
         val heads = arr(o["heads"], "/heads", 0, MAX_HEADS).mapIndexed { i, h ->
             val ho = obj(h, "/heads/$i")
             Head(uuid(ho["entryId"], "/heads/$i/entryId"), int(ho["revision"], "/heads/$i/revision", 1, MAX_SAFE), str(ho["digest"], "/heads/$i/digest", DIGEST))
@@ -238,11 +225,11 @@ object RevisionFormat {
         return RevisionBody(heads, content(o))
     }
 
-    /** UTF-8 JSON plaintext back to a body; [RevisionFormatInvalid] for anything that is not one. */
+    /** UTF-8 JSON plaintext back to a body; [RevisionFormatInvalid] for anything that is not one. A leading byte order mark
+     *  is dropped, as a fatal UTF-8 `TextDecoder` drops it (the vectors' `decode`). */
     fun decode(bytes: ByteArray): RevisionBody {
         val parsed = try {
-            // a leading byte order mark is dropped, as a fatal UTF-8 `TextDecoder` drops it (the vectors' `decode`)
-            JSON.parseToJsonElement(bytes.decodeToString(throwOnInvalidSequence = true).removePrefix("\uFEFF"))
+            JsonText.parse(bytes.decodeToString(throwOnInvalidSequence = true).removePrefix("﻿"))
         } catch (e: Exception) {
             fail("")
         }
@@ -251,59 +238,66 @@ object RevisionFormat {
 
     // ---- writing ----
 
-    private fun splitJson(s: Split): JsonObject = buildJsonObject {
-        fun pairs(list: String, key: String, xs: List<Pair<String, Long>>) = put(list, buildJsonArray {
-            xs.forEach { (p, w) -> add(buildJsonObject { put("participant", p); put(key, w) }) }
-        })
-        when (s) {
-            is Split.Equal -> { put("mode", "equal"); put("participants", JsonArray(s.participants.map { JsonPrimitive(it) })) }
-            is Split.Shares -> { put("mode", "shares"); pairs("shares", "shares", s.shares) }
-            is Split.Percent -> { put("mode", "percent"); pairs("percents", "percent", s.percents) }
-            is Split.Amounts -> { put("mode", "amounts"); pairs("amounts", "amount", s.amounts) }
+    private fun num(n: Long) = JsonValue.Num(n)
+    private fun strs(xs: List<String>) = jsonArray(xs.map(::jsonString))
+
+    private fun splitJson(s: Split): JsonValue.Obj {
+        fun pairs(key: String, xs: List<Pair<String, Long>>) = jsonArray(xs.map { (p, w) -> jsonObject("participant" to jsonString(p), key to num(w)) })
+        return when (s) {
+            is Split.Equal -> jsonObject("mode" to jsonString("equal"), "participants" to strs(s.participants))
+            is Split.Shares -> jsonObject("mode" to jsonString("shares"), "shares" to pairs("shares", s.shares))
+            is Split.Percent -> jsonObject("mode" to jsonString("percent"), "percents" to pairs("percent", s.percents))
+            is Split.Amounts -> jsonObject("mode" to jsonString("amounts"), "amounts" to pairs("amount", s.amounts))
         }
     }
 
-    private fun contributionsJson(xs: List<Contribution>) = JsonArray(xs.map { buildJsonObject { put("participant", it.participant); put("amount", it.amount) } })
+    private fun contributionsJson(xs: List<Contribution>) = jsonArray(xs.map { jsonObject("participant" to jsonString(it.participant), "amount" to num(it.amount)) })
 
-    private fun allocationJson(a: Allocation) = buildJsonObject {
-        put("items", JsonArray(a.items.map { buildJsonObject { put("label", it.label); put("amount", it.amount); put("split", splitJson(it.split)) } }))
-        a.rest?.let { put("rest", splitJson(it)) }
+    private fun allocationJson(a: Allocation) = jsonObject(
+        "items" to jsonArray(a.items.map { jsonObject("label" to jsonString(it.label), "amount" to num(it.amount), "split" to splitJson(it.split)) }),
+        "rest" to a.rest?.let(::splitJson),
+    )
+
+    private fun moneyJson(m: MoneyContent) = arrayOf(
+        "date" to jsonString(m.date), "currency" to jsonString(m.currency), "minorUnits" to num(m.minorUnits.toLong()),
+        "rate" to jsonString(m.rate), "amount" to num(m.amount), "receipts" to strs(m.receipts),
+    )
+
+    /** What a revision says as JSON, without the `v` and `heads` every body carries: the fields the schema names. */
+    fun contentJson(c: RevisionContent): JsonValue.Obj = when (c) {
+        is Expense -> jsonObject(
+            "kind" to jsonString("expense"), "title" to jsonString(c.title), "category" to jsonString(c.category), *moneyJson(c),
+            "payers" to contributionsJson(c.payers), "allocation" to allocationJson(c.allocation),
+        )
+        is Refund -> jsonObject(
+            "kind" to jsonString("refund"), "title" to jsonString(c.title), "category" to jsonString(c.category), *moneyJson(c),
+            "receivers" to contributionsJson(c.receivers), "allocation" to allocationJson(c.allocation), "refunds" to c.refunds?.let(::jsonString),
+        )
+        is Transfer -> jsonObject(
+            // the title last, where the web's reader put it: the key order carries no meaning, but a rewrite of the vectors diffs
+            "kind" to jsonString("transfer"), *moneyJson(c), "from" to jsonString(c.from), "to" to jsonString(c.to), "title" to c.title?.let(::jsonString),
+        )
+        is ParticipantBody -> jsonObject(
+            "kind" to jsonString("participant"), "name" to jsonString(c.name), "active" to JsonValue.Bool(c.active), "joined" to num(c.joined),
+            "member" to c.member?.let { jsonObject("userId" to jsonString(it)) },
+        )
+        Deleted -> jsonObject("kind" to jsonString("deleted"))
+        is Erasure -> jsonObject("kind" to jsonString("erasure"), "joined" to num(c.joined))
     }
 
     /** The body as JSON, before it is held to the schema. */
-    fun toJson(body: RevisionBody): JsonObject = buildJsonObject {
-        put("v", VERSION)
-        put("heads", JsonArray(body.heads.map { buildJsonObject { put("entryId", it.entryId); put("revision", it.revision); put("digest", it.digest) } }))
-        fun money(m: MoneyContent) {
-            put("date", m.date); put("currency", m.currency); put("minorUnits", m.minorUnits); put("rate", m.rate)
-            put("amount", m.amount); put("receipts", JsonArray(m.receipts.map { JsonPrimitive(it) }))
-        }
-        when (val c = body.content) {
-            is Expense -> {
-                put("kind", "expense"); put("title", c.title); put("category", c.category); money(c)
-                put("payers", contributionsJson(c.payers)); put("allocation", allocationJson(c.allocation))
-            }
-            is Refund -> {
-                put("kind", "refund"); put("title", c.title); put("category", c.category); money(c)
-                put("receivers", contributionsJson(c.receivers)); put("allocation", allocationJson(c.allocation)); c.refunds?.let { put("refunds", it) }
-            }
-            is Transfer -> {
-                put("kind", "transfer"); c.title?.let { put("title", it) }; money(c); put("from", c.from); put("to", c.to)
-            }
-            is ParticipantBody -> {
-                put("kind", "participant"); put("name", c.name); put("active", c.active); put("joined", c.joined)
-                c.member?.let { put("member", buildJsonObject { put("userId", it) }) }
-            }
-            Deleted -> put("kind", "deleted")
-            is Erasure -> { put("kind", "erasure"); put("joined", c.joined) }
-        }
-    }
+    fun toJson(body: RevisionBody): JsonValue.Obj = JsonValue.Obj(
+        linkedMapOf<String, JsonValue>(
+            "v" to num(VERSION),
+            "heads" to jsonArray(body.heads.map { jsonObject("entryId" to jsonString(it.entryId), "revision" to num(it.revision), "digest" to jsonString(it.digest)) }),
+        ) + contentJson(body.content).fields,
+    )
 
     /** The bytes a writer seals: compact UTF-8 JSON, held to the schema first — a writer never seals a body its own reader
      *  would refuse. */
     fun encode(body: RevisionBody): ByteArray {
         val json = toJson(body)
         read(json)
-        return json.toString().encodeToByteArray()
+        return JsonText.stringify(json).encodeToByteArray()
     }
 }

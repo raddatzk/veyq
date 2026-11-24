@@ -84,7 +84,7 @@ const answers: Record<string, (c: any) => unknown> = {
     }
     throw new Error(`no op ${c.op}`)
   },
-  rates: (c) => (c.op === 'parseTable' ? parseTable(c.answer, new Set(c.known)) : crossRate(c.table, c.from, c.to)),
+  rates: (c) => (c.op === 'parseTable' ? parseTable(c.answer ?? JSON.parse(c.text), new Set(c.known)) : crossRate(c.table, c.from, c.to)),
 }
 
 describe('the Expenses vectors (contracts/expenses/v1-vectors.json)', () => {

@@ -1,7 +1,7 @@
 package me.raddatz.veyq.mobile.expenses
 
 /**
- * What a device computes from a Pot's entries, a port of `src/web/src/features/expenses/domain/ledger.ts` (ADR 0108
+ * What a device computes from a Pot's entries, the web's too (ADR 0155, through `@veyq/core-js/expenses`; ADR 0108
  * decision 9): each entry's effect in the base currency, the balances, the settle-up and the overview. Every rule about
  * money runs on the device, the server holding only ciphertext; `contracts/expenses/v1-vectors.json` pins it.
  *

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.expenses
 
+import me.raddatz.veyq.mobile.json.toKotlinx
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -107,7 +108,7 @@ object PotExport {
 
     /** An entry's revision without what an import writes anew (`v`, `heads`). */
     internal fun entryJson(c: MoneyContent): JsonObject =
-        JsonObject(RevisionFormat.toJson(RevisionBody(emptyList(), c)).filterKeys { it != "v" && it != "heads" })
+        RevisionFormat.contentJson(c).toKotlinx() as JsonObject
 
     private fun withReceipts(c: MoneyContent, ids: List<String>): MoneyContent = when (c) {
         is Expense -> c.copy(receipts = ids)

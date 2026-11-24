@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.expenses
 
+import me.raddatz.veyq.mobile.json.toTree
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -43,6 +44,6 @@ class PotExportTest {
         RevisionFormat.read(kotlinx.serialization.json.JsonObject(json + mapOf(
             "v" to kotlinx.serialization.json.JsonPrimitive(RevisionFormat.VERSION),
             "heads" to kotlinx.serialization.json.JsonArray(emptyList()),
-        )))
+        )).toTree())
     }
 }

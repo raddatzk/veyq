@@ -631,33 +631,3 @@ private val DEFAULT_CATEGORY_WORDS: Map<String, me.raddatz.veyq.mobile.words.Msg
     "household" to me.raddatz.veyq.mobile.words.Msg.CAT_HOUSEHOLD,
     "other" to me.raddatz.veyq.mobile.words.Msg.CAT_OTHER,
 )
-
-object Amounts {
-    /**
-     * A typed amount in minor units (`web/amounts.ts` `parseAmount`): digits with `.` or `,` and at most [minorUnits]
-     * decimals, above zero and at most 2⁵³−1; null for anything else.
-     */
-    fun parse(text: String, minorUnits: Int): Long? {
-        // every white space out, a no-break space too, as the web's `\s` takes it (the vectors' `amounts`)
-        val t = text.filterNot { it.isWhitespace() }
-        val m = Regex("^([0-9]+)(?:[.,]([0-9]*))?$").matchEntire(t) ?: return null
-        val frac = m.groupValues[2]
-        if (frac.length > minorUnits) return null
-        val digits = (m.groupValues[1] + frac.padEnd(minorUnits, '0')).trimStart('0').ifEmpty { "0" }
-        if (digits.length > 16) return null
-        val v = digits.toLongOrNull() ?: return null
-        return v.takeIf { it in 1..RevisionFormat.MAX_SAFE }
-    }
-
-    /** A typed rate as the format seals it (a decimal with a dot, the schema's `rate`), or null (`amounts.ts` `parseRate`). */
-    fun parseRate(text: String): String? = text.trim().replace(',', '.').takeIf { Money.RATE.matches(it) }
-
-    /** [amount] minor units as a decimal string to be typed over, with [separator] (`amounts.ts` `amountText`). */
-    fun text(amount: Long, minorUnits: Int, separator: Char = '.'): String {
-        val neg = amount < 0
-        val digits = (if (neg) -amount else amount).toString().padStart(minorUnits + 1, '0')
-        val whole = digits.dropLast(minorUnits)
-        val out = if (minorUnits == 0) whole else whole + separator + digits.takeLast(minorUnits)
-        return if (neg) "-$out" else out
-    }
-}

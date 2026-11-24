@@ -17,7 +17,7 @@ class RevisionUnreadable(val reason: Reason) : Exception("revision_unreadable: $
 }
 
 /**
- * The format v1 codec of one Expenses revision, a port of `src/web/src/features/expenses/domain/codec.ts` (ADR 0108
+ * The format v1 codec of one Expenses revision, the web's too (ADR 0155, through `@veyq/core-js/expenses`; ADR 0108
  * decision 4): the plaintext padded to a size class, sealed as an `expense-entry` field under a fresh `K_rev`, and `K_rev`
  * sealed under the Pot's `K_node` as `expense-entry-key`. Both bind the ADDRESS the revision is read by — never a field of
  * the row that carries it — so a body served at another entry, revision or Pot does not open.

@@ -2,15 +2,16 @@ package me.raddatz.veyq.mobile.expenses
 
 /**
  * The currencies a Pot or an entry may be kept in and their minor-unit digits (the euro 2, the yen 0, the dinar 3) — one
- * table for every app (ADR 0136), the web's `knownCurrencies` and `minorUnitsOf` (`src/web/src/features/expenses/amounts.ts`),
- * which ask the browser's `Intl`. A platform's own table differs where ISO 4217 and CLDR do (Android's `java.util.Currency`
- * gives the Iraqi dinar 3 digits, `Intl` 0), so the apps carry this one. The digits a Pot or an entry was written with are
- * sealed in it: a later table never moves a stored amount.
+ * table for every client (ADR 0136; the web's too, through `@veyq/core-js/expenses`, ADR 0155): a platform's own table
+ * differs where ISO 4217 and CLDR do (Android's `java.util.Currency` gives the Iraqi dinar 3 digits, `Intl` 0), and a
+ * browser's moves with its ICU, so no client asks its own. The digits a Pot or an entry was written with are sealed in it:
+ * a later table never moves a stored amount.
  *
  * Measured from `Intl`: `Intl.supportedValuesOf('currency')`, and for each
  * `new Intl.NumberFormat('en', {style: 'currency', currency}).resolvedOptions().maximumFractionDigits` — 2026-11-10 under
  * ICU 77.1, then 2026-11-21 under ICU 78.3 (Node 22.23, the line CI runs; COP, HUF, IDR and PKR lost their digits, RSD
- * gained two). `ShownVectorsTest.theDigitsAreTheWebs` holds the table to `format-vectors.json`, which the web writes.
+ * gained two). A change is deliberate: it rewrites `src/mobile/words/money-vectors.json` (`ShownVectorsTest`'s write mode),
+ * which records each currency's digits.
  */
 object Currencies {
     private const val KNOWN = "AED AFN ALL AMD ANG AOA ARS AUD AWG AZN BAM BBD BDT BGN BHD BIF BMD BND BOB BRL BSD BTN BWP " +

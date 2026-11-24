@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.expenses
 
+import me.raddatz.veyq.mobile.json.toTree
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -33,7 +34,7 @@ object PotImport {
 
     /** An entry's revision body as the import reads it: the archive's entry with what an import writes anew (`v`, `heads`). */
     private fun body(entry: kotlinx.serialization.json.JsonElement?): RevisionBody =
-        RevisionFormat.read(JsonObject((entry as? JsonObject).orEmpty() + mapOf("v" to JsonPrimitive(1), "heads" to JsonArray(emptyList()))))
+        RevisionFormat.read(JsonObject((entry as? JsonObject).orEmpty() + mapOf("v" to JsonPrimitive(1), "heads" to JsonArray(emptyList()))).toTree())
 
     /** An `expenses.pot` content from a download held to its contract (decision 10: the archive is untrusted input). */
     fun validate(content: JsonObject): NodeImport.Problem? {

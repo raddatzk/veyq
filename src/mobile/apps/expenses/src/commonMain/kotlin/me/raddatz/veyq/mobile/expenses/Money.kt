@@ -1,7 +1,7 @@
 package me.raddatz.veyq.mobile.expenses
 
 /**
- * Expenses' arithmetic, a port of `src/web/src/features/expenses/domain/money.ts` (ADR 0108 decision 9): exact fractions,
+ * Expenses' arithmetic, the web's too (ADR 0155, through `@veyq/core-js/expenses`; ADR 0108 decision 9): exact fractions,
  * never floating point — the rounding rule is part of the format version, so every device computes the same cent from the
  * same entries, and `contracts/expenses/v1-vectors.json` pins it. [convertToBase] converts an entry's total once,
  * [allocate] splits an integer total by weights with the largest-remainder rule.

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.offline
 
+import me.raddatz.veyq.mobile.json.toKotlinx
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpMethod
 import io.ktor.http.content.OutgoingContent
@@ -327,7 +328,7 @@ class QueuedTest {
             x.a, "t1", x.scope.id, x.folder.id, me.raddatz.veyq.mobile.blob.UploadSource.of("n.txt", 4, "text/plain", null) { from, length -> "text".encodeToByteArray().copyOfRange(from.toInt(), from.toInt() + length) }, 0, {},
         )!!
         Queued.POT_ENTRY -> {
-            val body = me.raddatz.veyq.mobile.expenses.RevisionFormat.toJson(me.raddatz.veyq.mobile.expenses.RevisionBody(emptyList(), me.raddatz.veyq.mobile.expenses.ParticipantBody("Cleo", true, 3)))
+            val body = me.raddatz.veyq.mobile.expenses.RevisionFormat.toJson(me.raddatz.veyq.mobile.expenses.RevisionBody(emptyList(), me.raddatz.veyq.mobile.expenses.ParticipantBody("Cleo", true, 3))).toKotlinx() as kotlinx.serialization.json.JsonObject
             QueuedWrite("entry:p", q.name, "t1", x.scope.id, node = x.pot.id, intent = QueuedNodes.encode(me.raddatz.veyq.mobile.expenses.QueuedExpenses.EntryIntent.serializer(), me.raddatz.veyq.mobile.expenses.QueuedExpenses.EntryIntent("0e000000-0000-4000-8000-000000000003", null, body)), at = 0)
         }
         Queued.MEDIA_MARK -> QueuedWrite("k", q.name, "t1", x.scope.id, node = x.memory.id, intent = QueuedNodes.encode(me.raddatz.veyq.mobile.memories.QueuedMemories.MarkIntent.serializer(), me.raddatz.veyq.mobile.memories.QueuedMemories.MarkIntent(x.medium.id, true)), at = 0)

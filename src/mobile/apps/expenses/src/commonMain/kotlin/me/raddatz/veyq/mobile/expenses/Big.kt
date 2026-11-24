@@ -1,7 +1,7 @@
 package me.raddatz.veyq.mobile.expenses
 
 /**
- * An arbitrary-precision integer for Expenses' exact arithmetic (`money.ts` computes in JS `BigInt`): Kotlin Multiplatform
+ * An arbitrary-precision integer for Expenses' exact arithmetic, the web's and the apps' alike: Kotlin Multiplatform
  * has no common one, and the rounding of a cent must come out the same on every device. Only what the ledger needs — the
  * four operations with JS `BigInt` semantics (division truncates toward zero, the remainder takes the dividend's sign),
  * comparison, powers of ten and decimal text. Schoolbook on base-10⁹ limbs: the numbers here stay small (amounts below
