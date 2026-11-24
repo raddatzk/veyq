@@ -49,7 +49,7 @@ import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeHeaderModel
 import me.raddatz.veyq.mobile.navigation.TrashSheet
 import me.raddatz.veyq.mobile.navigation.MoveSheet
-import me.raddatz.veyq.mobile.composition.ShareSheet
+import me.raddatz.veyq.mobile.navigation.ShareSheet
 import me.raddatz.veyq.mobile.navigation.ReportSheet
 import me.raddatz.veyq.mobile.session.CoverFrame
 import me.raddatz.veyq.mobile.session.NodeCover
@@ -172,7 +172,7 @@ internal class Composition<A : Connection, T : Any>(
      * What is asked before [loss] deletes account [account]'s writes made offline ([Call.QueuedAskFor]): `QueuedTray.ask`
      * over that account in the library; a test plays one, or has none (nothing asked).
      */
-    val queuedAsk: suspend (account: A, loss: me.raddatz.veyq.mobile.composition.QueuedLoss) -> me.raddatz.veyq.mobile.composition.QueuedAsk? = { _, _ -> null },
+    val queuedAsk: suspend (account: A, loss: me.raddatz.veyq.mobile.offline.QueuedLoss) -> me.raddatz.veyq.mobile.offline.QueuedAsk? = { _, _ -> null },
     /** The models over a tenant just opened; null where there are none (a test's tenant that is no `TenantSession`). */
     val tenant: (T) -> Tenant?,
 )
@@ -496,15 +496,15 @@ internal class HeldDropBox(val page: me.raddatz.veyq.mobile.depot.DropBoxPage) {
  * the level shown holds not sent yet ([here]). Over a shell ([of]); a test plays one.
  */
 internal class QueuedDoor(
-    val items: Flow<List<me.raddatz.veyq.mobile.composition.QueuedItem>>,
+    val items: Flow<List<me.raddatz.veyq.mobile.offline.QueuedItem>>,
     val discard: suspend (id: String) -> Boolean,
-    val opens: suspend (id: String) -> me.raddatz.veyq.mobile.composition.QueuedOpen?,
+    val opens: suspend (id: String) -> me.raddatz.veyq.mobile.offline.QueuedOpen?,
     val copyName: suspend (id: String, index: Int) -> Pair<String?, String?>?,
     val saveCopy: suspend (id: String, index: Int, sink: suspend (ByteArray) -> Unit) -> Boolean,
-    val ask: suspend (loss: me.raddatz.veyq.mobile.composition.QueuedLoss) -> me.raddatz.veyq.mobile.composition.QueuedAsk?,
+    val ask: suspend (loss: me.raddatz.veyq.mobile.offline.QueuedLoss) -> me.raddatz.veyq.mobile.offline.QueuedAsk?,
     val banner: Flow<Notice?>,
     val sent: Flow<List<Notice>>,
-    val here: Flow<List<me.raddatz.veyq.mobile.composition.QueuedItem>>,
+    val here: Flow<List<me.raddatz.veyq.mobile.offline.QueuedItem>>,
 ) {
     companion object {
         fun of(shell: ShellModel): QueuedDoor {
@@ -519,7 +519,7 @@ internal class QueuedDoor(
 
 /** What the shell's state carries of the writes made offline ([ShellShown.queuedBanner], `queuedHere`, `queuedSaid`). */
 internal class QueuedBeside(
-    val banner: Notice? = null, val here: List<me.raddatz.veyq.mobile.composition.QueuedItem> = emptyList(), val said: List<Notice> = emptyList(),
+    val banner: Notice? = null, val here: List<me.raddatz.veyq.mobile.offline.QueuedItem> = emptyList(), val said: List<Notice> = emptyList(),
 )
 
 /** An entry editor the host opened on Pot [pot] ([Call.EditorOpen]), typed in with [separator]. */
@@ -574,7 +574,7 @@ internal interface DeviceFiles {
     fun source(path: String): me.raddatz.veyq.mobile.blob.UploadSource?
 
     /** What a walk of the directory at [path] meets (core's `PickedPaths.walk`); null where it is no directory that lists. */
-    fun walk(path: String): List<me.raddatz.veyq.mobile.depot.FolderUpload.Found>?
+    fun walk(path: String): List<me.raddatz.veyq.mobile.blob.DirectoryWalk.Found>?
 
     /** No file is written: a test's composition that has none to offer. */
     object None : DeviceFiles {
@@ -582,7 +582,7 @@ internal interface DeviceFiles {
             throw UnsupportedOperationException("this composition writes no files")
         override suspend fun read(path: String, most: Int): ByteArray = throw UnsupportedOperationException("this composition reads no files")
         override fun source(path: String): me.raddatz.veyq.mobile.blob.UploadSource? = null
-        override fun walk(path: String): List<me.raddatz.veyq.mobile.depot.FolderUpload.Found>? = null
+        override fun walk(path: String): List<me.raddatz.veyq.mobile.blob.DirectoryWalk.Found>? = null
     }
 
     companion object {
@@ -847,7 +847,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.SessionUnlock -> opened(session.unlock(call.password))
             Call.SessionOtherAccount -> Answer.Done.also { session.otherAccount() }
             Call.SessionForgetUnlocked -> if (session.forgetUnlocked()) Answer.Done else Answer.Refused(Answer.Why.NOT_OFFERED)
-            Call.UnlockForgetAsk -> Answer.QueuedAsked(me.raddatz.veyq.mobile.composition.QueuedShown.forgetAsk(session.waitingOnUnlock()))
+            Call.UnlockForgetAsk -> Answer.QueuedAsked(me.raddatz.veyq.mobile.offline.QueuedShown.forgetAsk(session.waitingOnUnlock()))
             Call.SessionAddServer -> Answer.Done.also { session.addServer() }
             Call.SessionCancelAdd -> Answer.Done.also { session.cancelAdd() }
             is Call.SessionSignInKit -> {
@@ -3780,7 +3780,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     )
                 },
                 squarePicture = squarePicture,
-                queuedAsk = { account, loss -> me.raddatz.veyq.mobile.composition.QueuedTray(account).ask(loss) },
+                queuedAsk = { account, loss -> me.raddatz.veyq.mobile.offline.QueuedTray(account).ask(loss) },
                 received = { link, queue, password, music ->
                     me.raddatz.veyq.mobile.sharing.GuestView.open(
                         primitives, link, client, store, guestSessions, { config.language }, handedPassword = password, queue = queue,

@@ -113,6 +113,15 @@ interface ApplicationKinds {
     @HiddenFromObjC
     val kept: me.raddatz.veyq.mobile.offline.ApplicationKept? get() = null
 
+    /**
+     * Its parts of what a tenant's list rows say beside their names ([me.raddatz.veyq.mobile.navigation.RowDetails]), each
+     * read on its own so one that fails keeps its previous rows; none where its rows say nothing of their own.
+     */
+    val rowParts: List<me.raddatz.veyq.mobile.navigation.RowDetails.Part> get() = emptyList()
+
+    /** How the uploads tray shows its queued writes that carry its own content (`offline.QueuedTray`); null: from their intents. */
+    val queuedShown: me.raddatz.veyq.mobile.offline.QueuedShownPart? get() = null
+
     /** What a pin keeps of its kinds ([AppKinds.pins]); null where it keeps none. */
     val pins: PinKinds? get() = null
 
@@ -124,6 +133,9 @@ interface ApplicationKinds {
 
     /** The words of the share sheet of its kind [kind] ([AppKinds.shareWords]). */
     fun shareWords(kind: String): ShareWords? = null
+
+    /** How the share sheet of its kind [kind] lists and mints links ([AppKinds.shareShape]); null: every role, as a folder's. */
+    fun shareShape(kind: String): me.raddatz.veyq.mobile.navigation.ShareSheet.Shape? = null
 
     /** Its answer to files shared to a node of [kind] ([AppKinds.share]). */
     fun share(kind: String): ShareAnswer? = null

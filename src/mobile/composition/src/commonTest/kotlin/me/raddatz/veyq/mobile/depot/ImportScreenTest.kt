@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.depot
 
+import me.raddatz.veyq.mobile.blob.DirectoryWalk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
@@ -124,11 +125,11 @@ class ImportScreenTest {
     fun aFolderHoldingTheManifestIsOffered_oneWithoutItUploadedAsItsTree() = runTest {
         val m = model()
         val files = ImportFixtures.cases().first { it.id == "unpacked" }.input as ImportInput.Folder
-        val found = files.files.map { (path, source) -> FolderUpload.Found(path, FolderUpload.Kind.FILE, source) }
+        val found = files.files.map { (path, source) -> DirectoryWalk.Found(path, DirectoryWalk.Kind.FILE, source) }
         val offered = m.uploads.screenFolder("s", null, "Space", "Trip download", "/x/Trip download", found)
         assertNotNull(offered.offer)
         assertNull(m.door.folderUploaded)
-        val plainFolder = listOf(FolderUpload.Found("a.txt", FolderUpload.Kind.FILE, plain("a.txt")))
+        val plainFolder = listOf(DirectoryWalk.Found("a.txt", DirectoryWalk.Kind.FILE, plain("a.txt")))
         val uploaded = m.uploads.screenFolder("s", null, "Space", "Photos", "/x/Photos", plainFolder)
         assertNull(uploaded.offer)
         assertEquals("Photos", m.door.folderUploaded)

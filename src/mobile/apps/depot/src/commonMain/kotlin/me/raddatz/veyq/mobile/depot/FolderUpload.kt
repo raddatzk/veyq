@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.depot
 
+import me.raddatz.veyq.mobile.blob.DirectoryWalk.Found
+import me.raddatz.veyq.mobile.blob.DirectoryWalk.Kind
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.crypto.nfc
@@ -25,15 +27,6 @@ object FolderUpload {
     class Entry(val path: String, val source: UploadSource) {
         val size get() = source.size
     }
-
-    /** What a walk of a picked directory met at one path: a file, a directory, a link, or an entry it could not read. */
-    enum class Kind { FILE, DIRECTORY, LINK, UNREADABLE, OTHER }
-
-    /**
-     * One entry a platform's walk met (its own door: Android's documents provider, Apple's enumerator, the desktops'
-     * `listDirectory`): its path below the picked directory (`/`-separated), what it is, and for a file its [source].
-     */
-    class Found(val path: String, val kind: Kind, val source: UploadSource? = null)
 
     /**
      * Whether a walk keeps [found] for the upload (the web's directory input, `docs/apps/depot.md`): a regular file that

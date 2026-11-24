@@ -582,7 +582,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      */
     fun forgetUnlocked() {
         val go = { viewModelScope.launch { if (session.forgetUnlocked()) trustLog("unlock stop trusting") }; Unit }
-        _lossAsk.value = LossAsk(me.raddatz.veyq.mobile.composition.QueuedShown.forgetAsk(session.waitingOnUnlock()), go, {})
+        _lossAsk.value = LossAsk(me.raddatz.veyq.mobile.offline.QueuedShown.forgetAsk(session.waitingOnUnlock()), go, {})
     }
 
     /** The switcher: another tenant of the same server is the same session at another domain; another server is its own. */
@@ -623,7 +623,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * device still trusts with the password, or the sign-in. Staying signed in ends with the sign-out; the password trust
      * stays (as on the web).
      */
-    fun signOut(account: VeyqAccount) = beforeLoss(account, me.raddatz.veyq.mobile.composition.QueuedLoss.SIGN_OUT) {
+    fun signOut(account: VeyqAccount) = beforeLoss(account, me.raddatz.veyq.mobile.offline.QueuedLoss.SIGN_OUT) {
         if (session.signedTo?.account == account) uploads.clear()
         viewModelScope.launch { signedOut(session.signOut(account)) }
     }
@@ -647,7 +647,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** Ends this device's trust in [account]: the next sign-in on this device asks for the Secret Key again. */
-    fun forgetDevice(account: VeyqAccount) = beforeLoss(account, me.raddatz.veyq.mobile.composition.QueuedLoss.STOP_TRUSTING) {
+    fun forgetDevice(account: VeyqAccount) = beforeLoss(account, me.raddatz.veyq.mobile.offline.QueuedLoss.STOP_TRUSTING) {
         viewModelScope.launch {
             session.forgetDevice(account)
             trustLog("manage stop trusting")
@@ -706,7 +706,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         override fun signOut(familyId: String) {
             // this device's own family is a sign-out here: asked first while writes made offline wait (ADR 0153 decision 2)
             if (settingsModel?.current?.families?.firstOrNull { it.id == familyId }?.current == true) {
-                beforeLoss(session.signedTo?.account, me.raddatz.veyq.mobile.composition.QueuedLoss.SIGN_OUT) { onSettings { it.signOut(familyId) } }
+                beforeLoss(session.signedTo?.account, me.raddatz.veyq.mobile.offline.QueuedLoss.SIGN_OUT) { onSettings { it.signOut(familyId) } }
             } else {
                 onSettings { it.signOut(familyId) }
             }
@@ -727,14 +727,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             done(change)
             null
         }
-        override fun stopTrusting() = beforeLoss(session.signedTo?.account, me.raddatz.veyq.mobile.composition.QueuedLoss.STOP_TRUSTING) {
+        override fun stopTrusting() = beforeLoss(session.signedTo?.account, me.raddatz.veyq.mobile.offline.QueuedLoss.STOP_TRUSTING) {
             onSettings { m ->
                 m.stopTrusting()
                 trustLog("settings stop trusting")
                 null
             }
         }
-        override fun signOutHere() = beforeLoss(session.signedTo?.account, me.raddatz.veyq.mobile.composition.QueuedLoss.SIGN_OUT) { onSettings { it.signOutHere() } }
+        override fun signOutHere() = beforeLoss(session.signedTo?.account, me.raddatz.veyq.mobile.offline.QueuedLoss.SIGN_OUT) { onSettings { it.signOutHere() } }
         override fun setOfflineLimit(amount: String, unit: me.raddatz.veyq.mobile.offline.LimitUnit) = onSettings { it.setOfflineLimit(amount, unit); null }
         override fun turnOfflineLimitOff() = onSettings { it.turnOfflineLimitOff(); null }
         override fun clearOfflineCache() = onSettings { it.clearOfflineCache(); null }
@@ -742,7 +742,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         override fun setBackgroundSync(on: Boolean) = onSettings { it.setBackgroundSync(on); null }
         override fun askRemoveAllOffline() { settingsModel?.askRemoveAllOffline() }
         override fun cancelRemoveAllOffline() { settingsModel?.cancelRemoveAllOffline() }
-        override fun removeAllOffline() = beforeLoss(session.signedTo?.account, me.raddatz.veyq.mobile.composition.QueuedLoss.REMOVE_ALL, cancel = ::cancelRemoveAllOffline) {
+        override fun removeAllOffline() = beforeLoss(session.signedTo?.account, me.raddatz.veyq.mobile.offline.QueuedLoss.REMOVE_ALL, cancel = ::cancelRemoveAllOffline) {
             onSettings { it.removeAllOffline(); null }
         }
         override fun linkShow() = showForNewDevice()
@@ -1001,7 +1001,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         tenantSession = t
         // what each application held open of the tenant before closes (its pages, its dialogs, a profile's section)
         eachHolding { it.leave() }
-        rows = me.raddatz.veyq.mobile.composition.RowDetails.Read.EMPTY
+        rows = me.raddatz.veyq.mobile.navigation.RowDetails.Read.EMPTY
         val model = me.raddatz.veyq.mobile.composition.ShellModel(t, hidden, recent, System::currentTimeMillis)
         shellWatch?.cancel()
         shellModel = model
@@ -1191,13 +1191,13 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * on, delete, a folder's "Add files only"; a link's close tells the tenant, whose open Pot reads again); the rows'
      * details are read anew after a drop box was made.
      */
-    fun shareSheet(node: me.raddatz.veyq.mobile.navigation.NodeAt): me.raddatz.veyq.mobile.composition.ShareSheet? {
+    fun shareSheet(node: me.raddatz.veyq.mobile.navigation.NodeAt): me.raddatz.veyq.mobile.navigation.ShareSheet? {
         val m = shellModel ?: return null
         return m.shareSheet(node) { viewModelScope.launch { readRowDetails(m.tenant) } }
     }
 
     /** The share of space [scopeId]'s top level (core's `ShareSheet.topLevel`: "Add files only" alone, a drop box at the top). */
-    fun topLevelShareSheet(scopeId: String): me.raddatz.veyq.mobile.composition.ShareSheet? {
+    fun topLevelShareSheet(scopeId: String): me.raddatz.veyq.mobile.navigation.ShareSheet? {
         val m = shellModel ?: return null
         return m.topLevelShareSheet(scopeId) { viewModelScope.launch { readRowDetails(m.tenant) } }
     }
@@ -1253,10 +1253,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** What the rows read last (core's `RowDetails`): a part that does not read next time keeps these. */
-    private var rows = me.raddatz.veyq.mobile.composition.RowDetails.Read.EMPTY
+    private var rows = me.raddatz.veyq.mobile.navigation.RowDetails.Read.EMPTY
 
     internal suspend fun readRowDetails(t: me.raddatz.veyq.mobile.session.TenantSession) {
-        val read = me.raddatz.veyq.mobile.composition.RowDetails.read(t, rows)
+        val read = me.raddatz.veyq.mobile.navigation.RowDetails.read(t, rows)
         if (tenantSession !== t) return
         rows = read
         // a page on screen reads itself anew (a file: a replaced blob is shown)
@@ -1307,13 +1307,13 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /** The level shown's nodes made offline and not sent yet (core's `ShellModel.queuedHere`), each with its mark. */
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    val queuedHere: StateFlow<List<me.raddatz.veyq.mobile.composition.QueuedItem>> = _shell
+    val queuedHere: StateFlow<List<me.raddatz.veyq.mobile.offline.QueuedItem>> = _shell
         .flatMapLatest { it?.queuedHere ?: kotlinx.coroutines.flow.flowOf(emptyList()) }
         .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyList())
 
     /** Every write made offline as the uploads tray lists it (core's `QueuedTray.items`), oldest first. */
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    val queuedItems: StateFlow<List<me.raddatz.veyq.mobile.composition.QueuedItem>> = _shell
+    val queuedItems: StateFlow<List<me.raddatz.veyq.mobile.offline.QueuedItem>> = _shell
         .flatMapLatest { it?.queuedTray()?.items ?: kotlinx.coroutines.flow.flowOf(emptyList()) }
         .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, emptyList())
 
@@ -1389,7 +1389,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
                 runCatching { resolver.openOutputStream(uri)?.use { out -> tray.saveCopy(id, index) { out.write(it) } } ?: false }.getOrDefault(false)
             }
             if (!saved) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { android.provider.DocumentsContract.deleteDocument(resolver, uri) } }
-            said(me.raddatz.veyq.mobile.composition.QueuedShown.copySaved(name, saved))
+            said(me.raddatz.veyq.mobile.offline.QueuedShown.copySaved(name, saved))
         }
     }
 
@@ -1404,8 +1404,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** A held rename's *Open*: the rename dialog with the person's name in it (core's `QueuedOpen.Rename`). */
-    private val _heldRename = MutableStateFlow<me.raddatz.veyq.mobile.composition.QueuedOpen.Rename?>(null)
-    val heldRename: StateFlow<me.raddatz.veyq.mobile.composition.QueuedOpen.Rename?> = _heldRename.asStateFlow()
+    private val _heldRename = MutableStateFlow<me.raddatz.veyq.mobile.offline.QueuedOpen.Rename?>(null)
+    val heldRename: StateFlow<me.raddatz.veyq.mobile.offline.QueuedOpen.Rename?> = _heldRename.asStateFlow()
 
     fun heldRenameSeen() {
         _heldRename.value = null
@@ -1419,12 +1419,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val m = shellModel ?: return
         viewModelScope.launch {
             when (val o = m.queuedTray().opens(id)) {
-                is me.raddatz.veyq.mobile.composition.QueuedOpen.Entry -> {
+                is me.raddatz.veyq.mobile.offline.QueuedOpen.Entry -> {
                     m.openFound(o.scope, o.pot)
                     _heldEntry.value = HeldEntry(o.pot, o.entry, o.write)
                 }
-                is me.raddatz.veyq.mobile.composition.QueuedOpen.Rename -> _heldRename.value = o
-                is me.raddatz.veyq.mobile.composition.QueuedOpen.Place -> o.node?.let { m.openFound(o.scope, it) } ?: switchSpace(o.scope)
+                is me.raddatz.veyq.mobile.offline.QueuedOpen.Rename -> _heldRename.value = o
+                is me.raddatz.veyq.mobile.offline.QueuedOpen.Place -> o.node?.let { m.openFound(o.scope, it) } ?: switchSpace(o.scope)
                 null -> {}
             }
         }
@@ -1432,7 +1432,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
 
     /** A held rename decided in its dialog (core's rename of the node, which drops the held one once it lands). */
-    suspend fun renameHeld(open: me.raddatz.veyq.mobile.composition.QueuedOpen.Rename, name: String): me.raddatz.veyq.mobile.navigation.NameAnswer {
+    suspend fun renameHeld(open: me.raddatz.veyq.mobile.offline.QueuedOpen.Rename, name: String): me.raddatz.veyq.mobile.navigation.NameAnswer {
         val m = shellModel ?: return me.raddatz.veyq.mobile.navigation.NameAnswer.DONE
         val node = m.state.value?.lists?.nodes?.firstOrNull { it.scopeId == open.scope && it.nodeId == open.node }
             ?: return me.raddatz.veyq.mobile.navigation.NameAnswer.DONE
@@ -1442,7 +1442,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** The ask before a loss of writes made offline (core's `QueuedAsk`), what its confirm runs and what its cancel does. */
-    class LossAsk(val ask: me.raddatz.veyq.mobile.composition.QueuedAsk, val run: () -> Unit, val cancel: () -> Unit)
+    class LossAsk(val ask: me.raddatz.veyq.mobile.offline.QueuedAsk, val run: () -> Unit, val cancel: () -> Unit)
 
     private val _lossAsk = MutableStateFlow<LossAsk?>(null)
     val lossAsk: StateFlow<LossAsk?> = _lossAsk.asStateFlow()
@@ -1451,10 +1451,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      * Before [loss] deletes the writes made offline [account] keeps (ADR 0153 decision 2, owner 2026-11-19): core's ask while
      * any wait (`QueuedTray.ask`), [run] once confirmed, [cancel] otherwise; with none waiting [run] at once.
      */
-    private fun beforeLoss(account: VeyqAccount?, loss: me.raddatz.veyq.mobile.composition.QueuedLoss, cancel: () -> Unit = {}, run: () -> Unit) {
+    private fun beforeLoss(account: VeyqAccount?, loss: me.raddatz.veyq.mobile.offline.QueuedLoss, cancel: () -> Unit = {}, run: () -> Unit) {
         if (account == null) return run()
         viewModelScope.launch {
-            val ask = runCatching { me.raddatz.veyq.mobile.composition.QueuedTray(account).ask(loss) }.getOrNull()
+            val ask = runCatching { me.raddatz.veyq.mobile.offline.QueuedTray(account).ask(loss) }.getOrNull()
             if (ask == null) run() else _lossAsk.value = LossAsk(ask, run, cancel)
         }
     }

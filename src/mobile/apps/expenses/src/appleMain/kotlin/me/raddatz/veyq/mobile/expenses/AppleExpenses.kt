@@ -3,6 +3,10 @@ package me.raddatz.veyq.mobile.expenses
 import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.usePinned
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import me.raddatz.veyq.mobile.blob.FileSink
+import me.raddatz.veyq.mobile.export.NodeExport
 import me.raddatz.veyq.mobile.session.AppleSessions
 import me.raddatz.veyq.mobile.session.TenantSession
 import platform.Foundation.NSData
@@ -19,6 +23,17 @@ suspend fun AppleSessions.openPot(tenant: TenantSession, scopeId: String, nodeId
 /** A receipt of [pot] opened to its bytes, as Foundation data; null when blocked or unreadable. */
 @Throws(Exception::class)
 suspend fun AppleSessions.openReceipt(pot: PotSession, receiptId: String): NSData? = pot.openReceipt(receiptId)?.toNSData()
+
+/**
+ * Writes [session]'s Pot as the web's ZIP to [path], chunk by chunk as the archive is produced (core's [FileSink]: the app
+ * writes into its temporary directory and hands the file to the save sheet, never holding the whole ZIP); null when it
+ * has nothing to export in or did not finish (nothing is left at [path] then).
+ */
+@Throws(Exception::class)
+suspend fun AppleSessions.downloadPot(session: PotSession, deletedName: String, nowMs: Long, path: String): NodeExport.Written? =
+    withContext(Dispatchers.Default) {
+        FileSink.write(path, kept = { it != null }) { sink -> PotExport.download(session, deletedName, nowMs, sink) }
+    }
 
 /** A file picked as a receipt for core's entry editor to judge ([data] nil: it did not read). */
 fun AppleSessions.picked(data: NSData?, type: String, name: String?, modifiedAt: Long?): EntryEditor.Picked =

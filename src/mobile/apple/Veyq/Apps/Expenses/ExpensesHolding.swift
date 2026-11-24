@@ -318,7 +318,7 @@ final class ExpensesHolding: Holding {
     /// removes a download that did not finish); nil when it did not complete.
     func downloadPot(_ ref: ObjectRef, to path: String) async -> [NodeExport.Skipped]? {
         guard let session = potSession, pot?.ref == ref else { return nil }
-        let written = try? await FileDownloads.shared.pot(
+        let written = try? await AppleSessions.shared.downloadPot(
             session: session, deletedName: say(.potDeletedPerson), nowMs: Int64(Date().timeIntervalSince1970 * 1000), path: path
         )
         return written == nil ? nil : []

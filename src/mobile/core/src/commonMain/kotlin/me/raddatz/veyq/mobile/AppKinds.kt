@@ -41,12 +41,23 @@ object AppKinds {
         val kinds = parts.flatMap { it.kinds }
         check(kinds.size == kinds.toSet().size && kinds.none { it in CORE }) { "a node kind owned twice: $kinds" }
         check(parts.all { p -> p.kindFacts.map { it.kind }.sorted() == p.kinds.sorted() }) { "an application's kind facts are not its kinds" }
+        val rowKeys = parts.flatMap { p -> p.rowParts.map { it.key } }
+        check(rowKeys.size == rowKeys.toSet().size) { "a row part's key registered twice: $rowKeys" }
+        val shownOps = parts.flatMap { it.queuedShown?.ops.orEmpty() }
+        check(shownOps.size == shownOps.toSet().size) { "a queued write shown by two applications: $shownOps" }
         held = KindFacts((CORE_FACTS + parts.flatMap { it.kindFacts }).sortedBy { it.kind })
         installed = parts
     }
 
     /** Each application's part of the offline store, in the order installed. */
     internal val kept: List<me.raddatz.veyq.mobile.offline.ApplicationKept> get() = applications.mapNotNull { it.kept }
+
+    /** The application's part that shows queued write [op] in the uploads tray (`offline.QueuedTray`); null: core shows it from its intent. */
+    internal fun queuedShown(op: me.raddatz.veyq.mobile.offline.Queued?): me.raddatz.veyq.mobile.offline.QueuedShownPart? =
+        op?.let { q -> applications.firstNotNullOfOrNull { a -> a.queuedShown?.takeIf { q in it.ops } } }
+
+    /** Each application's parts of what the list rows say ([me.raddatz.veyq.mobile.navigation.RowDetails]), in the order installed. */
+    internal val rowParts: List<me.raddatz.veyq.mobile.navigation.RowDetails.Part> get() = applications.flatMap { it.rowParts }
 
     private val CORE = setOf("FOLDER", "SHARE_BOOKMARK")
 
@@ -382,6 +393,12 @@ object AppKinds {
 
     /** The words of a node of [kind]'s share sheet, where its application has its own; null: core's folder words. */
     fun shareWords(kind: String): me.raddatz.veyq.mobile.session.ShareWords? = applications.firstNotNullOfOrNull { it.shareWords(kind) }
+
+    /**
+     * How a node of [kind]'s share sheet lists and mints links: a drop box its WRITE_ONLY links alone (Depot's), a Memory and
+     * a chapter every role with an upload link on the node itself (Memories'); null — a folder, a Pot, a file — every role.
+     */
+    fun shareShape(kind: String): me.raddatz.veyq.mobile.navigation.ShareSheet.Shape? = applications.firstNotNullOfOrNull { it.shareShape(kind) }
 
     /**
      * The answer of [kind] to a link's guest of [role] (ADR 0150 decision 5): each application's own door in its package —

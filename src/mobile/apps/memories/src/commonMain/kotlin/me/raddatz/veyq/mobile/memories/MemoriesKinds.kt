@@ -12,6 +12,7 @@ import me.raddatz.veyq.mobile.media.Derivation
 import me.raddatz.veyq.mobile.navigation.ApplicationId
 import me.raddatz.veyq.mobile.navigation.HeaderAction as H
 import me.raddatz.veyq.mobile.navigation.ShareAnswer
+import me.raddatz.veyq.mobile.navigation.ShareSheet
 import me.raddatz.veyq.mobile.offline.PinKinds
 import me.raddatz.veyq.mobile.offline.Queued
 import me.raddatz.veyq.mobile.offline.QueuedSender
@@ -138,6 +139,9 @@ object MemoriesKinds : ApplicationKinds {
     }
 
     override val spaceSearch: ApplicationSearch = MemoriesSearch.search
+
+    // every role in one list, "Add photos only" a link on the node itself
+    override fun shareShape(kind: String): ShareSheet.Shape? = if (kind == MEMORY || kind == CHAPTER) ShareSheet.Shape.UPLOAD_LINK else null
 
     // the same dialog as core's, its sentences naming the node shared (Memories' `share.*`)
     override fun shareWords(kind: String): ShareWords? = when (kind) {

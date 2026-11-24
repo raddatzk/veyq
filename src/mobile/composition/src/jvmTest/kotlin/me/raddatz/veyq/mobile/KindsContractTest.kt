@@ -9,7 +9,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.raddatz.veyq.mobile.api.models.Capability
 import me.raddatz.veyq.mobile.composition.AppComposition
-import me.raddatz.veyq.mobile.composition.ShareSheet
+import me.raddatz.veyq.mobile.navigation.ShareSheet
 import me.raddatz.veyq.mobile.depot.DepotFiles
 import me.raddatz.veyq.mobile.depot.DropBoxes
 import me.raddatz.veyq.mobile.navigation.NodeAt
@@ -197,7 +197,7 @@ class KindsContractTest {
     private class Door(override val rules: ShareLinks.Rules) : ShareSheet.Door {
         override suspend fun list(): List<ShareLinks.Link> = emptyList()
         override suspend fun mint(role: String, label: String, password: String, expiresAt: String?): ShareLinks.Minted = error("no write")
-        override suspend fun createDropBox(name: String, password: String, expiresAt: String?): DropBoxes.Created = error("no write")
+        override suspend fun createDropBox(name: String, password: String, expiresAt: String?): ShareSheet.Made = error("no write")
         override suspend fun edit(shareId: String, edit: ShareLinkChanges.Edit): ShareLinkChanges.Changed = error("no write")
         override suspend fun renew(shareId: String): ShareLinkChanges.Changed = error("no write")
         override suspend fun switchOff(shareId: String): ShareLinks.Closed = error("no write")

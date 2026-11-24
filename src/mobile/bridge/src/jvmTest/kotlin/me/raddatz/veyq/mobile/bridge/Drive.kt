@@ -109,19 +109,19 @@ internal object JvmFiles : DeviceFiles {
         }
     }
 
-    override fun walk(path: String): List<me.raddatz.veyq.mobile.depot.FolderUpload.Found>? {
+    override fun walk(path: String): List<me.raddatz.veyq.mobile.blob.DirectoryWalk.Found>? {
         val root = java.nio.file.Paths.get(path)
         if (!java.nio.file.Files.isDirectory(root, java.nio.file.LinkOption.NOFOLLOW_LINKS)) return null
-        val out = ArrayList<me.raddatz.veyq.mobile.depot.FolderUpload.Found>()
+        val out = ArrayList<me.raddatz.veyq.mobile.blob.DirectoryWalk.Found>()
         fun visit(dir: java.nio.file.Path) {
             val names = java.nio.file.Files.list(dir).use { s -> s.map { it.fileName.toString() }.sorted().toList() }
             for (n in names) {
                 val p = dir.resolve(n)
                 val at = root.relativize(p).toString().replace('\\', '/')
                 when {
-                    java.nio.file.Files.isSymbolicLink(p) -> out += me.raddatz.veyq.mobile.depot.FolderUpload.Found(at, me.raddatz.veyq.mobile.depot.FolderUpload.Kind.LINK)
-                    java.nio.file.Files.isDirectory(p) -> { out += me.raddatz.veyq.mobile.depot.FolderUpload.Found(at, me.raddatz.veyq.mobile.depot.FolderUpload.Kind.DIRECTORY); visit(p) }
-                    else -> out += me.raddatz.veyq.mobile.depot.FolderUpload.Found(at, me.raddatz.veyq.mobile.depot.FolderUpload.Kind.FILE, source(p.toString()))
+                    java.nio.file.Files.isSymbolicLink(p) -> out += me.raddatz.veyq.mobile.blob.DirectoryWalk.Found(at, me.raddatz.veyq.mobile.blob.DirectoryWalk.Kind.LINK)
+                    java.nio.file.Files.isDirectory(p) -> { out += me.raddatz.veyq.mobile.blob.DirectoryWalk.Found(at, me.raddatz.veyq.mobile.blob.DirectoryWalk.Kind.DIRECTORY); visit(p) }
+                    else -> out += me.raddatz.veyq.mobile.blob.DirectoryWalk.Found(at, me.raddatz.veyq.mobile.blob.DirectoryWalk.Kind.FILE, source(p.toString()))
                 }
             }
         }

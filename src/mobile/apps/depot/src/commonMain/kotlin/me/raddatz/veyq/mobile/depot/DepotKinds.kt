@@ -14,7 +14,9 @@ import me.raddatz.veyq.mobile.media.Derivation
 import me.raddatz.veyq.mobile.navigation.ApplicationId
 import me.raddatz.veyq.mobile.navigation.HeaderAction as H
 import me.raddatz.veyq.mobile.navigation.NodeAt
+import me.raddatz.veyq.mobile.navigation.RowDetails
 import me.raddatz.veyq.mobile.navigation.ShareAnswer
+import me.raddatz.veyq.mobile.navigation.ShareSheet
 import me.raddatz.veyq.mobile.offline.PinKinds
 import me.raddatz.veyq.mobile.offline.Queued
 import me.raddatz.veyq.mobile.offline.QueuedSender
@@ -27,6 +29,7 @@ import me.raddatz.veyq.mobile.sharing.GuestAccess
 import me.raddatz.veyq.mobile.sharing.GuestDoor
 import me.raddatz.veyq.mobile.sharing.GuestSession
 import me.raddatz.veyq.mobile.words.Msg
+import me.raddatz.veyq.mobile.words.Piece
 
 /**
  * Depot's part of the platform's registry ([AppKinds], the web's `features/depot/register.ts`): a file and a drop box —
@@ -133,6 +136,12 @@ object DepotKinds : ApplicationKinds {
     @HiddenFromObjC
     override val kept = DepotKept
 
+    // a file's row says its size and change (or that it is not uploaded), a drop box's its guests — each read on its own
+    override val rowParts: List<RowDetails.Part> = listOf(
+        RowDetails.Part("depot.files") { tenant -> DepotFiles.list(tenant).mapValues { DepotFiles.rowDetails(it.value) } },
+        RowDetails.Part("depot.boxes") { tenant -> DropBoxes.people(tenant.nodes()).mapValues { listOf(Piece.Said(it.value)) } },
+    )
+
     override val pins: PinKinds = object : PinKinds {
         override fun pinnable(kind: String): Boolean = kind == FILE
         override suspend fun blobs(tenant: TenantSession, node: OpenNode) = DepotFiles.pinned(tenant, node)
@@ -155,6 +164,9 @@ object DepotKinds : ApplicationKinds {
         )
         else -> null
     }
+
+    // a drop box's own links are its WRITE_ONLY ones
+    override fun shareShape(kind: String): ShareSheet.Shape? = if (kind == DROPBOX) ShareSheet.Shape.WRITE_ONLY else null
 
     // a folder — a space's top asks as one — takes shared files into Depot's upload queue
     override fun share(kind: String): ShareAnswer? = if (kind == FOLDER) FolderShare.answer else null

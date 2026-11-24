@@ -1,6 +1,5 @@
 package me.raddatz.veyq.mobile.blob
 
-import me.raddatz.veyq.mobile.composition.PickedPaths
 
 import kotlinx.coroutines.test.runTest
 import kotlin.random.Random
@@ -128,17 +127,17 @@ class FilesTest {
         try {
             val found = assertNotNull(PickedPaths.walk(root)).associateBy { it.path }
             val kinds = found.mapValues { it.value.kind }
-            assertEquals(me.raddatz.veyq.mobile.depot.FolderUpload.Kind.FILE, kinds["a.txt"])
-            assertEquals(me.raddatz.veyq.mobile.depot.FolderUpload.Kind.FILE, kinds[".hidden"], "a hidden file is met")
-            assertEquals(me.raddatz.veyq.mobile.depot.FolderUpload.Kind.DIRECTORY, kinds["Büro 中文"])
-            assertEquals(me.raddatz.veyq.mobile.depot.FolderUpload.Kind.FILE, kinds["Büro 中文/$name"], "a nested file under its own name")
+            assertEquals(DirectoryWalk.Kind.FILE, kinds["a.txt"])
+            assertEquals(DirectoryWalk.Kind.FILE, kinds[".hidden"], "a hidden file is met")
+            assertEquals(DirectoryWalk.Kind.DIRECTORY, kinds["Büro 中文"])
+            assertEquals(DirectoryWalk.Kind.FILE, kinds["Büro 中文/$name"], "a nested file under its own name")
             if (linked) {
-                assertEquals(me.raddatz.veyq.mobile.depot.FolderUpload.Kind.LINK, kinds["link-out"], "a link is reported as one")
+                assertEquals(DirectoryWalk.Kind.LINK, kinds["link-out"], "a link is reported as one")
                 assertNull(kinds["link-out/secret.txt"], "and never followed")
             }
             assertTrue(found.keys.none { it.contains("secret") }, "nothing outside the directory is reached: $kinds")
             if (unlistable) {
-                assertEquals(me.raddatz.veyq.mobile.depot.FolderUpload.Kind.UNREADABLE, kinds["locked"], "a directory that does not list is said")
+                assertEquals(DirectoryWalk.Kind.UNREADABLE, kinds["locked"], "a directory that does not list is said")
                 assertNull(kinds["locked/inside.txt"])
             }
             // a file met is read at its offsets under its own name, its size, type and modified time the system's
@@ -150,13 +149,13 @@ class FilesTest {
             assertContentEquals(whole.copyOfRange(70_000, 70_100), nested.read(70_000, 100))
             nested.close()
             assertEquals("text/plain", found["a.txt"]?.source?.type)
-            // what the upload keeps: the three files, the link and the unlistable directory left out and said
-            val walked = me.raddatz.veyq.mobile.depot.FolderUpload.walked(found.values.toList())
+            // the files that read, each with its source; the link and the unlistable directory met as what they are (what an
+            // application keeps of them is its own: Depot's `FolderUpload.walked`, held by its `FolderUploadTest`)
             // a host that lists every directory anyway (root in the container, Windows) walks into the one meant to be locked
-            val kept = listOf(".hidden", "a.txt", "Büro 中文/$name") + if (unlistable) emptyList() else listOf("locked/inside.txt")
-            assertEquals(kept.sorted(), walked.entries.map { it.path }.sorted())
-            if (linked) assertEquals(listOf("link-out"), walked.links)
-            if (unlistable) assertEquals(listOf("locked"), walked.unreadable)
+            val files = listOf(".hidden", "a.txt", "Büro 中文/$name") + if (unlistable) emptyList() else listOf("locked/inside.txt")
+            assertEquals(files.sorted(), found.values.filter { it.kind == DirectoryWalk.Kind.FILE && it.source != null }.map { it.path }.sorted())
+            if (linked) assertEquals(listOf("link-out"), found.values.filter { it.kind == DirectoryWalk.Kind.LINK }.map { it.path })
+            if (unlistable) assertEquals(listOf("locked"), found.values.filter { it.kind == DirectoryWalk.Kind.UNREADABLE }.map { it.path })
             println("walked on this host: link ${if (linked) "made" else "not made"}, unlistable ${if (unlistable) "made" else "not made"}")
         } finally {
             makeListable(locked)

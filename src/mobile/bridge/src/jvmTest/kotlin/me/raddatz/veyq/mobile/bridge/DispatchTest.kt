@@ -1093,7 +1093,7 @@ class DispatchTest {
     }
 
     /** A share sheet's door the test plays: a server's links, every write recorded. */
-    private class PlayedShare : me.raddatz.veyq.mobile.composition.ShareSheet.Door {
+    private class PlayedShare : me.raddatz.veyq.mobile.navigation.ShareSheet.Door {
         val links = java.util.concurrent.CopyOnWriteArrayList<me.raddatz.veyq.mobile.session.ShareLinks.Link>()
         val sent = java.util.concurrent.CopyOnWriteArrayList<String>()
         @Volatile var passwordSent: String? = null
@@ -1114,8 +1114,10 @@ class DispatchTest {
         /** Whether "Add files only" makes its drop box (the top level's share) or the server refuses it. */
         @Volatile var dropBoxMade = false
         override suspend fun createDropBox(name: String, password: String, expiresAt: String?) =
-            (if (dropBoxMade) me.raddatz.veyq.mobile.depot.DropBoxes.Created(me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.CREATED, "box-2", "http://t/s/d1#k=key-d1")
-            else me.raddatz.veyq.mobile.depot.DropBoxes.Created(me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.FAILED)).also { sent += "dropbox:$name" }
+            me.raddatz.veyq.mobile.depot.DropBoxes.made(
+                if (dropBoxMade) me.raddatz.veyq.mobile.depot.DropBoxes.Created(me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.CREATED, "box-2", "http://t/s/d1#k=key-d1")
+                else me.raddatz.veyq.mobile.depot.DropBoxes.Created(me.raddatz.veyq.mobile.depot.DropBoxes.Outcome.FAILED),
+            ).also { sent += "dropbox:$name" }
         override suspend fun edit(shareId: String, edit: me.raddatz.veyq.mobile.session.ShareLinkChanges.Edit): me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed {
             sent += "edit:$shareId:${edit.label}"
             return me.raddatz.veyq.mobile.session.ShareLinkChanges.Changed(me.raddatz.veyq.mobile.session.ShareLinkChanges.Outcome.DONE)
@@ -1187,7 +1189,7 @@ class DispatchTest {
                     move = { node, copying, _, _ -> me.raddatz.veyq.mobile.navigation.MoveSheet(node, copying, move) },
                     // a clock that has always moved on: the live poll's first tick asks at once
                     dropBox = { node -> var t = 0L; me.raddatz.veyq.mobile.depot.DropBoxPage(node, box, now = { t += 60_000; t }) },
-                    topLevelShare = { scopeId -> me.raddatz.veyq.mobile.composition.ShareSheet.topLevel(scopeId, share) { 1_700_000_000_000L } },
+                    topLevelShare = { scopeId -> me.raddatz.veyq.mobile.navigation.ShareSheet.topLevel(scopeId, share) { 1_700_000_000_000L } },
                 )
             }
         }
@@ -1286,7 +1288,7 @@ class DispatchTest {
             Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { _ ->
                 Tenant(
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
-                    share = { node -> me.raddatz.veyq.mobile.composition.ShareSheet(node, played, { 1_700_000_000_000L }) },
+                    share = { node -> me.raddatz.veyq.mobile.navigation.ShareSheet(node, played, { 1_700_000_000_000L }) },
                 )
             }
         }
@@ -1850,7 +1852,7 @@ class DispatchTest {
     private class OpenedFiles : DeviceFiles by JvmFiles {
         val opened: MutableList<String> = java.util.Collections.synchronizedList(ArrayList())
         override fun source(path: String): me.raddatz.veyq.mobile.blob.UploadSource? { opened += path; return JvmFiles.source(path) }
-        override fun walk(path: String): List<me.raddatz.veyq.mobile.depot.FolderUpload.Found>? { opened += path; return JvmFiles.walk(path) }
+        override fun walk(path: String): List<me.raddatz.veyq.mobile.blob.DirectoryWalk.Found>? { opened += path; return JvmFiles.walk(path) }
     }
 
     /**
@@ -1983,13 +1985,13 @@ class DispatchTest {
             val hidden = Hidden({}, emptySet())
             Composition(
                 SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles,
-                queuedAsk = { account, loss -> me.raddatz.veyq.mobile.composition.QueuedShown.ask(loss, if (account.key == "a.example#u1") 2 else 0) },
+                queuedAsk = { account, loss -> me.raddatz.veyq.mobile.offline.QueuedShown.ask(loss, if (account.key == "a.example#u1") 2 else 0) },
             ) { _ -> Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {}) }
         }
         b.signedIn()
-        val asked = b.ask(Call.QueuedAskFor("a.example#u1", me.raddatz.veyq.mobile.composition.QueuedLoss.STOP_TRUSTING)) as Answer.QueuedAsked
+        val asked = b.ask(Call.QueuedAskFor("a.example#u1", me.raddatz.veyq.mobile.offline.QueuedLoss.STOP_TRUSTING)) as Answer.QueuedAsked
         assertEquals(Notice(Msg.OFFLINE_WRITES_LOST, 2) to Msg.OFFLINE_STOP_TRUSTING_ANYWAY, asked.ask!!.question to asked.ask.confirm)
-        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_CONNECTION), b.ask(Call.QueuedAskFor("b.example#u2", me.raddatz.veyq.mobile.composition.QueuedLoss.SIGN_OUT)))
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_CONNECTION), b.ask(Call.QueuedAskFor("b.example#u2", me.raddatz.veyq.mobile.offline.QueuedLoss.SIGN_OUT)))
         b.shutdown()
     }
 
@@ -2228,7 +2230,7 @@ class DispatchTest {
     @Test
     fun theWritesMadeOfflineAreListedDiscardedOpenedAndARefusedFileSavedToAPath() = runBlocking {
         fun item(id: String, op: me.raddatz.veyq.mobile.offline.Queued, state: me.raddatz.veyq.mobile.offline.QueuedWrite.State, said: Msg, opens: Boolean, copies: Int, at: Long) =
-            me.raddatz.veyq.mobile.composition.QueuedItem(id, op, "ta", "s", "n", "Trip", Notice(Msg.QUEUED_FOLDER, id), state, Notice(said), opens, copies, at)
+            me.raddatz.veyq.mobile.offline.QueuedItem(id, op, "ta", "s", "n", "Trip", Notice(Msg.QUEUED_FOLDER, id), state, Notice(said), opens, copies, at)
         val waiting = item("w1", me.raddatz.veyq.mobile.offline.Queued.FOLDER_CREATE, me.raddatz.veyq.mobile.offline.QueuedWrite.State.WAITING, Msg.OFFLINE_WAITING, false, 0, 1)
         val held = item("entry:e1", me.raddatz.veyq.mobile.offline.Queued.POT_ENTRY, me.raddatz.veyq.mobile.offline.QueuedWrite.State.HELD, Msg.OFFLINE_HELD_CHANGED, true, 0, 2)
         val refused = item("m1", me.raddatz.veyq.mobile.offline.Queued.MEDIA_ADD, me.raddatz.veyq.mobile.offline.QueuedWrite.State.REFUSED, Msg.OFFLINE_REFUSED_NO_ROOM, false, 1, 3)
@@ -2237,11 +2239,11 @@ class DispatchTest {
         val door = QueuedDoor(
             items = items,
             discard = { id -> items.value.any { it.id == id }.also { found -> if (found) items.value = items.value.filter { it.id != id } } },
-            opens = { id -> if (id == held.id) me.raddatz.veyq.mobile.composition.QueuedOpen.Entry("ta", "s", "p", "e1", id) else null },
+            opens = { id -> if (id == held.id) me.raddatz.veyq.mobile.offline.QueuedOpen.Entry("ta", "s", "p", "e1", id) else null },
             copyName = { id, index -> if (id == refused.id && index == 0) "dune.png" to "image/png" else null },
             // the played tray answers any write it holds, refused or not: the refused check is the dispatch's to hold
             saveCopy = { id, _, sink -> if (items.value.any { it.id == id }) { sink(plain.copyOfRange(0, 4)); sink(plain.copyOfRange(4, plain.size)); true } else false },
-            ask = { loss -> me.raddatz.veyq.mobile.composition.QueuedShown.ask(loss, items.value.size) },
+            ask = { loss -> me.raddatz.veyq.mobile.offline.QueuedShown.ask(loss, items.value.size) },
             banner = kotlinx.coroutines.flow.flowOf(null), sent = kotlinx.coroutines.flow.emptyFlow(), here = kotlinx.coroutines.flow.flowOf(emptyList()),
         )
         val b = Bridge {
@@ -2258,7 +2260,7 @@ class DispatchTest {
         assertEquals(listOf(Notice(Msg.OFFLINE_WAITING), Notice(Msg.OFFLINE_HELD_CHANGED), Notice(Msg.OFFLINE_REFUSED_NO_ROOM)), first.map { it.said })
 
         // Open: the core's typed target for a held one, none for one that waits
-        assertEquals(Answer.QueuedOpens(me.raddatz.veyq.mobile.composition.QueuedOpen.Entry("ta", "s", "p", "e1", "entry:e1")), b.ask(Call.QueuedOpen("entry:e1")))
+        assertEquals(Answer.QueuedOpens(me.raddatz.veyq.mobile.offline.QueuedOpen.Entry("ta", "s", "p", "e1", "entry:e1")), b.ask(Call.QueuedOpen("entry:e1")))
         assertEquals(Answer.Refused(Answer.Why.NO_SUCH_QUEUED), b.ask(Call.QueuedOpen("w1")))
         // a held entry's editor needs its Pot open first
         assertEquals(Answer.Refused(Answer.Why.NO_SUCH_POT), b.ask(Call.EditorOpenHeld(99, "entry:e1", ",")))
@@ -2281,16 +2283,16 @@ class DispatchTest {
         }
 
         // the ask before a loss: how many go, and the loss's own confirm
-        val asked = b.ask(Call.QueuedAsk(me.raddatz.veyq.mobile.composition.QueuedLoss.SIGN_OUT)) as Answer.QueuedAsked
+        val asked = b.ask(Call.QueuedAsk(me.raddatz.veyq.mobile.offline.QueuedLoss.SIGN_OUT)) as Answer.QueuedAsked
         assertEquals(Notice(Msg.OFFLINE_WRITES_LOST, 3) to Msg.OFFLINE_SIGN_OUT_ANYWAY, asked.ask!!.question to asked.ask.confirm)
-        assertEquals(Msg.OFFLINE_REMOVE_ANYWAY, (b.ask(Call.QueuedAsk(me.raddatz.veyq.mobile.composition.QueuedLoss.REMOVE_ALL)) as Answer.QueuedAsked).ask!!.confirm)
+        assertEquals(Msg.OFFLINE_REMOVE_ANYWAY, (b.ask(Call.QueuedAsk(me.raddatz.veyq.mobile.offline.QueuedLoss.REMOVE_ALL)) as Answer.QueuedAsked).ask!!.confirm)
 
         // Discard: gone from the list at once; a second is refused
         assertEquals(Answer.Done, b.ask(Call.QueuedDiscard("w1")))
         assertEquals(listOf("entry:e1", "m1"), tray.until { u -> (u as Update.QueuedTray).items?.takeIf { it.size == 2 } }.map { it.id })
         assertEquals(Answer.Refused(Answer.Why.NO_SUCH_QUEUED), b.ask(Call.QueuedDiscard("w1")))
         items.value = emptyList()
-        assertEquals(Answer.QueuedAsked(null), b.ask(Call.QueuedAsk(me.raddatz.veyq.mobile.composition.QueuedLoss.STOP_TRUSTING)), "asked with nothing waiting")
+        assertEquals(Answer.QueuedAsked(null), b.ask(Call.QueuedAsk(me.raddatz.veyq.mobile.offline.QueuedLoss.STOP_TRUSTING)), "asked with nothing waiting")
 
         // the tenant closed: the tray is gone
         assertEquals(Answer.Done, b.ask(Call.SessionSignOut("a.example#u1")))

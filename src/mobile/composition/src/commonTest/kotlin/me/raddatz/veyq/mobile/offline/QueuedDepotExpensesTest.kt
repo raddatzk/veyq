@@ -1,7 +1,7 @@
 package me.raddatz.veyq.mobile.offline
 
-import me.raddatz.veyq.mobile.composition.QueuedOpen
-import me.raddatz.veyq.mobile.composition.QueuedTray
+import me.raddatz.veyq.mobile.offline.QueuedOpen
+import me.raddatz.veyq.mobile.offline.QueuedTray
 
 import io.ktor.client.request.HttpRequestData
 import io.ktor.http.HttpMethod

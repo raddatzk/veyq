@@ -1,8 +1,5 @@
-package me.raddatz.veyq.mobile.composition
+package me.raddatz.veyq.mobile.navigation
 
-import me.raddatz.veyq.mobile.depot.dropBoxRefused
-import me.raddatz.veyq.mobile.navigation.NodeAt
-import me.raddatz.veyq.mobile.navigation.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -13,8 +10,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import me.raddatz.veyq.mobile.depot.DepotFiles
-import me.raddatz.veyq.mobile.depot.DropBoxes
 import me.raddatz.veyq.mobile.session.LinkForm
 import me.raddatz.veyq.mobile.session.LinkRow
 import me.raddatz.veyq.mobile.session.LocalDays
@@ -60,8 +55,8 @@ class ShareSheet(
         /** The node's links (a drop box's: its WRITE_ONLY ones), newest first; null when they do not list. */
         suspend fun list(): List<ShareLinks.Link>?
         suspend fun mint(role: String, label: String, password: String, expiresAt: String?): ShareLinks.Minted
-        /** "Add files only" on a folder: a drop box [name] in it with its first link. */
-        suspend fun createDropBox(name: String, password: String, expiresAt: String?): DropBoxes.Created
+        /** "Add files only" on a folder: a drop box [name] in it with its first link (Depot's, through the composition). */
+        suspend fun createDropBox(name: String, password: String, expiresAt: String?): Made
         suspend fun edit(shareId: String, edit: ShareLinkChanges.Edit): ShareLinkChanges.Changed
         suspend fun renew(shareId: String): ShareLinkChanges.Changed
         suspend fun switchOff(shareId: String): ShareLinks.Closed
@@ -71,6 +66,21 @@ class ShareSheet(
         fun rekeyed()
         /** A node was made (a drop box): the lists are read again. */
         fun changed()
+    }
+
+    /** What "Add files only" made ([Door.createDropBox]): made where [refused] is null, its first link's address [url] (null: none). */
+    class Made(val url: String?, val refused: Notice?)
+
+    /**
+     * How a kind's links are listed and minted (an application's, `ApplicationKinds.shareShape`); a kind without one (a
+     * folder, a Pot, a file) lists every role, a folder offering "Add files only" as a drop box made in it.
+     */
+    enum class Shape {
+        /** Its own links are WRITE_ONLY only, never edited or renewed, no name of their own (a drop box). */
+        WRITE_ONLY,
+
+        /** Every role in one list, its upload-only link one on the node itself (a Memory, a chapter: "Add photos only"). */
+        UPLOAD_LINK,
     }
 
     data class State(
@@ -122,13 +132,13 @@ class ShareSheet(
     )
 
     /** A drop box's own links: WRITE_ONLY only, never edited or renewed, no name of their own. */
-    val dropBox: Boolean = node.kind == DepotFiles.DROPBOX
+    val dropBox: Boolean = me.raddatz.veyq.mobile.AppKinds.shareShape(node.kind) == Shape.WRITE_ONLY
 
     /**
      * A Memory's or a chapter's links: every role in one list, its "Add photos only" a link on the node itself whose guests
      * seal to the node's own drop key (made by its first such link, reused by every later one: `ShareLinks.mint`).
      */
-    val memory: Boolean = node.kind == "MEMORY" || node.kind == "CHAPTER"
+    val memory: Boolean = me.raddatz.veyq.mobile.AppKinds.shareShape(node.kind) == Shape.UPLOAD_LINK
 
     /** The tenant's link rules: what the form offers and requires. */
     val rules: ShareLinks.Rules get() = door.rules
@@ -244,9 +254,9 @@ class ShareSheet(
         val mint = LinkRow.mint(form.role, form.label, onDropBox = dropBox, dropBoxes = !memory)
         val password = form.submittedPassword.orEmpty()
         if (mint.makesDropBox) {
-            val made = runCatching { door.createDropBox(mint.label, password, expiresAt) }.getOrDefault(DropBoxes.Created(DropBoxes.Outcome.FAILED))
+            val made = runCatching { door.createDropBox(mint.label, password, expiresAt) }.getOrDefault(Made(null, Notice(Msg.SHARE_FAILED)))
             door.changed()
-            if (made.outcome != DropBoxes.Outcome.CREATED) return@withContext refused(Notices.dropBoxRefused(made.outcome))
+            if (made.refused != null) return@withContext refused(made.refused)
             _state.update { it.copy(saving = false, form = null, fresh = made.url) }
             return@withContext current
         }

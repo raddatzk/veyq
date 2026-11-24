@@ -457,10 +457,10 @@ class GuestDoorsTest {
         val up = me.raddatz.veyq.mobile.depot.DepotGuest.uploadFolder(
             here, null, "/home/ben/Trip",
             listOf(
-                me.raddatz.veyq.mobile.depot.FolderUpload.Found("a.txt", me.raddatz.veyq.mobile.depot.FolderUpload.Kind.FILE, source("a.txt", "a")),
-                me.raddatz.veyq.mobile.depot.FolderUpload.Found("sub", me.raddatz.veyq.mobile.depot.FolderUpload.Kind.DIRECTORY),
-                me.raddatz.veyq.mobile.depot.FolderUpload.Found("sub/b.txt", me.raddatz.veyq.mobile.depot.FolderUpload.Kind.FILE, source("b.txt", "b")),
-                me.raddatz.veyq.mobile.depot.FolderUpload.Found("elsewhere", me.raddatz.veyq.mobile.depot.FolderUpload.Kind.LINK),
+                me.raddatz.veyq.mobile.blob.DirectoryWalk.Found("a.txt", me.raddatz.veyq.mobile.blob.DirectoryWalk.Kind.FILE, source("a.txt", "a")),
+                me.raddatz.veyq.mobile.blob.DirectoryWalk.Found("sub", me.raddatz.veyq.mobile.blob.DirectoryWalk.Kind.DIRECTORY),
+                me.raddatz.veyq.mobile.blob.DirectoryWalk.Found("sub/b.txt", me.raddatz.veyq.mobile.blob.DirectoryWalk.Kind.FILE, source("b.txt", "b")),
+                me.raddatz.veyq.mobile.blob.DirectoryWalk.Found("elsewhere", me.raddatz.veyq.mobile.blob.DirectoryWalk.Kind.LINK),
             ),
         )
         assertEquals(2, up.queued, "a guest's folder upload queued not its two files")

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.composition
 
+import me.raddatz.veyq.mobile.blob.DirectoryWalk
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.*
 import me.raddatz.veyq.mobile.blob.UploadSource
@@ -24,9 +25,9 @@ sealed class Dropped {
 
     /**
      * A folder at [path] ([shownName]: its name where the platform shows another than the path's last part), and what its
-     * walk [found] (`FolderUpload.Found`); null where it did not read.
+     * walk [found] (`DirectoryWalk.Found`); null where it did not read.
      */
-    class Folder(val path: String, val shownName: String?, val found: List<FolderUpload.Found>?) : Dropped() {
+    class Folder(val path: String, val shownName: String?, val found: List<DirectoryWalk.Found>?) : Dropped() {
         /** The folder's name as it is said and made. */
         val name: String get() = FolderUpload.rootName(shownName, path)
     }

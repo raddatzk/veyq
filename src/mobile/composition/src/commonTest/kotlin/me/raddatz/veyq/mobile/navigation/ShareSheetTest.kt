@@ -1,6 +1,6 @@
 package me.raddatz.veyq.mobile.navigation
 
-import me.raddatz.veyq.mobile.composition.ShareSheet
+import me.raddatz.veyq.mobile.navigation.ShareSheet
 
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.depot.DropBoxes
@@ -53,10 +53,10 @@ class ShareSheetTest {
             links += ShareLinks.Link(id, role, true, true, "2026-12-0$next", expiresAt, label, false, password.isNotEmpty(), "https://t/s/$id#k=fresh", false, false, false)
             return ShareLinks.Minted(ShareLinks.Outcome.CREATED, "https://t/s/$id#k=fresh")
         }
-        override suspend fun createDropBox(name: String, password: String, expiresAt: String?): DropBoxes.Created {
+        override suspend fun createDropBox(name: String, password: String, expiresAt: String?): ShareSheet.Made {
             sent += "dropbox:$name"
             dropBoxEnd = expiresAt
-            return DropBoxes.Created(DropBoxes.Outcome.CREATED, "box", "https://t/s/box#k=drop")
+            return DropBoxes.made(DropBoxes.Created(DropBoxes.Outcome.CREATED, "box", "https://t/s/box#k=drop"))
         }
         override suspend fun edit(shareId: String, edit: ShareLinkChanges.Edit): ShareLinkChanges.Changed {
             sent += "edit:$shareId"
@@ -211,7 +211,7 @@ class ShareSheetTest {
         val on = s.reactivate("a")
         assertEquals(listOf("off:a", "on:a"), server.sent)
         assertTrue(on.links!!.single().enabled)
-        assertEquals("https://t/s/a#k=keya", on.links.single().url, "its old address")
+        assertEquals("https://t/s/a#k=keya", on.links!!.single().url, "its old address")
         assertEquals(1, server.rekeys, "switching on re-keys nothing")
     }
 

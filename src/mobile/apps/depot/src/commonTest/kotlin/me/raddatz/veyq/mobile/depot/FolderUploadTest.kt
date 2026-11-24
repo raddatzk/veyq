@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.depot
 
+import me.raddatz.veyq.mobile.blob.DirectoryWalk
 import me.raddatz.veyq.mobile.AppKinds
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -45,21 +46,21 @@ class FolderUploadTest {
         assertEquals("Café", plan.root.name)
     }
 
-    private fun found(path: String, kind: FolderUpload.Kind, reads: Boolean = true) = FolderUpload.Found(
-        path, kind, if (kind == FolderUpload.Kind.FILE && reads) me.raddatz.veyq.mobile.blob.UploadSource.of(path, 1, "text/plain", null) { _, n -> ByteArray(n) } else null,
+    private fun found(path: String, kind: DirectoryWalk.Kind, reads: Boolean = true) = DirectoryWalk.Found(
+        path, kind, if (kind == DirectoryWalk.Kind.FILE && reads) me.raddatz.veyq.mobile.blob.UploadSource.of(path, 1, "text/plain", null) { _, n -> ByteArray(n) } else null,
     )
 
     @Test
     fun aWalkKeepsRegularFilesHiddenOnesTooAndReportsLinksAndWhatDidNotRead() {
         val walk = listOf(
-            found("a.txt", FolderUpload.Kind.FILE),
-            found(".hidden", FolderUpload.Kind.FILE),
-            found("Photos/.DS_Store", FolderUpload.Kind.FILE),
-            found("Photos", FolderUpload.Kind.DIRECTORY),
-            found("to-home", FolderUpload.Kind.LINK),
-            found("Photos/locked", FolderUpload.Kind.UNREADABLE),
-            found("gone.bin", FolderUpload.Kind.FILE, reads = false),
-            found("fifo", FolderUpload.Kind.OTHER),
+            found("a.txt", DirectoryWalk.Kind.FILE),
+            found(".hidden", DirectoryWalk.Kind.FILE),
+            found("Photos/.DS_Store", DirectoryWalk.Kind.FILE),
+            found("Photos", DirectoryWalk.Kind.DIRECTORY),
+            found("to-home", DirectoryWalk.Kind.LINK),
+            found("Photos/locked", DirectoryWalk.Kind.UNREADABLE),
+            found("gone.bin", DirectoryWalk.Kind.FILE, reads = false),
+            found("fifo", DirectoryWalk.Kind.OTHER),
         )
         assertEquals(listOf(true, true, true, false, false, false, false, false), walk.map(FolderUpload::keeps))
         val w = FolderUpload.walked(walk)
