@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.expenses
 
+import me.raddatz.veyq.mobile.text.Pattern
 import me.raddatz.veyq.mobile.json.JsonText
 import me.raddatz.veyq.mobile.json.JsonValue
 import me.raddatz.veyq.mobile.json.jsonArray
@@ -82,10 +83,10 @@ object RevisionFormat {
     /** The default categories: stable ids the client translates. A Pot's own are uuids. */
     val DEFAULT_CATEGORIES = listOf("food", "groceries", "accommodation", "transport", "leisure", "household", "other")
 
-    val UUID = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
-    val DIGEST = Regex("^[A-Za-z0-9_-]{43}$")
-    val CURRENCY = Regex("^[A-Z]{3}$")
-    val DATE = Regex("^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])$")
+    val UUID = Pattern("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+    val DIGEST = Pattern("^[A-Za-z0-9_-]{43}$")
+    val CURRENCY = Pattern("^[A-Z]{3}$")
+    val DATE = Pattern("^[0-9]{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])$")
     const val MAX_HEADS = 64
     const val MAX_SAFE = 9007199254740991L
     private const val MAX_LIST = 200
@@ -110,7 +111,7 @@ object RevisionFormat {
         return n
     }
 
-    private fun str(v: JsonValue?, path: String, pattern: Regex? = null, min: Int = 0, max: Int = Int.MAX_VALUE): String {
+    private fun str(v: JsonValue?, path: String, pattern: Pattern? = null, min: Int = 0, max: Int = Int.MAX_VALUE): String {
         val s = (v as? JsonValue.Str)?.value ?: fail(path)
         val n = codePoints(s)
         if (n < min || n > max || (pattern != null && !pattern.matches(s))) fail(path)

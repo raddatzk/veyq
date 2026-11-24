@@ -102,12 +102,17 @@ val facades: Map<String, FileTree> = (listOf(project(":core")) + rootProject.pro
 fun writeEntries(dist: File) {
     val declaration = Regex("""@JsExport\s+(?:@[\w.]+(?:\([^)]*\))?\s+)*(external\s+interface|class|object|fun|val)\s+(?:<[^>]*>\s*)?(\w+)""")
     val seen = HashSet<String>()
+    // One declaration file for every module (the composition's): two façades exporting one name would merge there —
+    // TypeScript merges two `interface`s of one name into one with both's fields (Expenses' ledger entry into the tree's,
+    // measured 2026-11-24) — so a name belongs to one façade.
+    val owner = HashMap<String, String>()
     facades.toSortedMap().forEach { (module, tree) ->
         tree.files.groupBy { it.parentFile.parentFile.name }.toSortedMap().forEach { (entry, files) ->
             check(seen.add(entry)) { "two façades named $entry" }
             val found = files.sortedBy { it.name }.flatMap { f -> declaration.findAll(f.readText()).map { it.groupValues[1] to it.groupValues[2] } }
             check(found.isNotEmpty()) { "the façade $entry exports nothing" }
             val all = found.map { it.second }.sorted()
+            all.forEach { name -> owner.put(name, entry)?.let { other -> error("$name is exported by both façades $other and $entry") } }
             val head = "// @veyq/core-js/$entry: the declarations of the façade …mobile.$entry.web in $module, written by :composition:jsPackage.\n"
             dist.resolve("$entry.d.mts").writeText(head + "export { ${all.joinToString(", ")} } from './veyq-mobile-composition.mjs';\n")
         }

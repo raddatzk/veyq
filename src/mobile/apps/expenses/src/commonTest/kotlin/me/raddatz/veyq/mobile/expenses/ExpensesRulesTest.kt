@@ -58,11 +58,11 @@ class ExpensesRulesTest {
         val schema = JsonText.parse(readRepoFile("contracts/expenses/entry.v1.schema.json").decodeToString()) as JsonValue.Obj
         fun at(vararg path: String): JsonValue? = path.fold(schema as JsonValue?) { v, k -> (v as? JsonValue.Obj)?.get(k) }
         fun pattern(vararg path: String) = (at(*path) as JsonValue.Str).value
-        assertEquals(pattern("\$defs", "uuid", "pattern"), RevisionFormat.UUID.pattern)
-        assertEquals(pattern("\$defs", "head", "properties", "digest", "pattern"), RevisionFormat.DIGEST.pattern)
-        assertEquals(pattern("\$defs", "currency", "pattern"), RevisionFormat.CURRENCY.pattern)
-        assertEquals(pattern("\$defs", "date", "pattern"), RevisionFormat.DATE.pattern)
-        assertEquals(pattern("\$defs", "rate", "pattern"), Money.RATE.pattern)
+        assertEquals(pattern("\$defs", "uuid", "pattern"), RevisionFormat.UUID.source)
+        assertEquals(pattern("\$defs", "head", "properties", "digest", "pattern"), RevisionFormat.DIGEST.source)
+        assertEquals(pattern("\$defs", "currency", "pattern"), RevisionFormat.CURRENCY.source)
+        assertEquals(pattern("\$defs", "date", "pattern"), RevisionFormat.DATE.source)
+        assertEquals(pattern("\$defs", "rate", "pattern"), Money.RATE.source)
         assertEquals(RevisionFormat.MAX_HEADS.toDouble(), (at("properties", "heads", "maxItems") as JsonValue.Num).value)
         assertEquals(listOf("expense", "refund", "transfer", "participant", "deleted", "erasure"), (at("properties", "kind", "enum") as JsonValue.Arr).items.map { (it as JsonValue.Str).value })
         val categories = (((at("\$defs", "category", "anyOf") as JsonValue.Arr).items[0] as JsonValue.Obj)["enum"] as JsonValue.Arr).items.map { (it as JsonValue.Str).value }

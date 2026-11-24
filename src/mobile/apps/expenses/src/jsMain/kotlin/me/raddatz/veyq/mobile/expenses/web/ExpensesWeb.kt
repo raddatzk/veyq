@@ -39,6 +39,7 @@ import me.raddatz.veyq.mobile.json.JsonValue
 import me.raddatz.veyq.mobile.words.Shown
 import org.khronos.webgl.Int8Array
 import org.khronos.webgl.Uint8Array
+import kotlin.js.Date
 import kotlin.js.collections.JsReadonlyArray
 import kotlin.js.collections.JsReadonlyMap
 
@@ -57,7 +58,7 @@ private val codec by lazy { RevisionCodec(V1(JsPrimitives)) }
 /** [parsed] held to the v1 schema: the body with only the fields the schema names, or a `RevisionFormatInvalid` error
  *  carrying the `path` of the first rule it breaks. */
 @JsExport
-fun readRevisionBody(parsed: JsonShape?): BodyShape = bodyShape(readBody(parsed))
+fun readRevisionBody(parsed: JsonValueShape?): BodyShape = bodyShape(readBody(parsed))
 
 /** Whether [content] is an expense, a refund or a transfer. */
 @JsExport
@@ -66,8 +67,8 @@ fun isMoney(content: ContentShape): Boolean = content.kind == "expense" || conte
 /** The format's numbers and pattern sources. */
 @JsExport
 fun formatRules(): FormatRulesShape = shape(
-    "uuid" to RevisionFormat.UUID.pattern, "digest" to RevisionFormat.DIGEST.pattern, "currency" to RevisionFormat.CURRENCY.pattern,
-    "date" to RevisionFormat.DATE.pattern, "rate" to Money.RATE.pattern, "maxHeads" to RevisionFormat.MAX_HEADS,
+    "uuid" to RevisionFormat.UUID.source, "digest" to RevisionFormat.DIGEST.source, "currency" to RevisionFormat.CURRENCY.source,
+    "date" to RevisionFormat.DATE.source, "rate" to Money.RATE.source, "maxHeads" to RevisionFormat.MAX_HEADS,
     "maxReceipts" to RevisionFormat.MAX_RECEIPTS, "percentWhole" to RevisionFormat.PERCENT_WHOLE.toInt(),
     "defaultCategories" to RevisionFormat.DEFAULT_CATEGORIES.toTypedArray(), "sizeClasses" to RevisionCodec.SIZE_CLASSES.toTypedArray(),
 )
@@ -270,6 +271,12 @@ fun settleUp(balances: JsReadonlyMap<String, bigint>, order: JsReadonlyArray<Str
 @JsExport
 fun formatMoney(amount: bigint, currency: String, minorUnits: Int, locale: String): String = Shown.money(longOf(amount), currency, minorUnits, locale)
 
+/** An entry's [amount] (minor units of its currency, [minorUnits] digits) in minor units of the base currency
+ *  ([baseMinorUnits] digits) at [rate]: converted once, rounded a half away from zero. */
+@JsExport
+fun convertToBase(amount: bigint, minorUnits: Int, rate: String, baseMinorUnits: Int): bigint =
+    big(Money.convertToBase(bigOf(amount), minorUnits, rate, baseMinorUnits))
+
 /** [amount] minor units as a plain decimal with a dot: `1250n, 2` → `"12.50"`. */
 @JsExport
 fun decimalOf(amount: bigint, minorUnits: Int): String = Amounts.text(longOf(amount), minorUnits)
@@ -299,16 +306,16 @@ fun knownCurrencies(): JsReadonlyArray<String> = array(Currencies.known)
 
 /** A provider's answer as a table of the currencies [known] names (the core's list where none), or null for another shape. */
 @JsExport
-fun parseTable(answer: JsonShape?, known: JsReadonlyArray<String>? = null): JsonShape? {
+fun parseTable(answer: JsonValueShape?, known: JsReadonlyArray<String>? = null): JsonValueShape? {
     val tree = try { JsJson.fromJs(answer) } catch (e: IllegalArgumentException) { return null }
     val table = ExchangeRateTable.parseTable(tree, (known?.let(::list) ?: Currencies.known).toSet()) ?: return null
     return JsJson.toJs(JsonValue.Obj(table.mapValues { (_, r) -> JsonValue.Obj(linkedMapOf("rate" to JsonValue.Str(r.rate), "date" to JsonValue.Str(r.date))) }))
-        .unsafeCast<JsonShape>()
+        .unsafeCast<JsonValueShape>()
 }
 
 /** One unit of [from] in [to] from [table], or null when either is missing. */
 @JsExport
-fun crossRate(table: JsonShape, from: String, to: String): RateShape? {
+fun crossRate(table: JsonValueShape, from: String, to: String): RateShape? {
     val rows = (JsJson.fromJs(table) as? JsonValue.Obj)?.fields.orEmpty().mapNotNull { (code, row) ->
         val o = row as? JsonValue.Obj ?: return@mapNotNull null
         val rate = (o["rate"] as? JsonValue.Str)?.value ?: return@mapNotNull null
@@ -356,7 +363,7 @@ private fun addressOf(a: AddressShape) = RevisionAddress(a.scopeId, a.nodeId, a.
 
 /** A held row as the core holds it; its body re-read from the format's JSON (the web's held bodies are the reader's own). */
 private fun heldOf(h: HeldShape): HeldRevision = HeldRevision(
-    h.entryId, h.revision.toLong(), h.createdAt.toLong(), h.digest,
+    h.entryId, h.revision.toLong(), h.createdAt.getTime().toLong(), h.digest,
     h.body?.let { RevisionFormat.read(JsJson.fromJs(it)) },
     h.unreadable?.let { RevisionUnreadable.Reason.valueOf(it.uppercase()) },
 )
@@ -370,10 +377,10 @@ private fun participantShape(p: Ledger.Participant): ParticipantShape = shape(
     "id" to p.id, "name" to p.name, "active" to p.active, "joined" to p.joined.toDouble(), "erased" to p.erased, "member" to p.member,
 )
 
-private fun entryShape(e: Ledger.Entry, revisions: PotRevisions): EntryShape = shape(
+private fun entryShape(e: Ledger.Entry, revisions: PotRevisions): LedgerEntryShape = shape(
     "id" to e.id, "revision" to e.revision.toDouble(), "status" to e.status.name.lowercase(),
     "content" to e.content?.let { revisions.bodyOf.get(it) }, "problem" to problemName(e.problem),
-    "effect" to e.effect?.let(::effectShape), "edited" to e.edited, "recordedAt" to e.recordedAt.toDouble(),
+    "effect" to e.effect?.let(::effectShape), "edited" to e.edited, "recordedAt" to Date(e.recordedAt.toDouble()),
 )
 
 private fun effectShape(f: Ledger.Effect): EffectShape =

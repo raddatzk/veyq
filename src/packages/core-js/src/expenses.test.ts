@@ -12,7 +12,7 @@ if (!existsSync(resolve(here, '../dist/expenses.d.mts'))) {
 const x = await import('@veyq/core-js/expenses')
 type HeldShape = import('@veyq/core-js/expenses').HeldShape
 type LedgerShape = import('@veyq/core-js/expenses').LedgerShape
-type JsonShape = import('@veyq/core-js/expenses').JsonShape
+type JsonValueShape = import('@veyq/core-js/expenses').JsonValueShape
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the vectors are JSON, read case by case */
 // repo contracts/ (4 levels up from src/packages/core-js/src/)
@@ -31,7 +31,7 @@ function readAnswer(read: () => unknown): unknown {
   }
 }
 const heldOf = (h: any): HeldShape => ({
-  entryId: h.entryId, revision: h.revision, createdAt: h.createdAt, sealedBody: new Uint8Array(), wrappedRevisionKey: new Uint8Array(),
+  entryId: h.entryId, revision: h.revision, createdAt: new Date(h.createdAt), sealedBody: new Uint8Array(), wrappedRevisionKey: new Uint8Array(),
   digest: h.digest, body: h.body === null ? null : x.readRevisionBody(h.body), unreadable: h.body === null ? 'body' : null,
 } as HeldShape)
 // an entry's content is the web's own body object it was read from, `v` and `heads` with it, as the TypeScript's was
@@ -40,7 +40,7 @@ const pairs = (m: ReadonlyMap<string, any>, f: (v: any) => unknown = (v) => Numb
 const ledgerJson = (l: LedgerShape) => ({
   participants: l.participants,
   entries: l.entries.map((e) => ({
-    id: e.id, revision: e.revision, status: e.status, problem: e.problem, edited: e.edited, recordedAt: e.recordedAt, content: e.content == null ? null : strip(e.content),
+    id: e.id, revision: e.revision, status: e.status, problem: e.problem, edited: e.edited, recordedAt: e.recordedAt.getTime(), content: e.content == null ? null : strip(e.content),
     effect: e.effect == null ? null : { base: Number(e.effect.base), paid: pairs(e.effect.paid), received: pairs(e.effect.received), shares: pairs(e.effect.shares) },
   })),
   balances: pairs(l.balances),
@@ -238,7 +238,7 @@ describe('the codec over the web\'s primitives', () => {
   it('opens every served row, holding one that does not open as unreadable, never dropping it', () => {
     const body = { v: 1, heads: [], kind: 'deleted' } as any
     const sealed = x.sealRevision(address, potKey, body)
-    const rows = [{ entryId: address.entryId, revision: 1, createdAt: 5, writer: 'user:u', ...sealed }, { entryId: address.entryId, revision: 2, createdAt: 6, ...sealed }]
+    const rows = [{ entryId: address.entryId, revision: 1, createdAt: new Date(5), writer: 'user:u', ...sealed }, { entryId: address.entryId, revision: 2, createdAt: new Date(6), ...sealed }]
     const held = x.openServedRevisions(address.scopeId, address.nodeId, potKey, rows)
     expect(held.map((h) => [h.revision, h.unreadable, h.body?.kind ?? null, h.writer ?? null, h.digest === x.revisionDigest(sealed.sealedBody)])).toEqual([
       [1, null, 'deleted', 'user:u', true],
@@ -264,8 +264,8 @@ describe('what the web passes crosses', () => {
 
   it('money past 2^53 keeps every digit: a bigint in, a bigint out', () => {
     expect(x.decimalOf(9007199254740993n, 2)).toBe('90071992547409.93')
-    const held = [{ entryId: '0e000000-0000-4000-8000-000000000001', revision: 1, createdAt: 0, digest: '', sealedBody: new Uint8Array(), wrappedRevisionKey: new Uint8Array(), unreadable: null,
-      body: x.readRevisionBody({ v: 1, heads: [], kind: 'participant', name: 'A', active: true, joined: 1 } as JsonShape) }] as HeldShape[]
+    const held = [{ entryId: '0e000000-0000-4000-8000-000000000001', revision: 1, createdAt: new Date(0), digest: '', sealedBody: new Uint8Array(), wrappedRevisionKey: new Uint8Array(), unreadable: null,
+      body: x.readRevisionBody({ v: 1, heads: [], kind: 'participant', name: 'A', active: true, joined: 1 } as JsonValueShape) }] as HeldShape[]
     const ledger = x.buildLedger(x.potRevisions(held), { currency: 'EUR', minorUnits: 2 })
     expect(typeof ledger.balances.get('0e000000-0000-4000-8000-000000000001')).toBe('bigint')
     expect(x.isSettled(ledger, '0e000000-0000-4000-8000-000000000001')).toBe(true)
@@ -273,7 +273,7 @@ describe('what the web passes crosses', () => {
   })
 
   it('a refusal crosses as an Error carrying its path', () => {
-    expect(() => x.readRevisionBody({ v: 2 } as JsonShape)).toThrow(expect.objectContaining({ name: 'RevisionFormatInvalid', path: '/v' }))
+    expect(() => x.readRevisionBody({ v: 2 } as JsonValueShape)).toThrow(expect.objectContaining({ name: 'RevisionFormatInvalid', path: '/v' }))
     expect(() => x.readRevisionBody(null)).toThrow(expect.objectContaining({ path: '' }))
   })
 })

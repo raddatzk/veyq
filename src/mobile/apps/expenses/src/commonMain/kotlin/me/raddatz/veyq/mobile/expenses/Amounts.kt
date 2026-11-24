@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.expenses
 
+import me.raddatz.veyq.mobile.text.Pattern
 /**
  * Amounts as a person types them and reads them back to type over (ADR 0108 decision 9): exact, in digits and strings,
  * never through a float — a typed "0.10" is 10 cents, not 0.1 × 100. The web's and the apps' one rule (ADR 0155: the web
@@ -14,14 +15,16 @@ object Amounts {
     fun parse(text: String, minorUnits: Int): Long? {
         // every white space out, a no-break space too, as the web's `\s` takes it (the vectors' `amounts`)
         val t = text.filterNot { it.isWhitespace() }
-        val m = Regex("^([0-9]+)(?:[.,]([0-9]*))?$").matchEntire(t) ?: return null
-        val frac = m.groupValues[2]
+        val m = TYPED.groups(t) ?: return null
+        val frac = m[2]
         if (frac.length > minorUnits) return null
-        val digits = (m.groupValues[1] + frac.padEnd(minorUnits, '0')).trimStart('0').ifEmpty { "0" }
+        val digits = (m[1] + frac.padEnd(minorUnits, '0')).trimStart('0').ifEmpty { "0" }
         if (digits.length > 16) return null
         val v = digits.toLongOrNull() ?: return null
         return v.takeIf { it in 1..RevisionFormat.MAX_SAFE }
     }
+
+    private val TYPED = Pattern("([0-9]+)(?:[.,]([0-9]*))?")
 
     /** A typed rate as the format seals it (a decimal with a dot, the schema's `rate`), or null. */
     fun parseRate(text: String): String? = text.trim().replace(',', '.').takeIf { Money.RATE.matches(it) }

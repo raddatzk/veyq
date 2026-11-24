@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.expenses
 
+import me.raddatz.veyq.mobile.text.Pattern
 /**
  * Expenses' arithmetic, the web's too (ADR 0155, through `@veyq/core-js/expenses`; ADR 0108 decision 9): exact fractions,
  * never floating point — the rounding rule is part of the format version, so every device computes the same cent from the
@@ -32,8 +33,8 @@ class Fraction private constructor(val num: Big, val den: Big) {
 
         /** A weight as the vectors write one: `"3"`, `"1/3"`, `"-2/4"`. */
         fun parse(text: String): Fraction {
-            val m = Regex("^(-?[0-9]+)(?:/([0-9]+))?$").matchEntire(text) ?: throw IllegalArgumentException("fraction_malformed")
-            return of(Big.parse(m.groupValues[1]), m.groupValues[2].takeIf { it.isNotEmpty() }?.let { Big.parse(it) } ?: Big.ONE)
+            val m = Pattern("(-?[0-9]+)(?:/([0-9]+))?").groups(text) ?: throw IllegalArgumentException("fraction_malformed")
+            return of(Big.parse(m[1]), m[2].takeIf { it.isNotEmpty() }?.let { Big.parse(it) } ?: Big.ONE)
         }
     }
 }
@@ -51,7 +52,7 @@ internal fun gcd(a: Big, b: Big): Big {
 
 object Money {
     /** The schema's `rate`: a decimal greater than zero, at most 12 digits on either side of the point. */
-    val RATE = Regex("^(?:[1-9][0-9]{0,11}(?:\\.[0-9]{1,12})?|0\\.(?=[0-9]*[1-9])[0-9]{1,12})$")
+    val RATE = Pattern("^(?:[1-9][0-9]{0,11}(?:\\.[0-9]{1,12})?|0\\.(?=[0-9]*[1-9])[0-9]{1,12})$")
 
     /** A rate as an exact fraction — `"1.1725"` is `11725 / 10000`. Throws on anything the schema's pattern refuses. */
     fun parseRate(rate: String): Fraction {

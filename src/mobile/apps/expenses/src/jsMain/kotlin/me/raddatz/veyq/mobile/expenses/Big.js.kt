@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.expenses
 
+import me.raddatz.veyq.mobile.text.Pattern
 /** [Big] on JavaScript: the engine's own `BigInt`, exactly the arithmetic the web's TypeScript ran. */
 actual class Big private constructor(private val v: dynamic) : Comparable<Big> {
     actual val signum: Int get() = sign(v)
@@ -37,7 +38,7 @@ actual class Big private constructor(private val v: dynamic) : Comparable<Big> {
         private const val SAFE = 9007199254740991.0
         actual fun of(v: Int): Big = Big(bigOfNumber(v.toDouble()))
         actual fun parse(text: String): Big {
-            require(Regex("^-?[0-9]+$").matches(text)) { "not an integer: $text" }
+            require(INTEGER.matches(text)) { "not an integer: $text" }
             return Big(big(text))
         }
         actual fun pow10(n: Int): Big {
@@ -49,6 +50,8 @@ actual class Big private constructor(private val v: dynamic) : Comparable<Big> {
         internal fun ofBigInt(b: dynamic): Big = Big(b)
     }
 }
+
+private val INTEGER = Pattern("-?[0-9]+")
 
 private fun big(text: String): dynamic = js("BigInt(text)")
 private fun bigOfNumber(n: Double): dynamic = js("BigInt(n)")

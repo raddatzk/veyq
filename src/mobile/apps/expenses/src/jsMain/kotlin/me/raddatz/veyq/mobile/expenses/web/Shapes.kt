@@ -2,6 +2,7 @@
 
 package me.raddatz.veyq.mobile.expenses.web
 
+import kotlin.js.Date
 import kotlin.js.collections.JsReadonlyArray
 import kotlin.js.collections.JsReadonlyMap
 import org.khronos.webgl.Uint8Array
@@ -10,7 +11,7 @@ import org.khronos.webgl.Uint8Array
 // names every field with its type (never `any`) and the web passes and reads plain objects — no Kotlin class crosses. They
 // spell the web's own shapes (`features/expenses/domain/format.ts`, `ledger.ts`), which the web keeps for what it draws and
 // holds to these by a compile-time check (`format.ts`). A body is the format's JSON object exactly; money is `bigint`; a
-// map is a JavaScript `Map`; a time is epoch milliseconds; an enum is its string.
+// map is a JavaScript `Map`; a time is the web's own `Date`; an enum is its string.
 
 /**
  * JavaScript's `bigint`, as a type only: named so, the `.d.ts` writes the primitive. Kotlin's own (`JsBigInt`) is a `Long`,
@@ -22,7 +23,7 @@ external class bigint
 
 /** Any JSON value the web read (`JSON.parse`'s result, an object it built): a reader holds it to its rules. */
 @JsExport
-external interface JsonShape
+external interface JsonValueShape
 
 /** One revision a Pot's heads name. */
 @JsExport
@@ -132,14 +133,14 @@ external interface RefShape {
     val revision: Double
 }
 
-/** One served row, decoded from the wire's base64 but not opened; `createdAt` and `purgeAfter` in epoch milliseconds. */
+/** One served row, decoded from the wire's base64 but not opened; `createdAt` and `purgeAfter` the web's own `Date`s. */
 @JsExport
 external interface ServedShape : SealedShape {
     val entryId: String
     val revision: Double
-    val createdAt: Double
+    val createdAt: Date
     val writer: String?
-    val purgeAfter: Double?
+    val purgeAfter: Date?
 }
 
 /** One revision as held: the row, its body's digest, and what it opened to — or why it did not (`key`, `body`, `format`). */
@@ -193,7 +194,7 @@ external interface EffectShape {
 
 /** A money record as its latest revision leaves it; `status` is `live`, `deleted`, `invalid` or `unreadable`. */
 @JsExport
-external interface EntryShape {
+external interface LedgerEntryShape {
     val id: String
     val revision: Double
     val status: String
@@ -201,7 +202,7 @@ external interface EntryShape {
     val problem: String?
     val effect: EffectShape?
     val edited: Boolean
-    val recordedAt: Double
+    val recordedAt: Date
 }
 
 /** One transfer of the settle-up. */
@@ -229,7 +230,7 @@ external interface OverviewShape {
 @JsExport
 external interface LedgerShape {
     val participants: JsReadonlyArray<ParticipantShape>
-    val entries: JsReadonlyArray<EntryShape>
+    val entries: JsReadonlyArray<LedgerEntryShape>
     val balances: JsReadonlyMap<String, bigint>
     val settleUp: JsReadonlyArray<TransferShape>
     val overview: OverviewShape

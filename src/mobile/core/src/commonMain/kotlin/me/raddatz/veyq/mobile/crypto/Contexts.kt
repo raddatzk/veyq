@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.crypto
 
+import me.raddatz.veyq.mobile.text.Pattern
 /**
  * The typed seal contexts of the v1 suite, a port of `src/packages/crypto/src/seal.ts`: each purpose with its binding
  * fields in canonical order. A context is encoded `lp(utf8(purpose)) ‖ lp(field)…` in the table's order, an id as its
@@ -106,16 +107,16 @@ data class Context(val purpose: String, val fields: Map<String, Any?> = emptyMap
     constructor(purpose: String, vararg fields: Pair<String, Any?>) : this(purpose, fields.toMap())
 }
 
-private val CANONICAL_UUID = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
-private val SHARE_ID = Regex("^[A-Za-z0-9_-]{43}$")
-private val BLOB_ROLE = Regex("^[A-Z][A-Z0-9_]{0,15}$")
+private val CANONICAL_UUID = Pattern("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+private val SHARE_ID = Pattern("^[A-Za-z0-9_-]{43}$")
+private val BLOB_ROLE = Pattern("^[A-Z][A-Z0-9_]{0,15}$")
 private val SCOPE_KINDS = setOf("TENANT", "GROUP", "PERSONAL")
-private val PAIRING_CODE = Regex("^[0-9]{6}$")
-private val OPERATION_ID = Regex("^[a-z][A-Za-z0-9]{0,63}$")
+private val PAIRING_CODE = Pattern("^[0-9]{6}$")
+private val OPERATION_ID = Pattern("^[a-z][A-Za-z0-9]{0,63}$")
 
 private fun encodeField(purpose: String, name: String, kind: FieldKind, value: Any?): ByteArray {
     fun bad(what: String): Nothing = throw SealContextInvalid("$purpose.$name is not $what")
-    fun str(re: Regex, what: String) = (value as? String)?.takeIf { re.matches(it) }?.let { utf8(it) } ?: bad(what)
+    fun str(re: Pattern, what: String) = (value as? String)?.takeIf { re.matches(it) }?.let { utf8(it) } ?: bad(what)
     return when (kind) {
         FieldKind.ID -> str(CANONICAL_UUID, "a canonical lowercase UUID")
         FieldKind.SHARE_ID -> str(SHARE_ID, "a share id")

@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.expenses
 
+import me.raddatz.veyq.mobile.text.Pattern
 import me.raddatz.veyq.mobile.json.JsonValue
 import me.raddatz.veyq.mobile.json.jsNumberText
 
@@ -15,8 +16,8 @@ import me.raddatz.veyq.mobile.json.jsNumberText
  */
 object ExchangeRateTable {
     private const val PLACES = 12
-    private val DAY = Regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
-    private val ISO = Regex("^[A-Z]{3}$")
+    private val DAY = Pattern("^[0-9]{4}-[0-9]{2}-[0-9]{2}$")
+    private val ISO = Pattern("^[A-Z]{3}$")
 
     /**
      * The provider's answer (Frankfurter's v2 shape: an array of `{date, base, quote, rate}`, base `EUR`) as a table, or
@@ -39,7 +40,10 @@ object ExchangeRateTable {
                 is JsonValue.Str -> r.value
                 else -> continue
             }
-            val decimal = text.replace(Regex("(\\.[0-9]*?)0+$"), "$1").removeSuffix(".")
+            // a fraction's trailing zeros out, then a bare point (`1.50` → `1.5`, `2.0` → `2`); an exponent form keeps its text
+            val dot = text.indexOf('.')
+            val trimmed = if (dot >= 0 && text.substring(dot + 1).all { it in '0'..'9' }) text.trimEnd('0') else text
+            val decimal = trimmed.removeSuffix(".")
             if (!Money.RATE.matches(decimal)) continue
             table[quote] = ExchangeRates.Row(decimal, date)
         }

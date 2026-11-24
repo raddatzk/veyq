@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.json
 
+import me.raddatz.veyq.mobile.text.Pattern
 /**
  * A JSON value as the core's own tree (ADR 0155 decision 4, the JSON seam): what a format reads and writes, on every
  * platform alike. A number is the IEEE double `JSON.parse` yields, so `1e2`, `100.0` and `1` are one value, a duplicate
@@ -55,16 +56,18 @@ internal expect fun jsonTextOf(value: JsonValue): String
  * 10^21, in exponent form outside (`1e-7`, `1.5e+21`) — from the platform's own shortest form, whichever notation it uses.
  * What a reader that takes a number's text sees on every platform (`ExchangeRateTable.parseTable`).
  */
+private val NUMBER_TEXT = Pattern("-?([0-9]*)(?:\\.([0-9]*))?(?:[eE]([+-]?[0-9]+))?")
+
 fun jsNumberText(d: Double): String {
     if (d.isNaN()) return "NaN"
     if (d.isInfinite()) return if (d > 0) "Infinity" else "-Infinity"
     if (d == 0.0) return "0"
     val raw = d.toString()
     val negative = raw.startsWith('-')
-    val m = Regex("^-?([0-9]*)(?:\\.([0-9]*))?(?:[eE]([+-]?[0-9]+))?$").matchEntire(raw) ?: return raw
-    val whole = m.groupValues[1]
-    val frac = m.groupValues[2]
-    val exp = m.groupValues[3].ifEmpty { "0" }.toInt()
+    val m = NUMBER_TEXT.groups(raw) ?: return raw
+    val whole = m[1]
+    val frac = m[2]
+    val exp = m[3].ifEmpty { "0" }.toInt()
     var digits = whole + frac
     // the decimal point after `whole`: value = 0.digits × 10^n
     var n = whole.length + exp

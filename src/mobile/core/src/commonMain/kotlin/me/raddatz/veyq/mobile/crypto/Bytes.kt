@@ -49,8 +49,25 @@ fun splitLp(b: ByteArray, count: Int): List<ByteArray> {
     return out
 }
 
-/** The wire's base64: standard alphabet, padded. */
-fun b64(bytes: ByteArray): String = Base64.encode(bytes)
+/**
+ * The wire's base64: standard alphabet, padded — written here rather than by `kotlin.io.encoding.Base64`, whose object and
+ * tables would otherwise ship in the standard library's module file with every JavaScript entry (cr-web-expenses-on-the-core,
+ * measured ~9 KB minified). Decoding stays the standard library's, with its refusals.
+ */
+fun b64(bytes: ByteArray): String {
+    val out = StringBuilder((bytes.size + 2) / 3 * 4)
+    var i = 0
+    while (i < bytes.size) {
+        val n = minOf(3, bytes.size - i)
+        var v = 0
+        for (k in 0 until 3) v = (v shl 8) or (if (k < n) bytes[i + k].toInt() and 0xff else 0)
+        for (k in 0 until 4) out.append(if (k <= n) B64_ALPHABET[(v ushr (18 - 6 * k)) and 0x3f] else '=')
+        i += 3
+    }
+    return out.toString()
+}
+
+private const val B64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 fun unb64(s: String): ByteArray = Base64.decode(s)
 
 fun hex(bytes: ByteArray): String = bytes.joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
