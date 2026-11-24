@@ -199,6 +199,24 @@ Measured before the decision (2026-11-20):
    only where a moved application's codec needs it, over the same `@noble/*` primitives and the same vectors. admin-web
    holds no domain logic to move ([ADR 0065](0065-admin-ui-cli-separate-service.md)).
 
+10. **What a budget protects: the first load of a link guest, not a member's cached return** (the owner, 2026-11-24).
+    A member's browser holds the built chunks in its cache between visits, so a lazy chunk only members load costs
+    them once per release. Three costs stay that a cache does not remove, and they set where a budget binds:
+    every release renames the hashed chunks it changes, and the platform module changes with almost every release, so
+    each member pays its download again then; the engine parses and compiles every loaded script on every start, cached
+    or not, which a weak phone feels; and a link guest is a first visitor — opened on a phone, on a mobile network, with
+    nothing cached. Hence:
+    - **The guest path stays tight:** what a link guest's first load fetches — the eager set (decision 2's `main` and
+      `index.html`'s modulepreloads; the platform module sits in it, every entry importing it) plus the chunks the share
+      view of the guest's kind loads — has a ceiling of its own, measured per move as the eager set is today. Its number
+      is set from Depot's move, the first one measured against it, and recorded here with the owner's date. Until then
+      the running budget of decision 7.2 and 7.3's application bound hold as written.
+    - **A chunk only members load is looser:** it is still measured and recorded with every move, but its growth is
+      not a gate; a move reports it, and the owner is asked only where it is unusual for what the move deletes.
+    - **Time still binds everywhere:** 7.3's time bound is about running, not loading, and holds for every rule moved.
+    - **Later moves of an application already moved** (inbox #1270, the owner 2026-11-24) are gated as a slice: at most
+      R = 3.0 times the gzip of the TypeScript they delete, on the guest path; a member-only chunk under the rule above.
+
 ## Consequences
 
 - **The pilot's gate** (2026-11-20/21, branch `claude/kjs-p1`, macOS arm64, Kotlin 2.4.21; each number against the
