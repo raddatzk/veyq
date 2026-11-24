@@ -38,6 +38,7 @@ struct RootView: View {
                 onScanFromTrusted: linkEntry(model.scanFromTrusted(server:)),
                 onShowForSignIn: linkEntry(model.showForSignIn(server:)),
                 onOpenLink: model.inExtension ? nil : { model.guests.ask(model) },
+                tray: model.inExtension ? nil : model.signedOutTray,
                 secretKeyProblem: model.secretKeyProblem(_:)
             ) { server, email, password, secretKey in
                 model.signIn(server: server, email: email, password: password, secretKey: secretKey)
@@ -58,7 +59,8 @@ struct RootView: View {
             UnlockView(
                 record: record, working: working, error: error, inExtension: model.inExtension, onUnlock: model.unlock(password:),
                 onOther: model.otherAccount, onForget: model.forgetUnlocked,
-                onOpenLink: model.inExtension ? nil : { model.guests.ask(model) }
+                onOpenLink: model.inExtension ? nil : { model.guests.ask(model) },
+                tray: model.inExtension ? nil : model.signedOutTray
             )
             // the ask before its *Stop trusting this device* while writes made offline wait (inbox #1052)
             .modifier(LossAsking(model: model, here: true))

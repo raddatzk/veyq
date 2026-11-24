@@ -35,6 +35,9 @@ struct SignInView: View {
     /// *Forgot your password?* (uc.account.recover-access) over the server and email as typed; nil in the share extension.
     var onForgot: ((String, String) -> Void)?
     let onSignIn: (String, String, String, String) -> Void
+    /// The tray over the app's queue alone: a link guest's uploads left running signed out (inbox #1250); nil in the share
+    /// extension.
+    var tray: SignedOutTray?
 
     @State private var server: String
     @State private var email: String
@@ -54,9 +57,11 @@ struct SignInView: View {
         onScanKit: ((String) -> QrScan<AnyObject>)? = nil,
         onScanFromTrusted: ((String) -> Void)? = nil, onShowForSignIn: ((String) -> Void)? = nil,
         onOpenLink: (() -> Void)? = nil,
+        tray: SignedOutTray? = nil,
         secretKeyProblem: @escaping (String) -> SecretKeyProblem? = { _ in nil },
         onSignIn: @escaping (String, String, String, String) -> Void
     ) {
+        self.tray = tray
         self.working = working
         self.error = error
         self.adding = adding
@@ -98,6 +103,7 @@ struct SignInView: View {
                 Text(adding ? say(.signinAddTitle) : say(.signinTitle)).font(.title2.bold()).foregroundStyle(Role.text)
             }
             .listRowBackground(Color.clear)
+            if let tray { SignedOutUploadsSection(tray: tray) }
             Section {
                 TextField(say(.signinServer), text: $server)
                     .textContentType(.URL)
@@ -339,6 +345,9 @@ struct UnlockView: View {
     let onForget: () -> Void
     /// *Open a link* under the unlock (ADR 0150 decision 4); nil where the app offers none.
     var onOpenLink: (() -> Void)?
+    /// The tray over the app's queue alone: a link guest's uploads left running signed out (inbox #1250); nil in the share
+    /// extension.
+    var tray: SignedOutTray?
 
     @State private var password = ""
 
@@ -358,6 +367,7 @@ struct UnlockView: View {
                 }
             }
             .listRowBackground(Color.clear)
+            if let tray { SignedOutUploadsSection(tray: tray) }
             Section {
                 if !remembered {
                     SecureField(say(.signinPassword), text: $password)

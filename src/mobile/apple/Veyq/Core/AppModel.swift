@@ -1611,6 +1611,10 @@ final class AppModel {
     /// account: a sign-out or a switch of tenant empties it.
     let uploads = UploadQueue()
 
+    /// The tray over `uploads` alone (core's `UploadsTray`): the sign-in's and the unlock's, where a link guest's uploads
+    /// left running signed out show (inbox #1250). The process's, as the queue is.
+    @ObservationIgnored private(set) lazy var signedOutTray = SignedOutTray(queue: uploads)
+
     /// A picked file as an upload lists it: its name, size, type, modified time (read inside its security scope).
     struct Picked {
         let name: String

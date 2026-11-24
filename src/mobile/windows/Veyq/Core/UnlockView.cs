@@ -98,7 +98,8 @@ internal sealed class UnlockView
         var stretch = new Grid();
         stretch.Children.Add(column);
         // the password (PasswordBox's peek shows it): out of capture
-        Page = ScreenSecrets.Guard(new ScrollViewer { Content = stretch, HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
+        // the tray over the app's queue alone at the top right: a link guest's uploads left running signed out (inbox #1250)
+        Page = Uploads.WithTray(window, ScreenSecrets.Guard(new ScrollViewer { Content = stretch, HorizontalScrollMode = ScrollMode.Disabled, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled }));
         Plan();
     }
 

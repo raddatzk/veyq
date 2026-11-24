@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
@@ -63,16 +64,20 @@ fun AppRoot(model: AppModel) {
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when (val s = screen) {
             Screen.Starting -> StartingScreen()
-            is Screen.SignIn -> SignInScreen(
-                s, { server, email, password, secretKey -> model.signIn(server, email, password, secretKey) }, model::cancelAdd,
-                onKit = model::readKit, onClearKit = model::clearKit, onScanKit = model::scanKit, kitScan = kitScan, onCloseKitScan = model::closeKitScan,
-                onScanFromTrusted = model::scanFromTrusted, onShowForSignIn = model::showForSignIn, onOpenLink = model.guests::ask,
-                secretKeyProblem = model::secretKeyProblem,
-                onLocked = model::signInLocked, onForgot = model::forgotPassword,
-            )
+            is Screen.SignIn -> UnderTray(model) {
+                SignInScreen(
+                    s, { server, email, password, secretKey -> model.signIn(server, email, password, secretKey) }, model::cancelAdd,
+                    onKit = model::readKit, onClearKit = model::clearKit, onScanKit = model::scanKit, kitScan = kitScan, onCloseKitScan = model::closeKitScan,
+                    onScanFromTrusted = model::scanFromTrusted, onShowForSignIn = model::showForSignIn, onOpenLink = model.guests::ask,
+                    secretKeyProblem = model::secretKeyProblem,
+                    onLocked = model::signInLocked, onForgot = model::forgotPassword,
+                )
+            }
             is Screen.Locked -> LockedScreen(s, onSignOutEverywhere = model::signOutEverywhere, onBack = model::lockedBack)
             is Screen.Recover -> RecoverScreen(s, onSend = model::requestRecovery, onBack = model::backToSignIn)
-            is Screen.Unlock -> UnlockScreen(s, model::unlock, model::otherAccount, onForget = model::forgetUnlocked, onOpenLink = model.guests::ask)
+            is Screen.Unlock -> UnderTray(model) {
+                UnlockScreen(s, model::unlock, model::otherAccount, onForget = model::forgetUnlocked, onOpenLink = model.guests::ask)
+            }
             is Screen.Signed -> offer?.let { OfferScreen(it, trustWorking, model::answerOffer) }
                 ?: settings?.let { SettingsScreen(it, model.settingsActions, maps, at = settingsAt, onAt = model::settingsAtSeen) }
                 ?: s.managing?.let { ManageScreen(it, model) } ?: ShellScreen(s, model)
@@ -97,6 +102,20 @@ fun AppRoot(model: AppModel) {
         guest?.let { GuestLinkScreen(it, model) }
         val asking by model.guests.asking.collectAsStateWithLifecycle()
         asking?.let { OpenLinkDialog(it, onOpen = model.guests::openAsked, onCancel = model.guests::cancelAsk) }
+    }
+}
+
+/**
+ * A way-in screen (the sign-in, the unlock) under the tray over the app's one queue alone (core's `UploadsTray`): a link
+ * guest's uploads left running signed out show there as the shell's do, under the status bar (ADR 0145 decision 6, inbox
+ * #1250). With nothing listed the tray takes no room.
+ */
+@Composable
+private fun UnderTray(model: AppModel, content: @Composable () -> Unit) {
+    // the status bar's inset taken here, so the screen's own safe-drawing padding does not add it again
+    Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        UploadTray(model.signedOutTray)
+        androidx.compose.foundation.layout.Box(Modifier.weight(1f)) { content() }
     }
 }
 

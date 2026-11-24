@@ -1473,6 +1473,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
      */
     val uploads = me.raddatz.veyq.mobile.blob.UploadQueue()
 
+    /**
+     * The tray over [uploads] alone (core's `UploadsTray`): the sign-in's and the unlock's, where a link guest's uploads left
+     * running signed out show (inbox #1250). The process's, as the queue is.
+     */
+    internal val signedOutTray: TrayActions = SignedOutTray(viewModelScope, me.raddatz.veyq.mobile.blob.UploadsTray(uploads))
+
     /** The shell's uploads into a level (the tray, New's *Upload files* and *Upload folder*), as an application keeps them. */
     internal val levelUploads: LevelUploads? get() = holdings.values.firstNotNullOfOrNull { it.levelUploads }
 

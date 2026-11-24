@@ -381,7 +381,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
                 if (s.switching) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
                 if (refreshable) androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.Indicator(pull, refreshing, Modifier.align(Alignment.TopCenter))
                 Column(Modifier.fillMaxWidth()) {
-                    UploadTray(model)
+                    UploadTray(model.levelUploads)
                     // the writes made offline, each under where it goes (core's `QueuedTray`, ADR 0153 decision 5)
                     QueuedTrayRow(model)
                 }

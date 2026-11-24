@@ -181,8 +181,8 @@ class ReceivedBridgeTest {
 
     /**
      * #1016: the desktops' quit question counts every upload under way in the process — a tenant open or not, so a
-     * signed-out guest's upload counts (`Watched.Underway` over core's `UploadsUnderway`; the tray's `UploadsShown` is
-     * null with no tenant).
+     * signed-out guest's upload counts (`Watched.Underway` over core's `UploadsUnderway`; the shell's `Watched.Uploads` is
+     * null with no tenant, the sign-in's `Watched.Tray` is not).
      */
     @Test
     fun theUnderwayCountIsTheProcesssUploadsWithNoTenantOpen() = runBlocking {
@@ -201,6 +201,34 @@ class ReceivedBridgeTest {
         assertEquals(1, w.untilJson { j -> files(j).takeIf { it > 0 } })
         go.complete(Unit)
         assertEquals(0, w.untilJson { j -> files(j).takeIf { it == 0 } })
+        b.shutdown()
+    }
+
+    /**
+     * #1250: the sign-in's and the unlock's tray (`Watched.Tray`, core's `UploadsTray` over the bridge's one queue) shows a
+     * link guest's upload with no tenant open, and the batch all in leaves it by itself after the moment.
+     */
+    @Test
+    fun theTrayShowsAGuestsUploadWithNoTenantOpen() = runBlocking {
+        val share = PlayedShare(p, role = "WRITE_ONLY", rootKind = "DEPOT_DROPBOX")
+        PlayedGuestContent(share).dropKey()
+        val b = bridge(share)
+        val tray = b.watching(Watched.Tray)
+        fun shown(j: kotlinx.serialization.json.JsonElement) = (wire.decodeFromJsonElement(Update.serializer(), j) as Update.Tray).shown
+        tray.untilJson { j -> shown(j).takeIf { it.summary == null && it.batches.isEmpty() } }
+        val opened = assertIs<Answer.ReceivedOpened>(b.ask(Call.ReceivedOpen(share.link)))
+        val w = b.watching(Watched.Received(opened.received))
+        fun page(j: kotlinx.serialization.json.JsonElement) = (wire.decodeFromJsonElement(Update.serializer(), j) as Update.Received).shown
+        w.untilJson { j -> page(j)?.takeIf { it.page?.kind == ReceivedPageKind.DROP_BOX } }
+        val file = kotlin.io.path.createTempFile("dropped", ".txt").toFile().apply { writeText("dropped"); deleteOnExit() }
+        val sending = async { b.ask(Call.ReceivedUpload(opened.received, listOf(file.path))) }
+        w.untilJson { j -> page(j)?.takeIf { it.naming } }
+        b.ask(Call.ReceivedNamingSave(opened.received, "Ben"))
+        assertEquals(Answer.Done, sending.await())
+        val listed = tray.untilJson { j -> shown(j).takeIf { s -> s.batches.any { b -> b.items.any { it.name == file.name } } } }
+        assertNotNull(listed.summary, "the tray's one line, signed out")
+        assertNull(listed.said)
+        tray.untilJson { j -> shown(j).takeIf { s -> s.batches.isEmpty() } }
         b.shutdown()
     }
 

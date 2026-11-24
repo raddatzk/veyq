@@ -27,6 +27,7 @@ use gtk::glib;
 use crate::bridge::{self, wire::Answer, wire::Call, wire::Gate, wire::KitShown, wire::Method, wire::ScanKind, wire::ScanShown, wire::ScanState, wire::SecretKeyProblem, wire::SignInEntry, wire::StaySignedIn, wire::UnlockEntry, wire::Why};
 use crate::core_ui::qr_camera::ScanView;
 use crate::core_ui::dev_login::DevSignIn;
+use crate::core_ui::uploads::Uploads;
 use crate::core_ui::{said, theme, words};
 
 /// What the unlock of [method]'s record says, its line and its button, by the level its key is ([level], the record's
@@ -43,6 +44,19 @@ pub fn unlock_words(method: Method, level: Option<StaySignedIn>) -> (String, Str
 
 /// The column every way-in page shares: the brand, a heading, then [rows], clamped and scrolling, under a bare header bar.
 pub(crate) fn page(heading: &gtk::Label, rows: &[&gtk::Widget]) -> adw::ToolbarView {
+    page_bar(heading, rows).0
+}
+
+/// [page] under a header bar that carries the tray over the app's one queue alone ([Uploads::signed_out]): a link guest's
+/// uploads left running signed out (ADR 0145 decision 6, inbox #1250), where the shell's header bar carries its own.
+fn page_with_tray(heading: &gtk::Label, rows: &[&gtk::Widget]) -> (adw::ToolbarView, Rc<Uploads>) {
+    let (page, bar) = page_bar(heading, rows);
+    let uploads = Uploads::signed_out();
+    bar.pack_end(uploads.button());
+    (page, uploads)
+}
+
+fn page_bar(heading: &gtk::Label, rows: &[&gtk::Widget]) -> (adw::ToolbarView, adw::HeaderBar) {
     let column = gtk::Box::new(gtk::Orientation::Vertical, 18);
     column.set_margin_top(24);
     column.set_margin_bottom(24);
@@ -61,9 +75,10 @@ pub(crate) fn page(heading: &gtk::Label, rows: &[&gtk::Widget]) -> adw::ToolbarV
     let clamp = adw::Clamp::builder().maximum_size(420).child(&column).build();
     let scroll = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).child(&clamp).build();
     let page = adw::ToolbarView::new();
-    page.add_top_bar(&adw::HeaderBar::builder().show_title(false).build());
+    let bar = adw::HeaderBar::builder().show_title(false).build();
+    page.add_top_bar(&bar);
     page.set_content(Some(&scroll));
-    page
+    (page, bar)
 }
 
 /// Says a typo under a Secret Key row as it is typed (`SecretKey.Check`, the core's `KeyIntake.problem`; inbox #1058, the
@@ -149,6 +164,8 @@ pub struct SignIn {
     cancel: gtk::Button,
     spinner: adw::Spinner,
     error: gtk::Label,
+    /// The tray over the app's queue alone, in the header bar (inbox #1250).
+    uploads: Rc<Uploads>,
 }
 
 impl SignIn {
@@ -206,7 +223,7 @@ impl SignIn {
         cancel.add_css_class("flat");
         let spinner = adw::Spinner::builder().visible(false).build();
         let heading = gtk::Label::new(Some(&words::signin_title()));
-        let page = page(
+        let (page, uploads) = page_with_tray(
             &heading,
             &[fields.upcast_ref(), typo.upcast_ref(), other_server.upcast_ref(), keeps_nothing.upcast_ref(), error.upcast_ref(), notice.upcast_ref(), spinner.upcast_ref(), entries.upcast_ref()],
         );
@@ -237,6 +254,7 @@ impl SignIn {
             cancel,
             spinner,
             error,
+            uploads,
         });
         let ask = s.asker();
         let on_click = ask.clone();
@@ -435,6 +453,8 @@ impl SignIn {
     /// row as typed or as the kit's, working or not, the core's error.
     pub fn show(self: &Rc<Self>, gate: &Gate) {
         let Gate::SignIn { working, error, server, email, adding, kit, notice, keeps_nothing } = gate else { return };
+        // the core runs once a gate shows: the tray's watch is taken now (asked before the start, it is refused)
+        self.uploads.start();
         if self.asked.replace(Some(*adding)) != Some(*adding) {
             self.ask_plan();
         }
@@ -524,6 +544,8 @@ pub struct Unlock {
     forget: adw::ButtonRow,
     spinner: adw::Spinner,
     error: gtk::Label,
+    /// The tray over the app's queue alone, in the header bar (inbox #1250).
+    uploads: Rc<Uploads>,
 }
 
 impl Unlock {
@@ -551,9 +573,9 @@ impl Unlock {
         let entries = gtk::Box::new(gtk::Orientation::Vertical, 12);
         entries.set_widget_name("unlock-entries");
         let heading = gtk::Label::new(Some(&words::unlock_title()));
-        let page = page(&heading, &[group.upcast_ref(), error.upcast_ref(), spinner.upcast_ref(), entries.upcast_ref()]);
+        let (page, uploads) = page_with_tray(&heading, &[group.upcast_ref(), error.upcast_ref(), spinner.upcast_ref(), entries.upcast_ref()]);
 
-        let s = Self { page, account, group, password, submit, other, open_link, forget, spinner, error };
+        let s = Self { page, account, group, password, submit, other, open_link, forget, spinner, error, uploads };
         let unlock = {
             let password = s.password.clone();
             move || {
@@ -610,6 +632,8 @@ impl Unlock {
     /// level), working or not, the error.
     pub fn show(&self, gate: &Gate) {
         let Gate::Unlock { record, working, error } = gate else { return };
+        // the core runs once a gate shows: the tray's watch is taken now (asked before the start, it is refused)
+        self.uploads.start();
         self.account.set_title(&record.email);
         self.account.set_subtitle(&record.server);
         let remembered = record.method == Method::DeviceKey;
