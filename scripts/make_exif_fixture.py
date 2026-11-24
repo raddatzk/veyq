@@ -20,14 +20,18 @@ date, an IPTC object name). One PNG carries its capture date in XMP only, as Lig
 `-xmpdate`, with no `eXIf`, the three XMP capture dates each a different moment, and a later `xmp:ModifyDate`.
 Three carry the XMP in the forms read since inbox #1141: `-xmp.heic` (the Exif item and an XMP item, as macOS writes a
 HEIC), `-compressed.png` (the TIFF as a `zTXt` raw profile, the XMP as a compressed `iTXt`) and `-extended.jpg` (the
-XMP split into a standard and an extended packet, the extended one in chunks).
+XMP split into a standard and an extended packet, the extended one in chunks). Two carry the forms read since inbox
+#1185: `-xmp.tif` (a TIFF laid out as macOS's `sips` and ImageMagick write one — the Exif and GPS IFDs first, the pixels,
+then IFD0 last, carrying the XMP in tag 700 and an IPTC stream in tag 33723) and `-iptc.png` (`-iptc.jpg`'s tags in a PNG:
+the TIFF as `eXIf`, the IPTC as exiftool writes it, a `zTXt` raw profile named `IPTC profile` holding Photoshop's
+resources).
 
 Re-run after changing which tags the client reads:
 
     python3 scripts/make_exif_fixture.py
 
-Output: src/web/src/features/memories/__fixtures__/exif-sample{,-fallbacks,-iptc,-extended}.jpg, exif-sample{,-le}.tif,
-exif-sample{,-xmpdate,-compressed}.png, exif-sample.{webp,avif,heic}, exif-sample-ftyp52.heic, exif-sample-xmp.heic
+Output: src/web/src/features/memories/__fixtures__/exif-sample{,-fallbacks,-iptc,-extended}.jpg, exif-sample{,-le,-xmp}.tif,
+exif-sample{,-xmpdate,-compressed,-iptc}.png, exif-sample.{webp,avif,heic}, exif-sample-ftyp52.heic, exif-sample-xmp.heic
 """
 from __future__ import annotations
 
@@ -53,8 +57,8 @@ BASE_JPEG = bytes.fromhex(
 )
 
 # TIFF field types (TIFF 6.0 §2). Only the ones this fixture needs.
-BYTE, ASCII, SHORT, LONG, RATIONAL, SRATIONAL = 1, 2, 3, 4, 5, 10
-TYPE_SIZE = {BYTE: 1, ASCII: 1, SHORT: 2, LONG: 4, RATIONAL: 8, SRATIONAL: 8}
+BYTE, ASCII, SHORT, LONG, RATIONAL, UNDEFINED, SRATIONAL = 1, 2, 3, 4, 5, 7, 10
+TYPE_SIZE = {BYTE: 1, ASCII: 1, SHORT: 2, LONG: 4, RATIONAL: 8, UNDEFINED: 1, SRATIONAL: 8}
 
 
 def _payload(ftype: int, value, bo: str) -> tuple[int, bytes]:
@@ -62,9 +66,13 @@ def _payload(ftype: int, value, bo: str) -> tuple[int, bytes]:
     if ftype == ASCII:
         raw = value.encode("ascii") + b"\x00"
         return len(raw), raw
+    if ftype == BYTE and isinstance(value, bytes):
+        return len(value), value
     if ftype == BYTE:
         vals = value if isinstance(value, (list, tuple)) else [value]
         return len(vals), bytes(vals)
+    if ftype == UNDEFINED:
+        return len(value), value
     if ftype == SHORT:
         vals = value if isinstance(value, (list, tuple)) else [value]
         return len(vals), b"".join(struct.pack(bo + "H", v) for v in vals)
@@ -126,44 +134,47 @@ def build_tiff(ifd0_fields: list, exif_fields: list, gps_fields: list, bo: str =
     return header + ifd0 + exif_ifd + gps_ifd
 
 
+# The main sample's tags, by IFD: every tag the client reads, each from its first-choice source.
+_SAMPLE_EXIF = [
+    (0x829A, RATIONAL, (1, 500)),        # ExposureTime — 1/500 s
+    (0x829D, RATIONAL, (18, 10)),        # FNumber — f/1.8
+    (0x8827, SHORT, 200),                # ISO
+    (0x9003, ASCII, "2021:07:15 18:04:05"),  # DateTimeOriginal
+    (0x9204, SRATIONAL, (-7, 10)),       # ExposureBiasValue — -0.7 EV, the SIGNED type is the point
+    (0x9209, SHORT, 9),                  # Flash — bitfield: 0x1 fired | 0x8 compulsory
+    (0x920A, RATIONAL, (50, 1)),         # FocalLength — 50 mm
+    (0xA002, LONG, 4032),                # ExifImageWidth
+    (0xA003, LONG, 3024),                # ExifImageHeight
+    (0xA405, SHORT, 75),                 # FocalLengthIn35mmFormat
+    (0xA434, ASCII, "RF 50mm F1.8 STM"), # LensModel
+]
+_SAMPLE_GPS = [
+    (0x0000, BYTE, [2, 3, 0, 0]),        # GPSVersionID
+    (0x0001, ASCII, "N"),                # GPSLatitudeRef
+    (0x0002, RATIONAL, [(48, 1), (8, 1), (13, 1)]),   # GPSLatitude — 48°8'13"
+    (0x0003, ASCII, "E"),                # GPSLongitudeRef
+    (0x0004, RATIONAL, [(11, 1), (34, 1), (30, 1)]),  # GPSLongitude — 11°34'30"
+    (0x0005, BYTE, 0),                   # GPSAltitudeRef — 0 = above sea level
+    (0x0006, RATIONAL, (5194, 10)),      # GPSAltitude — 519.4 m
+    (0x0010, ASCII, "T"),                # GPSImgDirectionRef — true north
+    (0x0011, RATIONAL, (2153, 10)),      # GPSImgDirection — 215.3°
+    (0x001F, RATIONAL, (48, 10)),        # GPSHPositioningError — 4.8 m
+]
+_SAMPLE_IFD0 = [
+    (0x010E, ASCII, "Marienplatz at golden hour"),  # ImageDescription
+    (0x010F, ASCII, "Canon"),            # Make
+    (0x0110, ASCII, "EOS R"),            # Model
+    (0x0112, SHORT, 6),                  # Orientation — 6 = rotate 90° CW
+    (0x0131, ASCII, "veyq fixture 1.0"), # Software
+    (0x013B, ASCII, "A. Photographer"),  # Artist
+    (0x4746, SHORT, 4),                  # Rating — 0..5
+    (0x8298, ASCII, "(c) 2021 A. Photographer"),  # Copyright
+]
+
+
 def sample_tiff(bo: str = ">") -> bytes:
     """The main sample: every tag the client reads, each from its first-choice source."""
-    exif_fields = [
-        (0x829A, RATIONAL, (1, 500)),        # ExposureTime — 1/500 s
-        (0x829D, RATIONAL, (18, 10)),        # FNumber — f/1.8
-        (0x8827, SHORT, 200),                # ISO
-        (0x9003, ASCII, "2021:07:15 18:04:05"),  # DateTimeOriginal
-        (0x9204, SRATIONAL, (-7, 10)),       # ExposureBiasValue — -0.7 EV, the SIGNED type is the point
-        (0x9209, SHORT, 9),                  # Flash — bitfield: 0x1 fired | 0x8 compulsory
-        (0x920A, RATIONAL, (50, 1)),         # FocalLength — 50 mm
-        (0xA002, LONG, 4032),                # ExifImageWidth
-        (0xA003, LONG, 3024),                # ExifImageHeight
-        (0xA405, SHORT, 75),                 # FocalLengthIn35mmFormat
-        (0xA434, ASCII, "RF 50mm F1.8 STM"), # LensModel
-    ]
-    gps_fields = [
-        (0x0000, BYTE, [2, 3, 0, 0]),        # GPSVersionID
-        (0x0001, ASCII, "N"),                # GPSLatitudeRef
-        (0x0002, RATIONAL, [(48, 1), (8, 1), (13, 1)]),   # GPSLatitude — 48°8'13"
-        (0x0003, ASCII, "E"),                # GPSLongitudeRef
-        (0x0004, RATIONAL, [(11, 1), (34, 1), (30, 1)]),  # GPSLongitude — 11°34'30"
-        (0x0005, BYTE, 0),                   # GPSAltitudeRef — 0 = above sea level
-        (0x0006, RATIONAL, (5194, 10)),      # GPSAltitude — 519.4 m
-        (0x0010, ASCII, "T"),                # GPSImgDirectionRef — true north
-        (0x0011, RATIONAL, (2153, 10)),      # GPSImgDirection — 215.3°
-        (0x001F, RATIONAL, (48, 10)),        # GPSHPositioningError — 4.8 m
-    ]
-    ifd0_fields = [
-        (0x010E, ASCII, "Marienplatz at golden hour"),  # ImageDescription
-        (0x010F, ASCII, "Canon"),            # Make
-        (0x0110, ASCII, "EOS R"),            # Model
-        (0x0112, SHORT, 6),                  # Orientation — 6 = rotate 90° CW
-        (0x0131, ASCII, "veyq fixture 1.0"), # Software
-        (0x013B, ASCII, "A. Photographer"),  # Artist
-        (0x4746, SHORT, 4),                  # Rating — 0..5
-        (0x8298, ASCII, "(c) 2021 A. Photographer"),  # Copyright
-    ]
-    return build_tiff(ifd0_fields, exif_fields, gps_fields, bo)
+    return build_tiff(_SAMPLE_IFD0, _SAMPLE_EXIF, _SAMPLE_GPS, bo)
 
 
 def fallbacks_tiff() -> bytes:
@@ -249,14 +260,25 @@ XMP_DATES = """<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <?xpacket end="w"?>"""
 
 
+# IIM 4.2's record 1, dataset 90 (`CodedCharacterSet`): ESC % G names UTF-8, as macOS writes it (seen in a `sips` TIFF)
+IPTC_UTF8 = b"\x1c\x01\x5a\x00\x03\x1b\x25\x47"
+
+
+def iptc_iim(datasets: list[tuple[int, str]], charset: bool = False) -> bytes:
+    """IPTC-IIM record-2 datasets (IIM 4.2), with `charset` the record-1 dataset naming UTF-8 before them."""
+    return (IPTC_UTF8 if charset else b"") + b"".join(
+        b"\x1c\x02" + bytes([ds]) + struct.pack(">H", len(v.encode("utf-8"))) + v.encode("utf-8") for ds, v in datasets)
+
+
+def iptc_resource(iim: bytes) -> bytes:
+    """One Photoshop image resource: 8BIM, 0x0404 (IPTC-NAA), an empty name, the IIM, padded to an even length."""
+    resource = b"8BIM" + struct.pack(">H", 0x0404) + b"\x00\x00" + struct.pack(">I", len(iim)) + iim
+    return resource + (b"\x00" if len(iim) % 2 else b"")
+
+
 def iptc_app13(datasets: list[tuple[int, str]]) -> bytes:
     """An APP13 payload: "Photoshop 3.0", one 8BIM resource 0x0404 holding IPTC-IIM record-2 datasets (IIM 4.2)."""
-    iim = b"".join(b"\x1c\x02" + bytes([ds]) + struct.pack(">H", len(v.encode("utf-8"))) + v.encode("utf-8")
-                   for ds, v in datasets)
-    resource = b"8BIM" + struct.pack(">H", 0x0404) + b"\x00\x00" + struct.pack(">I", len(iim)) + iim
-    if len(iim) % 2:
-        resource += b"\x00"
-    return b"Photoshop 3.0\x00" + resource
+    return b"Photoshop 3.0\x00" + iptc_resource(iptc_iim(datasets))
 
 
 def app13(payload: bytes) -> bytes:
@@ -278,6 +300,30 @@ def build_jpeg(tiff: bytes, xmp: str | None = XMP_PACKET, extra: bytes = b"") ->
     # APP1 goes directly after SOI, before the JFIF APP0 the base body already carries; decoders and EXIF readers
     # scan the marker chain, so the order is only a convention — but "Exif first" is what cameras write.
     return BASE_JPEG[:2] + segments + BASE_JPEG[2:]
+
+
+def build_tiff_ifd0_last(bo: str = ">", pixels: int = 64) -> bytes:
+    """The sample's TIFF laid out as macOS's `sips` and ImageMagick write one (measured 2026-11-24 on a 1500 x 1000
+    conversion: IFD0 at byte 4,500,450 of 4,505,644): the header, the Exif IFD and the GPS IFD, the pixels (`pixels`
+    bytes here, a strip of grey), then IFD0 with its values — the sample's tags, the XMP packet in tag 700 (`XMLPacket`,
+    BYTE) and an IPTC stream in tag 33723 (`IPTC-NAA`, UNDEFINED: the UTF-8 character set and an object name)."""
+    exif = build_ifd(_SAMPLE_EXIF, 8, bo)
+    gps_offset = 8 + len(exif)
+    gps = build_ifd(_SAMPLE_GPS, gps_offset, bo)
+    strip_offset = gps_offset + len(gps)
+    ifd0_offset = strip_offset + pixels
+    iim = iptc_iim([(5, "Hofgarten")], charset=True)
+    ifd0_fields = list(_SAMPLE_IFD0) + [
+        (0x0100, SHORT, 8), (0x0101, SHORT, 8),           # ImageWidth, ImageLength — 8 x 8 grey
+        (0x0111, LONG, strip_offset),                     # StripOffsets
+        (0x0117, LONG, pixels),                           # StripByteCounts
+        (0x02BC, BYTE, XMP_PACKET.encode("utf-8")),        # XMLPacket
+        (0x83BB, UNDEFINED, iim),                         # IPTC-NAA
+        (0x8769, LONG, 8),                                # ExifIFDPointer
+        (0x8825, LONG, gps_offset),                       # GPSInfoIFDPointer
+    ]
+    header = (b"MM\x00\x2a" if bo == ">" else b"II\x2a\x00") + struct.pack(bo + "I", ifd0_offset)
+    return header + exif + gps + b"\x80" * pixels + build_ifd(ifd0_fields, ifd0_offset, bo)
 
 
 def png_chunk(kind: bytes, data: bytes) -> bytes:
@@ -313,6 +359,19 @@ def build_png_compressed(tiff: bytes, xmp: str = XMP_PACKET) -> bytes:
     itxt = b"XML:com.adobe.xmp\x00" + b"\x01\x00" + b"\x00" + b"\x00" + zlib.compress(xmp.encode("utf-8"))
     idat = zlib.compress(b"\x00\x80")
     return (b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", ihdr) + png_chunk(b"zTXt", ztxt) + png_chunk(b"iTXt", itxt)
+            + png_chunk(b"IDAT", idat) + png_chunk(b"IEND", b""))
+
+
+def build_png_iptc(tiff: bytes, datasets: list[tuple[int, str]]) -> bytes:
+    """A 1x1 greyscale PNG with the TIFF block as `eXIf` and the IPTC as exiftool 13.44 writes it into a PNG (measured
+    2026-11-24, `exiftool -IPTC:ObjectName=…`): a `zTXt` raw profile `Raw profile type iptc` named `IPTC profile`, holding
+    Photoshop's image resources (an 8BIM 0x0404 block) — not ImageMagick's form, whose profile is named `iptc` and holds the
+    datasets bare (a vector case carries that one)."""
+    ihdr = struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 0)
+    profile = raw_profile("IPTC profile", iptc_resource(iptc_iim(datasets, charset=True)))
+    ztxt = b"Raw profile type iptc\x00" + b"\x00" + zlib.compress(profile)
+    idat = zlib.compress(b"\x00\x80")
+    return (b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", ihdr) + png_chunk(b"zTXt", ztxt) + png_chunk(b"eXIf", tiff)
             + png_chunk(b"IDAT", idat) + png_chunk(b"IEND", b""))
 
 
@@ -462,6 +521,9 @@ def main() -> None:
         "exif-sample-xmp.heic": build_heif(b"heic", HEIC_BRANDS, tiff, XMP_PACKET),
         "exif-sample-compressed.png": build_png_compressed(tiff),
         "exif-sample-extended.jpg": build_jpeg_extended(tiff),
+        # the forms read from inbox #1185 on: a TIFF's own XMP and IPTC with IFD0 last, a PNG's raw IPTC profile
+        "exif-sample-xmp.tif": build_tiff_ifd0_last(),
+        "exif-sample-iptc.png": build_png_iptc(iptc_tiff(), [(5, "Hofgarten"), (120, "Hofgarten in spring")]),
     }
     assert struct.unpack(">I", outputs["exif-sample-ftyp52.heic"][:4])[0] == 52, "the iOS 18 case needs a 52-byte ftyp"
     assert struct.unpack(">I", outputs["exif-sample.heic"][:4])[0] == 40

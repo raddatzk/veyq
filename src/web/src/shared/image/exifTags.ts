@@ -7,7 +7,8 @@
 // and a test can hand it a record. Formats: JPEG, TIFF, PNG, WebP, HEIC, AVIF; XMP is scanned by hand in the core, never
 // handed to the browser's XML parser; a PNG's compressed chunk is inflated by the browser's own zlib (`mediaInflater`),
 // the platform module carrying none on JavaScript. Never the whole file: a JPEG's and a HEIF's head in windows, a PNG's or a WebP's first
-// [CHUNKED_PREFIX], a bare TIFF's first [TIFF_PREFIX]. It fetches nothing. This file holds no rule.
+// [CHUNKED_PREFIX], a bare TIFF's first [TIFF_PREFIX] and the windows its IFDs point at beyond it. It fetches nothing. This
+// file holds no rule.
 import { exifChunkedPrefix, exifTags, exifTiffPrefix, type ExifShape } from '@veyq/core-js/media'
 import { mediaFileOf, mediaInflater } from './mediaFile'
 
@@ -21,7 +22,7 @@ export type ExifScope = 'date' | 'xmpDate' | 'all'
 
 /** The most of a PNG or a WebP read: a PNG's metadata usually precedes its pixels, a WebP's follows them. */
 export const CHUNKED_PREFIX = exifChunkedPrefix()
-/** The most of a bare TIFF read: its IFDs, where the tags are, start at its head. */
+/** A bare TIFF's head, read first: its IFDs and their values beyond it are read where they are, in windows (inbox #1185). */
 export const TIFF_PREFIX = exifTiffPrefix()
 
 /**

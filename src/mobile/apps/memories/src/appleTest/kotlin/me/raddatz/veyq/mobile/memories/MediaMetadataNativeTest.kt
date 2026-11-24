@@ -35,6 +35,8 @@ class MediaMetadataNativeTest {
             "exif-sample.jpg" to "Marienplatz", "exif-sample.heic" to null,
             // inbox #1141: a HEIC's XMP item, a PNG's compressed chunks (the platform's zlib), a JPEG's extended XMP
             "exif-sample-xmp.heic" to "Marienplatz", "exif-sample-compressed.png" to "Marienplatz", "exif-sample-extended.jpg" to "Marienplatz",
+            // inbox #1185: a TIFF laid out as macOS writes one (IFD0 last, its XMP in tag 700)
+            "exif-sample-xmp.tif" to "Marienplatz",
         )) {
             val read = MediaMetadata.read(photo(name), "image/jpeg", 0)
             assertEquals(taken, read.capturedAt, name)
