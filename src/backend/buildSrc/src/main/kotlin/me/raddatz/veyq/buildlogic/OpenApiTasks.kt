@@ -80,8 +80,9 @@ abstract class OpenApiGenerate : DefaultTask() {
                     "collectionType" to "list",
                 ),
             )
+            // `jaxrs-spec`, keeping each interface's class-level @Path — see ClassPathKept.
             run(
-                set, commonSchemas, "jaxrs-spec", spec.absolutePath, apiDir.get().asFile,
+                set, commonSchemas, ClassPathKept::class.java.name, spec.absolutePath, apiDir.get().asFile,
                 mapOf("apis" to "", "supportingFiles" to "false"),
                 mapOf(
                     "interfaceOnly" to "true",
