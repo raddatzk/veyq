@@ -3697,6 +3697,17 @@
       }
     },
     {
+      "name": "a whole file whose last frame is cut short: counted",
+      "chunk": "//FQgAIf/LGLOnnLDs1pB//xTIAEH/ysC+y7NK8REO7Muc6W3K3uYzg3ryFN+3kJ//FQgAIf/JoHDnSEWRtlDP/xUIAIH/0qnIMMxnrTHJE/YpZZTRKCsXS5ZUwMffzI4JSn7g==",
+      "at": 0,
+      "size": 100,
+      "seconds": 0,
+      "expected": {
+        "read": 128,
+        "seconds": 0.11421315192743764
+      }
+    },
+    {
       "name": "counted onto what came before",
       "chunk": "//FQgAIf/LGLOnnLDs1pB//xTIAEH/ysC+y7NK8REO7Muc6W3K3uYzg3ryFN+3kJ//FQgAIf/JoHDnSEWRtlDP/xUIAIH/0qnIMMxnrTHJE/YpZZTRKCsXS5ZUwMffzI4JSn7r9Nud51/Nsep5kst6ipDxV2ALDe6gcUU5MZBEE=",
       "at": 4194304,

@@ -10,7 +10,7 @@ import { resolve } from 'node:path'
 import { calculateJustifiedMediaLayout, galleryDisplayAspectRatio } from './mediaGridLayout'
 import { computeMedoid } from './medoid'
 import { mergeParticipants } from './participantsWrite'
-import { adtsFrame, adtsFrameLength, firstFrameChain, mp3FrameLength } from './music/frames'
+import { adtsDurationMs, adtsFrame, adtsFrameLength, firstFrameChain, mp3FrameLength } from './music/frames'
 import { parseWavHeader, readWavEnds, wavSamples } from './music/wav'
 
 const v = JSON.parse(readFileSync(resolve(__dirname, '../../../../../contracts/memories/v1-vectors.json'), 'utf8')) as any
@@ -64,8 +64,18 @@ describe('frames', () => {
       expect(firstFrameChain(bytes(c.bytes), c.kind === 'adts' ? adtsFrameLength : mp3FrameLength, c.chain)).toBe(c.expected)
     })
   })
-  // `adtsCount` and `adtsEnd` are the steps of `adtsDurationMs`' loop: the package's `memories.test.ts` answers them, and
-  // `frames.test.ts` counts whole files through the loop.
+  // `adtsCount` and `adtsEnd` are the steps of `adtsDurationMs`' loop, each answered by the package's `memories.test.ts`; a
+  // case that is a whole file (read from its start, nothing counted before, its chain at 0) is counted here through the
+  // loop: its length is the step's seconds where the step reads it to its end or a short tag follows.
+  ;(v.adtsCount as any[]).forEach((c, i) => {
+    const chunk = bytes(c.chunk)
+    if (c.at !== 0 || c.seconds !== 0 || c.size !== chunk.length || firstFrameChain(chunk, adtsFrameLength) !== 0) return
+    it(`adtsCount through adtsDurationMs: ${label(c, i)}`, async () => {
+      const left = c.size - c.expected.read
+      const expected = left <= 64 * 1024 ? Math.round(c.expected.seconds * 1000) : null
+      await expect(adtsDurationMs(new Blob([chunk as BlobPart]))).resolves.toBe(expected)
+    })
+  })
 })
 
 describe('wav', () => {
