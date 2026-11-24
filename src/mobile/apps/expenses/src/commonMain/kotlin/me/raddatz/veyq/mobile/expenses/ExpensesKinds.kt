@@ -11,6 +11,7 @@ import me.raddatz.veyq.mobile.export.SubtreeImport
 import me.raddatz.veyq.mobile.media.Derivation
 import me.raddatz.veyq.mobile.navigation.ApplicationId
 import me.raddatz.veyq.mobile.navigation.HeaderAction as H
+import me.raddatz.veyq.mobile.navigation.RowDetails
 import me.raddatz.veyq.mobile.navigation.ShareAnswer
 import me.raddatz.veyq.mobile.offline.PinKinds
 import me.raddatz.veyq.mobile.offline.Queued
@@ -23,6 +24,7 @@ import me.raddatz.veyq.mobile.session.TenantSession
 import me.raddatz.veyq.mobile.sharing.GuestAccess
 import me.raddatz.veyq.mobile.sharing.GuestDoor
 import me.raddatz.veyq.mobile.words.Msg
+import me.raddatz.veyq.mobile.words.Piece
 
 /**
  * Expenses' part of the platform's registry ([AppKinds], the web's `features/expenses/register.ts`): a Pot — its slug
@@ -95,6 +97,11 @@ object ExpensesKinds : ApplicationKinds {
     @PlatformApi
     @HiddenFromObjC
     override val kept = ExpensesKept
+
+    // a Pot's row says its currency
+    override val rowParts: List<RowDetails.Part> = listOf(
+        RowDetails.Part("expenses.pots") { tenant -> PotRows.details(tenant).mapValues { (_, facts) -> facts.map { Piece.Plain(it) } } },
+    )
 
     override val pins: PinKinds = object : PinKinds {
         override fun pinnable(kind: String): Boolean = kind == POT

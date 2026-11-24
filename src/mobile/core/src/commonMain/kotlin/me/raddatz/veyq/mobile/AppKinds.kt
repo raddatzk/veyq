@@ -41,12 +41,17 @@ object AppKinds {
         val kinds = parts.flatMap { it.kinds }
         check(kinds.size == kinds.toSet().size && kinds.none { it in CORE }) { "a node kind owned twice: $kinds" }
         check(parts.all { p -> p.kindFacts.map { it.kind }.sorted() == p.kinds.sorted() }) { "an application's kind facts are not its kinds" }
+        val rowKeys = parts.flatMap { p -> p.rowParts.map { it.key } }
+        check(rowKeys.size == rowKeys.toSet().size) { "a row part's key registered twice: $rowKeys" }
         held = KindFacts((CORE_FACTS + parts.flatMap { it.kindFacts }).sortedBy { it.kind })
         installed = parts
     }
 
     /** Each application's part of the offline store, in the order installed. */
     internal val kept: List<me.raddatz.veyq.mobile.offline.ApplicationKept> get() = applications.mapNotNull { it.kept }
+
+    /** Each application's parts of what the list rows say ([me.raddatz.veyq.mobile.navigation.RowDetails]), in the order installed. */
+    internal val rowParts: List<me.raddatz.veyq.mobile.navigation.RowDetails.Part> get() = applications.flatMap { it.rowParts }
 
     private val CORE = setOf("FOLDER", "SHARE_BOOKMARK")
 

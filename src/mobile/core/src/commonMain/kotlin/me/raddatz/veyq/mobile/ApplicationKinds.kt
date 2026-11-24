@@ -113,6 +113,12 @@ interface ApplicationKinds {
     @HiddenFromObjC
     val kept: me.raddatz.veyq.mobile.offline.ApplicationKept? get() = null
 
+    /**
+     * Its parts of what a tenant's list rows say beside their names ([me.raddatz.veyq.mobile.navigation.RowDetails]), each
+     * read on its own so one that fails keeps its previous rows; none where its rows say nothing of their own.
+     */
+    val rowParts: List<me.raddatz.veyq.mobile.navigation.RowDetails.Part> get() = emptyList()
+
     /** What a pin keeps of its kinds ([AppKinds.pins]); null where it keeps none. */
     val pins: PinKinds? get() = null
 

@@ -14,6 +14,7 @@ import me.raddatz.veyq.mobile.media.Derivation
 import me.raddatz.veyq.mobile.navigation.ApplicationId
 import me.raddatz.veyq.mobile.navigation.HeaderAction as H
 import me.raddatz.veyq.mobile.navigation.NodeAt
+import me.raddatz.veyq.mobile.navigation.RowDetails
 import me.raddatz.veyq.mobile.navigation.ShareAnswer
 import me.raddatz.veyq.mobile.offline.PinKinds
 import me.raddatz.veyq.mobile.offline.Queued
@@ -27,6 +28,7 @@ import me.raddatz.veyq.mobile.sharing.GuestAccess
 import me.raddatz.veyq.mobile.sharing.GuestDoor
 import me.raddatz.veyq.mobile.sharing.GuestSession
 import me.raddatz.veyq.mobile.words.Msg
+import me.raddatz.veyq.mobile.words.Piece
 
 /**
  * Depot's part of the platform's registry ([AppKinds], the web's `features/depot/register.ts`): a file and a drop box —
@@ -132,6 +134,12 @@ object DepotKinds : ApplicationKinds {
     @PlatformApi
     @HiddenFromObjC
     override val kept = DepotKept
+
+    // a file's row says its size and change (or that it is not uploaded), a drop box's its guests — each read on its own
+    override val rowParts: List<RowDetails.Part> = listOf(
+        RowDetails.Part("depot.files") { tenant -> DepotFiles.list(tenant).mapValues { DepotFiles.rowDetails(it.value) } },
+        RowDetails.Part("depot.boxes") { tenant -> DropBoxes.people(tenant.nodes()).mapValues { listOf(Piece.Said(it.value)) } },
+    )
 
     override val pins: PinKinds = object : PinKinds {
         override fun pinnable(kind: String): Boolean = kind == FILE

@@ -1001,7 +1001,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         tenantSession = t
         // what each application held open of the tenant before closes (its pages, its dialogs, a profile's section)
         eachHolding { it.leave() }
-        rows = me.raddatz.veyq.mobile.composition.RowDetails.Read.EMPTY
+        rows = me.raddatz.veyq.mobile.navigation.RowDetails.Read.EMPTY
         val model = me.raddatz.veyq.mobile.composition.ShellModel(t, hidden, recent, System::currentTimeMillis)
         shellWatch?.cancel()
         shellModel = model
@@ -1253,10 +1253,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** What the rows read last (core's `RowDetails`): a part that does not read next time keeps these. */
-    private var rows = me.raddatz.veyq.mobile.composition.RowDetails.Read.EMPTY
+    private var rows = me.raddatz.veyq.mobile.navigation.RowDetails.Read.EMPTY
 
     internal suspend fun readRowDetails(t: me.raddatz.veyq.mobile.session.TenantSession) {
-        val read = me.raddatz.veyq.mobile.composition.RowDetails.read(t, rows)
+        val read = me.raddatz.veyq.mobile.navigation.RowDetails.read(t, rows)
         if (tenantSession !== t) return
         rows = read
         // a page on screen reads itself anew (a file: a replaced blob is shown)
