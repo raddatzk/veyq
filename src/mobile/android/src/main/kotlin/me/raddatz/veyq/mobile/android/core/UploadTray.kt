@@ -42,19 +42,37 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.raddatz.veyq.mobile.android.R
 import me.raddatz.veyq.mobile.android.words
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import me.raddatz.veyq.mobile.blob.UploadQueue
+import me.raddatz.veyq.mobile.blob.UploadsTray
 
 /**
- * The shell's uploads (the web's `UploadStatusMenu.vue`): a row under the top bar while the app's upload queue holds a
- * batch — what is under way and how far, or that all is in, or how many did not go up —, which opens a sheet listing
- * every batch with each file's state, its cancel while it may still go up and its retry where one helps. A batch all in
- * leaves on its own after a moment; one with a failure stays until it is closed.
+ * The tray over the app's one queue alone (core's `UploadsTray`), no application's: the sign-in's and the unlock's, where a
+ * link guest's uploads left running signed out show (inbox #1250). Nothing it says, no folder it prepares.
+ */
+internal class SignedOutTray(scope: CoroutineScope, private val core: UploadsTray) : TrayActions {
+    override val tray: StateFlow<TrayShown?> = core.state.map { TrayShown(it, null) }.stateIn(scope, SharingStarted.Eagerly, TrayShown(core.current, null))
+    override fun cancelAll() = core.cancelAll()
+    override fun acknowledge(batchId: String) = core.acknowledge(batchId)
+    override fun cancel(id: String) = core.cancel(id)
+    override fun retry(id: String) = core.retry(id)
+}
+
+/**
+ * The uploads (the web's `UploadStatusMenu.vue`): a row under the top bar while the app's upload queue holds a batch —
+ * what is under way and how far, or that all is in, or how many did not go up —, which opens a sheet listing every batch
+ * with each file's state, its cancel while it may still go up and its retry where one helps. A batch all in leaves on its
+ * own after a moment; one with a failure stays until it is closed. The shell's is the level uploads' ([LevelUploads]:
+ * Depot's `DepotUploads`, through the registry — its queue, the folder being prepared; none while no tenant is open); the
+ * sign-in's and the unlock's the queue's alone ([SignedOutTray]).
  */
 @Composable
-internal fun UploadTray(model: AppModel) {
-    // the tray is the level uploads' (Depot's `DepotUploads`, through the registry): its queue, the folder being
-    // prepared, the acknowledge of a batch all in; none while no tenant is open
-    val depot = model.levelUploads ?: return
+internal fun UploadTray(source: TrayActions?) {
+    val depot = source ?: return
     val shown = depot.tray.collectAsStateWithLifecycle().value ?: return
     val state = shown.queue
     val preparing = shown.preparing
@@ -97,7 +115,7 @@ internal fun UploadTray(model: AppModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun UploadSheet(state: UploadQueue.State, depot: LevelUploads, onDismiss: () -> Unit) {
+private fun UploadSheet(state: UploadQueue.State, depot: TrayActions, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.navigationBarsPadding()) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -123,7 +141,7 @@ private fun UploadSheet(state: UploadQueue.State, depot: LevelUploads, onDismiss
 }
 
 @Composable
-private fun UploadRow(item: UploadQueue.Item, depot: LevelUploads) {
+private fun UploadRow(item: UploadQueue.Item, depot: TrayActions) {
     val status = androidx.compose.ui.platform.LocalContext.current.text(me.raddatz.veyq.mobile.words.Notices.uploadStatus(item))
     ListItem(
         headlineContent = { Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },

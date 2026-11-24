@@ -265,7 +265,7 @@ class WireTest {
             Call.ErasureOpen("veyq.localhost#u1"), Call.ErasureChoose(124, "t1", null), Call.ErasureChoose(124, "t2", "user-3"),
             Call.ErasureRun(124, "pw"), Call.ErasureClose(124),
         ),
-        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.SelectionDelete(13), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.Underway, Watched.QueuedTray, Watched.Import(60), Watched.DropBox(30), Watched.DropBoxLive(30), Watched.Scan(40), Watched.Link(70), Watched.Received(80), Watched.ReceivedLive(80), Watched.Bookmark(90), Watched.Settings(50),
+        Watched.serializer() to listOf(Watched.Session, Watched.Shell, Watched.Pot(3), Watched.PotLive(3), Watched.Manage, Watched.Header(7), Watched.Trash(8), Watched.Move(9), Watched.SelectionDelete(13), Watched.Share(10), Watched.Report(11), Watched.Editor(12), Watched.PotSettings(15), Watched.PotCreate(16), Watched.File(20), Watched.Save(21), Watched.Uploads, Watched.Underway, Watched.Tray, Watched.QueuedTray, Watched.Import(60), Watched.DropBox(30), Watched.DropBoxLive(30), Watched.Scan(40), Watched.Link(70), Watched.Received(80), Watched.ReceivedLive(80), Watched.Bookmark(90), Watched.Settings(50),
             Watched.Gallery(60), Watched.GalleryLive(60), Watched.SettingsStorageLive(50), Watched.Lightbox(61), Watched.Player, Watched.Music(80), Watched.Buckets(120),
             Watched.Map(100), Watched.MapServices, Watched.Date(101), Watched.Place(102), Watched.Tracks(103),
             Watched.Participants(110), Watched.CaptureTime(111), Watched.Banner(112), Watched.Person(113), Watched.Search(114),
@@ -450,6 +450,7 @@ class WireTest {
             Update.Uploads(null),
             Update.Underway(0),
             Update.Underway(3),
+            Update.Tray(UploadsShown(null, 0, 1.0, null, emptyList(), null)),
             Update.QueuedTray(null), Update.QueuedTray(emptyList()),
             Update.QueuedTray(listOf(
                 me.raddatz.veyq.mobile.offline.QueuedItem("entry:e1", me.raddatz.veyq.mobile.offline.Queued.POT_ENTRY, "t", "scope-1", "pot-1", "Trip", Notice(Msg.QUEUED_ENTRY, listOf("Taxi")),

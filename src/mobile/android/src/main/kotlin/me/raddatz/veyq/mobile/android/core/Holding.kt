@@ -75,17 +75,21 @@ internal class AddedHere(val notice: Notice?)
 /** What the shell's tray shows: the upload queue and a folder still being prepared ([preparing], its name). */
 internal class TrayShown(val queue: UploadQueue.State, val preparing: String?)
 
-/**
- * The shell's uploads into a level (core UI's tray and New, ADR 0154 decision 3), as the application that keeps files
- * answers them: what the tray shows ([tray]: null while no tenant is open) and its actions, and the picked files and
- * folders New puts under the level shown.
- */
-internal interface LevelUploads {
+/** What a tray draws ([tray]) and its actions: the shell's ([LevelUploads]) or the sign-in's and the unlock's ([SignedOutTray]). */
+internal interface TrayActions {
     val tray: StateFlow<TrayShown?>
     fun cancelAll()
     fun acknowledge(batchId: String)
     fun cancel(id: String)
     fun retry(id: String)
+}
+
+/**
+ * The shell's uploads into a level (core UI's tray and New, ADR 0154 decision 3), as the application that keeps files
+ * answers them: what the tray shows ([tray]: null while no tenant is open) and its actions, and the picked files and
+ * folders New puts under the level shown.
+ */
+internal interface LevelUploads : TrayActions {
 
     /** The picked [uris] queued as new files under [parentId] of [scopeId] ([label] the level's name). */
     fun upload(scopeId: String, parentId: String?, label: String, uris: List<android.net.Uri>)

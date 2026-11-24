@@ -688,7 +688,11 @@ internal sealed class Call {
      */
     @Serializable @SerialName("Upload.Replace") data class UploadReplace(val file: Long, val path: String) : Call()
 
-    /** Cancels upload item [item] (a waiting one at once, a running one at its next frame); its empty file is given up. */
+    /**
+     * Cancels upload item [item] (a waiting one at once, a running one at its next frame); its empty file is given up. With
+     * no tenant open `Upload.Cancel`, `Upload.Retry`, `Upload.CancelAll` and `Upload.Acknowledge` reach the tray over the
+     * queue alone ([Watched.Tray]).
+     */
     @Serializable @SerialName("Upload.Cancel") data class UploadCancel(val item: String) : Call()
 
     /** Tries failed upload item [item] again ([UploadsShown.Item.canRetry]). */
@@ -2436,6 +2440,13 @@ internal sealed class Watched {
      */
     @Serializable @SerialName("Underway") data object Underway : Watched()
 
+    /**
+     * The tray over the app's one queue alone (core's `UploadsTray`), a tenant open or not: what the sign-in and unlock
+     * screens draw, a link guest's uploads left running signed out among it (inbox #1250). Nothing it says ([UploadsShown.said]
+     * and [UploadsShown.preparing] are always null: those are a level's); its actions are `Upload.*`'s.
+     */
+    @Serializable @SerialName("Tray") data object Tray : Watched()
+
     /** The writes made offline of the open tenant's account (`QueuedTray.items`): the uploads tray's list of its own. */
     @Serializable @SerialName("QueuedTray") data object QueuedTray : Watched()
 
@@ -2608,6 +2619,9 @@ internal sealed class Update {
 
     /** The files under way in this process ([Watched.Underway]): 0 while none waits or runs. */
     @Serializable @SerialName("Underway") data class Underway(val files: Int) : Update()
+
+    /** The tray over the app's one queue ([Watched.Tray]): [UploadsShown.summary] null while it lists nothing. */
+    @Serializable @SerialName("Tray") data class Tray(val shown: UploadsShown) : Update()
 
     /**
      * The writes made offline, oldest first ([me.raddatz.veyq.mobile.offline.QueuedItem]: each under the name of the place

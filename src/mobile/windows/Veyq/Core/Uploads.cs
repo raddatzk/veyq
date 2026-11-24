@@ -9,7 +9,10 @@
 // batch's Close. What the uploads say once — a folder's outcome, a replace offered — is an InfoBar under the bar, its
 // action button the offer's (Upload.TakeOffer), closed otherwise (Upload.Seen).
 //
-// Every state is the core's DepotUploads (Watched.Uploads); every action one call.
+// Every state is the core's DepotUploads (Watched.Uploads); every action one call. The sign-in and the unlock carry the
+// same command over the app's one queue alone (the signed-out constructor, Watched.Tray, core's UploadsTray): a link
+// guest's uploads left running signed out show there (inbox #1250) — nothing said, no writes made offline, no folder
+// prepared.
 
 namespace Veyq.Core;
 
@@ -26,7 +29,7 @@ using Windows.Storage.Pickers;
 internal sealed class Uploads : IDisposable
 {
     private readonly Window _window;
-    private readonly InfoBar _offer;
+    private readonly InfoBar? _offer;
     private readonly StackPanel _list = new() { Spacing = 12, MinWidth = 360, MaxWidth = 480 };
     private readonly Watch? _watch;
     private long? _saidShown;
@@ -57,13 +60,62 @@ internal sealed class Uploads : IDisposable
     /// <summary>Told when the command shows or goes (the CommandBar is drawn anew then).</summary>
     public Action? Changed { get; set; }
 
+    /// <summary>The sign-in's or the unlock's command over the app's one queue alone (Watched.Tray, core's UploadsTray;
+    /// inbox #1250): a link guest's uploads left running signed out among it. It says nothing and lists no writes made
+    /// offline.</summary>
+    public Uploads(Window window)
+    {
+        _window = window;
+        _button = MakeButton("signed-out-uploads");
+        _watch = Core.Watch(new Watched.Tray(), update =>
+        {
+            if (update is not Update.Tray t) return;
+            _last = t.shown;
+            Draw();
+        }, e => Log.Write($"a tray update: {e.Message}"));
+    }
+
+    /// <summary><paramref name="page"/> (the sign-in, the unlock) with a CommandBar at its top right that carries the
+    /// signed-out tray's command while the queue lists anything (inbox #1250), where the shell's CommandBar carries its
+    /// own.</summary>
+    public static UIElement WithTray(Window window, UIElement page)
+    {
+        var tray = new Uploads(window);
+        var bar = new CommandBar
+        {
+            DefaultLabelPosition = CommandBarDefaultLabelPosition.Right,
+            OverflowButtonVisibility = CommandBarOverflowButtonVisibility.Collapsed,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 8, 8, 0),
+        };
+        void Sync()
+        {
+            bar.PrimaryCommands.Clear();
+            if (tray.Button is { } button) bar.PrimaryCommands.Add(button);
+            bar.Visibility = tray.Button is null ? Visibility.Collapsed : Visibility.Visible;
+        }
+        tray.Changed = Sync;
+        Sync();
+        var layered = new Grid();
+        layered.Children.Add(page);
+        layered.Children.Add(bar);
+        return layered;
+    }
+
+    private AppBarButton MakeButton(string automationId)
+    {
+        var scroll = new ScrollViewer { Content = _list, MaxHeight = 480, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var button = new AppBarButton { Icon = new SymbolIcon(Symbol.Upload), Label = Words.UploadTitle(), Flyout = new Flyout { Content = scroll } };
+        AutomationProperties.SetAutomationId(button, automationId);
+        return button;
+    }
+
     public Uploads(Window window, InfoBar offer)
     {
         _window = window;
         _offer = offer;
-        var scroll = new ScrollViewer { Content = _list, MaxHeight = 480, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-        _button = new AppBarButton { Icon = new SymbolIcon(Symbol.Upload), Label = Words.UploadTitle(), Flyout = new Flyout { Content = scroll } };
-        AutomationProperties.SetAutomationId(_button, "uploads");
+        _button = MakeButton("uploads");
         _offer.CloseButtonClick += (_, _) =>
         {
             if (_saidShown is { } id && !_taking) Act.Send(new Call.UploadSeen { said = id });
@@ -108,7 +160,7 @@ internal sealed class Uploads : IDisposable
             if (was != visible) Changed?.Invoke();
             return;
         }
-        LogItems(s);
+        if (_offer is not null) LogItems(s);
         var summary = s.summary is { } n ? Said.Notice(n) : null;
         _button.Label = summary ?? (s.preparing is { } p ? Said.Notice(p) : _queued.Count > 0 ? _button.Label : Words.UploadTitle());
         AutomationProperties.SetName(_button, _button.Label);
@@ -221,9 +273,10 @@ internal sealed class Uploads : IDisposable
     /// <summary>What the uploads say now, in the InfoBar once: its action button the offer's, closed otherwise.</summary>
     private void Say(UploadsShown s)
     {
+        if (_offer is not { } offer) return; // the signed-out tray says nothing
         if (s.said is not { } told)
         {
-            if (_saidShown is not null && !_taking) _offer.IsOpen = false;
+            if (_saidShown is not null && !_taking) offer.IsOpen = false;
             _saidShown = null;
             return;
         }
@@ -231,8 +284,8 @@ internal sealed class Uploads : IDisposable
         _saidShown = told.id;
         _taking = false;
         Log.Write($"uploads say {told.id}: {string.Join(", ", told.notices.Select(n => n.msg))}");
-        _offer.Severity = told.action is null ? InfoBarSeverity.Warning : InfoBarSeverity.Informational;
-        _offer.Message = string.Join("\n", told.notices.Select(Said.Notice));
+        offer.Severity = told.action is null ? InfoBarSeverity.Warning : InfoBarSeverity.Informational;
+        offer.Message = string.Join("\n", told.notices.Select(Said.Notice));
         if (told.action is { } action)
         {
             var take = new Button { Content = Said.Key(action) };
@@ -243,12 +296,12 @@ internal sealed class Uploads : IDisposable
                 _taking = true;
                 Log.Write($"uploads said {id}: its action taken");
                 Act.Send(new Call.UploadTakeOffer { said = id });
-                _offer.IsOpen = false;
+                offer.IsOpen = false;
             };
-            _offer.ActionButton = take;
+            offer.ActionButton = take;
         }
-        else _offer.ActionButton = null;
-        _offer.IsOpen = true;
+        else offer.ActionButton = null;
+        offer.IsOpen = true;
     }
 
     /// <summary>Each item's status once, and its progress at each tenth, in the log (a pass reads them).</summary>

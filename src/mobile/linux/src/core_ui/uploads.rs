@@ -15,6 +15,10 @@
 //!
 //! Every state is the core's `DepotUploads` (`Watched.Uploads`); every action one call. The popover's rows are kept by the
 //! batch's and the item's id and updated in place, so a click is never taken by a row that an update replaced.
+//!
+//! The sign-in and the unlock carry the same button over the app's one queue alone ([Uploads::signed_out], `Watched.Tray`,
+//! core's `UploadsTray`): a link guest's uploads left running signed out show there (inbox #1250) — nothing said, no
+//! writes made offline, no folder prepared.
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -106,6 +110,8 @@ pub struct Uploads {
     uploads_shown: Cell<bool>,
     /// Where a held write's *Open* goes: the shell's ([Uploads::on_open]).
     on_open: RefCell<Option<OnOpen>>,
+    /// The sign-in's and the unlock's tray ([Uploads::signed_out]): the queue alone, saying nothing.
+    signed_out: bool,
 }
 
 /// Where a held write's *Open* goes.
@@ -237,6 +243,16 @@ impl Uploads {
     /// The queue's button (pack it into a header bar), saying in [toasts]; it follows the open tenant's uploads once
     /// [Uploads::start]ed.
     pub fn new(toasts: &adw::ToastOverlay) -> Rc<Self> {
+        Self::made(toasts, false)
+    }
+
+    /// The queue's button for the sign-in's or the unlock's header bar (`Watched.Tray`, inbox #1250): the queue alone, a
+    /// link guest's uploads left running signed out among it; it says nothing. Follows once [Uploads::start]ed.
+    pub fn signed_out() -> Rc<Self> {
+        Self::made(&adw::ToastOverlay::new(), true)
+    }
+
+    fn made(toasts: &adw::ToastOverlay, signed_out: bool) -> Rc<Self> {
         let list = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(12).width_request(360).margin_top(12).margin_bottom(12).margin_start(12).margin_end(12).build();
         // the head: the title, the one line, Cancel all while anything may still go up
         let head = gtk::Box::new(gtk::Orientation::Horizontal, 12);
@@ -292,6 +308,7 @@ impl Uploads {
             queued_watch: RefCell::new(None),
             uploads_shown: Cell::new(false),
             on_open: RefCell::new(None),
+            signed_out,
         })
     }
 
@@ -400,13 +417,16 @@ impl Uploads {
         if self._watch.borrow().is_some() {
             return;
         }
-        let Some((watch, updates)) = bridge::watch(&Watched::Uploads) else {
+        let watched = if self.signed_out { Watched::Tray } else { Watched::Uploads };
+        let Some((watch, updates)) = bridge::watch(&watched) else {
             eprintln!("veyq: the uploads were not watched");
             return;
         };
         *self._watch.borrow_mut() = Some(watch);
-        // the writes made offline, the tray's list of its own
-        if let Some((watch, queued)) = bridge::watch(&Watched::QueuedTray) {
+        // the writes made offline, the tray's list of its own (an account's: none signed out)
+        if !self.signed_out
+            && let Some((watch, queued)) = bridge::watch(&Watched::QueuedTray)
+        {
             *self.queued_watch.borrow_mut() = Some(watch);
             let weak = Rc::downgrade(self);
             glib::spawn_future_local(async move {
@@ -425,6 +445,7 @@ impl Uploads {
                 let Some(u) = weak.upgrade() else { return };
                 match update {
                     Ok(Update::Uploads { shown }) => u.draw(shown.as_ref()),
+                    Ok(Update::Tray { shown }) => u.draw(Some(&shown)),
                     other => eprintln!("veyq: an uploads update did not read: {other:?}"),
                 }
             }
@@ -444,7 +465,9 @@ impl Uploads {
             self.show_button();
             return;
         };
-        self.log(s);
+        if !self.signed_out {
+            self.log(s);
+        }
         let summary = s.summary.as_ref().map(said::notice);
         self.uploads_shown.set(summary.is_some() || s.preparing.is_some());
         self.show_button();
@@ -457,7 +480,9 @@ impl Uploads {
         if let Some(p) = &s.preparing {
             self.preparing_line.set_label(&said::notice(p));
         }
-        self.say(s);
+        if !self.signed_out {
+            self.say(s);
+        }
     }
 
     /// The batches as the queue lists them, each batch's and item's rows kept by id ([changes]).

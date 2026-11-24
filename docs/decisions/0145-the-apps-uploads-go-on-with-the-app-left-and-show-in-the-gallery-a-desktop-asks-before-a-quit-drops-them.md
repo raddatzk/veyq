@@ -1,7 +1,7 @@
 # ADR 0145 — The apps' uploads go on with the app left and show in the gallery; a desktop asks before a quit drops them
 - Status: Accepted
-- Built: yes; decisions 4–6 (a guest's uploads) 2026-11-24 on every app, by the core's and the bridge's tests and each
-  app's build — their device passes are the owner's (§ Consequences)
+- Built: yes; decisions 4–6 (a guest's uploads) and decision 7 (the tray signed out) 2026-11-24 on every app, by the
+  core's and the bridge's tests and each app's build — their device passes are the owner's (§ Consequences)
 - Date: 2026-11-18
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -93,13 +93,32 @@ A link's guest uploads on the app's one queue while its guest view is open (ADR 
 6. **The process is held and the question asked as for a member's**, since both read `UploadsUnderway`: Android's
    `UploadWorker`, iOS's `ContinuedWork` uploads instance, the Mac's quit question — and now Linux's and Windows', which
    count the bridge's `Watched.Underway` (`Update.Underway(files)`, from the core's start, a tenant open or not) instead of
-   the tray's `UploadsShown.active`, null with no tenant. **The tray** is the shell's, built from a tenant
-   (`DepotUploads` mirrors the whole queue): a guest's uploads show there once signed in; signed out no client has a tray —
-   the phone's notification or system progress and the desktops' question are what shows them (a tray on the sign-in
-   screen: inbox #1250).
+   the tray's `UploadsShown.active`, null with no tenant. **The shell's tray** is built from a tenant (`DepotUploads`
+   mirrors the whole queue): a guest's uploads show there once signed in; signed out decision 7's tray shows them.
    - **Rejected:** a queue per link — the tray, the worker, the continued task and the question already follow the one
      queue; a second would need a second tray on every client. Persisting a left link's key or session to resume after a
      process end — against ADR 0150 decision 3's key in memory only.
+
+7. **The sign-in and the unlock carry the tray over the queue alone** (inbox #1250, owner 2026-11-24). Core's
+   `blob/UploadsTray` — the platform's, no application's and no tenant's — is the queue's state with the tray's acknowledge
+   (a batch all in, none failed, leaves by itself after `UploadQueue.ACKNOWLEDGE_AFTER_MS`; one with a failure stays until it
+   is closed) and its cancel, retry, cancel all and close. The acknowledge lived in Depot's `DepotUploads`, a tenant's, so a
+   batch all in would have stayed on the sign-in for ever; it moved into `UploadsTray` once, and `DepotUploads` holds one.
+   Every app holds one more for its process (Android's `AppModel.signedOutTray`, Apple's `AppModel.signedOutTray`, the
+   bridge's `Watched.Tray` / `Update.Tray` — `Watched.Uploads` stays the tenant's, since what it says is answered once, by
+   the shell); both acknowledging the same batch is harmless. With no tenant open the bridge's `Upload.Cancel`, `Retry`,
+   `CancelAll` and `Acknowledge` reach it. Each client draws the shell's own tray, in its own place on the way-in screens,
+   and only while the queue lists something: **Android** the shell's row (progress ring, the queue's one line, a chevron)
+   above the sign-in and the unlock, under the status bar, opening the shell's bottom sheet; **Apple** (iOS and macOS) a
+   section under the heading of the sign-in's and the unlock's form — the shell's glyph, the queue's one line
+   (`Notices.uploadSummary`), a chevron — opening the shell's list as a sheet (the way-in screens have no toolbar for the
+   shell's button; not in the share extension, which opens no link); **Linux** the shell's header-bar button in the
+   way-in page's header bar (`Uploads::signed_out`); **Windows** the shell's command in a CommandBar at the page's top
+   right (`Uploads.WithTray`). Nothing is said there (no folder is prepared and no replace offered signed out), no writes
+   made offline are listed (they are an account's), and no new words were needed: the tray's own say it.
+   - **Rejected:** drawing the raw `UploadQueue.State` alone (no acknowledge, above); giving `Watched.Uploads` a value with no
+     tenant (two host instances would each answer what the shell's uploads say); a tray made and closed at every gate change
+     (four clients' bookkeeping for a double acknowledge that changes nothing).
 
 ## Consequences
 
@@ -130,6 +149,14 @@ A link's guest uploads on the app's one queue while its guest view is open (ADR 
   with no tenant open). Android and Apple needed no code: their holds and the Mac's question already read
   `UploadsUnderway`. Owed, the owner's: a guest's upload with the link and the app left on Android and an iPhone, the Mac's
   ⌘Q, Linux's and Windows' close signed out, and a sign-in over a running guest upload.
+- **The tray signed out (decision 7, 2026-11-24)** is proved by `UploadsTrayTest` (a guest's batch spared by a sign-out's
+  `clear()` shown with its progress and acknowledged by itself once in, with no tenant's model; a failed one kept until it
+  is closed; the actions reaching the queue; a closed tray acknowledging nothing) — bitten: the acknowledge taken out of
+  `UploadsTray` turned it red —, `DepotUploadsTest` unchanged over the moved rule, and the bridge's `ReceivedBridgeTest`
+  (`Watched.Tray` lists a drop box guest's upload with no tenant open, then empties) and `WireTest`. Each app builds.
+  Owed, the owner's: on each of Android, an iPhone, the Mac, Linux and Windows, a link guest's upload left running, the
+  link left and the app on its sign-in or unlock — the tray shows it with its progress, leaves once it is in, keeps and
+  closes a failure, and cancels one under way.
 - **What the docs site says:** [Add photos and videos](../../site/src/content/docs/memories/add-photos-and-videos.mdx)
   (EN and DE) § In the app — the placeholders, a phone's uploads with the app left, a desktop's question.
 - **Rejected:** a foreground service started by the app itself rather than WorkManager — WorkManager's typed

@@ -9,7 +9,6 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,6 +17,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.blob.UploadSource
+import me.raddatz.veyq.mobile.blob.UploadsTray
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Notices
@@ -32,8 +32,8 @@ import me.raddatz.veyq.mobile.words.Notices
  * - each Depot item's **settle**: the lists read anew ([Door.changed]); a name a file holds offers that file's replace, a
  *   replace refused as stale "Replace anyway" — the item taken out of the tray, the offer said once ([State.said]) with its
  *   action ([take]);
- * - the **tray's acknowledge**: a batch all in, none failed, leaves by itself [UploadQueue.ACKNOWLEDGE_AFTER_MS] after it is
- *   ([UploadQueue.State.clean]), run here on the model's clock, never by a view; one with a failure waits for its close;
+ * - the **tray's acknowledge**: the platform's [UploadsTray]'s (a batch all in, none failed, leaves by itself; one with a
+ *   failure waits for its close), one held for this model's life;
  * - a **shared file handed back**: files [upload]ed with a `left` (a share's, ADR 0138 decision 6) are handed to it once no
  *   run reads them again — the upload done or cancelled, or gone from the queue after it failed, and a same-name file's
  *   replace offer answered (its replace then followed the same way). A model closed hands nothing back: the queue may
@@ -143,25 +143,15 @@ class DepotUploads(
 
     /** Held files an offer's action is taking: its replace not queued yet. */
     private val taking = HashSet<UploadSource>()
-    private var acknowledging: Job? = null
-    private var acknowledgeKey: List<Pair<String, Boolean>>? = null
+
+    /** The tray's acknowledge and actions, the platform's. */
+    private val tray = UploadsTray(queue, dispatcher)
 
     init {
         scope.launch {
             queue.state.collect { q ->
                 _state.update { it.copy(queue = q) }
                 follow(q)
-                // the tray's acknowledge, keyed by the batches and whether each is in: a change starts the moment anew
-                val key = q.batches.map { it.id to it.finished }
-                if (key != acknowledgeKey) {
-                    acknowledgeKey = key
-                    acknowledging?.cancel()
-                    val clean = q.clean
-                    acknowledging = if (clean.isEmpty()) null else scope.launch {
-                        delay(UploadQueue.ACKNOWLEDGE_AFTER_MS)
-                        clean.forEach { queue.acknowledge(it.id) }
-                    }
-                }
             }
         }
     }
@@ -308,15 +298,18 @@ class DepotUploads(
 
     private fun drop(id: Long) = _state.update { s -> s.copy(saying = s.saying.filterNot { it.id == id }) }
 
-    fun cancel(id: String) = queue.cancel(id)
-    fun retry(id: String) = queue.retry(id)
-    fun cancelAll() = queue.cancelAll()
+    fun cancel(id: String) = tray.cancel(id)
+    fun retry(id: String) = tray.retry(id)
+    fun cancelAll() = tray.cancelAll()
 
     /** The tray closed batch [batchId] (one with a failure stays until this). */
-    fun acknowledge(batchId: String) = queue.acknowledge(batchId)
+    fun acknowledge(batchId: String) = tray.acknowledge(batchId)
 
     /** The model goes (a sign-out, a switch of tenant): nothing more is watched or said, nothing handed back. */
-    fun close() = scope.cancel()
+    fun close() {
+        tray.close()
+        scope.cancel()
+    }
 
     /** What the queue shows of each job reading a held file: done or cancelled lets it go, failed waits, failed and gone too. */
     private fun follow(q: UploadQueue.State) {

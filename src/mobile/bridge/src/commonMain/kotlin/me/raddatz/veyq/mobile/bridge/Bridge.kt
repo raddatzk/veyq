@@ -688,6 +688,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     /** The app's one upload queue (the phones' `AppModel.uploads`): emptied when the tenant closes. */
     private val queue = me.raddatz.veyq.mobile.blob.UploadQueue()
 
+    /** The tray over [queue] alone ([Watched.Tray]), for the process: what the sign-in and unlock draw (inbox #1250). */
+    private val tray = me.raddatz.veyq.mobile.blob.UploadsTray(queue)
+
     /** The open tenant's uploads over [queue] ([Watched.Uploads]); null while none is open. */
     private val uploads = MutableStateFlow<me.raddatz.veyq.mobile.depot.DepotUploads?>(null)
 
@@ -2746,6 +2749,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     private fun Unit?.done(why: Answer.Why = Answer.Why.NO_TENANT_OPEN): Answer = if (this == null) Answer.Refused(why) else Answer.Done
 
+    /** [act] done, which always reaches something (a tenant's model or the tray over the queue alone). */
+    private inline fun answered(act: () -> Unit): Answer {
+        act()
+        return Answer.Done
+    }
+
     /** A change of trust's outcome as the call's answer. */
     private fun TrustChange.answer(): Answer = when (this) {
         TrustChange.DONE -> Answer.Done
@@ -3050,6 +3059,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             open?.models?.queued?.items?.map { Update.QueuedTray(it) } ?: flowOf(Update.QueuedTray(null))
         }
         Watched.Uploads -> uploads.flatMapLatest { u -> u?.state?.map { Update.Uploads(shownUploads(it)) } ?: flowOf(Update.Uploads(null)) }
+        Watched.Tray -> tray.state.map { Update.Tray(shownTray(it)) }
         Watched.Underway -> me.raddatz.veyq.mobile.blob.UploadsUnderway.uploads.map { Update.Underway(me.raddatz.veyq.mobile.blob.UploadsUnderway.total(it)?.files ?: 0) }.distinctUntilChanged()
         is Watched.Pot -> {
             val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
@@ -3454,24 +3464,28 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     /** The uploads as the host draws them ([UploadsShown]), each field the model's or a core function's answer. */
-    private fun shownUploads(s: me.raddatz.veyq.mobile.depot.DepotUploads.State): UploadsShown {
-        val q = s.queue
-        return UploadsShown(
-            summary = Notices.uploadSummary(q),
-            active = q.active,
-            progress = q.progress,
-            preparing = s.preparing?.let { Notice(Msg.UPLOAD_PREPARING_FOLDER, it) },
-            batches = q.batches.map { b ->
-                UploadsShown.Batch(b.id, b.label, b.finished, b.items.map { i ->
-                    UploadsShown.Item(
-                        i.id, i.name, i.sizeBytes, i.status, i.progress, Notices.uploadStatus(i),
-                        failed = i.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.FAILED, canCancel = i.active, canRetry = i.retryable,
-                    )
-                })
-            },
-            said = s.said?.let { UploadsShown.Said(it.id, it.notices, it.action) },
-        )
-    }
+    private fun shownUploads(s: me.raddatz.veyq.mobile.depot.DepotUploads.State): UploadsShown = shownTray(
+        s.queue,
+        preparing = s.preparing?.let { Notice(Msg.UPLOAD_PREPARING_FOLDER, it) },
+        said = s.said?.let { UploadsShown.Said(it.id, it.notices, it.action) },
+    )
+
+    /** The queue [q] as the host's tray draws it ([UploadsShown]); [preparing] and [said] a level's uploads' alone. */
+    private fun shownTray(q: me.raddatz.veyq.mobile.blob.UploadQueue.State, preparing: Notice? = null, said: UploadsShown.Said? = null) = UploadsShown(
+        summary = Notices.uploadSummary(q),
+        active = q.active,
+        progress = q.progress,
+        preparing = preparing,
+        batches = q.batches.map { b ->
+            UploadsShown.Batch(b.id, b.label, b.finished, b.items.map { i ->
+                UploadsShown.Item(
+                    i.id, i.name, i.sizeBytes, i.status, i.progress, Notices.uploadStatus(i),
+                    failed = i.status == me.raddatz.veyq.mobile.blob.UploadQueue.Status.FAILED, canCancel = i.active, canRetry = i.retryable,
+                )
+            })
+        },
+        said = said,
+    )
 
     /** A file's page as the host draws it ([FileShown]), each field the model's own answer. */
     /** An import offered (ADR 0152 decision 6): held by its id until its dialog closes. */
@@ -3516,10 +3530,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             val source = parts.files.source(call.path) ?: return Answer.Said(Notices.notRead(listOf(pathName(call.path))))
             if (u.replace(page, source)) Answer.Queued(1) else Answer.Refused(Answer.Why.NOT_CHOSEN)
         } ?: noTenant
-        is Call.UploadCancel -> uploads.value?.cancel(call.item).done()
-        is Call.UploadRetry -> uploads.value?.retry(call.item).done()
-        Call.UploadCancelAll -> uploads.value?.cancelAll().done()
-        is Call.UploadAcknowledge -> uploads.value?.acknowledge(call.batch).done()
+        // with no tenant open the tray over the queue alone answers (the sign-in's and the unlock's, inbox #1250)
+        is Call.UploadCancel -> answered { uploads.value?.cancel(call.item) ?: tray.cancel(call.item) }
+        is Call.UploadRetry -> answered { uploads.value?.retry(call.item) ?: tray.retry(call.item) }
+        Call.UploadCancelAll -> answered { uploads.value?.cancelAll() ?: tray.cancelAll() }
+        is Call.UploadAcknowledge -> answered { uploads.value?.acknowledge(call.batch) ?: tray.acknowledge(call.batch) }
         is Call.UploadTakeOffer -> uploads.value?.let { u ->
             val said = u.current.saying.firstOrNull { it.id == call.said } ?: return Answer.Refused(Answer.Why.NO_SUCH_SAID)
             u.take(said)

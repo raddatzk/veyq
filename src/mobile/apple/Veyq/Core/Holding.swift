@@ -80,16 +80,22 @@ struct TrayShown {
     let preparing: String?
 }
 
-/// The shell's uploads into a level (core UI's tray and New, ADR 0154 decision 3), as the application that keeps files
-/// answers them: what the tray shows (`tray`: nil while no tenant is open) and its actions, and the picked files and folder
-/// New puts under the level shown.
+/// What a tray draws (`tray`) and its actions: the shell's (`LevelUploads`) or the sign-in's and the unlock's
+/// (`SignedOutTray`).
 @MainActor
-protocol LevelUploads: AnyObject {
+protocol TrayActions: AnyObject {
     var tray: TrayShown? { get }
     func cancelAll()
     func acknowledge(_ batchId: String)
     func cancel(_ id: String)
     func retry(_ id: String)
+}
+
+/// The shell's uploads into a level (core UI's tray and New, ADR 0154 decision 3), as the application that keeps files
+/// answers them: what the tray shows (`tray`: nil while no tenant is open) and its actions, and the picked files and folder
+/// New puts under the level shown.
+@MainActor
+protocol LevelUploads: TrayActions {
     /// The picked `urls` queued as new files under the level shown.
     func upload(_ urls: [URL])
     /// The directory at `url` uploaded whole under the level shown.
