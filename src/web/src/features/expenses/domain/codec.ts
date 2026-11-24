@@ -12,6 +12,10 @@
 import * as core from '@veyq/core-js/expenses'
 import { formatRefusal, type RevisionBody } from './format'
 
+/** The padded plaintext sizes (512 B, 2 KiB, 8 KiB, 16 KiB — the contract's 16 KiB cap is the last), the core's: the server
+ *  takes a body of exactly one of their sealed lengths, so a revision's size tells it nothing finer than its class. */
+export const SIZE_CLASSES: readonly number[] = core.formatRules().sizeClasses
+
 /** Where a revision lives — everything its two seals bind. */
 export type RevisionAddress = { scopeId: string; nodeId: string; entryId: string; revision: number }
 
