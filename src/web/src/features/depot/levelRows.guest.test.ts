@@ -41,6 +41,8 @@ vi.mock('../../core/sharing/guestTree', async (orig) => ({
 vi.mock('../tenant/tenantStorage', () => ({ tenantStorageFits: vi.fn() }))
 
 import { depotRows } from './levelRows'
+// loaded by the rows on the first folder upload (ADR 0155 § Depot's move): here up front, so that load is no wait of a test
+import './uploadFolder'
 import { registerDepot } from './register'
 import { createRegistry } from '../../core/applications/registry'
 import { publicShareFilesApi } from './api'

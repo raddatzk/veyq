@@ -38,6 +38,8 @@ vi.mock('../../core/node/treeStore', async () => {
 })
 
 import { depotRows } from './levelRows'
+// loaded by the rows on the first folder upload (ADR 0155 § Depot's move): here up front, so that load is no wait of a test
+import './uploadFolder'
 import { filesApi } from './api'
 import { downloadFile } from './download'
 import { fileUploadJob, type FileUploadTarget } from './uploadFile'

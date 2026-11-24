@@ -1,16 +1,18 @@
 // Reading a file to SHOW it (inbox #412): the decision what an opened file is, and the bytes that decision needs, no more.
 //
-// **The bytes decide, the claim only narrows.** The first chunk is opened and sniffed (`core/blob/sniff.ts`); the blob's
-// sealed type and the node's name are a peer's statement and are consulted only where the bytes are ambiguous (text needs a
-// text-ish claim, SVG needs the claim to agree) - a PNG claimed as `text/plain` is a PNG, a binary claimed as `image/png`
-// is nothing we show. Nothing here renders anything: it returns what a view may be built from (a typed `Blob`, a string, or
-// the container a media element streams), and a viewer builds the DOM.
+// **The bytes decide, the claim only narrows** — Depot's Kotlin `FileView.decide`, drawn through `@veyq/core-js/depot`
+// (ADR 0155 decision 7.3, § Depot's move; one rule with the apps, held by `contracts/depot/v1-vectors.json`'s `view`): the
+// first chunk is opened and sniffed; the blob's sealed type and the node's name are a peer's statement and are consulted only
+// where the bytes are ambiguous (text needs a text-ish claim, SVG needs the claim to agree) - a PNG claimed as `text/plain`
+// is a PNG, a binary claimed as `image/png` is nothing we show. Nothing here renders anything: it returns what a view may be
+// built from (a typed `Blob`, a string, or the container a media element streams), and a viewer builds the DOM. This file
+// holds the reading, not the rule.
 //
-// **Memory is bounded per kind** ([IMAGE_CAP], [TEXT_CAP], [PDF_CAP]): an image is collected chunk by chunk into one typed
-// `Blob` (opened [FILE_VIEW_IN_FLIGHT] at a time, the stream pump of #371) only up to its cap, a text is cut at its cap and
-// says so, a PDF is collected into ONE buffer allocated at its size (no parts to concatenate afterwards), and audio/video
-// read nothing beyond chunk 0 here - the service worker's media route (ADR 0047) pulls the rest on demand. A file over its
-// cap is not read past the first chunk.
+// **Memory is bounded per kind** ([IMAGE_CAP], [TEXT_CAP], [PDF_CAP], the core's): an image is collected chunk by chunk into
+// one typed `Blob` (opened [FILE_VIEW_IN_FLIGHT] at a time, the stream pump of #371) only up to its cap, a text is cut at its
+// cap and says so, a PDF is collected into ONE buffer allocated at its size (no parts to concatenate afterwards), and
+// audio/video read nothing beyond chunk 0 here - the service worker's media route (ADR 0047) pulls the rest on demand. A file
+// over its cap is not read past the first chunk.
 //
 // **A PDF is returned as bytes** (inbox #412): it is drawn by pdf.js onto canvases inside the page (`shared/pdf/pdfEngine.ts`), not
 // by the browser's own viewer, which would need an `<iframe>`/`<object>` on a `blob:` URL against the app's policy
@@ -19,18 +21,18 @@
 //
 // Operator-blind: the chunks are opened on this device under the keys the page holds; nothing here talks to a server but the
 // provider's own presigned reads.
+import * as core from '@veyq/core-js/depot'
 import { streamBlob, type ByteSink, type ChunkSource } from '../../core/blob/stream'
-import {
-  claimsSvg, claimsText, sniffImage, sniffPdf, sniffStream, sniffSvg, sniffText, type StreamKind, type TextEncoding,
-} from '../../core/blob/sniff'
-import { PLAINTEXT_CHUNK_SIZE, plaintextTotal } from '../../sw/range'
+import type { TextEncoding } from '../../core/blob/sniff'
+import { plaintextTotal } from '../../sw/range'
 
+const CAPS = core.depotFileViewCaps()
 /** Largest image the page decrypts into memory. Over it, the download is offered instead. */
-export const IMAGE_CAP = 64 * 1024 * 1024
+export const IMAGE_CAP: number = CAPS.image
 /** Most text shown; a longer file shows its first [TEXT_CAP] bytes and a note. */
-export const TEXT_CAP = 1024 * 1024
+export const TEXT_CAP: number = CAPS.text
 /** Largest PDF the page decrypts into memory (and hands to pdf.js, which holds its own copy while it draws). */
-export const PDF_CAP = 64 * 1024 * 1024
+export const PDF_CAP: number = CAPS.pdf
 /** Frames opened at once while collecting an image or text - the pump's bound (`streamBlob`). */
 export const FILE_VIEW_IN_FLIGHT = 4
 
@@ -113,30 +115,29 @@ export async function loadFileView(
   if (head.length === 0) return { kind: 'unsupported', reason: 'empty' }
   const total = Math.max(0, plaintextTotal(source.byteSize, source.chunkCount))
 
-  const raster = sniffImage(head)
-  const svg = !raster && claimsSvg(hints.type, hints.name) && sniffSvg(head)
-  if (raster || svg) {
-    if (total > IMAGE_CAP) return { kind: 'too-large', limit: IMAGE_CAP }
-    const type = raster ?? 'image/svg+xml'
-    const parts = await collect(source, head, source.chunkCount, signal, onProgress)
-    return { kind: 'image', blob: new Blob(parts as BlobPart[], { type }), type }
-  }
-  const media: StreamKind | undefined = sniffStream(head)
-  if (media) return { kind: 'stream', element: media.element, type: media.type }
-  if (sniffPdf(head)) {
-    if (total > PDF_CAP) return { kind: 'too-large', limit: PDF_CAP }
-    return { kind: 'pdf', bytes: await collectInto(source, head, source.chunkCount, total, signal, onProgress) }
-  }
-  const encoding = claimsText(hints.type, hints.name) ? sniffText(head, source.chunkCount === 1) : undefined
-  if (encoding) {
-    const truncated = total > TEXT_CAP
-    const chunks = Math.min(source.chunkCount, Math.ceil(TEXT_CAP / PLAINTEXT_CHUNK_SIZE))
-    const parts = await collect(source, head, chunks, signal, onProgress)
-    let bytes = new Uint8Array(parts.reduce((n, p) => n + p.length, 0))
-    let at = 0
-    for (const p of parts) { bytes.set(p, at); at += p.length }
-    if (bytes.length > TEXT_CAP) bytes = bytes.subarray(0, TEXT_CAP)
-    return { kind: 'text', text: decode(encoding, bytes, truncated), truncated }
+  const d = core.depotFileView(head, source.chunkCount, total, hints.type ?? null, hints.name ?? null)
+  switch (d.kind) {
+    case 'too-large':
+      return { kind: 'too-large', limit: d.limit }
+    case 'image': {
+      const type = d.type!
+      const parts = await collect(source, head, d.frames, signal, onProgress)
+      return { kind: 'image', blob: new Blob(parts as BlobPart[], { type }), type }
+    }
+    case 'stream':
+      return { kind: 'stream', element: d.element as 'video' | 'audio', type: d.type! }
+    case 'pdf':
+      return { kind: 'pdf', bytes: await collectInto(source, head, d.frames, total, signal, onProgress) }
+    case 'text': {
+      const parts = await collect(source, head, d.frames, signal, onProgress)
+      let bytes = new Uint8Array(parts.reduce((n, p) => n + p.length, 0))
+      let at = 0
+      for (const p of parts) { bytes.set(p, at); at += p.length }
+      if (bytes.length > TEXT_CAP) bytes = bytes.subarray(0, TEXT_CAP)
+      return { kind: 'text', text: decode(d.encoding as TextEncoding, bytes, d.truncated), truncated: d.truncated }
+    }
+    case 'empty':
+      return { kind: 'unsupported', reason: 'empty' }
   }
   return { kind: 'unsupported', reason: 'format' }
 }
