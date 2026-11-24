@@ -229,7 +229,8 @@ object RevisionFormat {
     /** A parsed plaintext held to the v1 schema, or [RevisionFormatInvalid] at the first rule it breaks. */
     fun read(parsed: JsonElement): RevisionBody {
         val o = obj(parsed, "")
-        if ((o["v"] as? JsonPrimitive)?.let { !it.isString && it.content.toLongOrNull() == VERSION } != true) fail("/v")
+        // a number as JSON.parse reads one: `1.0` and `1e0` are 1 (contracts/expenses/v1-vectors.json `decode`)
+        if ((o["v"] as? JsonPrimitive)?.let { !it.isString && it !is JsonNull && it.content.toDoubleOrNull() == VERSION.toDouble() } != true) fail("/v")
         val heads = arr(o["heads"], "/heads", 0, MAX_HEADS).mapIndexed { i, h ->
             val ho = obj(h, "/heads/$i")
             Head(uuid(ho["entryId"], "/heads/$i/entryId"), int(ho["revision"], "/heads/$i/revision", 1, MAX_SAFE), str(ho["digest"], "/heads/$i/digest", DIGEST))
@@ -240,7 +241,8 @@ object RevisionFormat {
     /** UTF-8 JSON plaintext back to a body; [RevisionFormatInvalid] for anything that is not one. */
     fun decode(bytes: ByteArray): RevisionBody {
         val parsed = try {
-            JSON.parseToJsonElement(bytes.decodeToString(throwOnInvalidSequence = true))
+            // a leading byte order mark is dropped, as a fatal UTF-8 `TextDecoder` drops it (the vectors' `decode`)
+            JSON.parseToJsonElement(bytes.decodeToString(throwOnInvalidSequence = true).removePrefix("\uFEFF"))
         } catch (e: Exception) {
             fail("")
         }

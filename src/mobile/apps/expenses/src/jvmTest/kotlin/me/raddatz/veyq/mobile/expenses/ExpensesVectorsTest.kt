@@ -3,6 +3,7 @@ package me.raddatz.veyq.mobile.expenses
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -10,6 +11,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.crypto.Context
@@ -164,5 +166,182 @@ class ExpensesVectorsTest {
         bad("""{"v":1,"heads":[],"kind":"transfer","date":"2026-01-01","currency":"EUR","minorUnits":2,"rate":"01","amount":1,"from":"0e000000-0000-4000-8000-000000000001","to":"0e000000-0000-4000-8000-000000000002","receipts":[]}""")
         val ok = RevisionFormat.read(Json.parseToJsonElement("""{"v":1,"heads":[],"kind":"participant","name":"Ännä","active":true,"joined":1.0,"extra":1}"""))
         assertEquals(ParticipantBody("Ännä", true, 1), ok.content)
+    }
+
+    // ---- the sections both sides answer before the web draws the core (cr-web-expenses-on-the-core phase 1) ----------
+
+    private fun JsonElement?.s(): String? = (this as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+    /** JSON equality as the web's `toEqual` reads it: objects by their keys in any order, numbers by value. */
+    private fun same(a: JsonElement?, b: JsonElement?): Boolean = when {
+        a is JsonObject && b is JsonObject -> a.keys == b.keys && a.keys.all { same(a[it], b[it]) }
+        a is JsonArray && b is JsonArray -> a.size == b.size && a.indices.all { same(a[it], b[it]) }
+        a is JsonPrimitive && b is JsonPrimitive && !a.isString && !b.isString && a !is JsonNull && b !is JsonNull ->
+            a.content.toDoubleOrNull()?.let { it == b.content.toDoubleOrNull() } ?: (a.content == b.content)
+        else -> a == b
+    }
+
+    private fun section(name: String, answer: (JsonObject) -> JsonElement) {
+        val cases = vectors[name]!!.jsonArray
+        assertTrue(cases.isNotEmpty(), "no $name vectors")
+        val wrong = cases.mapIndexedNotNull { i, c ->
+            val case = c.jsonObject
+            val got = try { answer(case) } catch (e: Exception) { JsonPrimitive("threw $e") }
+            if (same(got, case["expected"])) null else "$name #$i (${case["rule"].s()}): want ${case["expected"]}, got $got"
+        }
+        assertEquals(emptyList(), wrong, "${wrong.size} of ${cases.size} $name vectors")
+    }
+
+    private fun readAnswer(read: () -> RevisionBody): JsonElement = try {
+        buildJsonObject { put("body", RevisionFormat.toJson(read())) }
+    } catch (e: RevisionFormatInvalid) {
+        buildJsonObject { put("path", e.path) }
+    }
+
+    private fun bodyOf(content: JsonObject): RevisionBody =
+        RevisionFormat.read(buildJsonObject { put("v", 1); put("heads", JsonArray(emptyList())); content.forEach { (k, v) -> put(k, v) } })
+
+    private fun contentJson(c: RevisionContent): JsonObject =
+        JsonObject(RevisionFormat.toJson(RevisionBody(emptyList(), c)).filterKeys { it != "v" && it != "heads" })
+
+    private fun problemName(p: Ledger.Problem?) = p?.name?.lowercase()?.replace('_', '-')
+
+    private fun heldOf(j: JsonElement): HeldRevision {
+        val o = j.jsonObject
+        val body = (o["body"] as? JsonObject)?.let { RevisionFormat.read(it) }
+        return HeldRevision(o["entryId"].s()!!, o["revision"]!!.jsonPrimitive.long, o["createdAt"]!!.jsonPrimitive.long, o["digest"].s()!!, body, if (body == null) RevisionUnreadable.Reason.BODY else null)
+    }
+
+    private fun refJson(entryId: String, revision: Long) = buildJsonObject { put("entryId", entryId); put("revision", revision) }
+
+    /** A split as the web hands one over, unchecked: the reader would refuse a person twice before the rule could name it. */
+    private fun splitOf(j: JsonElement): Split {
+        val o = j.jsonObject
+        fun pairs(list: String, key: String) = o[list]!!.jsonArray.map { it.jsonObject["participant"].s()!! to it.jsonObject[key]!!.jsonPrimitive.long }
+        return when (o["mode"].s()) {
+            "equal" -> Split.Equal(o["participants"]!!.jsonArray.map { it.jsonPrimitive.content })
+            "shares" -> Split.Shares(pairs("shares", "shares"))
+            "percent" -> Split.Percent(pairs("percents", "percent"))
+            else -> Split.Amounts(pairs("amounts", "amount"))
+        }
+    }
+
+    private fun pairs(m: Map<String, Big>) = JsonArray(m.map { (k, v) -> JsonArray(listOf(JsonPrimitive(k), JsonPrimitive(v.toLong()))) })
+
+    private fun ledgerJson(pot: Ledger.Pot) = buildJsonObject {
+        put("participants", JsonArray(pot.participants.map { p ->
+            buildJsonObject { put("id", p.id); put("name", p.name); put("active", p.active); put("joined", p.joined); put("erased", p.erased); put("member", p.member) }
+        }))
+        put("entries", JsonArray(pot.entries.map { e ->
+            buildJsonObject {
+                put("id", e.id); put("revision", e.revision); put("status", e.status.name.lowercase()); put("problem", problemName(e.problem))
+                put("edited", e.edited); put("recordedAt", e.recordedAt); put("content", e.content?.let(::contentJson) ?: JsonNull)
+                put("effect", e.effect?.let { f ->
+                    buildJsonObject { put("base", f.base.toLong()); put("paid", pairs(f.paid)); put("received", pairs(f.received)); put("shares", pairs(f.shares)) }
+                } ?: JsonNull)
+            }
+        }))
+        put("balances", pairs(pot.balances))
+        put("settleUp", JsonArray(pot.settleUp.map { buildJsonObject { put("from", it.from); put("to", it.to); put("amount", it.amount.toLong()) } }))
+        put("overview", buildJsonObject {
+            put("byCategory", pairs(pot.overview.byCategory))
+            put("byPerson", JsonArray(pot.overview.byPerson.map { (k, v) ->
+                JsonArray(listOf(JsonPrimitive(k), buildJsonObject { put("paid", v.first.toLong()); put("share", v.second.toLong()) }))
+            }))
+            put("byCategoryAndPerson", JsonArray(pot.overview.byCategoryAndPerson.map { (k, v) -> JsonArray(listOf(JsonPrimitive(k), pairs(v))) }))
+        })
+    }
+
+    @Test
+    fun readSection() = section("read") { c -> readAnswer { RevisionFormat.read(c["body"]!!) } }
+
+    @Test
+    fun decodeSection() = section("decode") { c ->
+        val bytes = c["hex"].s()?.let(::unhex) ?: c["utf8"].s()!!.encodeToByteArray()
+        readAnswer { RevisionFormat.decode(bytes) }
+    }
+
+    @Test
+    fun encodeSection() = section("encode") { c ->
+        try {
+            val bytes = RevisionFormat.encode(RevisionFormat.read(c["body"]!!))
+            buildJsonObject { put("length", bytes.size); put("json", Json.parseToJsonElement(bytes.decodeToString())) }
+        } catch (e: RevisionFormatInvalid) {
+            buildJsonObject { put("path", e.path) }
+        }
+    }
+
+    @Test
+    fun checkSection() = section("check") { c ->
+        val held = c["held"]!!.jsonArray.map(::heldOf)
+        val check = LedgerCheck.of(held)
+        fun refs(l: List<LedgerCheck.Ref>) = JsonArray(l.map { refJson(it.entryId, it.revision) })
+        buildJsonObject {
+            put("check", buildJsonObject {
+                put("complete", check.complete); put("missing", refs(check.missing)); put("altered", refs(check.altered))
+                put("unreadable", refs(check.unreadable)); put("entries", JsonArray(check.entries.map(::JsonPrimitive)))
+            })
+            put("currentHeads", JsonArray(Revisions.currentHeads(held).map { JsonPrimitive(it.id) }))
+            put("headsToName", JsonArray(Revisions.headsToName(held).map { buildJsonObject { put("entryId", it.entryId); put("revision", it.revision); put("digest", it.digest) } }))
+        }
+    }
+
+    @Test
+    fun entryProblemSection() = section("entryProblem") { c ->
+        val content = bodyOf(c["content"]!!.jsonObject).content as MoneyContent
+        val people = (c["participants"] as? JsonArray)?.map { it.jsonPrimitive.content }?.toSet()
+        JsonPrimitive(problemName(Ledger.entryProblem(content, people?.let { set -> { id: String -> id in set } })))
+    }
+
+    @Test
+    fun splitBreaksSection() = section("splitBreaks") { c ->
+        val problem = Ledger.Problem.valueOf(c["problem"].s()!!.uppercase().replace('-', '_'))
+        JsonPrimitive(Ledger.splitBreaks(problem, splitOf(c["split"]!!), (c["part"] as? JsonPrimitive)?.longOrNull?.let { Big.of(it) }))
+    }
+
+    @Test
+    fun namedSection() = section("named") { c ->
+        JsonArray(Ledger.namedParticipants(bodyOf(c["content"]!!.jsonObject).content as MoneyContent).map(::JsonPrimitive))
+    }
+
+    @Test
+    fun ledgerSection() = section("ledger") { c ->
+        val base = c["base"]!!.let { Ledger.BaseCurrency(it.str("currency"), it.long("minorUnits").toInt()) }
+        ledgerJson(Ledger.build(c["held"]!!.jsonArray.map(::heldOf), base))
+    }
+
+    @Test
+    fun settleUpSection() = section("settleUp") { c ->
+        val balances = LinkedHashMap<String, Big>()
+        c["balances"]!!.jsonArray.forEach { balances[it.jsonArray[0].jsonPrimitive.content] = Big.of(it.jsonArray[1].jsonPrimitive.long) }
+        JsonArray(Ledger.settleUp(balances, c["order"]!!.jsonArray.map { it.jsonPrimitive.content }).map {
+            buildJsonObject { put("from", it.from); put("to", it.to); put("amount", it.amount.toLong()) }
+        })
+    }
+
+    @Test
+    fun amountsSection() = section("amounts") { c ->
+        fun sep() = if (c["language"].s() == "de") ',' else '.'
+        when (c["op"].s()) {
+            "parseAmount" -> JsonPrimitive(Amounts.parse(c["text"].s()!!, c.long("minorUnits").toInt())?.toString())
+            "decimalOf" -> JsonPrimitive(Amounts.text(c["amount"].s()!!.toLong(), c.long("minorUnits").toInt()))
+            "amountText" -> JsonPrimitive(Amounts.text(c["amount"].s()!!.toLong(), c.long("minorUnits").toInt(), sep()))
+            "parseRate" -> JsonPrimitive(Amounts.parseRate(c["text"].s()!!))
+            "formatMoney" -> JsonPrimitive(me.raddatz.veyq.mobile.words.Shown.money(c["amount"].s()!!.toLong(), c["currency"].s(), c.long("minorUnits").toInt(), c["language"].s()!!))
+            else -> error("no such op")
+        }
+    }
+
+    @Test
+    fun ratesSection() = section("rates") { c ->
+        fun tableJson(t: Map<String, ExchangeRates.Row>?) = t?.let { JsonObject(it.mapValues { (_, r) -> buildJsonObject { put("rate", r.rate); put("date", r.date) } }) } ?: JsonNull
+        when (c["op"].s()) {
+            "parseTable" -> tableJson(ExchangeRates.parseTable(c["answer"]!!, c["known"]!!.jsonArray.map { it.jsonPrimitive.content }.toSet()))
+            "crossRate" -> {
+                val table = c["table"]!!.jsonObject.mapValues { (_, r) -> ExchangeRates.Row(r.str("rate"), r.str("date")) }
+                ExchangeRates.crossRate(table, c["from"].s()!!, c["to"].s()!!)?.let { buildJsonObject { put("rate", it.rate); put("date", it.date) } } ?: JsonNull
+            }
+            else -> error("no such op")
+        }
     }
 }

@@ -638,7 +638,8 @@ object Amounts {
      * decimals, above zero and at most 2⁵³−1; null for anything else.
      */
     fun parse(text: String, minorUnits: Int): Long? {
-        val t = text.trim().replace(Regex("\\s"), "")
+        // every white space out, a no-break space too, as the web's `\s` takes it (the vectors' `amounts`)
+        val t = text.filterNot { it.isWhitespace() }
         val m = Regex("^([0-9]+)(?:[.,]([0-9]*))?$").matchEntire(t) ?: return null
         val frac = m.groupValues[2]
         if (frac.length > minorUnits) return null
