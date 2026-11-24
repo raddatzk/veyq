@@ -359,10 +359,14 @@ class ShareGates(
         }.getOrNull()
     }
 
-    /** The open link let go: its key zeroed, its client closed. A closed model loads nothing. */
+    /**
+     * The open link let go: its key zeroed, its client closed, the guest's session no longer held here (the credential
+     * store's entry stays, ADR 0150 decision 3). A closed model loads nothing.
+     */
     fun close() {
         if (closed) return
         closed = true
+        _guest.value = null
         kShare.fill(0)
         head?.kShare?.fill(0)
         retired.forEach { it.kShare.fill(0) }

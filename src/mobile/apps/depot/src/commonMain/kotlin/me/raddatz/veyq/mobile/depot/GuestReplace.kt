@@ -14,10 +14,10 @@ import me.raddatz.veyq.mobile.sharing.GuestAccess
  * (`FileModel.chooseReplace`, the choice then left standing).
  */
 fun GuestAccess.replace(file: FileModel, source: UploadSource): Boolean {
-    val q = queue ?: return false
+    if (queue == null) return false
     if (role != GuestAccess.READ_WRITE || session.value == null) return false
     val job = file.replace(source) ?: return false
-    q.enqueue(listOf(job), source.name, file.node.nodeId, onSettled = { file.reload() }, onFinished = null)
+    enqueue(listOf(job), source.name, file.node.nodeId, onSettled = { file.reload() })
     return true
 }
 

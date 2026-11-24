@@ -236,6 +236,8 @@ fn activate(app: &adw::Application) {
     eprintln!("veyq: the core started");
     // what every notice lives by and a line is joined with, the core's (ADR 0154 decisions 4 and 5)
     veyq::core_ui::said::start();
+    // what closing the window asks about: every upload under way, a tenant open or not (ADR 0145 decision 2, #1016)
+    veyq::core_ui::uploads::watch_underway();
     // a debug build's QR harness: the camera alone, no session (the QR CR, phase 5)
     if dev_scan::requested() {
         let view = dev_scan::view();

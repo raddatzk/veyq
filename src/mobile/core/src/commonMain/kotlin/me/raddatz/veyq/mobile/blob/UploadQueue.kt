@@ -168,7 +168,7 @@ class UploadQueue(dispatcher: CoroutineDispatcher) {
 
     private class Group(
         val id: String, val label: String, val key: String?, val seq: Long, val entries: MutableList<Entry>,
-        val onSettled: ((Item) -> Unit)?, val onFinished: ((Batch) -> Unit)?,
+        val onSettled: ((Item) -> Unit)?, val onFinished: ((Batch) -> Unit)?, val account: Boolean,
     ) {
         var finished = false
         var acknowledged = false
@@ -215,12 +215,22 @@ class UploadQueue(dispatcher: CoroutineDispatcher) {
      * Queues [jobs] as one batch labelled [label] (where they go), [key] the caller's name for that place. [onSettled] is
      * told each item as it settles (done, failed or cancelled), [onFinished] the batch once all its items settled.
      */
-    fun enqueue(jobs: List<Job>, label: String, key: String?, onSettled: ((Item) -> Unit)?, onFinished: ((Batch) -> Unit)?) {
+    fun enqueue(jobs: List<Job>, label: String, key: String?, onSettled: ((Item) -> Unit)?, onFinished: ((Batch) -> Unit)?) =
+        add(jobs, label, key, onSettled, onFinished, account = true)
+
+    /**
+     * [jobs] queued as [enqueue] does, as a batch that is not the signed-in account's — a link guest's (inbox #1016) —:
+     * [clear] (a sign-out, a switch) spares it.
+     */
+    internal fun enqueueSpared(jobs: List<Job>, label: String, key: String?, onSettled: ((Item) -> Unit)?, onFinished: ((Batch) -> Unit)?) =
+        add(jobs, label, key, onSettled, onFinished, account = false)
+
+    private fun add(jobs: List<Job>, label: String, key: String?, onSettled: ((Item) -> Unit)?, onFinished: ((Batch) -> Unit)?, account: Boolean) {
         if (jobs.isEmpty()) return
         val entries = jobs.map { Entry(newId(), it) }.toMutableList()
         val id = newId()
         scope.launch {
-            groups += Group(id, label.ifEmpty { "${entries.size}" }, key, seq++, entries, onSettled, onFinished)
+            groups += Group(id, label.ifEmpty { "${entries.size}" }, key, seq++, entries, onSettled, onFinished, account)
             publish()
             schedule()
         }
@@ -418,15 +428,39 @@ class UploadQueue(dispatcher: CoroutineDispatcher) {
         }
     }
 
-    /** Cancels everything and empties the queue (a sign-out, a switch of tenant). */
+    /**
+     * Cancels the account's batches and drops them (a sign-out, a switch of tenant, an erasure). A batch queued by
+     * [enqueueSpared] — a link guest's, which is no account's (inbox #1016) — goes on.
+     */
     fun clear() {
         scope.launch {
-            for (g in groups) for (e in g.entries) {
+            val gone = groups.filter { it.account }
+            for (g in gone) for (e in g.entries) {
                 e.cancelRequested = true
                 e.work?.cancel()
+                if (e === ahead) ahead = null
             }
-            groups.clear()
-            ahead = null
+            groups.removeAll(gone)
+            publish()
+        }
+    }
+
+    /**
+     * Each failed item of [jobs] made final — it offers no retry —, and one of them queued again meanwhile cancelled: what
+     * runs them is gone (a left link's keys and client, dropped once none of its jobs ran; inbox #1016).
+     */
+    internal fun endRetries(jobs: Set<Job>) {
+        scope.launch {
+            for (g in groups) for (e in g.entries) {
+                if (e.job !in jobs) continue
+                if (e.status == Status.FAILED) e.final = true
+                else if (e.status == Status.QUEUED && e !== ahead) {
+                    e.status = Status.CANCELLED
+                    abandon(e.job)
+                    settled(g, e)
+                }
+            }
+            groups.forEach(::finish)
             publish()
         }
     }

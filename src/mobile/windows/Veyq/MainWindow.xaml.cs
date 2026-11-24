@@ -134,6 +134,8 @@ public sealed partial class MainWindow : Window
                 return;
         }
         Log.Write("the core started");
+        // what closing the window asks about: every upload under way, a tenant open or not (ADR 0145 decision 2, #1016)
+        Uploads.WatchUnderway();
         // a debug build's QR harness: the camera alone, no session (the QR CR, phase 5)
         if (DevScan.Requested)
         {

@@ -173,13 +173,13 @@ object MemoriesGuest {
         override suspend fun named(): Boolean = access.role == GuestAccess.READ_WRITE && access.naming.request() != null
 
         override fun upload(sources: List<UploadSource>): Int {
-            val queue = access.queue ?: return 0
+            if (access.queue == null) return 0
             val deriver = access.deriver ?: return 0
             val session = access.session.value ?: return 0
             if (access.role != GuestAccess.READ_WRITE || sources.isEmpty()) return 0
             val target = node.id.takeIf { it != access.tree?.root?.id }
             val nodeEpoch = if (target == null) access.rootEpoch else node.epoch
-            queue.enqueue(
+            access.enqueue(
                 sources.map { source ->
                     MediaUpload.GuestJob(source, deriver, access.now) { original, prepared, progress ->
                         MemoriesGuest.send(access, session, node.scopeId, node.key, nodeEpoch, target, original, prepared, progress).also { r ->
@@ -188,7 +188,7 @@ object MemoriesGuest {
                         }
                     }
                 },
-                node.name, null, null, null,
+                node.name,
             )
             return sources.size
         }
@@ -261,10 +261,10 @@ class GuestUploader internal constructor(private val access: GuestAccess, val no
 
     /** [sources] queued into the link's root; how many were (none before the guest named itself). */
     fun upload(sources: List<UploadSource>): Int {
-        val queue = access.queue ?: return 0
+        if (access.queue == null) return 0
         val deriver = access.deriver ?: return 0
         if (session.value == null || sources.isEmpty()) return 0
-        queue.enqueue(sources.map { source -> MediaUpload.GuestJob(source, deriver, access.now) { o, p, progress -> send(o, p, progress, source.name) } }, node.name, null, null, null)
+        access.enqueue(sources.map { source -> MediaUpload.GuestJob(source, deriver, access.now) { o, p, progress -> send(o, p, progress, source.name) } }, node.name)
         return sources.size
     }
 

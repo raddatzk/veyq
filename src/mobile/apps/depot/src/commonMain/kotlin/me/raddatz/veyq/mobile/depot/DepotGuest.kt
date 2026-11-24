@@ -299,9 +299,8 @@ class GuestDropBox internal constructor(private val access: GuestAccess, val nod
 
     /** [sources] queued into the guest's folder; how many were (none before the guest named itself, or without a queue). */
     fun upload(sources: List<UploadSource>): Int {
-        val queue = access.queue ?: return 0
-        if (session.value == null || sources.isEmpty()) return 0
-        queue.enqueue(sources.map { Job(it) }, node.name, null, null, null)
+        if (access.queue == null || session.value == null || sources.isEmpty()) return 0
+        access.enqueue(sources.map { Job(it) }, node.name)
         return sources.size
     }
 

@@ -10,7 +10,9 @@ import VeyqCore
 /// model and are shown again once the link is left. Every guest view of the app — opened here, by a bookmark's page or its
 /// *Open on its own page* — is made by one `GuestOpener` over the app's group defaults (the terms' and the note's
 /// acceptances), the Keychain (a write link's guest session, `KeychainGuestSessions`) and the app's one upload queue.
-/// Nothing of a link is kept here once it is left: the core's model holds the key and zeroes it (`GuestScreen.leave`).
+/// Nothing of a link is kept here once it is left: the core's model holds the key and zeroes it (`GuestScreen.leave`) —
+/// once the guest's uploads still under way are in, which go on with the link left as a member's do (`ContinuedWork`'s
+/// uploads instance and the Mac's quit question follow them, inbox #1016).
 @MainActor
 @Observable
 final class GuestLinks {
@@ -163,7 +165,7 @@ final class GuestHeld: Identifiable {
         depth = (screen.view.stack.value as? [Any])?.count ?? 0
     }
 
-    /// The link let go: its page's model goes, its key is zeroed (`GuestScreen.leave`).
+    /// The link let go: its page's model goes, its key is zeroed (`GuestScreen.leave`; after its uploads, inbox #1016).
     func close() {
         guard !closed else { return }
         closed = true
