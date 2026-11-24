@@ -260,7 +260,7 @@ den du bekommen hast*, *Open in the browser* / *Im Browser öffnen*, *Keep* / *B
   link with a password opened signed out — the instance, the password and the gates passed, the owner's photo read
   through the link byte-equal, the guest named and its photo listed by the owner as a guest's, no request of the visit
   holding `K_share` as b64url, b64 or hex; the link kept as a bookmark in the personal space and read back with its
-  password), `GuestGapsLiveTest` (#1032–#1034: a READ Memory link reported whole and a medium as an `ITEM`, both received;
+  password; the bookmark and the Memory trashed and purged at its end, so it holds on a used throwaway, #1205), `GuestGapsLiveTest` (#1032–#1034: a READ Memory link reported whole and a medium as an `ITEM`, both received;
   a READ_WRITE folder's guest adding a folder and a file the owner lists; a bookmark listed on its level, found by search
   and opened on its own page), `GuestRemainderLiveTest` (#1035: a guest's file replaced on the link's queue and read anew;
   a Pot guest's Settings with its people alone; a kept link's page renamed and, trashed, left).
