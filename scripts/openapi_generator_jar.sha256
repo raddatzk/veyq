@@ -19,4 +19,4 @@
 # identity. The value below is therefore trust-on-first-write, the same trust Gradle's verification metadata has.
 #
 # Format: `<version> <sha256>`, one per line. A bump adds the new line; the old one may go once nothing names it.
-7.23.0 cb087e40001e31eb08ef6140dd5de10938dbeb89016a1fe0481eaa25cd569026
+7.27.0 db9c4b738727698748746144394cb7ee96512fe50166555baaeeca9311ee1dba
