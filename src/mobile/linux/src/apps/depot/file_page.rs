@@ -1,7 +1,7 @@
 //! A file's page (Depot's file viewer; ADR 0123's Consequences, the Linux app's Depot whole), GNOME's way: the file's content in place — a picture
 //! (`gtk::Picture`, decoded by GTK and held at the core's edge at most), a text (a read-only monospace `gtk::TextView`, the
 //! cut said in an `AdwBanner`), a PDF (its pages rendered by poppler as they come into view, [crate::core_ui::pdf_render]'s
-//! renderer, its text selected and copied through [crate::apps::depot::pdf_text]), an audio or video played by GTK's own player (`gtk::Video` over a `gtk::MediaFile` reading the core's reader
+//! renderer, its text selected and copied through [crate::core_ui::pdf_text]), an audio or video played by GTK's own player (`gtk::Video` over a `gtk::MediaFile` reading the core's reader
 //! through [crate::core_ui::reader_stream], the system's GStreamer decoding it; what it cannot decode is said as not shown here), or
 //! what the core says where it shows none (`AdwStatusPage`) — and its facts beneath, one row with the uploader.
 //! Everything is the core's `FileModel` (`File.Open`, `Watched.File`): what shows is decided by the bytes, and an image's
@@ -20,7 +20,7 @@ use gtk::{gdk, glib};
 use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::Facts, wire::FileShown, wire::FileViewKind, wire::NodeAt,
     wire::Update, wire::Watched};
 use crate::core_ui::home::glib_escape;
-use crate::apps::depot::pdf_text::{PageFrame, PdfText};
+use crate::core_ui::pdf_text::{PageFrame, PdfText};
 use crate::core_ui::picture::within_edge;
 use crate::core_ui::player::Playing;
 use crate::core_ui::saving::saving;
@@ -994,14 +994,14 @@ impl PdfPages {
                 let (w, h) = page.size();
                 let height = if w > 0.0 { (h * f64::from(PDF_WIDTH) / w).round() as i32 } else { PDF_WIDTH };
                 let label = words::file_pdf_page(i64::from(i) + 1, i64::from(total));
-                let frame = PageFrame::new(PDF_WIDTH, height.max(1), page, i as usize, &label);
+                let frame = PageFrame::new(PDF_WIDTH, height.max(1), page, i as usize, &label, "file");
                 frame.picture.update_property(&[gtk::accessible::Property::Label(&label)]);
                 this.column.append(&frame.overlay);
                 pictures.push(frame.picture.clone());
                 frames.push(frame);
             }
             // the text selected and copied over the pages (inbox #955)
-            *this.text.borrow_mut() = Some(PdfText::attach(&this.pdf, &this.column, frames));
+            *this.text.borrow_mut() = Some(PdfText::attach(&this.pdf, &this.column, frames, &words::tab_depot_file(), "file"));
             if let Some(cut) = cut {
                 let note = gtk::Label::builder().label(said::notice(&cut)).wrap(true).xalign(0.0).build();
                 note.add_css_class("dim-label");
