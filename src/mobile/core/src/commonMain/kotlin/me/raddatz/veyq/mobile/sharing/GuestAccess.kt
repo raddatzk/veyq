@@ -34,7 +34,22 @@ class GuestAccess internal constructor(
     val sharesCopies: Boolean = false,
     /** The player a guest's Memory plays its music with (the account's one, or the app's while signed out); null: none. */
     val music: me.raddatz.veyq.mobile.audio.PageMusic? = null,
+    /** The view's hold on its uploads (inbox #1016): every guest job is queued through it ([enqueue]). */
+    private val hold: GuestUploadHold = GuestUploadHold(queue),
 ) {
+    /**
+     * [jobs] queued on the guest view's [queue] as one batch labelled [label] ([UploadQueue.enqueue]'s [key], [onSettled],
+     * [onFinished]) — a guest's, which no sign-out or switch clears, and which holds the link's keys and client past the
+     * view until it is in (inbox #1016). Every application's guest upload queues through this, never on [queue] itself.
+     * False where there is no queue.
+     */
+    @PlatformApi
+    @HiddenFromObjC
+    fun enqueue(
+        jobs: List<UploadQueue.Job>, label: String, key: String? = null,
+        onSettled: ((UploadQueue.Item) -> Unit)? = null, onFinished: ((UploadQueue.Batch) -> Unit)? = null,
+    ): Boolean = hold.enqueue(jobs, label, key, onSettled, onFinished)
+
     val role: String get() = head.role
     val shareId: String get() = head.shareId
     val scopeId: String get() = head.scopeId

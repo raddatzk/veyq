@@ -100,13 +100,13 @@ class GuestLevel internal constructor(
      */
     fun upload(sources: List<me.raddatz.veyq.mobile.blob.UploadSource>): Int {
         val a = access ?: return 0
-        val queue = a.queue ?: return 0
+        if (a.queue == null) return 0
         val session = a.session.value ?: return 0
         val parent = tree.node(node.nodeId) ?: return 0
         if (!writes || sources.isEmpty()) return 0
         val jobs = AppKinds.guestLevelUploads(a, session, parent, sources)
         if (jobs.isEmpty()) return 0
-        queue.enqueue(jobs, node.name, null, { view?.reloadSoon() }, null)
+        a.enqueue(jobs, node.name, null, { view?.reloadSoon() }, null)
         return jobs.size
     }
 
@@ -131,7 +131,7 @@ class GuestLevel internal constructor(
     @HiddenFromObjC
     class Writer internal constructor(
         val access: GuestAccess, val session: GuestSession, val parent: me.raddatz.veyq.mobile.session.OpenNode,
-        val siblings: List<me.raddatz.veyq.mobile.session.OpenNode>, private val queue: UploadQueue, private val label: String,
+        val siblings: List<me.raddatz.veyq.mobile.session.OpenNode>, private val label: String,
         private val view: GuestView?,
     ) {
         /**
@@ -140,7 +140,7 @@ class GuestLevel internal constructor(
          */
         fun enqueue(jobs: List<UploadQueue.Job>, name: String = label, finished: (suspend (UploadQueue.Batch) -> Unit)? = null): Int {
             if (jobs.isEmpty()) return 0
-            queue.enqueue(jobs, name, null, { view?.reloadSoon() }, finished?.let { f -> { batch -> view?.launch { f(batch) } } })
+            access.enqueue(jobs, name, null, { view?.reloadSoon() }, finished?.let { f -> { batch -> view?.launch { f(batch) } } })
             return jobs.size
         }
 
@@ -177,11 +177,10 @@ class GuestLevel internal constructor(
     @HiddenFromObjC
     suspend fun writer(): Writer? {
         val a = access ?: return null
-        val queue = a.queue ?: return null
-        if (!writes) return null
+        if (a.queue == null || !writes) return null
         val session = a.naming.request() ?: return null
         val parent = tree.node(node.nodeId) ?: return null
-        return Writer(a, session, parent, tree.children(node.nodeId), queue, node.name, view)
+        return Writer(a, session, parent, tree.children(node.nodeId), node.name, view)
     }
 
     companion object {
@@ -224,10 +223,13 @@ class GuestView internal constructor(
     /** A monotonic clock in ms, the [live] poll's (its catch-up on a return to the foreground). */
     private val clock: () -> Long = monotonicMs(),
 ) {
-    /** Where a write's settle reads the link anew ([reloadSoon]); cancelled at [close]. */
+    /** Where a write's settle reads the link anew ([reloadSoon]); cancelled once the view is let go ([close]'s release). */
     private val scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
 
-    /** Trees a [reload] replaced: their keys are still held by pages opened before it (an upload under way), zeroed at [close]. */
+    /** This view's uploads on the app's queue, which hold its keys past [close] while one waits or runs (inbox #1016). */
+    private val hold = GuestUploadHold(queue)
+
+    /** Trees a [reload] replaced: their keys are still held by pages opened before it (an upload under way), zeroed at the release. */
     private val retired = mutableListOf<GuestTree>()
 
     private val _page = MutableStateFlow<GuestPage?>(null)
@@ -263,7 +265,7 @@ class GuestView internal constructor(
             return
         }
         val tree = if (head.role == GuestAccess.WRITE_ONLY) null else runCatching { GuestTree.open(gates.guestClient.suite, head) }.getOrNull()
-        val a = GuestAccess(gates, head, tree, queue, deriver, now, sharesCopies, music)
+        val a = GuestAccess(gates, head, tree, queue, deriver, now, sharesCopies, music, hold)
         access = a
         _stack.value = emptyList()
         show(a.root)
@@ -293,9 +295,10 @@ class GuestView internal constructor(
     private suspend fun rebuild(head: ShareHead, inPlace: Boolean) {
         val old = access ?: return
         val tree = if (head.role == GuestAccess.WRITE_ONLY) null else runCatching { GuestTree.open(gates.guestClient.suite, head) }.getOrNull() ?: return
-        val a = GuestAccess(gates, head, tree, queue, deriver, now, sharesCopies, music)
+        val a = GuestAccess(gates, head, tree, queue, deriver, now, sharesCopies, music, hold)
         access = a
         old.tree?.let { retired += it }
+        if (closed.value) return // left, its uploads still going: no page to show again
         if (tree == null || old.tree == null) {
             _stack.value = emptyList()
             show(a.root)
@@ -385,13 +388,17 @@ class GuestView internal constructor(
         fun stop() = job.cancel()
     }
 
-    /** [block] on this view's own scope (cancelled at [close]). */
+    /**
+     * [block] on this view's own scope (an upload's settle hook): counted by the view's hold, so a view left meanwhile
+     * keeps its keys and client until it ended.
+     */
     internal fun launch(block: suspend () -> Unit) {
-        scope.launch { runCatching { block() } }
+        scope.launch { hold.busy { runCatching { block() } } }
     }
 
-    /** [reload] off the caller's thread (an upload's settle). */
+    /** [reload] off the caller's thread (an upload's settle); none once the view was left. */
     internal fun reloadSoon() {
+        if (closed.value) return
         scope.launch { runCatching { reload() } }
     }
 
@@ -403,6 +410,7 @@ class GuestView internal constructor(
     }
 
     private suspend fun show(node: NodeAt) {
+        if (closed.value) return
         val a = access ?: return
         _stack.value = _stack.value + node
         _page.value = pageOf(a, node)
@@ -426,15 +434,33 @@ class GuestView internal constructor(
         return true
     }
 
-    /** The link let go: its key and the tree's keys zeroed, its client closed. */
+    /**
+     * The link let go: its pages and its live poll end now; its key and the tree's keys are zeroed and its client closed
+     * at once where none of its uploads waits or runs, else once the last of them is in, failed or cancelled — held in
+     * memory only, exactly that long, so a guest's upload goes on with the link left as a member's does (inbox #1016, ADR
+     * 0145 § A guest's uploads). A process ended meanwhile takes them with it: the upload fails as a cut-off one does.
+     */
     fun close() {
+        if (closed.value) return
         closed.value = true
+        liveJob?.cancel()
+        _page.value = null
+        _stack.value = emptyList()
+        hold.releaseWhenIdle(::release)
+    }
+
+    /** Whether the link's keys and client are still held after [close] for its uploads (none: let go). */
+    internal val holding: Boolean get() = closed.value && !released
+
+    private var released = false
+
+    private fun release() {
+        released = true
         scope.cancel()
         access?.tree?.close()
         retired.forEach { it.close() }
         retired.clear()
         access = null
-        _page.value = null
         gates.close()
     }
 
