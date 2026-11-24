@@ -14,8 +14,8 @@ import org.khronos.webgl.Uint8Array
 
 /**
  * JavaScript's `bigint`, as a type only: named so, the `.d.ts` writes the primitive. Kotlin's own (`JsBigInt`) is a `Long`,
- * which crosses only under the experimental `-Xes-long-as-bigint` (ADR 0155 decision 3), so money crosses as its decimal
- * text turned into a `BigInt` (`ExpensesWeb.kt`'s `big`), never through a double.
+ * which crosses only under the experimental `-Xes-long-as-bigint` (ADR 0155 decision 3); money crosses as the core's own
+ * `Big`, a `BigInt` on JavaScript (`expenses/Big.js.kt`), never through a double.
  */
 @Suppress("ClassName")
 external class bigint

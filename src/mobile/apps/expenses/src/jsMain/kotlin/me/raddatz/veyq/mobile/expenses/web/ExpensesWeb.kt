@@ -396,13 +396,10 @@ private fun splitOf(s: SplitShape): Split = when (s.mode) {
 
 // ---- JavaScript values ----
 
-/** `Big` crosses as its decimal text to `BigInt`, so no digit is lost past 2^53. */
-private fun big(b: Big): bigint {
-    val text = b.toString()
-    return js("BigInt(text)").unsafeCast<bigint>()
-}
+/** `Big` is a `BigInt` on JavaScript (`Big.js.kt`): it crosses as itself, no digit lost past 2^53. */
+private fun big(b: Big): bigint = b.bigint.unsafeCast<bigint>()
 
-private fun bigOf(b: bigint): Big = Big.parse(b.asDynamic().toString().unsafeCast<String>())
+private fun bigOf(b: bigint): Big = Big.ofBigInt(b)
 
 private fun longOf(b: bigint): Long = b.asDynamic().toString().unsafeCast<String>().toLong()
 
