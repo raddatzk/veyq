@@ -13,7 +13,6 @@ import { planFolderUpload, type FolderPlan } from './uploadFolder'
 import { planRaster } from './svgRaster'
 import type { DirectoryInput } from '../../core/export/importSource'
 
-/* eslint-disable @typescript-eslint/no-explicit-any -- the vectors are JSON, read case by case */
 const vectors = JSON.parse(readFileSync(resolve(__dirname, '../../../../../contracts/depot/v1-vectors.json'), 'utf8')) as any
 
 /** A source of `chunkCount` frames and `total` plaintext bytes whose frame 0 is `head`, every later one `head` again;

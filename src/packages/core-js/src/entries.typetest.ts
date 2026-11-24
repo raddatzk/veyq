@@ -1,4 +1,4 @@
-// One entry per façade (ADR 0155 decision 5): the platform's search, tree, share links, node plans, file facts, media headers, export archive and music order share one module file, Expenses' is its module's own, and a name of one
+// One entry per façade (ADR 0155 decision 5): the platform's search, tree, share links, node plans, file facts, media headers, export archive and music order share one module file, Expenses' and Depot's each its module's own, and a name of one
 // façade does not resolve through the other's entry, so the web's direction guard, which reads an import's entry, judges
 // every name by its owner. Checked by `pnpm run typecheck`: each `@ts-expect-error` below is itself an error the day the
 // name resolves. The controls import through the owner.
@@ -38,7 +38,14 @@ import { formatMoney as notTheTrees5 } from '@veyq/core-js/tree'
 import { search as notExpenses } from '@veyq/core-js/expenses'
 // @ts-expect-error -- the export archive's writer is no name of Expenses' entry
 import { zipWriter as notExpenses2 } from '@veyq/core-js/expenses'
+// @ts-expect-error -- Depot's view decision is no name of the file facts' entry
+import { depotFileView as notTheFiles3 } from '@veyq/core-js/files'
+// @ts-expect-error -- Depot's folder plan is no name of Expenses' entry
+import { depotFolderPlan as notExpenses3 } from '@veyq/core-js/expenses'
+// @ts-expect-error -- the file facts' sniff is no name of Depot's entry
+import { sniffImage as notDepots } from '@veyq/core-js/depot'
 import { buildLedger } from '@veyq/core-js/expenses'
+import { depotFileView } from '@veyq/core-js/depot'
 import { playOrder } from '@veyq/core-js/audio'
 import { zipWriter } from '@veyq/core-js/export'
 import { sniffImage } from '@veyq/core-js/files'
@@ -48,4 +55,4 @@ import { headerPlan } from '@veyq/core-js/navigation'
 import { fold } from '@veyq/core-js/search'
 import { parseShareLink } from '@veyq/core-js/sharing'
 
-export const crossEntryNames = [notTheSearchs, notTheTrees, notTheTrees2, notTheTrees3, notTheSharings, notTheNavigations, orderLevel, fold, parseShareLink, headerPlan, notTheTrees4, notTheFiles, sniffImage, notTheFiles2, notTheMedias, imageSize, notTheMedias2, notTheExports, zipWriter, notTheExports2, notTheAudios, playOrder, notTheSearchs2, notTheTrees5, notExpenses, notExpenses2, buildLedger]
+export const crossEntryNames = [notTheSearchs, notTheTrees, notTheTrees2, notTheTrees3, notTheSharings, notTheNavigations, orderLevel, fold, parseShareLink, headerPlan, notTheTrees4, notTheFiles, sniffImage, notTheFiles2, notTheMedias, imageSize, notTheMedias2, notTheExports, zipWriter, notTheExports2, notTheAudios, playOrder, notTheSearchs2, notTheTrees5, notExpenses, notExpenses2, buildLedger, notTheFiles3, notExpenses3, notDepots, depotFileView]
