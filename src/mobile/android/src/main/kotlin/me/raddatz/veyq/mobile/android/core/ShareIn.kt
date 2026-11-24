@@ -15,8 +15,10 @@ import me.raddatz.veyq.mobile.navigation.ShareInbox
  * dropped onto it (decision 9), as sources read a frame at a time where the system put them (`ContentSource`):
  * the share's read grant is the receiving activity's and outlives its leaving for the upload's worker (measured, ADR 0138's
  * Consequences). Nothing is read whole here; the kind chosen judges the files (core's `ShareAnswer`). A share that carries
- * no file (a text, a link: `EXTRA_TEXT` only) waits with none, so the pick mode says nothing could be taken (decision 1,
- * until a shared link has a meaning, inbox #1015).
+ * no file and no text waits with none, so the pick mode says nothing could be taken (decision 1).
+ *
+ * A share of a text alone (`text/plain` with `EXTRA_TEXT`, no stream) is a received link's way in, not a file's ([textOf],
+ * inbox #1015): the app opens the one link in it as *Open a link* does (ADR 0150 § S).
  *
  * A HEIC photo is taken as a JPEG (decision 7), so a receipt and a photo read in every browser: the one file the app
  * writes, its copy under `no_backup/share-in/` ([dir]), removed once nothing reads it again ([release]) and swept at
@@ -30,9 +32,24 @@ object ShareIn {
             Intent.ACTION_SEND_MULTIPLE -> IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java).orEmpty()
             else -> return null
         }
-        // a text or a link shared, no stream: nothing to take, said so
+        // no stream (a text shared goes to [textOf] first): nothing to take, said so
         if (uris.isEmpty()) return ShareInbox.Incoming(emptyList(), 0)
         return of(context, uris)
+    }
+
+    /**
+     * The text of a share that carries a text and no file (`ACTION_SEND`, `EXTRA_TEXT`, no `EXTRA_STREAM`): a received
+     * link's way in (inbox #1015, ADR 0150 § S); null for any other intent, which [from] reads. The text holds the key, so
+     * it is taken off the intent here — nothing later finds it there — and a start from the recents list, which hands the
+     * task's first intent again, opens nothing. A file shared with a caption is a file's share: its text is not read.
+     */
+    fun textOf(intent: Intent?): String? {
+        if (intent == null || intent.action != Intent.ACTION_SEND) return null
+        if (IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java) != null) return null
+        val text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString() ?: return null
+        intent.removeExtra(Intent.EXTRA_TEXT)
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return null
+        return text
     }
 
     /**

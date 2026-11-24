@@ -7,8 +7,8 @@ import VeyqCore
 /// in order, each into a directory of its own under `AppModel.pickedDir` (`loadFileRepresentation`: the system's file is
 /// valid only inside its callback), and handed on as a source read a frame at a time: nothing is held whole. An image as
 /// JPEG where the sender offers one, a HEIC re-encoded (decision 7), any other file as it is (decision 1: a folder takes
-/// any file). An attachment that carries no file — a bare text, a web page's link — is neither taken nor counted, so a
-/// share of only that says nothing could be taken (until #1015). The kind chosen judges them (core's `ShareAnswer`); each
+/// any file). An attachment that carries no file — a bare text, a web page's link — is neither taken nor counted; a share
+/// of only such attachments is a received link's way in (`sharedText`, inbox #1015, ADR 0150 § S). The kind chosen judges them (core's `ShareAnswer`); each
 /// copy is removed once nothing reads it again (`AppModel.removePicked`).
 @MainActor
 enum IncomingFiles {
@@ -27,6 +27,30 @@ enum IncomingFiles {
             files.append(source)
         }
         return AppModel.Incoming(files: files, refused: Int32(refused))
+    }
+
+    /// The text of a share that carries no file (inbox #1015, ADR 0150 § S): each attachment's link (`public.url`, a web
+    /// page's from Safari) or text (`public.plain-text`, a chat's message), one per line, for the core to find the one share
+    /// link in (`OpenLink.received`); nil where an attachment carries a file — that share is a file's — or none carries
+    /// either. The text holds the key: the caller hands it on and keeps nothing of it.
+    static func sharedText(_ providers: [NSItemProvider]) async -> String? {
+        if providers.isEmpty || providers.contains(where: carriesFile) { return nil }
+        var lines: [String] = []
+        for provider in providers {
+            if provider.hasItemConformingToTypeIdentifier(UTType.url.identifier), let url = await object(provider, URL.self), !url.isFileURL {
+                lines.append(url.absoluteString)
+            } else if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier), let text = await object(provider, String.self) {
+                lines.append(text)
+            }
+        }
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
+    }
+
+    private static func object<T: _ObjectiveCBridgeable & Sendable>(_ provider: NSItemProvider, _ type: T.Type) async -> T?
+    where T._ObjectiveCType: NSItemProviderReading {
+        await withCheckedContinuation { c in
+            _ = provider.loadObject(ofClass: type) { value, _ in c.resume(returning: value) }
+        }
     }
 
     /// A drop's items as core's one drop takes them (`ShellModel.drop`, ADR 0154 decision 1): each told a file from a folder

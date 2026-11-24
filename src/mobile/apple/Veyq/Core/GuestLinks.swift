@@ -17,6 +17,9 @@ final class GuestLinks {
     private(set) var asking: AskedLink?
     private(set) var screen: GuestHeld?
     @ObservationIgnored private var made: GuestOpener?
+    /// The share extension's end (inbox #1015): called once a received link's field was cancelled or its guest view left,
+    /// so the extension closes rather than showing what lies beneath (its sign-in or its pick mode); nil in the app.
+    @ObservationIgnored var onDone: (() -> Void)?
 
     /// The opener every guest view of this run is made by; a guest's Memory plays its music with the app's player (#1034).
     func opener(_ model: AppModel) -> GuestOpener {
@@ -41,15 +44,29 @@ final class GuestLinks {
         asking = AskedLink(opener(model).field())
     }
 
+    /// A text another app shared (inbox #1015, ADR 0150 § S): *Open a link*'s field, its link checked as a pasted one
+    /// (core's `OpenLink.received`) and opened at once where it opens; where not, the field stays with its reason (and, for
+    /// a moderator's review, *Open in the browser* in the app) — what a paste of the same text would have shown.
+    func receive(_ text: String, _ model: AppModel) {
+        ask(model)
+        guard let field = asking else { return }
+        field.link.field.received(shared: text)
+        field.state.refresh()
+        if field.state.value.canOpen { openAsked(model) }
+    }
+
+    /// The field closed by the person (*Cancel*, a swipe down).
     func cancelAsk() {
         asking?.stop()
         asking = nil
+        if screen == nil { onDone?() }
     }
 
     /// The field's link opened as its guest (the field closes; its text, which holds the key, is not kept).
     func openAsked(_ model: AppModel) {
         guard let field = asking, let s = field.link.open(tenant: model.guestTenant) else { return }
-        cancelAsk()
+        field.stop()
+        asking = nil
         show(s, model)
     }
 
@@ -64,6 +81,7 @@ final class GuestLinks {
     func closed(_ held: GuestHeld) {
         held.close()
         if screen === held { screen = nil }
+        if screen == nil, asking == nil { onDone?() }
     }
 }
 
@@ -198,7 +216,8 @@ struct OpenLinkSheet: View {
                 } footer: {
                     if let problem = state.problem { Text(say(problem)).foregroundStyle(Role.danger) }
                 }
-                if let link = state.browser, let url = URL(string: link) {
+                // an extension opens no URL (inbox #1015): its words say the link is the browser's
+                if !model.inExtension, let link = state.browser, let url = URL(string: link) {
                     Section {
                         Button { openURL(url) } label: { Label(say(.linkOpenInBrowser), systemImage: "safari") }
                     }
