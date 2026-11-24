@@ -9,11 +9,10 @@ vi.mock('../../api/client', () => ({
 
 import {
   MAX_PARTICIPANTS,
-  mergeParticipants,
   normalizeParticipants,
-  setMemoryParticipants,
   unsealMemoryParticipants,
 } from './memoryParticipants'
+import { mergeParticipants, setMemoryParticipants } from './participantsWrite'
 import { unsealMemoryDate, type MemoryDate } from './memoryDate'
 import { sealNodeMeta, unsealNodeMeta } from '../../core/node/nodeMeta'
 import { contentApi } from '../../api/client'

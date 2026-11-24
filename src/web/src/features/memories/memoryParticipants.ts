@@ -7,11 +7,9 @@
 // list is a set two members may extend at once, and `editField` answers "the same field moved" with a conflict the editor
 // must re-open on — which would drop a peer's addition or make the editor redo its pick. Here a `409 stale_revision`
 // re-reads the blob and MERGES: the union of what is stored and what the editor wants, except that an id the editor
-// REMOVED stays removed ({@link mergeParticipants}).
-import { editParticipantsOf, unsealNodeMeta } from '../../core/node/nodeMeta'
-import { writeNodeMeta, type WriteNodeMetaOptions } from '../../core/node/nodeMetaWrite'
-import type { NodeMetaState } from '../../core/node/nodeMeta'
-import type { SealedMetaState } from '../../core/node/sealedMetaWrite'
+// REMOVED stays removed. The write and its merge are `participantsWrite.ts` (the merge the Kotlin core's): this file is read
+// eagerly (the level's rows, the search's facets), the write only by a Memory's page, so Memories' module loads with that page.
+import { unsealNodeMeta } from '../../core/node/nodeMeta'
 
 /** At most this many participants: `wrappedMeta` is limited to 8192 base64 characters (~6 KB sealed) and an id is ~40
  *  bytes of JSON beside the date, place and cover (ADR 0083 decision 3a). */
@@ -34,49 +32,9 @@ export function normalizeParticipants(raw: unknown): string[] {
   return out
 }
 
-/**
- * The merge on a conflict: what the server holds now (`stored`) united with what the editor wants (`wanted`), minus the
- * ids the editor removed (`removed` = opened-with minus wanted). A peer's addition survives; the editor's own removal wins
- * for the id it removed; the order is stored first, then the editor's new ones. Capped at {@link MAX_PARTICIPANTS}.
- */
-export function mergeParticipants(stored: readonly string[], wanted: readonly string[], openedWith: readonly string[]): string[] {
-  const wantedSet = new Set(wanted)
-  const removed = new Set(openedWith.filter((id) => !wantedSet.has(id)))
-  const out: string[] = []
-  const seen = new Set<string>()
-  for (const id of [...stored, ...wanted]) {
-    if (removed.has(id) || seen.has(id)) continue
-    seen.add(id)
-    out.push(id)
-  }
-  return out.slice(0, MAX_PARTICIPANTS)
-}
-
 /** A Memory's participants from its `wrappedMeta` under `nodeKey` (`K_node`). Best-effort: `[]` when absent or unreadable. */
 export function unsealMemoryParticipants(
   scopeId: string, nodeKey: Uint8Array, node: { id: string; wrappedMeta: string | null },
 ): string[] {
   return normalizeParticipants(unsealNodeMeta(nodeKey, { scopeId, nodeId: node.id }, node.wrappedMeta).participants)
-}
-
-/**
- * The participants EDITOR's save: set `wanted` as the Memory's list, read-modify-write, version-checked, MERGING on a
- * conflict (see the header). Empty drops the sub-object. Unknown fields inside the sub-object and every sibling (date,
- * place, cover) are kept. Returns the state the server confirmed (or the one it handed back when nothing needed writing).
- *
- * `openedWith` is the list the picker SHOWED when it opened, never one read from `current`: the page's poll may have
- * brought a peer's addition into the node meanwhile, and that id is no removal of the editor's (inbox #952). `current` is
- * the node as the page holds it at the save — the revision the write states.
- */
-export async function setMemoryParticipants(
-  scopeId: string,
-  nodeId: string,
-  nodeKey: Uint8Array,
-  wanted: readonly string[],
-  openedWith: readonly string[],
-  current: NodeMetaState,
-  opts: WriteNodeMetaOptions = {},
-): Promise<SealedMetaState> {
-  const { state } = await writeNodeMeta(scopeId, nodeId, nodeKey, current, editParticipantsOf((stored) => mergeParticipants(stored, wanted, openedWith)), undefined, opts)
-  return state
 }
