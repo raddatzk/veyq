@@ -35,6 +35,11 @@ class ShareHead internal constructor(
     val role: String,
     /** The root's kind (`PublicShare.rootKind`); null when the server names none (a root in the trash). */
     val rootKind: String?,
+    /**
+     * The `ETag` the resolve that served this head carried (ADR 0081: a digest of what the link serves, never the scope's
+     * revision), the live poll's `If-None-Match` ([ShareResolve.poll]); null where the server named none.
+     */
+    internal val etag: String? = null,
 ) {
     /** The epoch the root's key was minted at, which a guest's write under it states (0 where unserved). */
     val rootEpoch: Int get() = share.rootEpoch ?: 0
@@ -62,12 +67,13 @@ object ShareResolve {
      * the password gate's [pwToken]. Throws [ShareRefused].
      */
     suspend fun resolve(client: GuestClient, shareId: String, kShare: ByteArray, pwToken: String?): ShareHead {
+        var etag: String? = null
         val share = try {
             val r = SharingApi(client.origin, client.http).resolveShare(shareId, pwToken)
             when {
                 r.status == 403 -> throw ShareRefused.PasswordIncorrect()
                 !r.success -> throw ShareRefused.Unavailable(unreachable = false)
-                else -> r.body()
+                else -> r.body().also { etag = r.response.headers[io.ktor.http.HttpHeaders.ETag] }
             }
         } catch (e: ShareRefused) {
             throw e
@@ -76,10 +82,32 @@ object ShareResolve {
         } catch (e: Exception) {
             throw ShareRefused.Unavailable(unreachable = true)
         }
-        return headOf(client, shareId, kShare, share)
+        return headOf(client, shareId, kShare, share, etag)
     }
 
-    private fun headOf(client: GuestClient, shareId: String, kShare: ByteArray, share: PublicShare): ShareHead {
+    /** A poll's resolve the server refused for a reason that says nothing about the link (a `429`, a `5xx`, …): back off. */
+    internal class PollFailed(val status: Int) : Exception("share_poll $status")
+
+    /**
+     * The live poll's resolve (the web's `pollPublicShare`, ADR 0081): the same head, asked CONDITIONALLY on [ifNoneMatch]
+     * (the tag of the last response) — `304`, null here: nothing to open, nothing to compare. Unlike [resolve] it tells a
+     * refusal from a hiccup: a `404` (revoked, expired, its space going — one non-enumerable answer) is
+     * [ShareRefused.Unavailable], a `403` [ShareRefused.PasswordIncorrect], the locked shell [ShareRefused.PasswordRequired];
+     * a network failure is thrown as it is and a `429` or a `5xx` as [PollFailed], because a poll that cannot reach the
+     * server knows nothing about the link and must not take the page down.
+     */
+    internal suspend fun poll(client: GuestClient, shareId: String, kShare: ByteArray, pwToken: String?, ifNoneMatch: String?): ShareHead? {
+        val r = SharingApi(client.origin, client.http).resolveShare(shareId, pwToken, ifNoneMatch)
+        when {
+            r.status == 304 && ifNoneMatch != null -> return null
+            r.status == 403 -> throw ShareRefused.PasswordIncorrect()
+            r.status == 404 -> throw ShareRefused.Unavailable(unreachable = false)
+            !r.success -> throw PollFailed(r.status)
+        }
+        return headOf(client, shareId, kShare, r.body(), r.response.headers[io.ktor.http.HttpHeaders.ETag])
+    }
+
+    private fun headOf(client: GuestClient, shareId: String, kShare: ByteArray, share: PublicShare, etag: String?): ShareHead {
         // a locked share serves only the challenge; locked is "no sealed name", never "no wrap" (WRITE_ONLY has none)
         if (share.passwordRequired && share.sealedName == null) throw ShareRefused.PasswordRequired(share.pwSalt ?: "")
         val scopeId = share.scopeId ?: throw ShareRefused.Unavailable(false)
@@ -92,7 +120,7 @@ object ShareResolve {
         val note = share.sealedNote?.let { openNote(client, kShare, it) }
         val acceptance = note?.takeIf { it.mustAccept && hasText(it.texts) }?.digest
         return ShareHead(
-            client.origin, shareId, share, kShare.copyOf(), scopeId, name, note?.texts ?: emptyMap(), acceptance, share.role.value, share.rootKind,
+            client.origin, shareId, share, kShare.copyOf(), scopeId, name, note?.texts ?: emptyMap(), acceptance, share.role.value, share.rootKind, etag,
         )
     }
 

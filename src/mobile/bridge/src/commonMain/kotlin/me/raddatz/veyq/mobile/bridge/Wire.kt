@@ -2524,6 +2524,14 @@ internal sealed class Watched {
     /** A received link opened by [Call.ReceivedOpen]. */
     @Serializable @SerialName("Received") data class Received(val received: Long) : Watched()
 
+    /**
+     * Received link [received]'s live poll (`GuestView.live`, the web's `useLevelLive` over `shareGates.poll`, inbox #1017),
+     * for as long as this watch stands: a host watches it while the link's screen (or a kept link's page showing it in place)
+     * stands. It delivers no update of its own — a moved link's page, or the gate a link gone or re-locked flips to, arrives
+     * on [Received]'s — and ends with the watch or the link.
+     */
+    @Serializable @SerialName("ReceivedLive") data class ReceivedLive(val received: Long) : Watched()
+
     /** A kept link's page opened by [Call.BookmarkOpen]. */
     @Serializable @SerialName("Bookmark") data class Bookmark(val bookmark: Long) : Watched()
 }
