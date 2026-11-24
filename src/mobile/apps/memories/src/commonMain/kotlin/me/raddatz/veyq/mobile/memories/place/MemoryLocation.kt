@@ -121,14 +121,16 @@ data class MemoryLocation(
         /** The place a node's opened meta carries, or null. */
         fun of(meta: JsonObject): MemoryLocation? = normalize(meta[FIELD])
 
+        /** [d] degrees in radians, as the web's `haversineKm` wrote it — `(d * π) / 180`, which rounds apart from `d * (π / 180)`. */
+        private fun rad(d: Double): Double = (d * PI) / 180
+
         /** Great-circle distance (haversine), in km: only the medoid's argmin reads it. */
         private fun haversineKm(a: LatLng, b: LatLng): Double {
-            val r = PI / 180
-            val dLat = (b.lat - a.lat) * r
-            val dLng = (b.lng - a.lng) * r
+            val dLat = rad(b.lat - a.lat)
+            val dLng = rad(b.lng - a.lng)
             val s1 = sin(dLat / 2)
             val s2 = sin(dLng / 2)
-            val s = s1 * s1 + cos(a.lat * r) * cos(b.lat * r) * s2 * s2
+            val s = s1 * s1 + cos(rad(a.lat)) * cos(rad(b.lat)) * s2 * s2
             return 2 * 6371 * asin(min(1.0, sqrt(s)))
         }
 

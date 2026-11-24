@@ -160,9 +160,15 @@ object MediaGridLayout {
      * A medium [width] × [height]'s aspect as the grid shows it (`galleryDisplayAspectRatio`): bounded to 3:4 … 4:3, so one
      * panorama cannot take a row; [FALLBACK_ASPECT] where a dimension is unknown.
      */
-    fun displayAspect(width: Int?, height: Int?): Double {
-        if (width == null || height == null || width <= 0 || height <= 0) return FALLBACK_ASPECT
-        val aspect = width.toDouble() / height
+    fun displayAspect(width: Int?, height: Int?): Double = displayAspectOf(width?.toDouble(), height?.toDouble())
+
+    /**
+     * [displayAspect] over any number, as the web's sealed dimensions arrive (`@veyq/core-js/memories`): a missing, zero,
+     * negative or not-a-number side, or an aspect that is not finite, is [FALLBACK_ASPECT].
+     */
+    internal fun displayAspectOf(width: Double?, height: Double?): Double {
+        if (width == null || height == null || !(width > 0) || !(height > 0)) return FALLBACK_ASPECT
+        val aspect = width / height
         if (!aspect.isFinite() || aspect <= 0) return FALLBACK_ASPECT
         return min(MAX_ASPECT, max(MIN_ASPECT, aspect))
     }

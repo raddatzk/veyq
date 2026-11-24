@@ -81,12 +81,14 @@ object Wav {
         return Decoded(data, fmt.sampleRate)
     }
 
+    /** How many bytes of [fmt]'s data the first and the last [limitMs] each span: whole blocks, at most all of it. */
+    internal fun endBytes(fmt: Format, limitMs: Long): Long = minOf(fmt.dataBytes, (fmt.sampleRate.toLong() * limitMs + 999) / 1000 * fmt.blockAlign)
+
     /** The samples of the first and the last [limitMs] of a WAV file's data (both the whole data where it is shorter). */
     suspend fun readEnds(file: ByteSource, limitMs: Long): Pair<Decoded, Decoded> {
         suspend fun headOf(size: Int) = parseHeader(file.read(0, minOf(file.size, size.toLong()).toInt()), file.size)
         val fmt = headOf(64 * 1024) ?: headOf(HEADER_MAX) ?: throw Unreadable("wav_no_data")
-        val wantFrames = (fmt.sampleRate.toLong() * limitMs + 999) / 1000
-        val want = minOf(fmt.dataBytes, wantFrames * fmt.blockAlign)
+        val want = endBytes(fmt, limitMs)
         val end = fmt.dataOffset + fmt.dataBytes
         suspend fun bytesAt(from: Long) = file.read(from, want.toInt())
         return samples(bytesAt(fmt.dataOffset), fmt) to samples(bytesAt(end - want), fmt)
