@@ -331,6 +331,47 @@ den du bekommen hast*, *Open in the browser* / *Im Browser öffnen*, *Keep* / *B
   person's *Keep* reached through the banner (read in the code: *Open a link* stands over the open tenant, measured by
   the Android and Windows phases' own passes, the guest screen after it not); the foreground on Windows when the system
   grants none to the starter.
+- **A guest's pages follow the link live** (#1017, built 2026-11-24; the web's `useLevelLive` over `shareGates.poll`,
+  ADR 0081). `GuestView.live` (`startLive` for a platform that cannot run a suspend loop) runs core's `LivePoll` at the
+  web's `LIVE_POLL` cadence, `LivePoll.LEVEL` (5 s ± 20 %, doubling to 2 min on errors, a catch-up at most every 2 s),
+  while a platform shows the link — any page behind its gates, a level or a kind's page, as the web's share page polls
+  for every page of the tree (#503). Each tick is `ShareGates.poll`: the link re-resolved conditionally on the open head's
+  tag (`ShareResolve.poll`, `If-None-Match` from the `ETag` every resolve now keeps on its `ShareHead`) — a `304` reads
+  and opens nothing; a moved link rebuilds the pages over the new tree (`GuestView.rebuild`: the back stack's nodes that
+  are still served kept, a node gone giving way to the deepest one left); a `404` flips the gates to *unavailable*, a
+  `403` to the password form (wrong), the locked shell to the form, a root no door renders to *unavailable* — the
+  platform draws that state as after a load, and once a new password is entered `GuestView.enter` rebuilds over the head
+  open now; a network failure, a `429` or a `5xx` is thrown to the poll, which backs off, and never reaches the state.
+  A guest's gallery follows its own media as a member's does: `GalleryModel.live` asks the guest's door `moved`, a
+  conditional first page of `listShareMedia` on the last listing's tag (the web's `readShareMedia`). Each platform only
+  starts and stops it: Android `GuestScreens.kt`'s `GuestContent` (`repeatOnLifecycle(STARTED)`), Apple
+  `GuestLinks.swift`'s `GuestContent` (`.task` while the scene is active, `GuestHeld.live`), Linux `received.rs` and
+  Windows `ReceivedView.cs` (the bridge's `Watched.ReceivedLive` while the screen stands, as a drop box's poll). Held by
+  `GuestLiveTest` (a `304` that leaves the page, a moved link opening the folder on screen anew and a folder gone falling
+  back to the root, a revoked link and a changed password flipping the gates and the new password's page over the new
+  head, a `503` backing off to three asks in 59 s and the poll ending with the view), `GuestDoorsTest`'s gallery tag and
+  `ReceivedBridgeTest`'s live watch; each core case bitten (no `If-None-Match`, no rebuild on a move, a `404` taken as a
+  hiccup, a failure counted as a read: each turned its test red). A guest's EXIF stays unread, as on the web, which
+  serves a guest none. **Decision log** (#1017):
+  1. *The terms and the note are not re-gated by a poll*, as the web's are not (`loadTerms` and `noteGateOf` run at
+     `load` only): a moved link carries its new name and banner into `State.Ready`; new terms or a new must-accept note
+     ask at the next open.
+  2. *A kind's own page stays where it stands*: when the link moved but the node on screen is still served under the same
+     role, a gallery, a file or a Pot keeps its model (its own poll follows its content; the platform's scroll, lightbox
+     and selection stay) and only the back stack's names follow; a level is opened anew (its rows are the tree's).
+  3. *Paused* (a tick asks nothing) while the core asks the guest's name (`GuestNaming.asking`) or a level's Select mode
+     is on (its selection lives in the level a rebuild replaces) — the core-held halves of the web's "a dialog is open";
+     a sheet a platform holds (a move, a report, *New folder*) keeps working over the access it was opened with, and a
+     write's own `reload` and a tick never overlap (one lock; a tick finding it held is a skip).
+  4. *The tag kept from every resolve*, not only the poll's (the web starts each `load` over with none): a first tick
+     after a load or a write's re-read is already a `304`.
+  5. *A head replaced is retired, not zeroed*: `ShareGates.load` after a flip keeps the head before (zeroed at `close`),
+     as `reresolve` already did, since the page the flip left open still holds it until the view rebuilds.
+  6. *A WRITE_ONLY link is not polled*, as the web's drop page is not (it is served no tree to follow).
+  7. *The desktop hosts poll while the screen stands*, as their drop box's and gallery's polls do; the phones stop it in
+     the background (Android `STARTED`, Apple `scenePhase == .active`).
+  **Not clicked on any app**: a guest's level picking up another guest's folder, a revoked link flipping, a changed
+  password asking (inbox #1017 holds the passes).
 
 ## Alternatives considered
 

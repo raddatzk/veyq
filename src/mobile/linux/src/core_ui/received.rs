@@ -274,6 +274,8 @@ struct Inner {
     held: RefCell<Option<Held>>,
     password: RefCell<Option<adw::PasswordEntryRow>>,
     watch: RefCell<Option<Watch>>,
+    /// The link's live poll (`Watched.ReceivedLive`, inbox #1017) while the screen stands: dropped with it.
+    live: RefCell<Option<Watch>>,
     /// The pasted text, for *Open in the browser* where the core refuses the link's instance; none for a kept link.
     browser: Option<String>,
     leave_asked: Cell<bool>,
@@ -372,6 +374,7 @@ impl ReceivedView {
             held: RefCell::new(None),
             password: RefCell::new(None),
             watch: RefCell::new(None),
+            live: RefCell::new(None),
             browser,
             leave_asked: Cell::new(false),
             report_opened: Cell::new(false),
@@ -384,6 +387,9 @@ impl ReceivedView {
             *inner.watch.borrow_mut() = Some(watch);
             glib::spawn_future_local(follow(Rc::downgrade(&inner), updates));
         }
+        // live while the screen stands: what others change in the link, or the link gone, arrives on the watch above (the
+        // core's poll; this watch delivers nothing of its own)
+        *inner.live.borrow_mut() = bridge::watch(&Watched::ReceivedLive { received }).map(|(w, _)| w);
         Self { received, inner }
     }
 
@@ -394,6 +400,7 @@ impl ReceivedView {
 
 impl Drop for ReceivedView {
     fn drop(&mut self) {
+        self.inner.live.borrow_mut().take();
         self.inner.watch.borrow_mut().take();
         self.inner.held.borrow_mut().take();
         // on its own the screen's going lets go of the link (the window closed); in place the kept link's page does
@@ -1070,6 +1077,7 @@ impl Inner {
         if self.left.replace(true) {
             return;
         }
+        self.live.borrow_mut().take();
         self.held.borrow_mut().take();
         if let Some(f) = self.on_left.borrow_mut().take() {
             f();

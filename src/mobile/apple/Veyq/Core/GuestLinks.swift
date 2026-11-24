@@ -159,6 +159,14 @@ final class GuestHeld: Identifiable {
         guest.stop()
     }
 
+    /// The link's live poll (core's `GuestView.live`, run by core) for as long as the calling task runs — the link's screen
+    /// while the app is active, so nothing is asked in the background; its cancellation stops the poll (inbox #1017).
+    func live() async {
+        let live = screen.view.startLive()
+        await untilCancelled()
+        live.stop()
+    }
+
     func back() { Task { _ = try? await AppleSharing.shared.back(screen: screen) } }
     func open(_ nodeId: String) { Task { _ = try? await AppleSharing.shared.open(screen: screen, nodeId: nodeId) } }
     func enter() { Task { _ = try? await AppleSharing.shared.enter(screen: screen) } }
@@ -316,6 +324,7 @@ struct GuestContent: View {
     @Bindable var model: AppModel
     let held: GuestHeld
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var phase
 
     var body: some View {
         Group {
@@ -388,6 +397,11 @@ struct GuestContent: View {
         .background(Role.bg)
         // the guest's pages are the link's: no cover of the shell's page is placed above them
         .environment(\.nodeHero, nil)
+        // live while the link shows and the app is active: what others change in the link, or the link gone, shows up
+        // (core's poll, the web's live refresh; inbox #1017)
+        .task(id: phase == .active) {
+            if phase == .active { await held.live() }
+        }
     }
 
     private func refusal(_ r: ShareInstance.Refusal) -> String {

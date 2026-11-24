@@ -82,6 +82,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.SecureFlagPolicy
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -246,6 +247,19 @@ internal fun GuestContent(screen: GuestScreen, model: AppModel, snackbar: Snackb
     val busy by view.gates.busy.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    // live while the link shows and the app started: what others change in the link, or the link gone, shows up (core's
+    // poll, the web's live refresh; inbox #1017)
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(view) {
+        owner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            val live = view.startLive()
+            try {
+                kotlinx.coroutines.awaitCancellation()
+            } finally {
+                live.stop()
+            }
+        }
+    }
     when (val g = gate) {
         ShareGates.State.Loading -> Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             CircularProgressIndicator()
