@@ -14,7 +14,7 @@ import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import { MAX_CATEGORY_NAME, MAX_OWN_CATEGORIES, type PotMeta } from '../domain/potMeta'
 import type { PotLedger } from '../domain/ledger'
 import type { PotSession } from '../potSession'
-import { knownCurrencies, minorUnitsOf } from '../amounts'
+import { knownCurrencies, minorUnitsOf } from '@veyq/core-js/expenses'
 
 const props = defineProps<{
   session: PotSession; meta: PotMeta | null; ledger: PotLedger | null

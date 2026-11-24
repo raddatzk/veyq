@@ -27,7 +27,7 @@ import { isMoney } from '../domain/format'
 import { isSettled, namedParticipants, type Participant, type PotLedger } from '../domain/ledger'
 import type { PotMeta } from '../domain/potMeta'
 import type { PotSession } from '../potSession'
-import { formatMoney } from '../amounts'
+import { formatMoney } from '@veyq/core-js/expenses'
 
 const props = defineProps<{
   session: PotSession

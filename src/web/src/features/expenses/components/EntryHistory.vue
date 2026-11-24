@@ -8,9 +8,9 @@ import { useI18n } from 'vue-i18n'
 import type { Person } from '../../../core/people/directory'
 import type { PotSession } from '../potSession'
 import { isMoney } from '../domain/format'
-import { convertToBase } from '../domain/money'
+import { convertToBase } from '../domain/ledger'
 import type { PotMeta } from '../domain/potMeta'
-import { formatMoney } from '../amounts'
+import { formatMoney } from '@veyq/core-js/expenses'
 
 const props = defineProps<{
   session: PotSession

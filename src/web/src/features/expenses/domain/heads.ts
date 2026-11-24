@@ -12,27 +12,20 @@
 // record, after which the server holds none of that record's earlier revisions. It covers ONLY its own record's earlier
 // revisions, and only as a revision that opened to `kind: "erasure"` — the server's `erasure` flag is not read, because
 // the server cannot write a sealed erasure and so cannot use one to hide anything.
-import { MAX_HEADS, type Head } from './format'
-import { revisionId, byRecord, type HeldRevision, type RevisionRef } from './revisions'
+//
+// The rules are the Kotlin core's (`expenses/LedgerCheck.kt`, `Revisions`, through `@veyq/core-js/expenses`, ADR 0155
+// decision 7.3), pinned by `contracts/expenses/v1-vectors.json` (`check`); this file keeps the types. It holds no rule.
+import * as core from '@veyq/core-js/expenses'
+import type { Head } from './format'
+import { revisionsOf, type HeldRevision, type RevisionRef } from './revisions'
 
-/** Every held revision that no held revision names as a head — what the next write names (up to {@link MAX_HEADS}). */
-export function currentHeads(held: readonly HeldRevision[]): HeldRevision[] {
-  const named = new Set<string>()
-  for (const r of held) for (const h of r.body?.heads ?? []) named.add(revisionId(h))
-  return held.filter((r) => !named.has(revisionId(r)))
-}
+/** Every held revision that no held revision names as a head — what the next write names (up to the format's `MAX_HEADS`). */
+export const currentHeads = (held: readonly HeldRevision[]): HeldRevision[] =>
+  [...core.currentHeads(revisionsOf(held))] as unknown as HeldRevision[]
 
-const byStoredTime = (a: HeldRevision, b: HeldRevision): number =>
-  a.createdAt.getTime() - b.createdAt.getTime() || (a.entryId < b.entryId ? -1 : a.entryId > b.entryId ? 1 : a.revision - b.revision)
-
-/** The heads a revision written now names: the Pot's current heads, the {@link MAX_HEADS} oldest by the time the server
- *  stored them when there are more (the next write names the rest, the schema's rule). Empty for an empty Pot. */
-export function headsToName(held: readonly HeldRevision[]): Head[] {
-  return [...currentHeads(held)]
-    .sort(byStoredTime)
-    .slice(0, MAX_HEADS)
-    .map((r) => ({ entryId: r.entryId, revision: r.revision, digest: r.digest }))
-}
+/** The heads a revision written now names: the Pot's current heads, the `MAX_HEADS` oldest by the time the server stored
+ *  them when there are more (the next write names the rest, the schema's rule). Empty for an empty Pot. */
+export const headsToName = (held: readonly HeldRevision[]): Head[] => [...core.headsToName(revisionsOf(held))]
 
 /** What a read of the Pot found wrong with its ledger. `complete` is true only when all three lists are empty; `entries`
  *  are the records any of them touch — what the ledger notice lists. */
@@ -48,42 +41,4 @@ export type LedgerCheck = {
 }
 
 /** Run the ledger check over everything held for one Pot. Pure: the revisions were opened by `openServedRevisions`. */
-export function checkLedger(held: readonly HeldRevision[]): LedgerCheck {
-  const present = new Map(held.map((r) => [revisionId(r), r] as const))
-  const records = byRecord(held)
-  // The highest sealed erasure of each record: it covers every earlier revision of that record, and nothing else.
-  const erasedBelow = new Map<string, number>()
-  for (const r of held) {
-    if (r.body?.kind !== 'erasure') continue
-    erasedBelow.set(r.entryId, Math.max(erasedBelow.get(r.entryId) ?? 0, r.revision))
-  }
-  const covered = (ref: RevisionRef): boolean => ref.revision < (erasedBelow.get(ref.entryId) ?? 0)
-
-  const missing = new Map<string, RevisionRef>()
-  const altered = new Map<string, RevisionRef>()
-  for (const r of held) {
-    for (const h of r.body?.heads ?? []) {
-      const id = revisionId(h)
-      const found = present.get(id)
-      if (found) {
-        if (found.digest !== h.digest) altered.set(id, { entryId: h.entryId, revision: h.revision })
-      } else if (!covered(h)) {
-        missing.set(id, { entryId: h.entryId, revision: h.revision })
-      }
-    }
-  }
-  // A record's revisions are 1..latest without a hole: `n + 1` is only ever taken on `n`, and only an erasure removes one.
-  for (const [entryId, revisions] of records) {
-    const latest = revisions[revisions.length - 1]!.revision
-    for (let revision = 1; revision < latest; revision++) {
-      const ref = { entryId, revision }
-      if (!present.has(revisionId(ref)) && !covered(ref)) missing.set(revisionId(ref), ref)
-    }
-  }
-  const unreadable = held.filter((r) => r.body === null).map((r) => ({ entryId: r.entryId, revision: r.revision }))
-
-  const order = (a: RevisionRef, b: RevisionRef) => (a.entryId < b.entryId ? -1 : a.entryId > b.entryId ? 1 : a.revision - b.revision)
-  const lists = { missing: [...missing.values()].sort(order), altered: [...altered.values()].sort(order), unreadable: unreadable.sort(order) }
-  const entries = [...new Set([...lists.missing, ...lists.altered, ...lists.unreadable].map((r) => r.entryId))].sort()
-  return { complete: entries.length === 0, ...lists, entries }
-}
+export const checkLedger = (held: readonly HeldRevision[]): LedgerCheck => core.checkLedger(revisionsOf(held)) as unknown as LedgerCheck

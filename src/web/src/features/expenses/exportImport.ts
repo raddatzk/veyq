@@ -40,7 +40,7 @@ import { memberNodeWriter } from '../../core/node/rereadNode'
 import {
   readGuestReceipts, readMemberReceipts, receiptChunks, receiptName, receiptPresign, receiptSize, uploadReceipt, type HeldReceipt,
 } from './receipts'
-import { decimalOf } from './amounts'
+import { decimalOf } from '@veyq/core-js/expenses'
 import { activeSpace } from '../../app/activeSpace'
 import { baseName, EXPENSES_CONTENT_VERSION, EXPENSES_POT_CONTENT, MAX_RECEIPT_NAME, validatePotContent } from './contentSchema'
 
