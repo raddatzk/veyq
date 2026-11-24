@@ -110,13 +110,23 @@ object MediaGridLayout {
     fun justify(
         items: List<Source>, containerWidth: Double, targetHeight: Double, gap: Double = GAP, showWidows: Boolean = true,
     ): Layout {
+        val tiles = ArrayList<Tile>(items.size)
+        return Layout(tiles, justifyInto(items, containerWidth, targetHeight, gap, showWidows, tiles))
+    }
+
+    /**
+     * [justify]'s tiles placed into [tiles], the grid's height returned — the web's façade reads them without a [Layout]
+     * (whose rows and window it never asks).
+     */
+    internal fun justifyInto(
+        items: List<Source>, containerWidth: Double, targetHeight: Double, gap: Double, showWidows: Boolean, tiles: MutableList<Tile>,
+    ): Double {
         val width = max(0.0, floor(containerWidth))
         val target = max(0.0, targetHeight)
         val g = max(0.0, gap)
-        if (items.isEmpty() || width <= 0.0 || target <= 0.0) return Layout(emptyList(), 0.0)
+        if (items.isEmpty() || width <= 0.0 || target <= 0.0) return 0.0
 
         val targetAspect = width / target
-        val tiles = ArrayList<Tile>(items.size)
         val row = ArrayList<Pair<String, Double>>()
         var rowAspect = 0.0
         var top = 0.0
@@ -136,7 +146,7 @@ object MediaGridLayout {
         } else if (row.isEmpty() && tiles.isNotEmpty()) {
             top -= g
         }
-        return Layout(tiles, max(top, 0.0))
+        return max(top, 0.0)
     }
 
     private fun layoutRow(
@@ -160,9 +170,15 @@ object MediaGridLayout {
      * A medium [width] × [height]'s aspect as the grid shows it (`galleryDisplayAspectRatio`): bounded to 3:4 … 4:3, so one
      * panorama cannot take a row; [FALLBACK_ASPECT] where a dimension is unknown.
      */
-    fun displayAspect(width: Int?, height: Int?): Double {
-        if (width == null || height == null || width <= 0 || height <= 0) return FALLBACK_ASPECT
-        val aspect = width.toDouble() / height
+    fun displayAspect(width: Int?, height: Int?): Double = displayAspectOf(width?.toDouble(), height?.toDouble())
+
+    /**
+     * [displayAspect] over any number, as the web's sealed dimensions arrive (`@veyq/core-js/memories`): a missing, zero,
+     * negative or not-a-number side, or an aspect that is not finite, is [FALLBACK_ASPECT].
+     */
+    internal fun displayAspectOf(width: Double?, height: Double?): Double {
+        if (width == null || height == null || !(width > 0) || !(height > 0)) return FALLBACK_ASPECT
+        val aspect = width / height
         if (!aspect.isFinite() || aspect <= 0) return FALLBACK_ASPECT
         return min(MAX_ASPECT, max(MIN_ASPECT, aspect))
     }

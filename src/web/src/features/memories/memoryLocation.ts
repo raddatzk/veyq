@@ -9,7 +9,7 @@
 //
 // A location is **never auto-created from GPS presence** — it is a deliberate per-Memory "set location" choice.
 // This module is the pure model + seal; the map editor (Leaflet) and the medoid-over-media self-heal live in the
-// UI layer (uc.memory.place), reusing `computeMedoid` here; the GPS points read from the Memory's own media are
+// UI layer (uc.memory.place), the medoid itself the Kotlin core's (`medoid.ts`); the GPS points read from the Memory's own media are
 // `memoryFromMedia.ts` (they open the gallery's listing, which this module - read by the level's rows - does not load).
 import { editField, unsealNodeMeta } from '../../core/node/nodeMeta'
 import { writeNodeMeta, type WriteNodeMetaOptions } from '../../core/node/nodeMetaWrite'
@@ -167,35 +167,4 @@ export function sameMemoryLocation(a: MemoryLocation | null, b: MemoryLocation |
     a.nameAnchor?.lng === b.nameAnchor?.lng &&
     a.nameAnchor?.level === b.nameAnchor?.level
   )
-}
-
-/** Great-circle distance between two points (Haversine). Unit is irrelevant for the medoid argmin — km here. */
-function haversineKm(a: LatLng, b: LatLng): number {
-  const R = 6371
-  const toRad = (d: number) => (d * Math.PI) / 180
-  const dLat = toRad(b.lat - a.lat)
-  const dLng = toRad(b.lng - a.lng)
-  const s =
-    Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)))
-}
-
-/**
- * The **medoid** of a set of GPS points: the input point minimizing the summed **Haversine** distance to all the
- * others (a real photo location — robust to an outlier, never the sea, never the mean). Ties resolve to the
- * **lowest index**; a single point is its own medoid; an empty set ⇒ **null**. This is the `auto` map position.
- */
-export function computeMedoid(points: LatLng[]): LatLng | null {
-  if (points.length === 0) return null
-  let best = 0
-  let bestSum = Infinity
-  for (let i = 0; i < points.length; i++) {
-    let sum = 0
-    for (let j = 0; j < points.length; j++) if (i !== j) sum += haversineKm(points[i], points[j])
-    if (sum < bestSum) {
-      bestSum = sum
-      best = i // strict `<` keeps the lowest index on a tie
-    }
-  }
-  return { lat: points[best].lat, lng: points[best].lng }
 }

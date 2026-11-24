@@ -315,4 +315,15 @@ the three, `memoryViews.ts`), and its create and share dialogs ride on its kinds
 and so is the upload status in the top bar, which lists Memories' batches with every other application's). How core and an application meet, on both sides, is
 [Applications](README.md#how-core-and-an-application-meet).
 
+**The web draws some of Memories' rules from the Kotlin core** ([ADR 0155](../decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md)
+§ Memories' move): the gallery grid's geometry and a medium's display aspect (`MediaGridLayout`), a Memory's medoid
+(`MemoryLocation.medoid`), the participants' merge on a conflict (`Participants.merge`), the MP3 and ADTS frame headers and a
+raw ADTS file's count (`music/Frames`) and a WAV's header, samples and ends (`music/Wav`) are `:apps:memories`' (in
+`src/mobile`), drawn through `@veyq/core-js/memories` by `mediaGridLayout.ts`, `medoid.ts`, `participantsWrite.ts`,
+`music/frames.ts` and `music/wav.ts`, which keep the web's shapes and the reads; `contracts/memories/v1-vectors.json` holds
+every client to them, so a change to one of these rules is made in the Kotlin core, never in the web. Memories' code is
+never in the eager set: the medoid and the participants' write sit in files of their own, off the eager
+`memoryLocation.ts` and `memoryParticipants.ts`. The meta's readers and the rest of Memories' rules are still the web's own
+(inbox #1320, #1321); its models with flows too (decision 8, inbox #1323).
+
 - End-user view (docs site): [Memories](../../site/src/content/docs/memories/index.mdx)

@@ -599,7 +599,15 @@ A Gradle build of its own, run through its own wrapper.
   `VEYQ_WRITE_VECTORS=1 ./gradlew :apps:depot:jvmTest --tests '*DepotVectorsTest*'` rewrites it, a plan's `tokens` from the
   apps' real foldings), `FileViewTest`, `FolderUploadTest`, `SvgViewTest`, then `@veyq/core-js`'s `depot.test.ts` and the
   web's `features/depot/vectors.test.ts`; a stdlib collection member the plan reaches first ships with every platform entry
-  (ADR 0155 § Depot's move: +131 B gz). Live,
+  (ADR 0155 § Depot's move: +131 B gz). Memories' rules the web draws (`apps/memories`: `MediaGridLayout`'s geometry and display
+  aspect, `MemoryLocation.medoid`, `Participants.merge`, `music/Frames`' headers, chain and ADTS count, `music/Wav`'s header,
+  samples and ends; the web's through `@veyq/core-js/memories`, `apps/memories/src/jsMain/…/memories/web/`) change only with
+  `contracts/memories/v1-vectors.json`: `MemoriesVectorsTest` (`commonTest`; `VEYQ_WRITE_VECTORS=1 ./gradlew
+  :apps:memories:jvmTest --tests '*MemoriesVectorsTest*'` rewrites it byte for byte where nothing changed),
+  `MediaGridLayoutTest`, `WavTest`, `FramesTest`, `ParticipantsTest`, then `@veyq/core-js`'s `memories.test.ts` and the web's
+  `features/memories/vectors.test.ts`. What the façade reaches is `internal` beside the public rule (`justifyInto`,
+  `medoidAt`, `adtsCount`, `endBytes`): a `Layout` or a companion holding a platform class, once reached, ships with every
+  platform entry (ADR 0155 § Memories' move D6: +462 → +106 B gz). Live,
   `SearchLiveTest` (`VEYQ_LIVE`: a Memory with a date, a place, a participant and a photo searched from another space,
   the photo opened through its gallery's request, a rename seen after a focus, an idle focus one `304` per tree and
   listing; the Memory purged). Its bounds are `SearchVolumeMeasure`'s, opt-in: `VEYQ_MEASURE=1 ./gradlew :apps:memories:jvmTest

@@ -82,17 +82,38 @@ object Frames {
         var seconds = 0.0
         while (at < size) {
             val chunk = file.read(at, minOf(size - at, COUNT_STEP.toLong()).toInt())
-            var p = 0
-            while (true) {
-                val frame = adtsFrame(chunk, p) ?: break
-                if (p + frame.length > chunk.size && at + p + frame.length < size) break // read on from this header
-                seconds += frame.samples.toDouble() / frame.sampleRate
-                p += frame.length
-                if (at + p >= size) break
-            }
-            if (p == 0) return if (size - at <= TRAILER_MAX) (seconds * 1000).roundToLong() else null // a tag after the last frame, or a break
-            at += p
+            val step = adtsCount(chunk, at.toDouble(), size.toDouble(), seconds)
+            seconds = step.seconds
+            if (step.read == 0) return adtsEnd(seconds, (size - at).toDouble())
+            at += step.read
         }
-        return (seconds * 1000).roundToLong()
+        return adtsMs(seconds)
     }
+
+    /** One slice's part of the ADTS count: the bytes its whole frames span ([read]) and the [seconds] counted so far. */
+    internal class AdtsCount(val read: Int, val seconds: Double)
+
+    /**
+     * The frames of [chunk], read from the file at [at] of [size] bytes, counted onto [seconds] (the count's step, which the
+     * web's loop over `Blob.slice` runs too): header by header, each next one found by its length, stopping before a frame
+     * the slice cuts off unless it is the file's last. Offsets are doubles: exact to 2^53, and no `Long` on the web's path.
+     */
+    internal fun adtsCount(chunk: ByteArray, at: Double, size: Double, seconds: Double): AdtsCount {
+        var s = seconds
+        var p = 0
+        while (true) {
+            val frame = adtsFrame(chunk, p) ?: break
+            if (p + frame.length > chunk.size && at + p + frame.length < size) break // read on from this header
+            s += frame.samples.toDouble() / frame.sampleRate
+            p += frame.length
+            if (at + p >= size) break
+        }
+        return AdtsCount(p, s)
+    }
+
+    /** The count's answer where a slice holds no frame, [remaining] bytes before the end: a tag after the last frame, or a break (null). */
+    internal fun adtsEnd(seconds: Double, remaining: Double): Long? = if (remaining <= TRAILER_MAX) adtsMs(seconds) else null
+
+    /** [seconds] counted, in whole ms. */
+    internal fun adtsMs(seconds: Double): Long = (seconds * 1000).roundToLong()
 }

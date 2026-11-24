@@ -7,8 +7,8 @@ vi.mock('../../api/client', () => ({
   sessionApi: vi.fn(),
 }))
 
+import { computeMedoid } from './medoid'
 import {
-  computeMedoid,
   isLocationPending,
   normalizeLocation,
   MAX_PLACE_NAME,

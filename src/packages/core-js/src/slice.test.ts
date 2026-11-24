@@ -77,6 +77,8 @@ const APPLICATIONS: Record<string, { forbidden?: RegExp; control: string }> = {
   expenses: { forbidden: /hash-library-sha3|sponges-library-keccak/i, control: 'expenses/Ledger.kt' },
   /** What an opened file is, a folder upload's plan, an SVG's raster and zoom steps. */
   depot: { control: 'depot/FolderUpload.kt' },
+  /** The gallery grid's geometry, a Memory's medoid, the participants' merge, the audio frame headers, a WAV's reading. */
+  memories: { control: 'memories/MediaGridLayout.kt' },
 }
 /** ADR 0155 decision 7.3: an application grows what ships by at most 25 KB gz. Held gross here — what its entry adds over
  *  every platform entry bundled together, its deleted TypeScript not subtracted, so it can only be stricter than the bound

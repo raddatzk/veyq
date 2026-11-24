@@ -10,12 +10,12 @@ import { computed, ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import {
   unsealMemoryLocation,
-  computeMedoid,
   sameMemoryLocation,
   isLocationPending,
   normalizeLocation,
   type MemoryLocation,
 } from './memoryLocation'
+import { computeMedoid } from './medoid'
 import { mediaGpsPoints } from './memoryFromMedia'
 import { nodeMetaState } from '../../core/node/nodeMeta'
 import { useMetaWriteFeedback, type NodeMetaUpdate } from './useMetaWriteFeedback'

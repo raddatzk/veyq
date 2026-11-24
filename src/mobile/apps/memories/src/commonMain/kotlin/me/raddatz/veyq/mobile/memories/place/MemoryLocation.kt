@@ -121,35 +121,12 @@ data class MemoryLocation(
         /** The place a node's opened meta carries, or null. */
         fun of(meta: JsonObject): MemoryLocation? = normalize(meta[FIELD])
 
-        /** Great-circle distance (haversine), in km: only the medoid's argmin reads it. */
-        private fun haversineKm(a: LatLng, b: LatLng): Double {
-            val r = PI / 180
-            val dLat = (b.lat - a.lat) * r
-            val dLng = (b.lng - a.lng) * r
-            val s1 = sin(dLat / 2)
-            val s2 = sin(dLng / 2)
-            val s = s1 * s1 + cos(a.lat * r) * cos(b.lat * r) * s2 * s2
-            return 2 * 6371 * asin(min(1.0, sqrt(s)))
-        }
-
         /**
          * The **medoid** of [points]: the one point minimising the summed haversine distance to the others — a real photo's
          * place, never the sea between them; ties to the lowest index; null for none (`computeMedoid`).
          */
-        fun medoid(points: List<LatLng>): LatLng? {
-            if (points.isEmpty()) return null
-            var best = 0
-            var bestSum = Double.POSITIVE_INFINITY
-            for (i in points.indices) {
-                var sum = 0.0
-                for (j in points.indices) if (i != j) sum += haversineKm(points[i], points[j])
-                if (sum < bestSum) {
-                    bestSum = sum
-                    best = i
-                }
-            }
-            return points[best]
-        }
+        fun medoid(points: List<LatLng>): LatLng? =
+            medoidAt(DoubleArray(points.size) { points[it].lat }, DoubleArray(points.size) { points[it].lng }).takeIf { it >= 0 }?.let { points[it] }
 
         /** The GPS points of a Memory's own media, from their listed tiers; one without is skipped (`mediaGpsPoints`). */
         fun gpsPoints(items: List<MemoryMedia.Item>): List<LatLng> = items.mapNotNull { it.meta }.mapNotNull { m ->
@@ -164,4 +141,37 @@ data class MemoryLocation(
 
         private fun point(p: LatLng) = JsonObject(linkedMapOf("lat" to jsNumber(p.lat), "lng" to jsNumber(p.lng)))
     }
+}
+
+/** [d] degrees in radians, as the web's `haversineKm` wrote it — `(d * π) / 180`, which rounds apart from `d * (π / 180)`. */
+private fun rad(d: Double): Double = (d * PI) / 180
+
+/** Great-circle distance (haversine), in km, between ([aLat], [aLng]) and ([bLat], [bLng]): only the medoid's argmin reads it. */
+private fun haversineKm(aLat: Double, aLng: Double, bLat: Double, bLng: Double): Double {
+    val dLat = rad(bLat - aLat)
+    val dLng = rad(bLng - aLng)
+    val s1 = sin(dLat / 2)
+    val s2 = sin(dLng / 2)
+    val s = s1 * s1 + cos(rad(aLat)) * cos(rad(bLat)) * s2 * s2
+    return 2 * 6371 * asin(min(1.0, sqrt(s)))
+}
+
+/**
+ * [MemoryLocation.medoid] over the points ([lat] `[i]`, [lng] `[i]`): the medoid's index, or -1 for none. A file-level
+ * function, so the web's façade reads its own array and never initializes [MemoryLocation]'s companion (its world view's
+ * [LatLng] would ship in the platform's module file with every entry).
+ */
+internal fun medoidAt(lat: DoubleArray, lng: DoubleArray): Int {
+    if (lat.isEmpty()) return -1
+    var best = 0
+    var bestSum = Double.POSITIVE_INFINITY
+    for (i in lat.indices) {
+        var sum = 0.0
+        for (j in lat.indices) if (i != j) sum += haversineKm(lat[i], lng[i], lat[j], lng[j])
+        if (sum < bestSum) {
+            bestSum = sum
+            best = i
+        }
+    }
+    return best
 }
