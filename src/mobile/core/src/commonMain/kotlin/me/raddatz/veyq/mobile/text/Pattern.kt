@@ -4,7 +4,7 @@ package me.raddatz.veyq.mobile.text
  * A regular expression run by the platform's own engine, matched against a whole text: on the JVM and natively Kotlin's
  * [Regex], on JavaScript the engine's `RegExp` itself (flag `u`). Code a façade reaches uses this, never [Regex]: Kotlin's
  * `Regex` on JavaScript is a class of its own over `RegExp`, and once anything reaches it, it ships in the standard
- * library's module file with every entry (cr-web-expenses-on-the-core, measured). The sources are the formats' patterns,
+ * library's module file with every entry (ADR 0155 § Expenses' move, measured). The sources are the formats' patterns,
  * which both engines read alike (ASCII classes, a lookahead, `\p{L}`).
  */
 class Pattern(

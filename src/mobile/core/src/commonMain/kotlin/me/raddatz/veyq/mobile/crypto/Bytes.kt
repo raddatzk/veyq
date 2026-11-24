@@ -51,7 +51,7 @@ fun splitLp(b: ByteArray, count: Int): List<ByteArray> {
 
 /**
  * The wire's base64: standard alphabet, padded — written here rather than by `kotlin.io.encoding.Base64`, whose object and
- * tables would otherwise ship in the standard library's module file with every JavaScript entry (cr-web-expenses-on-the-core,
+ * tables would otherwise ship in the standard library's module file with every JavaScript entry (ADR 0155 § Expenses' move,
  * measured ~9 KB minified). Decoding stays the standard library's, with its refusals.
  */
 fun b64(bytes: ByteArray): String {

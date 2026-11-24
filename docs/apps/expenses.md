@@ -225,6 +225,13 @@ A receipt is an image or a PDF of at most 10 MiB kept with an entry, up to 100 p
 
 ## What the client computes
 
+Every rule below is the Kotlin core's (`src/mobile/apps/expenses`: `Ledger`, `LedgerCheck`, `Money`, `Big`, `Format`,
+`Codec`, `Amounts`, `ExchangeRateTable`), which the apps run and the web draws through `@veyq/core-js/expenses`
+([ADR 0155](../decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md)
+decision 7.3, built 2026-11-24): one implementation, pinned by `contracts/expenses/v1-vectors.json`. The web keeps the
+types it draws by and its screens (`src/web/src/features/expenses/domain/`); the entry form, the Pot's meta, the writes,
+the re-key and the import and export are still TypeScript beside their Kotlin twins, the next Expenses move.
+
 - **Balances**: per participant, what they paid (and received as refunds) against their share of every expense and
   refund, transfers included.
 - **Settle up**: transfers that bring every balance to zero, computed greedily — debtors and creditors each sorted by

@@ -16,9 +16,10 @@
   video's size and capture time and a photo's tags, `@veyq/core-js/media`, § The media headers' slice — 2.73×; the ExifReader
   library gone); its sixth (2026-11-23: the export archive's ZIP, its length and the manifest's check, `@veyq/core-js/export`,
   § The export archive's slice — 1.90×); its seventh and last (2026-11-23: the music order and fades, `@veyq/core-js/audio`,
-  § The music order and fades' slice — 1.56×), so decision 7.2's list is built. Decision 7.3 and 8 are not built: Expenses' move is parked, half built on
-  branch `claude/p2-impl`; the owner (2026-11-22) counts the platform code its façade needs against the platform module's
-  running budget and retired the search-alone budget (§ Consequences)
+  § The music order and fades' slice — 1.56×), so decision 7.2's list is built. Decision 7.3's first application
+  (2026-11-24: Expenses' rules, `@veyq/core-js/expenses` from `:apps:expenses`' own module file, decision 4's JSON seam
+  with it, § Expenses' move); the owner (2026-11-22) counts the platform code its façade needs against the platform
+  module's running budget and retired the search-alone budget. Decision 8 is not built
 - Date: 2026-11-20
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -344,7 +345,7 @@ Measured before the decision (2026-11-20):
   side (`ShareLinkVectorsTest`, the package's `sharing.test.ts`, the web's three tests). **Inbox #1057** — the apps
   counted an edited link's last end day from today, the server from the link's creation — is fixed for all four apps in
   `LinkForm.start`, which now takes `now` and counts from the edited link's `createdAt`. The bookmark's sealed meta stays
-  TypeScript: decision 4's JSON seam is only on the parked `claude/p2-impl`. Its gate (each number against `b8c2228de`):
+  TypeScript: decision 4's JSON seam was then only on the parked `claude/p2-impl` (built since, § Expenses' move; inbox #1271). Its gate (each number against `b8c2228de`):
 
   | Criterion | Measured | Bound |
   |---|---|---|
@@ -1133,21 +1134,64 @@ Measured before the decision (2026-11-20):
     (the formats, the notices, the slug folding, the URL fragment rules) stays as it says; next is decision 7.3, Expenses
     first, whose move is parked below.
 
-- **Expenses' move is parked, not merged** ([cr-web-expenses-on-the-core](../../changes/cr-web-expenses-on-the-core.md)),
-  on branch `claude/p2-impl`: the vectors (`c76d3212f`), the JSON seam and Expenses' pure homes (`c5793db14`), the
-  façade and its entry (`cbf54e21e`), `Big` over the engine's `BigInt` (`243e89185`), one optimisation round
-  (`7b8af11cf`). It is rebased onto `:apps:expenses` and reused, not rebuilt — replayed there once for the measurement
-above, which says what changes first. Its time at
-  the park (Node 22.23.3, median of 15 after 3 warm-ups, the 10,010-revision Pot; the bench script, `bench.mts`, is not committed — the
-  numbers are the commit message's of `7b8af11cf` and the measuring session's):
-  `buildLedger` 80.4–82.9 ms against the TypeScript's 38–41 (2.07–2.12×), `checkLedger` 4.9–5.0 against 4.1–4.6
-  (1.15–1.19×), the answers identical — inside decision 7.3's time bound. **The trap that binds every later move: a
-  Kotlin `Long` is emulated on JavaScript.** `Big`'s limbs over `Long` took `buildLedger` from 38 ms to 25.7 s; over
-  the engine's `BigInt` (an `expect` class, the limbs kept for the JVM and native) 306 ms; then a revision handle
-  read once (260), the engine's own `Map` and `Set` for string keys (165), a ledger entry handed back as the web's own
-  body object (126), whole weights without the fractions' gcd and each rate read once (103), the remainder's cents by
-  selection instead of a sort (87), lazy reader views and a UUID checked by its characters (81). A hot path's Kotlin
-  for the web is measured on JavaScript, never assumed from the JVM.
+- **Expenses' move** (decision 7.3's first application, built 2026-11-24, branch `claude/expenses-core-resume`,
+  the work order cr-web-expenses-on-the-core, deleted at harvest). The web's Expenses rules — the entry
+  format's reader and writer, the revision codec, the held revisions and the ledger check, the ledger, money as text and
+  as typed, the currency digits, the day's rate table and cross rate — are `:apps:expenses`' (`Format`, `Codec`,
+  `Revisions`, `LedgerCheck`, `Ledger`, `Money`, `Big`, `Amounts`, `Currencies`, `ExchangeRateTable`), and the web draws them
+  through `@veyq/core-js/expenses` (`apps/expenses/src/jsMain/…/expenses/web/`), its code the application's own module file
+  (`kotlin_veyq_mobile_apps_expenses.mjs`), which imports the platform's. `src/web/src/features/expenses/domain/` keeps the
+  types the web draws by and hands the core what it asks — one `PotRevisions` handle per held list (`revisions.ts`), the
+  core's refusals as the web's error classes; `money.ts` and `amounts.ts` are gone. What stays TypeScript, with a Kotlin
+  twin, is the next Expenses move: the entry form, the Pot's meta, the writes, the re-key, the receipts' rules, import and
+  export. Its gate (each number against `1a30aed00`, the tree before the move, its own build):
+
+  | Criterion | Measured | Bound |
+  |---|---|---|
+  | size: Expenses over every platform entry (the package's `slice.test.ts`, gross, `@noble/*` external) | +20,838 B gz | ≤ 25,600 |
+  | size: the platform module, every entry | 79,637 B gz (70,173 before: +9,464 of platform code Expenses' façade needs — the suite's `V1`, `Contexts`, `Pad`, money's `Shown`, the JSON tree — and of the standard library it keeps) | the running budget, 80,094 (the owner, 2026-11-22) |
+  | size: the web's eager set and Expenses' chunks together (`vite build`, gzip -9 per chunk) | +25,409 B gz all in (eager +26,520: `main` +16,107, `review` +10,533; Expenses' lazy chunks −1,111), the deleted TypeScript counted; of it ~9.5 KB the platform's growth above | ≤ 25,600 for Expenses alone; met all in |
+  | size: any other lazy chunk | +17 B gz at most (`media`) | ≤ 1,024 |
+  | time: `buildLedger`, the 10,010-revision Pot (Node 22.23.4, median of 15 after 3 warm-ups) | 89.4–89.7 ms against the TypeScript's 42.3–42.5 (2.11×); the handle's one read of a new list 44–47 ms apart; the machine at a load of ~30 from other agents' builds, two runs | ≤ 2.5× and ≤ 100 ms |
+  | time: `checkLedger`, the same | 5.3–5.9 ms against 4.9–5.3 (1.11×) | ≤ 2.5× and ≤ 100 ms |
+  | answers | identical (one digest over balances, settle-up, the category overview and the check) | identical |
+  | behaviour | the web's tests pass with their imports changed; the twins' tests of the ledger, the heads, the codec, the member participants and the amounts stay and pass through the glue unchanged but one line (codec's padding case reads the plaintext's length without the deleted writer) | identical |
+
+  The move's decision log, kept by its implementer (question, choice and why, evidence, cost):
+  - *Replayed, not rebuilt.* The parked commits (`claude/p2-impl`: the vectors, the JSON seam and the pure homes, the
+    façade, `Big` over `BigInt`, the timing round) were cherry-picked onto the split, `core/…/expenses` landing in
+    `:apps:expenses` (git's directory renames did most), the façade in its `jsMain`, the decode runner in its own
+    `jsConformance` compilation (`dist/conformance/expenses/`, 21 decode cases green through it).
+  - *Where the platform code the façade needs goes: the platform.* The JSON tree (`json/JsonValue`, `JsonText`) and
+    money's `Shown` are platform code every application may use; the owner's answer (2026-11-22) counts them against the
+    running budget. Moving them into Expenses' module would charge them to its 25 KB and copy the platform's seam into an
+    application. Measured first at 84,028 B gz, **over** the running budget: whole-program elimination keeps in the
+    platform's and the standard library's files whatever any façade reaches, and a bundler drops nothing of either.
+  - *The squeeze, behaviour-neutral:* a pattern runs on the platform's own engine (`text/Pattern`: `RegExp` on JavaScript,
+    `Regex` elsewhere) in `Contexts`, the JSON tree's number text, `Shown`, the format, `Money`, `Amounts` and the rate
+    table — Kotlin's `Regex` was ~10 KB minified of the standard library; the wire base64 is written by hand
+    (`crypto/b64`, `B64Test` against the standard library's for every length) — `kotlin.io.encoding.Base64` was ~9 KB;
+    `Shown.money`'s letter test is a `\p{L}` pattern, not `Char.isLetter`'s tables. 84,028 → 79,637 B gz.
+  - *Times cross as the web's own `Date`*, not epoch milliseconds (the refine's decision 5): `createdAt`, `purgeAfter` in,
+    `recordedAt` out. Every staying test and component reads them unchanged; the cost is one `Date` per ledger entry.
+  - *One name per façade.* The composition's one declaration file merged Expenses' `EntryShape` into the tree's
+    (TypeScript merges two interfaces of one name): `:composition:jsPackage` now refuses a name two façades export, and
+    Expenses' shapes are `LedgerEntryShape` and `JsonValueShape`.
+  - *The glue files stay as glue.* `format.ts`, `ledger.ts`, `revisions.ts`, `heads.ts`, `codec.ts` keep their names and
+    types and hold no rule (no arithmetic, no validation branch, no seal), so the callers' imports did not move; the
+    package is imported directly where a caller used `amounts.ts`.
+  - *The JSON seam's two forms* (inbox #1151): the tree is what a format reads and writes (Expenses' revision body, the rate
+    table), the read-only view (`JsonAccess`) what checks a large untrusted document in place (the export manifest). Both
+    stay; decision 4's seam is both.
+  - *What the TypeScript twins' tests became* (decision 2's criterion): the reader's, writer's and patterns' cases
+    (`format.test.ts`) are the vectors' `read`, `decode` and `encode` sections and `ExpensesRulesTest`'s schema pins; the
+    arithmetic's (`money.test.ts`) the vectors' `conversion` and `rounding`, `BigTest`, `LedgerRulesTest`; the rest stay as
+    web tests over the glue. The vectors run through the package (`src/expenses.test.ts`) and through the web's glue
+    (`features/expenses/vectors.test.ts`).
+  - *Visible change* (the refine's decision 6): the currency picker offers the core's table (from `Intl` under ICU 78.3)
+    and a new Pot's or entry's digits stop depending on the browser's ICU.
+  - *Not done here:* the browser pass of the refine's phase 4 (two builds over one backend, en and de) — the tests above
+    hold the behaviour; the pass is owed.
 
 - **The operator-served web is unchanged in kind** ([ADR 0026](0026-client-trust-tiers.md)): still same-origin,
   content-hashed chunks, no new CSP source, no Subresource Integrity in use before or after; the Kotlin output is one

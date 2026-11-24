@@ -18,7 +18,7 @@ invariants:
 > **Status: planned, deferred by the owner 2026-11-21** — the journal waits behind the web's move onto the core
 > ([ADR 0155](../docs/decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md)
 > decision 7: the core's split, built 2026-11-22 ([ADR 0156](../docs/decisions/0156-the-kotlin-core-is-split-into-a-platform-module-and-one-module-per-application.md)),
-> then Expenses' move, [cr-web-expenses-on-the-core](cr-web-expenses-on-the-core.md)); no date set.
+> then Expenses' move, ADR 0155 § Expenses' move, built 2026-11-24); no date set.
 
 ## Goal
 

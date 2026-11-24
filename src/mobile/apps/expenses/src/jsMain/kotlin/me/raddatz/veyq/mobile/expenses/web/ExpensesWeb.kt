@@ -119,7 +119,7 @@ fun revisionDigest(sealedBody: Uint8Array): String = codec.digest(sealedBody.byt
 // ---- the held revisions and the ledger check ----
 
 /**
- * A Pot's held revisions as the core reads them (cr-web-expenses-on-the-core decision 5's named fallback): each body read
+ * A Pot's held revisions as the core reads them (ADR 0155 § Expenses' move: the named fallback of its timing gate): each body read
  * into the core once, when the web's list of held revisions is new, not on every rule's call. Opaque — no member in its
  * `.d.ts` — and held `markRaw` beside the list it was made from; the rules below take it.
  */

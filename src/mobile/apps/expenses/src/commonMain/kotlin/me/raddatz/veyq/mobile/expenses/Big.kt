@@ -7,7 +7,7 @@ package me.raddatz.veyq.mobile.expenses
  * dividend's sign), comparison, powers of ten and decimal text. On the JVM and natively schoolbook limbs
  * (`Big.threaded.kt`, held against `java.math.BigInteger` by `BigTest`); on JavaScript the engine's own `BigInt`
  * (`Big.js.kt`): Kotlin/JS emulates a `Long`, and the limbs over it took a 10,000-entry Pot's ledger from 38 ms to 26 s
- * (cr-web-expenses-on-the-core, measured), the CR's named fallback. Both answer `contracts/expenses/v1-vectors.json`.
+ * (ADR 0155 § Expenses' move, measured), the move's named fallback. Both answer `contracts/expenses/v1-vectors.json`.
  */
 expect class Big : Comparable<Big> {
     /** -1, 0 or 1. */

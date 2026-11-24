@@ -33,7 +33,7 @@ export type HeldRevision = ServedRevision & {
 
 /**
  * The core's handle of one list of held revisions: each body read into the core once per list, not on every rule's call
- * (cr-web-expenses-on-the-core decision 5's fallback, measured). Kept beside the list it was made from — a list is replaced,
+ * (ADR 0155 § Expenses' move, measured). Kept beside the list it was made from — a list is replaced,
  * never changed in place (`potSession.ts`) —, `markRaw`, read only by the core.
  */
 const handles = new WeakMap<readonly HeldRevision[], core.PotRevisions>()

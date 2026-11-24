@@ -4,7 +4,7 @@ package me.raddatz.veyq.mobile.expenses
  * A map and a set keyed by strings, in insertion order, for the ledger's hot paths. On the JVM and natively they are
  * `LinkedHashMap`/`LinkedHashSet`. On JavaScript they wrap the engine's own `Map`/`Set` (`StringMaps.js.kt`): Kotlin/JS's
  * hash map hashes a string anew on every lookup, and with it a 10,000-entry Pot's ledger spent most of its time in
- * `put` and `get` (cr-web-expenses-on-the-core's optimisation round, profiled). Iteration order is insertion order on
+ * `put` and `get` (ADR 0155 § Expenses' move, its optimisation round, profiled). Iteration order is insertion order on
  * every platform, which the ledger's lists are built by.
  */
 internal expect fun <V> stringMap(): MutableMap<String, V>

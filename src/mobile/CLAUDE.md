@@ -438,7 +438,9 @@ A Gradle build of its own, run through its own wrapper.
   `NoticeKind` through the platform's one notice host (decision 4), never a duration of the platform's own.
   `format-vectors.json` beside `words.json` is the web's output: written by `src/web/scripts/format-vectors.mts` under
   the ICU of the Node lines `engines` names (78.3 for 22, 24 and 26 on 2026-11-21; ICU 77 moves five currencies'
-  digits), never by hand; `ShownVectorsTest` holds `Shown` and `expenses/Currencies` to it.
+  digits), never by hand; `ShownVectorsTest` holds `Shown` and `expenses/Currencies` to it. Money and numbers moved with
+  Expenses (ADR 0155 decision 7.3): `money-vectors.json` is the core's output, written by `ShownVectorsTest`
+  (`VEYQ_WRITE_VECTORS=1`), byte for byte where nothing changed.
 - `theme/generate_theme.py` — the web's colour roles and brand mark for every platform (ADR 0123 decision 7): the
   builds run it (`:core:generateTheme`, `:android:generateThemeRes`, the Apple project's pre-build step, and `--gtk`,
   libadwaita's `style.css`, the icon and the desktop entry, in `run.py build`; `--winui`, WinUI's `Theme.xaml` and
@@ -580,7 +582,16 @@ A Gradle build of its own, run through its own wrapper.
   (`:composition`, the apps' kind table held to the file's; `VEYQ_WRITE_VECTORS=1 ./gradlew :composition:jvmTest --tests
   '*TreeVectorsTest*'` rewrites it byte for byte where nothing changed) and `TreeRulesTest`, then `@veyq/core-js`'s check and
   the web's `tree.vectors.test.ts`. Its code reached from the façade carries no `Long` and no enum (the web's bytes, ADR 0155
-  § The node tree's slice). Live,
+  § The node tree's slice). Expenses' rules (`apps/expenses`: the format, the codec, the ledger and its check, money as text and as
+  typed, the day's rates; the web's through `@veyq/core-js/expenses`, `apps/expenses/src/jsMain/…/expenses/web/`) change
+  only with `contracts/expenses/v1-vectors.json`: `ExpensesVectorsTest` (`commonTest`; `VEYQ_WRITE_VECTORS=1 ./gradlew
+  :apps:expenses:jvmTest --tests '*ExpensesVectorsTest*'` rewrites it byte for byte where nothing changed),
+  `ExpensesRulesTest`, `LedgerRulesTest`, `BigTest`, then `@veyq/core-js`'s check (its `expenses.test.ts`, the decode cases
+  through Expenses' own conformance binary, `DecodeRun.kt`) and the web's `features/expenses/vectors.test.ts`. Code a
+  façade reaches matches a pattern through `text/Pattern` (the engine's `RegExp` on JavaScript), never Kotlin's `Regex`, and
+  writes base64 through `crypto/b64`, never `kotlin.io.encoding.Base64`: either, once reached, ships in the standard
+  library's file with every entry (ADR 0155 § Expenses' move); a `Long` on its hot path is emulated (`Big` is the engine's
+  `BigInt` there). Live,
   `SearchLiveTest` (`VEYQ_LIVE`: a Memory with a date, a place, a participant and a photo searched from another space,
   the photo opened through its gallery's request, a rename seen after a focus, an idle focus one `304` per tree and
   listing; the Memory purged). Its bounds are `SearchVolumeMeasure`'s, opt-in: `VEYQ_MEASURE=1 ./gradlew :composition:jvmTest
