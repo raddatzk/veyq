@@ -3,7 +3,7 @@
 import './shared/security/trustedTypes'
 import { createApp } from 'vue'
 import App from './App.vue'
-import router from './router'
+import router, { preloadRoute } from './router'
 import { i18n } from './i18n'
 import { boot } from './app/boot'
 import { registerApplications } from './applications'
@@ -20,6 +20,9 @@ async function bootstrap() {
   // (ADR 0079 Decision 5); filled before boot() resolves the first route. The applications' strings with them (inbox #513).
   registerApplicationMessages()
   registerApplications()
+  // Every page is a chunk of its own (inbox #1310): start fetching the one this address opens now, so it travels while
+  // boot() asks the server rather than after. The navigation below awaits the same module.
+  preloadRoute(window.location.pathname + window.location.search + window.location.hash)
   // Discover the instance state (fresh → setup, set-up → login, unreachable → error banner) before mounting,
   // so the router lands on the right first screen.
   await boot()

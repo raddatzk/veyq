@@ -11,6 +11,7 @@ vi.mock('../../features/account/email/UnconfirmedEmailBanner.vue', () => ({ defa
 vi.mock('../../core/operator/operatorDetails', () => ({ loadPublishedOperator: async () => ({ identification: null, contact: null }) }))
 
 import AppShell from './AppShell.vue'
+import { loadMemberChrome } from './memberChrome'
 import router from '../../router'
 import { realI18n } from '../../test/i18n'
 
@@ -27,6 +28,8 @@ async function mountAt(path: string) {
   })
   await r.replace(path)
   await r.isReady()
+  // The member's chrome is a chunk of its own; the router's `appPage` has it loaded before an app page enters (inbox #1310).
+  await loadMemberChrome()
   const w = mount(AppShell, { global: { plugins: [r, realI18n()] } })
   mounted.push(w)
   await flushPromises()
