@@ -416,8 +416,10 @@ A Gradle build of its own, run through its own wrapper.
 - `words/` — every word the apps show (ADR 0136 decision 3): `words.json` (English and German, `{n}` / `{n:int}`
   placeholders, plurals by CLDR category) is the one source; `generate_words.py` writes the core's `Msg` keys
   (`:core:generateWords`), Android's resources and `Context.words` (`:android:generateWords`; the app has no
-  `strings.xml` of its own) and the Apple String Catalog `Words` (the project's `preGenCommand` and pre-build step;
-  `say(msg, …)`, `say(notice)`), the Linux app's gettext catalogs with `words.rs` (`--gettext`, which `run.py build`
+  `strings.xml` of its own) and the Apple String Catalog `Words` with `Msg+Words.swift` (the project's `preGenCommand`
+  and pre-build step; `say(msg, …)`, `say(notice)`; `Msg` is a class of one getter per word, never an enum, so the web
+  loads only the words it reads — the Swift file gives each its enum-era name, `Msg.trashMoved`: ADR 0136 § The words'
+  form for JavaScript), the Linux app's gettext catalogs with `words.rs` (`--gettext`, which `run.py build`
   runs; `build.rs` compiles each `.po` with `msgfmt --check`) and the Windows app's `.resw` catalogs with `Words.g.cs`
   (`--resw`, which `windows/run.py build` runs; a plural is one entry per CLDR category, `key#one`, and each catalog
   names its `_language`). The two manifests that show text are generated too: `--apple-infoplist` writes the usage
