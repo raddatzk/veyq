@@ -26,7 +26,7 @@
 // right itself, and nothing calls an API but through the source. The children that need the source get it by
 // injection (`provideMemoryView`: the organizer). The delete differs honestly by door: a member's trash with undo, a
 // guest's purge of its own media, asked first — on the tile and in the lightbox alike. The lightbox is handed the
-// source's loaders and each write per right (`canDelete`, the source's `mediaMeta` door). A guest
+// source's loaders and each write per right (`canDelete`, the source's `mediaMeta` door where `editMeta` holds). A guest
 // mounts this through core's share page (`core/sharing/ShareTreePage.vue`) for every Memory and chapter of its link: it
 // sees the date and place sealed in the node's meta, but never reconciles them (that writes the node's meta, `editMeta`).
 import { ref, computed, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
@@ -1204,7 +1204,7 @@ watch(
       :memory-name="node.name"
       :suspend-keys="coverEditing || bannerDialog"
       :can-delete="canDeleteInLightbox"
-      :media-meta="source.mediaMeta"
+      :media-meta="can.editMeta ? source.mediaMeta : undefined"
       :uploader-of="uploaderNames.uploaderOf"
       :preview-loader="previewLoader"
       :original-loader="originalLoader"
