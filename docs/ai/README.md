@@ -316,7 +316,9 @@ A refined CR nails **decisions, not keystrokes**:
   and every reader with the thread each runs on: cr-bundled-store-adopts-itself locked only the check's promotion,
   though its adoption inserts the same row the Server Owner's save does (a 500 under the race), and invalidated a cache
   the app shell reads on a Vert.x IO thread, where a cold cache cannot read the database (the first page after a change
-  hung). And a test class a CR names as a case's home is read for its profile: that CR put an ingress re-render case in
+  hung). A refine that says a write "cannot interleave" with a switch names the lock each *write path* takes, not only
+  the row writers': cr-setup-asks-for-applications claimed it, and write gates read the cached switch outside any lock.
+  And a test class a CR names as a case's home is read for its profile: that CR put an ingress re-render case in
   a class whose profile renders no ingress.
 - **Price a confidentiality layer against what the same attacker already reads.** `cr-guest-names-for-members-only`
   was refined to a per-Memory name keypair under `K_SC` so that *a link plus a database dump* could not read guest

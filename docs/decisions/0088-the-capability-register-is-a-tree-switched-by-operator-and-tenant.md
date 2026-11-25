@@ -70,8 +70,9 @@ instance and tenant layers.
    node's kind. An application off in a tenant that holds nothing of it is simply absent there — no banner, no day, no
    mail. That is the case of a tenant created while the instance holds an application off, of an application the
    Server Owner left out at setup (decision 12), and of a window that ends with nothing left, which then starts no next
-   one. While the application is off, every write of it is refused, so nothing of it can appear that would need a
-   window. The window is no requirement
+   one. While the application is off, every write of it is refused; a write whose gate read the switch just before it
+   went off can still commit a node, and the purge's next tick opens that tenant's window from then, never a day
+   earlier than members are told. The window is no requirement
    (decision 8): a tenant owner sets no value for it, and a tenant only narrows by switching the application off, never
    by shortening what the instance allows (decision 2). An instance switch gives every tenant its own day, and a tenant
    already off keeps its earlier one. Only the application's own entry erases; a child entry (`memories.places`) erases
