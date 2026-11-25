@@ -16,7 +16,8 @@
 //   4. switched on before the day, the row's day and the banner are gone; switched off again, a fresh day and a fresh
 //      notice;
 //   5. left off past that day: both files are gone, for the member and in the personal space; the folders, the subfolder
-//      and the Memory stay; still off, a fresh day starts and a fresh notice goes; switched on, it ends.
+//      and the Memory stay; still off with nothing of Depot left, no next day starts — no day on the owner's row, no
+//      banner, no third notice (ADR 0088 decision 5); switched on, the space is left with Depot on.
 //
 // Not driven here, each for its reason (ADR 0090 decision 9: a rule a slice test proves with an injected clock is not
 // proven again here by waiting real time): that a switch-on before the day leaves everything in place once the day has
@@ -427,7 +428,7 @@ test(
 )
 
 test(
-  'left off past its day, its files are gone in the shared and the personal space, the folders and the Memory stay, and a fresh day starts',
+  'left off past its day, its files are gone in the shared and the personal space, the folders and the Memory stay, and no next day starts',
   {
     tag: [
       '@uc.platform.erase-switched-off-application:on-the-day-its-nodes-are-erased',
@@ -457,17 +458,25 @@ test(
     await m.getByRole('button', { name: memory, exact: true }).click({ timeout: 60_000 })
     await expect(m.getByRole('heading', { level: 1, name: memory })).toBeVisible()
 
-    // Still off once the erasure ended: a fresh day from then, on the owner's row and in a fresh notice.
+    // Still off once the erasure ended, with nothing of Depot left: no next day (ADR 0088 decision 5) — the owner's row
+    // names none, the member's next document is served none and shows no banner, and no third notice goes.
     const { page } = owner
-    const fresh: { day: Date | null } = { day: null }
     await expect(async () => {
-      fresh.day = await openCapabilities()
-      expect(fresh.day?.getTime() ?? 0).toBeGreaterThan(erasureDay.getTime())
+      expect(await openCapabilities(), 'no next day once nothing of Depot is left').toBeNull()
     }).toPass({ timeout: 30_000, intervals: [2_000] })
-    await expect(erasureLine(page)).toHaveText(`Erased on ${await onScreen(page, fresh.day!, 'en')} unless switched on again`)
-    await expectNotices(3, fresh.day!)
+    await expect(erasureLine(page)).toHaveCount(0)
+    await expect(depotRow(page).getByRole('button', { name: 'Switch on', exact: true })).toBeVisible()
+    const served = tenantSet(m)
+    await reachHome(member, accountMember)
+    const set = await served
+    expect(set.capabilities.map((c) => c.id)).not.toContain('depot')
+    expect(set.applicationErasures).toEqual([])
+    await expect(banner(m)).toHaveCount(0)
+    for (const to of [accountOwner.email, accountMember.email]) {
+      expect(await awaitMails(to, NOTICE, 2), `${to}: the two notices of the two windows, no third`).toHaveLength(2)
+    }
 
-    // Switched on before that day, it ends: the space is left with Depot on.
+    // Switched on, the space is left with Depot on.
     await switchDepotOn()
     await expect(erasureLine(page)).toHaveCount(0)
   },

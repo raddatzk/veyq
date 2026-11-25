@@ -1686,7 +1686,6 @@ const en = {
   },
   applications: {
     // uc.platform.switch-application-off: the banner above every page of a space while an application is switched off.
-    switchedOff: '{application} is switched off here. You can still open and download what’s here, so save what you want to keep.',
     // uc.platform.erase-switched-off-application: the same banner once the server names the day the content is erased.
     switchedOffUntil: '{application} is switched off here. You can open and download what’s here until {day}; then it is erased. Save what you want to keep.',
   },
@@ -3955,7 +3954,6 @@ const de: typeof en = {
     },
   },
   applications: {
-    switchedOff: '{application} ist hier abgeschaltet. Was da ist, kannst du weiter öffnen und herunterladen – sichere, was du behalten willst.',
     switchedOffUntil: '{application} ist hier abgeschaltet. Was da ist, kannst du bis zum {day} öffnen und herunterladen; dann wird es gelöscht. Sichere, was du behalten willst.',
   },
   groups: {

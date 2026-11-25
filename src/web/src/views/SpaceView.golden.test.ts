@@ -223,14 +223,14 @@ describe('the Memories level view (golden)', () => {
     await expect(await golden('#~me/trips')).toMatchFileSnapshot(file('folder-readonly-unshareable'))
   })
 
-  it('Memories switched off for the tenant: the banner names it, no new Memory, the Memory keeps no write (uc.platform.switch-application-off)', async () => {
+  it('Memories switched off for the tenant with no day (nothing of it held): no banner, no new Memory, the Memory keeps no write (uc.platform.switch-application-off)', async () => {
     capabilityState.ids = [DEPOT, EXPENSES, CORE_PUBLIC_SHARES, CORE_PUBLIC_SHARES_CONTRIBUTE, CORE_PUBLIC_SHARES_DROP_BOX]
     await expect(await golden('#~me/trips')).toMatchFileSnapshot(file('folder-memories-off'))
   })
 
   // uc.platform.erase-switched-off-application (web): the banner names the day the server erases the application's
   // content, and only while the set says it is off — the server keeps the day while a due erasure still runs.
-  it('an application switched off with a named day: the dated banner; on again with the day still served: none', async () => {
+  it('an application switched off with a named day: the dated banner; on again with the day still served, or off with none: none', async () => {
     const until = new Date('2026-11-25T10:00:00Z')
     const local = Date.prototype.toLocaleDateString
     vi.spyOn(Date.prototype, 'toLocaleDateString').mockImplementation(function (this: Date, locales, options) {
@@ -243,9 +243,9 @@ describe('the Memories level view (golden)', () => {
       'Depot is switched off here. You can open and download what’s here until 11/25/2026; then it is erased. Save what you want to keep.',
     ]) // Memories is on: its served day (an erasure that still runs) draws no banner
 
-    capabilityState.tenantErasures = {} // off, with no day served: the undated banner stands
+    capabilityState.tenantErasures = {} // off, with no day served: the tenant holds nothing of it, so no banner (ADR 0088 decision 5)
     const undated = (await mountHome('#~me')).findAll('.application-off-banner').map((b) => b.text())
-    expect(undated).toEqual(['Depot is switched off here. You can still open and download what’s here, so save what you want to keep.'])
+    expect(undated).toEqual([])
   })
 
   it('an empty folder: both empty states beside the create cards', async () => {

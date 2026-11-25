@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeAll } from 'vitest'
 // (buildCreateServerOwnerRequest) is pure and untouched by this mock.
 vi.mock('../../api/client', () => ({ setupApi: vi.fn() }))
 
-import { buildCreateServerOwnerRequest, createServerOwner, prepareServerOwner } from './setupServer'
+import { buildCreateServerOwnerRequest, createServerOwner, listSetupApplications, prepareServerOwner } from './setupServer'
 import { setupApi } from '../../api/client'
 import type { SetupApi, SetupStatus } from '../../api/generated'
 import { fakeApi } from '../../test/apiMock'
@@ -117,6 +117,21 @@ describe('prepareServerOwner / createServerOwner — mint first, send after the 
     await expect(createServerOwner(request0())).resolves.toEqual({ userId: 'u-owner' })
     expect(create).toHaveBeenLastCalledWith({ createServerOwnerRequest: { email: 'owner@example.com' } })
     expect(create.mock.calls[0][0].createServerOwnerRequest).not.toHaveProperty('operatingMode')
+    // Nothing left out sends no field: every application stays on, as a client that predates the question posts.
+    expect(create.mock.calls[0][0].createServerOwnerRequest).not.toHaveProperty('applicationsOff')
+  })
+
+  it('carries the applications left out in the same post (uc.admin.setup-server step 6, ADR 0088 decision 12)', async () => {
+    const create = vi.fn<SetupApi['createServerOwner']>().mockResolvedValue({ userId: 'u-owner' })
+    fakeApi(setupApi, { createServerOwner: create })
+    await createServerOwner(request0(), ['depot'])
+    expect(create).toHaveBeenLastCalledWith({ createServerOwnerRequest: { email: 'owner@example.com', applicationsOff: ['depot'] } })
+  })
+
+  it('reads the applications the setup page asks about from the server', async () => {
+    const served = [{ id: 'depot', title: { en: 'Depot', de: 'Depot' }, purpose: { en: 'Files.', de: 'Dateien.' } }]
+    fakeApi(setupApi, { listSetupApplications: async () => served })
+    await expect(listSetupApplications()).resolves.toEqual(served)
   })
 })
 

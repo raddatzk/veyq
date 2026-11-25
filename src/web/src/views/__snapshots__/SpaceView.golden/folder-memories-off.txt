@@ -1,9 +1,4 @@
 div.veyq-node-host
-  div.application-off-banner.veyq-message.veyq-message--warn [role="alert"]
-    div.veyq-message__wrapper
-      div.veyq-message__content
-        div.veyq-message__text
-          "Memories is switched off here. You can still open and download what’s here, so save what you want to keep."
   div.veyq-level-view
     div.has-header.veyq-level-head
       header.has-leading.veyq-node-header

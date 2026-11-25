@@ -1,6 +1,6 @@
 // First run, as site/src/content/docs/run/first-run.mdx tells a Server Owner to do it and in its order: see the domain
-// answer that it is not set up, create the Server Owner, save the Emergency Kit and read what an operator may owe, sign
-// in, connect the bundled store and check it, publish who runs the instance (each empty value not stated), create the
+// answer that it is not set up, create the Server Owner, save the Emergency Kit, read what an operator may owe and keep every
+// application on, sign in, connect the bundled store and check it, publish who runs the instance (each empty value not stated), create the
 // first tenant and copy its invite link — then open that link as the invitee would, and see the provider
 // identification on the tenant's sign-in page. The labels are admin-web's own (src/admin-web/src/i18n/index.ts, en), so a renamed button is
 // a red run here and a stale Run page at the same time. It is the scenario, not a fixture (ADR 0090 decision 7): it
@@ -82,6 +82,16 @@ test(
     await expect(page.getByText('What you may have to state', { exact: true })).toBeVisible()
     await expect(page.getByText('This is your own assessment, not veyq’s, and not legal advice.', { exact: false })).toBeVisible()
     await expect(page.getByRole('checkbox'), 'information, not a choice').toHaveCount(0)
+    await page.getByRole('button', { name: 'Continue' }).click()
+
+    // Step 5: which applications the server offers, every one ticked, in the register's words (ADR 0088 decision 12).
+    // The run keeps them all, so every later scenario finds each application on.
+    await expect(page.getByText('Which applications does this server offer?', { exact: true })).toBeVisible()
+    for (const title of ['Memories', 'Depot', 'Expenses']) {
+      await expect(page.getByText(title, { exact: true })).toBeVisible()
+    }
+    await expect(page.getByRole('checkbox')).toHaveCount(3)
+    for (const box of await page.getByRole('checkbox').all()) await expect(box).toBeChecked()
     const create = page.getByRole('button', { name: 'Create the account and sign in' })
     await expect(create).toBeEnabled()
     await create.click()
