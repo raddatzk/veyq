@@ -21,7 +21,8 @@ pub fn trust_line(trusted: Option<Method>) -> Option<String> {
     match trusted {
         Some(Method::DeviceKey) => Some(words::manage_trusted_remembered()),
         Some(Method::Device) => Some(words::manage_trusted_password()),
-        None => None,
+        // a TV's PIN (ADR 0160) is no trust a desktop keeps
+        Some(Method::DevicePin) | None => None,
     }
 }
 

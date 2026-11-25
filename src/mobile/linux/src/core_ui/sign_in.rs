@@ -39,6 +39,8 @@ pub fn unlock_words(method: Method, level: Option<StaySignedIn>) -> (String, Str
         (Method::Device, _) => (words::unlock_password_hint(), words::unlock_submit()),
         (Method::DeviceKey, Some(StaySignedIn::Login)) => (words::unlock_login_hint(), words::unlock_retry()),
         (Method::DeviceKey, _) => (words::unlock_remembered_hint(), words::unlock_submit()),
+        // a TV's PIN (ADR 0160): no desktop keeps one, so its field is the password's
+        (Method::DevicePin, _) => (words::unlock_password_hint(), words::unlock_submit()),
     }
 }
 
@@ -631,7 +633,7 @@ impl Unlock {
     /// Draws [gate] (a `Gate.Unlock`): whose account, the password where it opens with one, what opens it (the record's
     /// level), working or not, the error.
     pub fn show(&self, gate: &Gate) {
-        let Gate::Unlock { record, working, error } = gate else { return };
+        let Gate::Unlock { record, working, error, .. } = gate else { return };
         // the core runs once a gate shows: the tray's watch is taken now (asked before the start, it is refused)
         self.uploads.start();
         self.account.set_title(&record.email);
