@@ -18,7 +18,10 @@ info:
     access token yields only ciphertext, which is useless without the password and Secret Key.
 
     `POST /api/account/wraps` adds a device-local convenience wrap — **DEVICE** (trust this device — unlock
-    with only the password next time) or **DEVICE_KEY** (password-less remember-me), ADR 0005;
+    with only the password next time), **DEVICE_KEY** (password-less remember-me), ADR 0005, or **DEVICE_PIN**
+    (a TV's PIN, ADR 0160: the wrap with a server share and a PIN verifier the server counts against —
+    `POST /api/account/wraps/{id}/pin-unlock` releases the share to a matching verifier, and the tenth failure in a
+    row deletes the wrap);
     `DELETE /api/account/wraps/{id}` removes a device-local wrap (untrust). Both act only on the caller's own
     wraps and receive only ciphertext + KDF params — never a key, a password, or the Secret Key. The PASSWORD
     floor (and RECOVERY/PASSKEY) cannot be removed this way.
@@ -116,14 +119,16 @@ paths:
     post:
       tags: [account-wraps]
       operationId: addAccountWrap
-      summary: Add a device-local convenience wrap (DEVICE or DEVICE_KEY) of the Master Key.
+      summary: Add a device-local convenience wrap (DEVICE, DEVICE_KEY or DEVICE_PIN) of the Master Key.
       description: >
         Stores a new device-local `MasterKeyWrap` for the authenticated caller — DEVICE (Master Key under a
         password + device-bound KEK, "trust this device") or DEVICE_KEY (under a device key alone,
         password-less remember-me), ADR 0005 — produced entirely on-device. The server receives only
         ciphertext + the opaque KDF params (the AEAD iv for DEVICE_KEY) and returns the new wrap's id (for a
-        later untrust). Restricted to the device-local methods; the PASSWORD floor and other methods are
-        created elsewhere.
+        later untrust). DEVICE_PIN (a TV's PIN level, ADR 0160) also carries `pinShare` and `pinVerifier`, which the
+        server keeps beside the wrap and never returns but through `pin-unlock`; both are required for DEVICE_PIN and
+        refused for every other method. Restricted to the device-local methods; the PASSWORD floor and other methods
+        are created elsewhere.
       security:
         - bearerAuth: []
       requestBody:
@@ -138,7 +143,9 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AddWrapResult" }
         "400":
-          description: The request was malformed (missing/invalid fields, or a method other than DEVICE / DEVICE_KEY).
+          description: >
+            The request was malformed (missing/invalid fields, a method other than DEVICE / DEVICE_KEY / DEVICE_PIN,
+            DEVICE_PIN without `pinShare` and `pinVerifier` of 32 bytes each, or either of them on another method).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -159,7 +166,7 @@ paths:
         "422":
           description: >
             The capability the wrap's method needs is switched off instance-wide (ADR 0032, ADR 0088):
-            `core.remember-device` for DEVICE, `core.remember-device.passwordless` for DEVICE_KEY, which by the AND
+            `core.remember-device` for DEVICE, `core.remember-device.passwordless` for DEVICE_KEY and DEVICE_PIN, which by the AND
             along the path also needs `core.remember-device`. With the first off no device is remembered; with
             only the second off, a remembered device still asks for the password. Enforced server-side even if a
             stale client still offers the toggle.
@@ -577,8 +584,8 @@ paths:
       summary: Remove a wrap by id (untrust this device).
       description: >
         Removes the caller's wrap with this id. **Idempotent** (like logout): the wrap is deleted only if it
-        is one of the caller's own **device-local convenience wraps** — **DEVICE** or **DEVICE_KEY**, the two
-        kinds `POST /api/account/wraps` creates (ADR 0005 §9: a device carries one at a time, so switching
+        is one of the caller's own **device-local convenience wraps** — **DEVICE**, **DEVICE_KEY** or **DEVICE_PIN**,
+        the kinds `POST /api/account/wraps` creates (a DEVICE_PIN wrap's share and verifier go with it) (ADR 0005 §9: a device carries one at a time, so switching
         level removes the old one through this endpoint). An unknown id, another account's wrap, the PASSWORD
         floor, or any other method is a silent no-op. Always 204 for a well-formed (UUID) id — no cross-account enumeration, the 2SKD
         floor can never be removed, and the RECOVERY/PASSKEY methods are out of reach of this endpoint.
@@ -603,6 +610,74 @@ paths:
           description: A path id that is no UUID names nothing (`not_found`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_found } }
+
+  /api/account/wraps/{id}/pin-unlock:
+    post:
+      tags: [account-wraps]
+      operationId: unlockAccountWrapWithPin
+      summary: Release a DEVICE_PIN wrap's server share to a matching PIN verifier (ADR 0160).
+      description: >
+        A TV unlocks an account it keeps behind a PIN (ADR 0160 decision 3): it derives the PIN's verifier from its
+        hardware factor and the PIN typed, and sends it. The server compares it in constant time with the verifier
+        stored at enrolment and answers the wrap's server share on a match, which resets the failure count. A mismatch
+        counts one failure and answers how many attempts are left; **the tenth failure in a row deletes the wrap with
+        its share and verifier**, and every later call answers 404. The server can test no PIN itself: the verifier
+        and the share are worthless without the device's hardware factor (ADR 0160 decision 4). The count is per wrap
+        on the server, so neither a reinstall nor a second device resets it.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The opaque id of the caller's DEVICE_PIN wrap (returned by the add-wrap call).
+          schema: { type: string, format: uuid, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PinUnlockRequest" }
+      responses:
+        "200":
+          description: The verifier matched; the wrap's server share is returned and the failure count is reset.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PinUnlockResult" }
+        "400":
+          description: The request was malformed (a verifier that is not 32 bytes of base64).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: >
+            `pin_incorrect` — the verifier did not match; one failure was counted, and `attemptsLeft` says how many
+            remain before the wrap is deleted (at least 1: the failure that leaves none deletes the wrap and answers 404).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PinUnlockRefused" }
+              example: { code: pin_incorrect, attemptsLeft: 7 }
+        "404":
+          description: >
+            `not_found` — the caller has no DEVICE_PIN wrap with this id: never had one, another device removed it, or
+            the tenth failure deleted it. The TV needs a new pairing.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_found }
+        "413": { $ref: "_common.openapi.yaml#/components/responses/RequestTooLarge" }
+        "429":
+          description: Too many unlock calls from this account in a short time; retry after the indicated delay. Nothing was counted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rate_limited }
 
   /api/account/rotation:
     post:
@@ -1906,6 +1981,60 @@ components:
 
     # MasterKeyWrap and ErrorResponse are single-sourced in _common.openapi.yaml (ADR 0038), aliased here by name
     # so the generator emits them under the names the operations use.
+    PinUnlockRequest:
+      type: object
+      description: A DEVICE_PIN wrap's unlock attempt — the PIN's verifier, derived on the device (ADR 0160 decision 2).
+      required: [verifier]
+      properties:
+        verifier:
+          type: string
+          description: '`V = HKDF(F, "veyq/v1/pin-verifier" ‖ PIN)`, 32 bytes (opaque base64).'
+          contentEncoding: base64
+          minLength: 44
+          maxLength: 44
+          example: cGluLXZlcmlmaWVyLTMyLWJ5dGVzLW9mLWhrZGYtb3V0Lg==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    PinUnlockResult:
+      type: object
+      description: The wrap's server share `S`, released to a matching verifier.
+      required: [pinShare]
+      properties:
+        pinShare:
+          type: string
+          description: The server share `S` stored at enrolment (32 bytes, opaque base64).
+          contentEncoding: base64
+          maxLength: 44
+          example: c2VydmVyLXNoYXJlLTMyLWJ5dGVzLW9mLXJhbmRvbS4=
+
+    PinUnlockRefused:
+      type: object
+      description: >
+        A wrong PIN (`code: pin_incorrect`): one failure counted; `attemptsLeft` failures remain before the wrap is
+        deleted. Operator-blind: a count the server keeps anyway.
+      required: [code, attemptsLeft]
+      properties:
+        code:
+          x-veyq-visibility: public
+          type: string
+          description: Stable, client-localizable error code.
+          maxLength: 64
+          example: pin_incorrect
+        message:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: Optional developer-facing detail; never contains secrets or content.
+          maxLength: 512
+          example: null
+        attemptsLeft:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 9
+          description: How many failures remain before the wrap is deleted.
+          example: 7
+
     MasterKeyWrap:
       $ref: '_common.openapi.yaml#/components/schemas/MasterKeyWrap'
 
@@ -1913,7 +2042,8 @@ components:
       type: object
       description: >
         A new device-local convenience wrap to store for the caller: DEVICE (trust this device — password +
-        device key) or DEVICE_KEY (remember me — password-less device key alone).
+        device key), DEVICE_KEY (remember me — password-less device key alone) or DEVICE_PIN (a TV's PIN, ADR 0160 —
+        with its server share and PIN verifier).
       required: [method, wrappedKey, kdfParams]
       properties:
         method:
@@ -1921,8 +2051,8 @@ components:
           type: string
           description: >
             The unlock method this wrap opens. Restricted to the device-local methods on this endpoint:
-            DEVICE (password + device factor) or DEVICE_KEY (password-less device key).
-          enum: [DEVICE, DEVICE_KEY]
+            DEVICE (password + device factor), DEVICE_KEY (password-less device key) or DEVICE_PIN (a TV's PIN).
+          enum: [DEVICE, DEVICE_KEY, DEVICE_PIN]
           example: DEVICE
         wrappedKey:
           type: string
@@ -1940,6 +2070,27 @@ components:
           maxLength: 256
           example: AAAAAwAAgAAAAAABAAAAIHNhbHQtZXhhbXBsZS0xNmJ5dGVz
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+        pinShare:
+          type: [string, "null"]
+          description: >
+            DEVICE_PIN only (required there, refused elsewhere): the server share `S`, 32 random bytes the device drew
+            and forgets (ADR 0160 decision 2). Kept beside the wrap and released only to a matching `pinVerifier`.
+          contentEncoding: base64
+          minLength: 44
+          maxLength: 44
+          example: c2VydmVyLXNoYXJlLTMyLWJ5dGVzLW9mLXJhbmRvbS4=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        pinVerifier:
+          type: [string, "null"]
+          description: >
+            DEVICE_PIN only (required there, refused elsewhere): the PIN's verifier `V = HKDF(F, "veyq/v1/pin-verifier"
+            ‖ PIN)`, 32 bytes. Worthless without the device's hardware factor `F`, which the server never sees.
+          contentEncoding: base64
+          minLength: 44
+          maxLength: 44
+          example: cGluLXZlcmlmaWVyLTMyLWJ5dGVzLW9mLWhrZGYtb3V0Lg==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 44, max = 44) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     AddWrapResult:
       type: object

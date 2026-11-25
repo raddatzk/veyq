@@ -2119,5 +2119,32 @@
       {"why": "an empty server", "token": "veyqkit:eyJ2IjozLCJlbWFpbCI6Inpvw6subcO8bGxlckBleGFtcGxlLmNvbSIsInNrIjoiMEM1MTI2LTBaNFJQSy04RVQyOTUtODVFUUs1LURIU1FOMC1DOEhZQjktVjk1QlBBLVdXMUhZRS1UUUUwTkQiLCJzcnYiOiIifQ"},
       {"why": "a server that is not a string", "token": "veyqkit:eyJ2IjozLCJlbWFpbCI6Inpvw6subcO8bGxlckBleGFtcGxlLmNvbSIsInNrIjoiMEM1MTI2LTBaNFJQSy04RVQyOTUtODVFUUs1LURIU1FOMC1DOEhZQjktVjk1QlBBLVdXMUhZRS1UUUUwTkQiLCJzcnYiOjQyfQ"}
     ]
+  },
+  "pin_kek": {
+    "note": "ADR 0160 decision 2 (DEVICE_PIN): salt = HKDF-SHA256(ikm = F || S, salt = empty, info = utf8(\"veyq/v1/pin-kek\"), L = 16); KEK = Argon2id(utf8(pin), salt) at the DEVICE wrap's production parameters; the wrap is the master-key seal (seal.sym.master-key's construction) under that KEK. F is the hardware factor (32 bytes), S the server share (32 bytes); other_share_salt pins that S changes the salt.",
+    "params": {
+      "t": 3,
+      "m": 32768,
+      "p": 1,
+      "dkLen": 32
+    },
+    "hardware_factor": "5555555555555555555555555555555555555555555555555555555555555555",
+    "server_share": "6666666666666666666666666666666666666666666666666666666666666666",
+    "pin_utf8": "493817",
+    "salt": "8115f128446998f4b5e72bdcbd6dbb0a",
+    "kek": "ea21fce5ebbb6f87bfa98c5fc504280c3fbfb6cac749b1aae1aebb87d014d453",
+    "master_key": "4444444444444444444444444444444444444444444444444444444444444444",
+    "nonce": "0a0b0c0d0e0f101112131415",
+    "wrap": "020a0b0c0d0e0f10111213141539bf8540bb61fcb826ebd90c2cd40c7f2d8053190bb96a08ac036c2062825d383379b9db68cfaeb67978aa8248b5a167",
+    "other_server_share": "7777777777777777777777777777777777777777777777777777777777777777",
+    "other_share_salt": "551f6acb74164ea6d04d455bf1496e6a"
+  },
+  "pin_verifier": {
+    "note": "ADR 0160 decision 2: V = HKDF-SHA256(ikm = F, salt = empty, info = utf8(\"veyq/v1/pin-verifier\") || utf8(pin), L = 32) — what the server compares, worthless without F. other_pin pins that one digit changes V.",
+    "hardware_factor": "5555555555555555555555555555555555555555555555555555555555555555",
+    "pin_utf8": "493817",
+    "verifier": "325272164121a5e56001d635785d709ec467d93c210a1165123c9633f00948ee",
+    "other_pin_utf8": "493818",
+    "other_verifier": "bd92d737ac0303d9e024fb2e0e1c237caa9dea09e59af3128a6c14d41e68da8e"
   }
 }

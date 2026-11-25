@@ -1,0 +1,19 @@
+useCase: uc.account.unlock-with-a-pin
+feature: account
+title: Unlock an account on a TV with its PIN
+# The PIN's mechanism on the device (F, the derivations, the picker, the idle lock) is the Kotlin core's, held by
+# its conformance suite over the pin_kek / pin_verifier vectors and its session tests; the native apps are no
+# coverage surface (SURFACES), so only the server's half is a ref here.
+status: planned
+acceptanceCriteria:
+  - id: enrol-keeps-share-and-verifier
+    text: A DEVICE_PIN wrap is stored only with a 32-byte share and a 32-byte verifier; both are refused on every other method, and neither is ever returned with the key material.
+  - id: matching-verifier-releases-the-share
+    text: A matching verifier answers the share and resets the failure count; a wrong one counts a failure and answers the attempts left.
+  - id: tenth-failure-deletes-the-wrap
+    text: The tenth failure in a row deletes the wrap with its share and verifier, and every later unlock answers 404.
+  - id: only-the-callers-own-wrap
+    text: Another account's wrap id, or a wrap of another method, answers 404 and counts nothing.
+gaps:
+  backend: The slice tests land with the backend phase of cr-tv-app.
+  web: The web takes no PIN level (ADR 0160 decision 8); nothing on it reads the DEVICE_PIN wrap but the shared enum.
