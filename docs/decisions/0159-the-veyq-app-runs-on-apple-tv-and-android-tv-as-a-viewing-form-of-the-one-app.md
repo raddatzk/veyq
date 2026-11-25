@@ -1,7 +1,9 @@
 # ADR 0159 — The veyq app runs on Apple TV and Android TV as a viewing form of the one app
 
-- Status: Proposed
-- Built: no
+- Status: Accepted (owner 2026-11-25, with decision 3 widened to every application and Search)
+- Built: yes — the core, Android TV (passed on a Google TV emulator, 2026-11-25) and Apple TV (built for the tvOS
+  Simulator and the device, never run: no tvOS runtime on the build Mac); the device passes and the signing wait
+  (inbox #1360)
 - Date: 2026-11-25
 - Model: [native-apps](../crosscutting/native-apps.md)
 
@@ -60,8 +62,8 @@ household's TV. The unlock a TV needs is [ADR 0160](0160-a-tv-unlocks-an-account
      input method with the results as a Compose for TV tile grid. A result opens the same object the drawer would.
 
 4. **A TV starts at an account picker, and opens one account at a time.** Every account remembered on it is a tile
-   under a name the person gives it on this TV (by default the account's own profile name; kept on this device in the
-   clear, the one plaintext the TV keeps beside its records — no avatar, no content). Picking one asks its PIN
+   under a name the person gives it on this TV (by default the account's address — a profile name is a tenant's and
+   sealed under its keys, and the picker shows before any key is open; kept on this device in the clear, the one plaintext the TV keeps beside its records — no avatar, no content). Picking one asks its PIN
    ([ADR 0160](0160-a-tv-unlocks-an-account-by-a-pin-the-device-hardware-binds-and-the-server-counts.md)) and opens only
    that account; *Lock* and the switcher return to the picker and drop the Master Key; *Add someone* runs the QR
    sign-in. The phone's "one authentication resumes every account" does not hold on a TV.
@@ -106,3 +108,48 @@ household's TV. The unlock a TV needs is [ADR 0160](0160-a-tv-unlocks-an-account
   `LAContext` would each need a tvOS branch, and App Store Connect's own help still asks for a separate target.
 - **Rejected — Chromecast as the way onto a TV:** the Cast sender SDK is proprietary and the receiver a Google-registered
   app (the no-vendor-locked-dependency rule). AirPlay is inbox #1330, separate.
+
+## Decision log (cr-tv-app, 2026-11-25)
+
+The choices the build made inside these decisions, each with its reason.
+
+- **The form is one fact, `ThisDevice.form`** (`DeviceForm.PHONE | DESKTOP | TV`, set by the host; a TV host names no
+  offline directory and runs nothing in the background), read by the plans as `ShellModel.viewOnly`: the shell's creates,
+  uploads, drops, shares, trash and download answer nothing, every header and row goes through `NodeHeader.viewOnly`
+  (every write, the download and "Available offline" off), Memories through `MemoryRights.Access.Member.viewOnly`, Depot
+  through `FileRights.of(…, viewOnly)`, Expenses through `PotDoor.viewOnly` (writes and the Pot's download refused in the
+  model too). Pinned by `TvFormPlansTest`.
+- **A video still plays** (`MemoryRights.Rights.play`, true on a TV and included in `download`): reading a medium in
+  ranges into a player is viewing; saving it is taking it away. The Android pass found no video before it.
+- **Memories' header keeps MUSIC on a TV:** it plays and stops the Memory's music, which is viewing.
+- **No report on a TV — our reading, for the owner** (inbox #1360): the report is a form a remote types badly, and every
+  other device of the account offers it; we read the DSA's notice duty (Art. 16) as binding the service, not each
+  client. If the owner reads it otherwise, `NodeHeader.viewOnly` keeps `report` and both TV clients draw its flow.
+- **A TV signs in by its QR code only** (`SignInPlan.tvEntries`): the PIN level exists because a TV never sees the
+  password or the Secret Key.
+- **The picker's default name is the account's address** (decision 4): `TrustedDevice.label`, renamed in the TV's
+  settings (`VeyqAccount.renameOnPicker`).
+- **`SessionModel.lock()` retires every open connection** (keys zeroed, the kept session kept), and an unlock of another
+  account closes the open one first; `Gate.Picker` is the TV's start. Pinned by `TvSessionModelTest`.
+- **Search's settings sections are empty on a TV:** its settings are its own few (Lock, Add someone, Change PIN, the
+  picker name, Remove from this TV).
+- **A Depot file a TV cannot show:** both TV clients draw `FileModel.Shown.Text`, `Pdf` and `Message` as
+  `tv_opens_elsewhere` — an exhaustive drawing of the core's answer; images and media go to the viewers.
+- **tvOS has no `LAContext`:** `staySignedIn` asks `deviceOwnerAuthenticationAvailable()`, an `expect` whose iOS and
+  macOS actuals are the LAContext probe and whose tvOS one is false.
+- **Android TV:** a `TvActivity` in the one APK; Memories and Depot on TV pages of their own (`KindPage.tv`), a Pot, a
+  person and a kept link on the phone's pages (already read-only on a TV); every application's list the core's arranged
+  list as tiles; a D-pad video player of its own (`MediaController` is touch-only); Search a text field the system IME
+  (voice included) fills and a tv-material card grid — no leanback `SearchSupportFragment`; the idle lock fed by
+  `onUserInteraction` (overriding `dispatchKeyEvent` is a `RestrictedApi` lint error), the players and
+  `onStop`/`onStart`; the banner generated from the mark. A TV page owns its whole page, so Memories' map tab, which
+  `Shell.barTabs` still names, is never drawn.
+- **Apple TV:** an XcodeGen target `VeyqTV` whose root is `Veyq/TV`, compiling the TV views, `Applications.swift` (the
+  one composition root, the only `#if os(tvOS)` outside `Veyq/TV`) and a handful of portable `Core` files; a model of its
+  own (`TvModel`) over the core's models rather than the iOS `AppModel`, whose closure would need tvOS branches across
+  the iOS root; a top `TabView` with Search as `Tab(role: .search)` and `.searchable` (verified: `searchable` tvOS 15+,
+  `TabRole.search` tvOS 18+; remembered, not yet seen: that it renders tvOS's keyboard grid — the simulator pass will
+  show); `UIBackgroundModes` audio so the music plays on, the return locking the account; the PIN and the link's digits
+  on a focusable 0–9 pad, every other field the system keyboard.
+
+The published page: [Use veyq on a TV](../../site/src/content/docs/getting-started/use-veyq-on-a-tv.mdx).

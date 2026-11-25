@@ -1,0 +1,56 @@
+---
+title: "veyq auf dem Fernseher"
+description: Die veyq-App auf Apple TV und Android TV — mit dem Handy anmelden, das eigene Konto hinter der eigenen PIN behalten und Erinnerungen, Dateien und Kassen ansehen.
+sources:
+  - docs/decisions/0159-the-veyq-app-runs-on-apple-tv-and-android-tv-as-a-viewing-form-of-the-one-app.md
+  - docs/decisions/0160-a-tv-unlocks-an-account-by-a-pin-the-device-hardware-binds-and-the-server-counts.md
+  - docs/features/account/use-cases/uc.account.unlock-with-a-pin.md
+  - docs/crosscutting/native-apps.md
+---
+
+Die veyq-App läuft auch auf **Apple TV** und auf **Android TV / Google TV**. Auf dem Fernseher **siehst** du dir an,
+was in deinen Bereichen liegt: deine Erinnerungen mit Diashow, Musik und Videos, Fotos, Videos und Musik aus dem Depot,
+deine Kassen und die Suche. Ändern kannst du dort nichts, und nichts verlässt den Fernseher: kein Herunterladen, kein
+Export, kein Teilen.
+
+:::caution[Eine Vorschau, noch nicht veröffentlicht]
+Die Fernseher-App ist eine **Vorschau**: Noch kein Store führt sie.
+:::
+
+## Mit dem Handy anmelden
+
+Ein Fernseher fragt nie nach deinem Passwort oder deinem Secret Key. Er zeigt stattdessen einen **QR-Code**:
+
+1. Wähle auf dem Fernseher **Jemanden hinzufügen** (oder starte die App zum ersten Mal). Der Fernseher zeigt einen Code.
+2. Öffne veyq auf deinem Handy, wähle **Gerät hinzufügen** und scanne den Code
+   ([Ein weiteres Gerät hinzufügen](/de/account/adding-another-device/)).
+3. Gib die **sechs Ziffern**, die dein Handy zeigt, mit der Fernbedienung am Fernseher ein.
+
+## Deine eigene PIN
+
+Einen Fernseher nutzen mehrere, deshalb behält jede Person ihr Konto hinter **ihrer eigenen sechsstelligen PIN**:
+
+- Gleich nach der Anmeldung bittet dich der Fernseher, eine PIN zu wählen, zweimal. Überspringst du das, behält der
+  Fernseher nichts, und du meldest dich beim nächsten Mal wieder mit dem Handy an.
+- Danach startet der Fernseher mit einer **Auswahl**: Jede Person, die hier ein Konto behält, hat eine Kachel. Wähle
+  deine und gib deine PIN ein. Nur dein Konto öffnet sich; die anderen bleiben gesperrt.
+- **Zehn falsche PINs hintereinander** entfernen dein Konto von diesem Fernseher. Melde es dann mit dem Handy wieder an.
+- Der Fernseher **sperrt wieder**, wenn du **Sperren** wählst, jedes Mal, wenn die App aus dem Hintergrund zurückkommt,
+  und nach **15 Minuten** ohne Tastendruck, solange nichts läuft.
+- In den Einstellungen des Fernsehers kannst du deine **PIN ändern**, den **Namen** deiner Kachel ändern und dein Konto
+  von diesem Fernseher **entfernen**.
+
+Hast du deine PIN vergessen, entferne das Konto (oder lass es nach zehn Versuchen entfernen) und melde dich mit dem
+Handy wieder an.
+
+## Was du auf dem Fernseher siehst
+
+- **Erinnerungen** — deine Favoriten, die zuletzt genutzten und alle Erinnerungen, die Fotos und Kapitel einer
+  Erinnerung, die Diashow mit ihrer Musik, Videos und Musik, die weiterläuft. Nicht die Karte und nicht das Tagebuch.
+- **Depot** — deine Ordner und Fotos, Videos und Musik in den Ansichten. Jede andere Datei steht in der Liste und sagt,
+  dass sie sich auf einem anderen Gerät öffnet.
+- **Ausgaben** — die Einträge und die Übersicht einer Kasse, zum Lesen.
+- **Suche** — tippe mit der Tastatur des Fernsehers oder sprich; die Treffer öffnen, was sie finden.
+
+Empfangene Freigabelinks öffnen sich nicht auf dem Fernseher, und der Fernseher behält keine Inhalte für die
+Offline-Nutzung.

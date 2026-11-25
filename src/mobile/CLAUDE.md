@@ -1028,6 +1028,10 @@ frames sealed at once under a fresh `K_blob` and the file let go — never evict
 the person starts, wiped unasked by a refused refresh or a wrap no longer served. A refused write's file becomes
 plaintext only in the file the person chose for *Save a copy* (`QueuedTray.saveCopy`). Anything else the app writes still has to be named here or in ADR 0047's Consequences.
 
+**A TV keeps one plaintext beside its records: each account's name on its picker** ([ADR 0159](../../docs/decisions/0159-the-veyq-app-runs-on-apple-tv-and-android-tv-as-a-viewing-form-of-the-one-app.md)
+decision 4): `TrustedDevice.label`, by default null (the picker shows the address), set by the TV's settings
+(`VeyqAccount.renameOnPicker`) — no avatar, no content. A TV keeps no offline store (its host names no `offlineRoot`).
+
 **The one plaintext secret the app writes is the Emergency Kit** ([ADR 0148](../../docs/decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 5), and only into the file the person
 chose in the system's save dialog: the core writes it straight there (Android `CreateDocument`'s stream, macOS
 `NSSavePanel`, iOS `fileExporter` over an in-memory document, Linux `gtk::FileDialog`, Windows `FileSavePicker`), never a
@@ -2001,3 +2005,13 @@ order is held to the web's `sections.ts` by `PlansAreTheWebsTest`: it changes on
   ./gradlew :android:assembleDebug`.
 - A Broadway pass whose page connects anew per batch finds the app as the last batch left it, an open popover included:
   a click aimed at the popover's button then closes it. Read the state (a shot, the log) before a batch that opens one.
+- **A TV (ADR 0159, 0160).** The form is one fact, `ThisDevice.form` (the host sets `DeviceForm.TV`, with no
+  `offlineRoot` and `backgroundRuns = false`); every plan reads it as `ShellModel.viewOnly` — a TV client never filters a
+  plan. Its PIN is not a `StaySignedIn` entry: `TrustedDevice.Method.DEVICE_PIN` plus `DeviceKeys.pinFactors` (null: not
+  offered). The Google TV emulator's Keystore is software-held, so it offers no PIN (`KeyInfo` level 0, 2026-11-25):
+  the PIN flow needs a real TV. `:core:tvosSimulatorArm64Test` needs a tvOS simulator runtime, which this Mac did not
+  have under Xcode 27.2 (only iOS runtimes): link the test binary instead (`:core:linkDebugTestTvosSimulatorArm64`).
+  `:core:compilePosixMainKotlinMetadata` was red before the TV targets (Files.posix.kt's `mode_t` width differs between
+  Apple and Linux) and blocks every metadata compile below `posixMain`; the per-target compiles still cover the
+  `expect`/`actual` split. A fresh worktree's first Apple build compiles every libsodium slice serially — near an hour a
+  slice under load.

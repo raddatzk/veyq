@@ -60,5 +60,6 @@ remove the account from that TV until it is signed in again from a phone.
 - Decisions: [ADR 0160](../../../decisions/0160-a-tv-unlocks-an-account-by-a-pin-the-device-hardware-binds-and-the-server-counts.md),
   [ADR 0159](../../../decisions/0159-the-veyq-app-runs-on-apple-tv-and-android-tv-as-a-viewing-form-of-the-one-app.md),
   [ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md), [ADR 0059](../../../decisions/0059-device-linking.md)
+- End-user view (docs site): [Use veyq on a TV](../../../../site/src/content/docs/getting-started/use-veyq-on-a-tv.mdx)
 - Related use-cases: [onboard a device](uc.account.onboard-device.md) (the QR sign-in that precedes it),
   [unlock](uc.account.unlock.md), [remember this device](uc.account.remember-this-device.md) (the other levels)

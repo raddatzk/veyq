@@ -1,0 +1,53 @@
+---
+title: "Use veyq on a TV"
+description: The veyq app on Apple TV and Android TV — sign in with your phone, keep your account behind your own PIN, and watch your Memories, files and Pots.
+sources:
+  - docs/decisions/0159-the-veyq-app-runs-on-apple-tv-and-android-tv-as-a-viewing-form-of-the-one-app.md
+  - docs/decisions/0160-a-tv-unlocks-an-account-by-a-pin-the-device-hardware-binds-and-the-server-counts.md
+  - docs/features/account/use-cases/uc.account.unlock-with-a-pin.md
+  - docs/crosscutting/native-apps.md
+---
+
+The veyq app also runs on **Apple TV** and on **Android TV / Google TV**. On the TV you **look** at what is in your
+spaces: your Memories with their slideshows, music and videos, your Depot's photos, videos and music, your Pots, and
+Search. You never change anything there, and nothing leaves the TV: there is no download, no export and no sharing.
+
+:::caution[A preview, not released yet]
+The TV app is a **preview**: no store lists it yet.
+:::
+
+## Sign in with your phone
+
+A TV never asks for your password or your Secret Key. It shows a **QR code** instead:
+
+1. On the TV, choose **Add someone** (or start the app the first time). The TV shows a code.
+2. On your phone, open veyq, choose **Add a device** and scan the code
+   ([Adding another device](/account/adding-another-device/)).
+3. Type the **six digits** your phone shows into the TV with the remote.
+
+## Your own PIN
+
+A TV is shared, so each person keeps their account behind **their own six-digit PIN**:
+
+- Right after you signed in, the TV asks you to choose a PIN, twice. If you skip it, the TV keeps nothing, and you sign
+  in with your phone again next time.
+- The TV then starts at a **picker**: everyone who keeps an account on this TV has a tile. Choose yours and type your
+  PIN. Only your account opens; the others stay locked.
+- **Ten wrong PINs in a row** remove your account from this TV. Sign it in again with your phone.
+- The TV **locks again** when you choose **Lock**, whenever the app comes back from the background, and after
+  **15 minutes** without a button press while nothing is playing.
+- In the TV's settings you can **change your PIN**, change the **name** your tile shows, and **remove** your account
+  from this TV.
+
+If you forget your PIN, remove the account (or let ten tries remove it) and sign in again with your phone.
+
+## What you see on a TV
+
+- **Memories** — your Favorites, Recent and all Memories, a Memory's photos and chapters, the slideshow with the
+  Memory's music, videos, and the music playing on. Not the map and not the journal.
+- **Depot** — your folders, and photos, videos and music in the viewers. Any other file is listed and says it opens on
+  another device.
+- **Expenses** — a Pot's entries and overview, to read.
+- **Search** — type with the TV's own keyboard or your voice; the results open what they find.
+
+Received share links don't open on a TV, and the TV keeps no content for offline use.
