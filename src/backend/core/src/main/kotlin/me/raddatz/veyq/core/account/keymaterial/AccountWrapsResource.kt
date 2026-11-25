@@ -3,6 +3,11 @@ package me.raddatz.veyq.core.account.keymaterial
 import me.raddatz.veyq.core.generated.api.AccountWrapsApi
 import me.raddatz.veyq.core.generated.model.AddWrapRequest
 import me.raddatz.veyq.core.generated.model.AddWrapResult
+import me.raddatz.veyq.core.generated.model.PinUnlockRequest
+import me.raddatz.veyq.core.generated.model.PinUnlockResult
+import me.raddatz.veyq.core.http.httpPinIncorrect
+import me.raddatz.veyq.core.ratelimit.RateLimit
+import me.raddatz.veyq.core.ratelimit.RateLimitKey
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
 import io.quarkus.security.Authenticated
@@ -39,10 +44,24 @@ class AccountWrapsResource(
             addWrapRequest.method.value,
             addWrapRequest.wrappedKey,
             addWrapRequest.kdfParams,
+            addWrapRequest.pinShare,
+            addWrapRequest.pinVerifier,
         )) {
             is AddWrapOutcome.Created ->
                 Response.status(Response.Status.CREATED).entity(AddWrapResult(id = UUID.fromString(outcome.id))).build()
             is HttpFailure -> httpError(outcome)
+        }
+
+    /**
+     * A TV's PIN unlock (ADR 0160 decision 3). Rate-limited per account on top of the wrap's own count: the count bounds
+     * guesses, the bucket bounds calls.
+     */
+    @RateLimit(key = RateLimitKey.USER)
+    override fun unlockAccountWrapWithPin(id: UUID, pinUnlockRequest: PinUnlockRequest): Response =
+        when (val outcome = handler.unlockWithPin(identity.principal.name, id.toString(), pinUnlockRequest.verifier)) {
+            is PinUnlockOutcome.Released -> Response.ok(PinUnlockResult(pinShare = outcome.share)).build()
+            is PinUnlockOutcome.Incorrect -> httpPinIncorrect(outcome, outcome.attemptsLeft)
+            is PinUnlockOutcome.Gone -> httpError(outcome)
         }
 
     override fun deleteAccountWrap(id: UUID): Response {

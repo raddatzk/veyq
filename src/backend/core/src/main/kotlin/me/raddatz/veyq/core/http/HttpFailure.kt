@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.http
 
 import me.raddatz.veyq.core.generated.model.ErrorResponse
+import me.raddatz.veyq.core.generated.model.PinUnlockRefused
 import me.raddatz.veyq.core.generated.model.StaleSealedMeta
 import jakarta.ws.rs.core.Response
 
@@ -80,4 +81,13 @@ fun httpError(failure: HttpFailure, message: String?): Response =
 fun httpStaleSealedMeta(failure: HttpFailure, wrappedMeta: String?, metaRevision: Long): Response =
     Response.status(failure.status.httpStatus)
         .entity(StaleSealedMeta(code = failure.code, wrappedMeta = wrappedMeta, metaRevision = metaRevision))
+        .build()
+
+/**
+ * A wrong PIN on a DEVICE_PIN wrap (ADR 0160 decision 3): the body carries how many failures remain before the wrap is
+ * deleted — a count the server keeps anyway, so nothing new crosses. The status comes from the failure's bucket.
+ */
+fun httpPinIncorrect(failure: HttpFailure, attemptsLeft: Int): Response =
+    Response.status(failure.status.httpStatus)
+        .entity(PinUnlockRefused(code = failure.code, attemptsLeft = attemptsLeft))
         .build()

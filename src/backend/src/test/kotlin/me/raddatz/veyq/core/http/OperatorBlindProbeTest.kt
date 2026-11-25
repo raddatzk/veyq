@@ -384,8 +384,8 @@ class OperatorBlindProbeTest {
         )
         reason(
             "account-wide: addresses the caller's own account, no space.",
-            "getAccountKeyMaterial", "addAccountWrap", "deleteAccountWrap", "getIdentityPins", "writeIdentityPins",
-            "listIdentityPinEntries", "getDeviceRegister", "putDeviceRegister", "changePassword", "listSessionFamilies",
+            "getAccountKeyMaterial", "addAccountWrap", "unlockAccountWrapWithPin", "deleteAccountWrap", "getIdentityPins",
+            "writeIdentityPins", "listIdentityPinEntries", "getDeviceRegister", "putDeviceRegister", "changePassword", "listSessionFamilies",
             "revokeOtherSessionFamilies", "revokeSessionFamily", "delegatePairingSession", "sealPairingChannel",
             "getAccountEmail", "confirmEmail", "getOwnAccountErasurePreview", "eraseOwnAccount",
         )

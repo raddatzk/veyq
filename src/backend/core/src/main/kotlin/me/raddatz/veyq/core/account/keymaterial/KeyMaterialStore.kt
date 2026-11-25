@@ -4,11 +4,15 @@ import me.raddatz.veyq.core.identity.MasterKeyWrapEntity
 import me.raddatz.veyq.core.identity.VeyqUser
 import me.raddatz.veyq.core.identity.WrapMethod
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
 import java.util.UUID
 
 /** One Master Key wrap as opaque ciphertext + its KDF params (server never opens it). */
 data class WrapMaterial(val id: String, val method: String, val wrappedKey: String, val kdfParams: String?)
+
+/** A DEVICE_PIN wrap's server share and PIN verifier (ADR 0160 decision 3), each 32 bytes as base64. */
+data class PinParts(val share: String, val verifier: String)
 
 /** A user's wrapped key material — everything the client needs to unlock the Master Key on-device. */
 data class KeyMaterial(
@@ -45,7 +49,13 @@ class KeyMaterialStore {
 
     /** Append a new wrap for the user (each trusted device adds its own). Returns the new wrap's id. */
     @Transactional
-    fun addWrap(userId: String, method: String, wrappedKey: String, kdfParams: String?): String {
+    fun addWrap(
+        userId: String,
+        method: String,
+        wrappedKey: String,
+        kdfParams: String?,
+        pin: PinParts? = null,
+    ): String {
         val id = UUID.randomUUID().toString()
         MasterKeyWrapEntity().apply {
             this.id = id
@@ -53,12 +63,25 @@ class KeyMaterialStore {
             this.method = method
             this.wrappedKey = wrappedKey
             this.kdfParams = kdfParams
+            this.pinShare = pin?.share
+            this.pinVerifier = pin?.verifier
         }.persist()
         return id
     }
 
+    /**
+     * The caller's own DEVICE_PIN wrap with this id, locked for the count's read-modify-write (two unlocks racing must
+     * not both count from the same number), or null — another account's wrap, another method and no wrap answer alike.
+     */
+    @Transactional
+    fun lockPinWrap(userId: String, id: String): MasterKeyWrapEntity? =
+        MasterKeyWrapEntity.find("id = ?1 and userId = ?2 and method = ?3", id, userId, WrapMethod.DEVICE_PIN.name)
+            .withLock(LockModeType.PESSIMISTIC_WRITE)
+            .firstResult()
+
     /** Remove a wrap by id — but only the caller's own **device-local convenience** wrap: DEVICE (trust this
-     *  device) or DEVICE_KEY (password-less remember-me); the only kinds this endpoint creates. Otherwise a
+     *  device), DEVICE_KEY (password-less remember-me) or DEVICE_PIN (a TV's PIN, whose share and verifier live on the
+     *  row and go with it); the only kinds this endpoint creates. Otherwise a
      *  no-op (idempotent). Whitelisting the device methods — rather than blacklisting only the PASSWORD floor —
      *  keeps the floor un-removable AND protects the RECOVERY/PASSKEY methods from being stripped through this
      *  device-trust endpoint, and doesn't hinge on the exact floor casing. Both device methods are removable so
