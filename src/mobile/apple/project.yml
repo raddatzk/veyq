@@ -1,5 +1,5 @@
 # The veyq app for Apple platforms (ADR 0123): one SwiftUI target for iOS (iPhone, iPad) and macOS on the shared
-# Kotlin base, VeyqCore.xcframework. The .xcodeproj is generated from this file (`xcodegen` in this directory) and
+# Kotlin base, VeyqCore.xcframework; the TV's form of the same app (ADR 0159 decision 1) is the target VeyqTV. The .xcodeproj is generated from this file (`xcodegen` in this directory) and
 # never committed.
 name: Veyq
 options:
@@ -7,12 +7,13 @@ options:
   deploymentTarget:
     iOS: "26.0"
     macOS: "26.0"
+    tvOS: "26.0"
   createIntermediateGroups: true
   # The words' String Catalogs exist before Xcode plans a first build, which reads a catalog's languages before any
   # script runs; each target's pre-build script keeps its own current (ADR 0136 decision 3). The manifest's words
   # (the usage descriptions: InfoPlist.xcstrings, and InfoPlist.xcconfig, the app's config file) exist before the
   # project does, since a build reads its config files before any script runs.
-  preGenCommand: python3 ../words/generate_words.py --apple-strings build/generated/app/Words.xcstrings --apple-swift build/generated/app/Msg+Words.swift --apple-infoplist build/generated/app && python3 ../words/generate_words.py --apple-strings build/generated/share/Words.xcstrings --apple-swift build/generated/share/Msg+Words.swift
+  preGenCommand: python3 ../words/generate_words.py --apple-strings build/generated/app/Words.xcstrings --apple-swift build/generated/app/Msg+Words.swift --apple-infoplist build/generated/app && python3 ../words/generate_words.py --apple-strings build/generated/share/Words.xcstrings --apple-swift build/generated/share/Msg+Words.swift && python3 ../words/generate_words.py --apple-strings build/generated/tv/Words.xcstrings --apple-swift build/generated/tv/Msg+Words.swift
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -30,7 +31,8 @@ targets:
     supportedDestinations: [iOS, macOS]
     sources:
       - path: Veyq
-        excludes: [Info.plist, "*.entitlements"]
+        # the TV's root and the applications' TV pages are VeyqTV's alone (ADR 0159 decision 1)
+        excludes: [Info.plist, "*.entitlements", "TV/**", "Apps/*/Tv*.swift"]
       # Every word the app shows, generated before the build from src/mobile/words/words.json (ADR 0136 decision 3).
       # The core's plan enums as exhaustive Swift enums (ADR 0154 decision 2, inbox #1050), generated before the build.
       - path: build/generated/app/Plans.swift
@@ -121,7 +123,7 @@ targets:
       - path: Veyq
         # ContinuedWork.swift asks UIApplication for background time, which an extension has not (ADR 0140 decision 9, ADR 0145
         # decision 1); BackgroundSync.swift is the app's scheduled run (ADR 0153 decision 8), never an extension's
-        excludes: [Info.plist, "*.entitlements", VeyqApp.swift, DevLogin.swift, DevAudio.swift, ContinuedWork.swift, BackgroundSync.swift]
+        excludes: [Info.plist, "*.entitlements", VeyqApp.swift, DevLogin.swift, DevAudio.swift, ContinuedWork.swift, BackgroundSync.swift, "TV/**", "Apps/*/Tv*.swift"]
       - path: VeyqShare
         excludes: [Info.plist, "*.entitlements"]
       - path: build/generated/share/Plans.swift
@@ -163,6 +165,76 @@ targets:
         INFOPLIST_FILE: VeyqShare/Info.plist
         INFOPLIST_KEY_CFBundleDisplayName: veyq
         APPLICATION_EXTENSION_API_ONLY: YES
+        FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../composition/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
+        OTHER_LDFLAGS: "$(inherited) -framework VeyqCore"
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: veyq-accent
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        LOCALIZATION_PREFERS_STRING_CATALOGS: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+  VeyqTV:
+    # The TV's form of the one app (ADR 0159 decision 1): the iOS app's bundle id (universal purchase; App Store Connect
+    # takes a tvOS build from a target of its own), its own root `Veyq/TV`, the applications' TV pages
+    # (`Veyq/Apps/<App>/Tv*.swift`) and only those files of the core UI and the applications that compile on tvOS — the
+    # rest of the iOS root is left out, never branched with `#if os(tvOS)`. No entitlements file: the user-management
+    # entitlement (`runs-as-current-user`, decision 5) and its provisioning are the owner's step at the end (CR decision 7).
+    type: application
+    platform: tvOS
+    sources:
+      - path: Veyq/TV
+        excludes: [Info.plist]
+      # the composition root: its tvOS branch registers the applications' TV pages
+      - path: Veyq/Applications.swift
+      - path: Veyq/Apps/Memories/TvMemory.swift
+      # a gallery's model takes the uploads' deriver though a TV uploads nothing (ImageIO and AVFoundation only)
+      - path: Veyq/Apps/Memories/MediaTiers.swift
+      - path: Veyq/Apps/Depot/TvFile.swift
+      - path: Veyq/Apps/Expenses/TvPot.swift
+      - path: Veyq/Core/Words.swift
+      - path: Veyq/Core/Formats.swift
+      - path: Veyq/Core/Theme.swift
+      - path: Veyq/Core/CoverImages.swift
+      - path: Veyq/Core/ReaderPlayback.swift
+      - path: Veyq/Core/MusicPlayback.swift
+      - path: Veyq/Assets.xcassets
+      - path: build/generated/tv/Plans.swift
+        optional: true
+        buildPhase: sources
+      - path: build/generated/tv/Words.xcstrings
+        optional: true
+        buildPhase: resources
+      - path: build/generated/tv/Msg+Words.swift
+        optional: true
+        buildPhase: sources
+    preBuildScripts:
+      # The same hook as the app's: VeyqCore for appletvos or appletvsimulator, as this build asks.
+      - name: Build VeyqCore
+        basedOnDependencyAnalysis: false
+        script: |
+          cd "$SRCROOT/.."
+          ./gradlew :composition:embedAndSignAppleFrameworkForXcode --console=plain
+      - name: Generate the plans
+        basedOnDependencyAnalysis: false
+        outputFiles: ["$(SRCROOT)/build/generated/tv/Plans.swift"]
+        script: |
+          python3 "$SRCROOT/generate_plans.py" --header "$SRCROOT/../composition/build/xcode-frameworks/$CONFIGURATION/$SDK_NAME/VeyqCore.framework/Headers/VeyqCore.h" --out "$SRCROOT/build/generated/tv/Plans.swift"
+      - name: Generate the theme
+        basedOnDependencyAnalysis: false
+        script: |
+          python3 "$SRCROOT/../theme/generate_theme.py" --apple-assets "$SRCROOT/Veyq/Assets.xcassets"
+      - name: Generate the words
+        basedOnDependencyAnalysis: false
+        outputFiles: ["$(SRCROOT)/build/generated/tv/Words.xcstrings", "$(SRCROOT)/build/generated/tv/Msg+Words.swift"]
+        script: |
+          python3 "$SRCROOT/../words/generate_words.py" --apple-strings "$SRCROOT/build/generated/tv/Words.xcstrings" --apple-swift "$SRCROOT/build/generated/tv/Msg+Words.swift"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.veyq
+        PRODUCT_NAME: veyq
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: veyq
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        # the launch screen, the music in the background, plain http to a *.localhost instance only (merged)
+        INFOPLIST_FILE: Veyq/TV/Info.plist
         FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../composition/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
         OTHER_LDFLAGS: "$(inherited) -framework VeyqCore"
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: veyq-accent

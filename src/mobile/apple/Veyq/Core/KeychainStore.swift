@@ -116,6 +116,13 @@ final class KeychainStore: NSObject, KeychainBridge {
         SecItemDelete(base(account) as CFDictionary)
     }
 
+    // The PIN level's hardware keys (ADR 0160 decision 2) are a TV's alone (`TV/TvKeychain.swift`): a phone and a Mac
+    // stay signed in by their own sign-in, so this bridge has none and the core offers no PIN here.
+    func pinKeysAvailable() -> Bool { false }
+    func createPinKey(account: String) -> Bool { false }
+    func pinAgreement(account: String) -> Data? { nil }
+    func removePinKey(account: String) {}
+
     /// Every item of this app. iOS keeps Keychain items when an app is deleted; a new installation, whose records are
     /// gone with its defaults, removes them before it starts, so no refresh token outlives the app that kept it.
     func removeAll() {
