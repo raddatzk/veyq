@@ -1413,7 +1413,8 @@ Measured before the decision (2026-11-20):
   its order and split, its tombstone and Undo, `mediaRevisionPolling.ts` and its test. What stays TypeScript, and why: the
   thumbnail pipeline (decoding and its cache are the platform's, ADR 0136 decision 1), the in-flight upload tiles with
   their previews (inbox #1342), the lightbox's snapshot, slideshow and details (#1343), the marks (#1340; the model's port
-  exists), the filter and the rights matrix (#1321), the Trash tab (no Kotlin twin). Its measurements (each against
+  exists), the filter and the rights matrix (#1321; the filter's *added by* chip, #1356, was built in both the core
+  and the TypeScript twin rather than moving the filter, ADR 0149 decision 5), the Trash tab (no Kotlin twin). Its measurements (each against
   `ba2704c62`, the tree before the move, its own build; the machine at a load of 6–20 from other agents):
 
   | Criterion | Measured |

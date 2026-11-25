@@ -91,6 +91,24 @@ the branch the refine read (each claim's command is in the refine's record of it
    with tokens, Linux's `gtk::SearchBar`, Windows' `AutoSuggestBox`) and the marks' mode as the platform's filter menu.
    The search's vectors are not extended: the filter's rules are Memories', twinned from the web's tests, and `search/`
    names no application (ADR 0146).
+   - **Who added it** (inbox #1356, owner 2026-11-25; built 2026-11-25, its decision log harvested here): a chip
+     `Chip.AddedBy(ownerKey, name)` — the medium's `created_by` owner key (`Fact.owner`) — ANDed in the same predicate,
+     its twin in the web's `galleryFilter.ts` (`{ type: 'by' }`). **The web keeps its TypeScript filter** and gains the
+     twin: moving the filter onto the core is inbox #1321's measured step, not this chip's. **Offered by the text** as
+     the day is — *Added by …* for a contributor whose name the text's longest tail begins at a word — and **only where
+     more than one contributed** (`Facts.contributors`; one narrows nothing); a medium without an owner key (a row from
+     before the buckets) matches none. **Named as the Contributions tab names a primary** (`GalleryFilter.contributorName`,
+     the web's `MemoryDetail.vue` over `useUploaderNames`): a member by name, one not named (who left, the directory
+     unread) *Member*, a guest by its sealed name marked *(guest)*, an unnamed guest *Contribution*; the chip reads
+     `media_filter_added_by` ("Added by {1}" / "Hinzugefügt von {1}", the web's `media.filter.addedBy`) around it. **The
+     names come from the lightbox's uploader read** (`GalleryModel.contributors()`, `State.uploaders`; the web's
+     `uploaderNames.ensure()`), made when the text first asks and only where more than one contributed, each owner key
+     asked once: a read the member already makes, no new data and no new operation. **A guest gets no chip because it
+     gets no filter** (this decision's `filterFacts`, ADR 0125 decision 7): the chip comes with the filter wherever a
+     guest is given one — whether it is, is inbox #1391. **The bridge says the chip's words through the host**
+     (`HostWords.say(notice)`, `HostRequest.WordsSay` with arguments), so `ChipShown` stays a label and Linux and Windows
+     draw it unchanged; **`GalleryModel.suggestions(photo, video)` stays** beside `suggestions(photo, video,
+     contributors)` for a host that draws no added-by chip yet (Swift reaches no Kotlin default argument).
 6. **The contributions, a guest named, a medium's report.** `core/…/memories/Buckets.kt` ports `mediaBuckets.ts`: the
    listing, create, rename, delete and a medium's move, a bucket's name sealed under the node's key (`bucket-name`, or the
    ancestor key a guest's identity folder uses, ADR 0080 decision 6). The **Contributions** view joins the Memory's view

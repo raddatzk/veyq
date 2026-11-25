@@ -120,12 +120,21 @@
      the year are the viewer's, in the time zone the gallery shows dates in, from the corrected capture time where one is
      set; a day's chip names its year where the Memory spans more than one. An item without a capture time matches no day
      and no year, and a medium blocked by the operator matches no chip and no text.
+   - **Added by** (inbox #1356): who added a medium — its `created_by` owner key (`user:{id}` / `share:{id}`,
+     [en.memory.media](../enablers/en.memory.media.md)), offered as *Added by …* for a name the typed text begins at a
+     word, and only where more than one person added the Memory's photos and videos (one contributor narrows nothing).
+     A contributor is named exactly as the Contributions tab names them ([uc.memory.buckets](uc.memory.buckets.md)): a
+     member by name, a link's guest by the name sealed at its write marked as a guest's, an unnamed guest
+     *Contribution*, a member not named (one who left) *Member*. A medium the listing carries no owner key for matches
+     no added-by chip.
    - **Free text:** whatever is not turned into a chip matches the original's name.
    - **Combining:** the chips combine with each other and with the favorites filter of step 7.
    - **Display:** as with step 7, the ordering rule is unchanged and the filter only removes tiles. The lightbox pages
      through the narrowed set.
-   - **Source:** the facts are the ones the opened listing already holds (ADR 0105). Nothing is fetched or sent for
-     the filter, and it is not stored; leaving the Memory clears it.
+   - **Source:** the facts are the ones the opened listing already holds (ADR 0105). Nothing is sent for the filter,
+     and it is not stored; leaving the Memory clears it. The one read is the contributors' names: the read the lightbox
+     makes for who added a photo (the node's buckets and the space's members, once per Memory), made when the text first
+     asks and only where more than one person contributed — data the member already reads, nothing new to the server.
    - **Who:** a member's view only. A share guest has no filter field, as they have no search (owner, 2026-11-08:
      guests get no search; ADR 0125 decision 7).
 
