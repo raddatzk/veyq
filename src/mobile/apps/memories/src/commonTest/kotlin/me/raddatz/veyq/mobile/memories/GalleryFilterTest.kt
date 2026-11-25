@@ -22,10 +22,10 @@ class GalleryFilterTest {
     /** A medium's id by its letter (the marks' seal binds real ids); the tests speak in letters. */
     private fun u(letter: String) = "00000000-0000-4000-8000-00000000000$letter"
 
-    private fun item(id: String, name: String, at: Long?, place: String? = null, video: Boolean = false) = MemoryMedia.Item(
+    private fun item(id: String, name: String, at: Long?, place: String? = null, video: Boolean = false, owner: String? = "user:u") = MemoryMedia.Item(
         "s", "n", u(id), MemoryMedia.Blob("b$id", 1, 100, "", null), null, null,
         MemoryMedia.Meta(null, null, at, null, null, null, null, place, null),
-        if (video) "video/mp4" else "image/jpeg", name, "user:u", false, ByteArray(32),
+        if (video) "video/mp4" else "image/jpeg", name, owner, false, ByteArray(32),
     )
 
     private val items = listOf(
@@ -98,5 +98,58 @@ class GalleryFilterTest {
         val taken = GalleryFilter.suggest("2025-05", listOf(GalleryFilter.Chip.Day("2025-05-03", "2025-05-03")), facts, "Photo", "Video").map { it.first }
         assertEquals(listOf("day:2025-05-04"), taken.filterIsInstance<GalleryFilter.Chip.Day>().map(GalleryFilter::key), "a chip chosen is not offered again")
         assertEquals(true, GalleryFilter.suggest("lis", emptyList(), facts, "Photo", "Video").any { (it.first as? GalleryFilter.Chip.Search)?.chip is SearchChip.Place })
+    }
+
+    /** Who added it (inbox #1356): Ana a, c and d; Ben, a link's guest, b; e carries no owner. */
+    private val added = listOf(
+        item("a", "Beach.jpg", may3 + 3_600_000, owner = "user:ana"),
+        item("b", "Bridge.jpg", may3 + 3_600_000, owner = "share:ben"),
+        item("c", "Beach evening.mp4", may3 + day + 3_600_000, video = true, owner = "user:ana"),
+        item("d", "Old.jpg", may3 - 400 * day, owner = "user:ana"),
+        item("e", "Undated.jpg", null, owner = null),
+    )
+    private val addedFacts = GalleryFilter.Facts.of(added, GalleryFilter.Calendar.UTC.dayOf, GalleryFilter.Calendar.UTC.label)
+    private val names = mapOf("user:ana" to "Ana", "share:ben" to "Ben (guest)")
+
+    private fun kept(state: GalleryFilter.State): List<String> {
+        val keep = GalleryFilter.predicate(state, { addedFacts }, null, false) ?: return added.map { it.mediaId.takeLast(1) }
+        return added.map { it.mediaId }.filter(keep).map { it.takeLast(1) }
+    }
+
+    @Test
+    fun whoAddedIt_isAndedWithTheOtherChipsAndTheText() {
+        assertEquals(listOf("user:ana", "share:ben"), addedFacts.contributors.toList())
+        val ana = GalleryFilter.Chip.AddedBy("user:ana", "Ana")
+        val ben = GalleryFilter.Chip.AddedBy("share:ben", "Ben (guest)")
+        assertEquals(listOf("a", "c", "d"), kept(GalleryFilter.State(chips = listOf(ana))))
+        assertEquals(listOf("b"), kept(GalleryFilter.State(chips = listOf(ben))))
+        assertEquals(listOf("a"), kept(GalleryFilter.State(chips = listOf(ana, GalleryFilter.Chip.Day("2025-05-03", "2025-05-03")))))
+        assertEquals(listOf("c"), kept(GalleryFilter.State(chips = listOf(ana), text = "evening")))
+        assertEquals(emptyList(), kept(GalleryFilter.State(chips = listOf(ana, ben))), "two contributors at once: nothing is both's")
+        assertEquals("by:share:ben", GalleryFilter.key(ben))
+    }
+
+    @Test
+    fun whoAddedIt_isOfferedByName_onlyWhereMoreThanOneContributed() {
+        fun by(text: String, chips: List<GalleryFilter.Chip> = emptyList(), facts: GalleryFilter.Facts = addedFacts, named: Map<String, String> = names) =
+            GalleryFilter.suggest(text, chips, facts, "Photo", "Video", named).filter { it.first is GalleryFilter.Chip.AddedBy }
+                .map { (c, rest) -> "${(c as GalleryFilter.Chip.AddedBy).name}|$rest" }
+        assertEquals(listOf("Ben (guest)|"), by("ben"))
+        assertEquals(listOf("Ana|beach"), by("beach an"), "the longest tail naming one; the rest stays text")
+        assertEquals(emptyList(), by("ben", listOf(GalleryFilter.Chip.AddedBy("share:ben", "Ben (guest)"))), "a chip chosen is not offered again")
+        assertEquals(emptyList(), by("ben", named = mapOf("user:ana" to "Ana")), "one the platform did not name is not offered")
+        val one = GalleryFilter.Facts.of(added.filter { it.ownerKey != "share:ben" }, GalleryFilter.Calendar.UTC.dayOf, GalleryFilter.Calendar.UTC.label)
+        assertEquals(emptyList(), by("ana", facts = one), "one contributor narrows nothing")
+    }
+
+    @Test
+    fun aContributorIsNamedAsTheContributionsTabNamesThem() {
+        val member = MediaDetails.Uploader(MediaDetails.UploaderKind.MEMBER, "Ana", "ana")
+        assertEquals(me.raddatz.veyq.mobile.words.Piece.Plain("Ana"), GalleryFilter.contributorName("user:ana", member))
+        fun said(p: me.raddatz.veyq.mobile.words.Piece) = (p as me.raddatz.veyq.mobile.words.Piece.Said).notice.let { it.msg to it.args }
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.MEMORY_BUCKETS_MEMBER to emptyList<Any>(), said(GalleryFilter.contributorName("user:old", MediaDetails.Uploader(MediaDetails.UploaderKind.FORMER, userId = "old"))))
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.MEMORY_BUCKETS_MEMBER to emptyList<Any>(), said(GalleryFilter.contributorName("user:unread", null)))
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.MEMORY_UPLOADER_GUEST_NAMED to listOf<Any>("Ben"), said(GalleryFilter.contributorName("share:ben", MediaDetails.Uploader(MediaDetails.UploaderKind.GUEST, "Ben"))))
+        assertEquals(me.raddatz.veyq.mobile.words.Msg.MEMORY_BUCKETS_CONTRIBUTOR to emptyList<Any>(), said(GalleryFilter.contributorName("share:x", MediaDetails.Uploader(MediaDetails.UploaderKind.GUEST))))
     }
 }

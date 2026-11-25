@@ -1,8 +1,10 @@
 // A Memory's gallery narrowed by facts (uc.memory.gallery step 8): a capture day, a capture year where the Memory spans more
-// than one, a place, a kind (photo, video), and free text over the original's name. It is the search's chip grammar over the
+// than one, a place, a kind (photo, video), who added it where more than one did (inbox #1356: the medium's `created_by`
+// owner key, named as the Contributions tab names it), and free text over the original's name. It is the search's chip grammar over the
 // gallery's own items - core's search (`core/search/query.ts`, the Kotlin core's rules) reads the typed text, suggests and tests the year, place and kind chips
 // and matches the name - plus the capture DAY, which only a gallery has and which therefore lives here (core has no use for
-// it). One reading of the text, never a copy of it.
+// it) - and who added it, Memories' own. One reading of the text, never a copy of it. The Kotlin core's `GalleryFilter` is
+// this file's twin (ADR 0149 decision 5; moving the web onto it is inbox #1321's).
 //
 // **What it reads.** Only what the opened listing holds (ADR 0105): an item's facts are Memories' search document of it
 // (`mediaDocuments` in `search.ts`: the original's name, its capture time with the correction first, its place), so the
@@ -29,15 +31,22 @@ export interface DayChip {
 }
 /** The search's chips a gallery takes. */
 export type FactSearchChip = Extract<SearchChip, { type: 'year' | 'place' | 'kind' }>
-/** The chips of a gallery's filter: the search's year, place and kind, and the day. */
-export type GalleryChip = FactSearchChip | DayChip
+/** Who added a medium: its uploader's owner key (`user:<id>` / `share:<identity>`), `label` its name as the Contributions
+ *  tab gives it (the caller's words, {@link suggestGalleryChips}' `contributors`). */
+export interface AddedByChip {
+  type: 'by'
+  ownerKey: string
+  label: string
+}
+/** The chips of a gallery's filter: the search's year, place and kind, the day, and who added it. */
+export type GalleryChip = FactSearchChip | DayChip | AddedByChip
 
 /** A chip's identity: two chips of one key are the same predicate. */
 export function galleryChipKey(chip: GalleryChip): string {
-  return chip.type === 'day' ? `day:${chip.day}` : chipKey(chip)
+  return chip.type === 'day' ? `day:${chip.day}` : chip.type === 'by' ? `by:${chip.ownerKey}` : chipKey(chip)
 }
 
-/** A chip as it reads (on the chip, in a suggestion, in the empty state). */
+/** A chip as it reads (on the chip, in a suggestion, in the empty state); an added-by chip the contributor's name. */
 export function galleryChipLabel(chip: GalleryChip): string {
   return chip.type === 'year' ? String(chip.year) : chip.label
 }
@@ -47,6 +56,8 @@ export interface GalleryFact {
   doc: SearchDocument
   /** Its capture day (`YYYY-MM-DD`, the viewer's), or null without a capture time. */
   day: string | null
+  /** Who added it (its owner key), or null where the listing carries none. */
+  owner: string | null
 }
 
 /** What the gallery's items offer the filter. */
@@ -59,6 +70,8 @@ export interface GalleryFacts {
   years: ReadonlySet<number>
   photos: boolean
   videos: boolean
+  /** Every owner key that added one of the media, in the order they first occur (the added-by chip's candidates). */
+  contributors: ReadonlySet<string>
 }
 
 export interface GalleryFactsInput {
@@ -90,6 +103,8 @@ export function galleryFacts(input: GalleryFactsInput): GalleryFacts {
   const years = new Set<number>()
   let photos = false
   let videos = false
+  const owners = new Map(input.items.map((i) => [i.mediaId, i.ownerKey ?? null] as const))
+  const contributors = new Set<string>()
   // No placeholder name: the text matches the original's own name, and a medium that carries none matches no text.
   for (const d of mediaDocuments({ scopeId: input.scopeId, key: input.key, items: input.items, unnamed: () => '', open: () => {} })) {
     const at = d.facets.capturedAt
@@ -98,7 +113,9 @@ export function galleryFacts(input: GalleryFactsInput): GalleryFacts {
     // The year in the same zone as the day: core's year chip reads `years` before a capture time's own year.
     const facets = year !== null ? { ...d.facets, years: { from: year, to: year } } : d.facets
     const doc = searchDocument({ ...d, facets, scopeId: input.scopeId, nodeId: '', path: [] })
-    byId.set(d.id, { doc, day })
+    const owner = owners.get(d.id) ?? null
+    byId.set(d.id, { doc, day, owner })
+    if (owner) contributors.add(owner)
     documents.push(doc)
     if (day && at !== undefined && !firstAt.has(day)) firstAt.set(day, at)
     if (year !== null) years.add(year)
@@ -108,7 +125,7 @@ export function galleryFacts(input: GalleryFactsInput): GalleryFacts {
   // A day's label names its year only where the Memory spans more than one, so two "3. Mai" never read alike.
   const label = new Intl.DateTimeFormat(input.locale, { timeZone: input.timeZone, day: 'numeric', month: 'long', ...(years.size > 1 ? { year: 'numeric' } : {}) })
   const days = new Map([...firstAt].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([day, at]) => [day, label.format(at)]))
-  return { byId, documents, days, years, photos, videos }
+  return { byId, documents, days, years, photos, videos, contributors }
 }
 
 /** A chip offered for the typed text: `text` is what stays once it is chosen. */
@@ -117,11 +134,13 @@ export interface GallerySuggestion {
   text: string
 }
 
-const isSearchChip = (c: GalleryChip): c is FactSearchChip => c.type !== 'day'
+const isSearchChip = (c: GalleryChip): c is FactSearchChip => c.type !== 'day' && c.type !== 'by'
 
 /**
  * The chips offered for `text`, none already among `chips`: a year that occurs where two or more do, the days whose label
- * the longest tail of the text that names any begins at a word (core's reading of the text), the places the items carry, and photo or video where both occur.
+ * the longest tail of the text that names any begins at a word (core's reading of the text), who added the media whose name
+ * that tail begins at a word where more than one did (`contributors`: each owner key's name as the Contributions tab gives it;
+ * one not named there is not offered), the places the items carry, and photo or video where both occur.
  * `words` are the kinds' words in the UI's language.
  */
 export function suggestGalleryChips(
@@ -129,6 +148,7 @@ export function suggestGalleryChips(
   chips: readonly GalleryChip[],
   facts: GalleryFacts,
   words: { photo: string; video: string },
+  contributors: ReadonlyMap<string, string> = new Map(),
 ): GallerySuggestion[] {
   const offered = suggestChips(text, chips.filter(isSearchChip), {
     documents: facts.documents,
@@ -149,12 +169,26 @@ export function suggestGalleryChips(
     }
     if (days.length) break
   }
-  return [...years, ...days, ...offered.filter((s) => s.chip.type !== 'year')]
+  // Who added them: offered only where more than one did (one contributor narrows nothing).
+  const by: GallerySuggestion[] = []
+  const named = facts.contributors.size > 1 ? [...facts.contributors].flatMap((k) => (contributors.get(k)?.trim() ? [[k, contributors.get(k)!] as const] : [])) : []
+  if (named.length) {
+    for (const { tail, rest } of tailsOf(text)) {
+      const t = fold(tail)
+      if (t.length < MIN_TAIL) continue
+      for (const [ownerKey, label] of named) {
+        if (by.length >= PER_TYPE) break
+        if (!taken.has(`by:${ownerKey}`) && wordPrefix(fold(label), t)) by.push({ chip: { type: 'by', ownerKey, label }, text: rest })
+      }
+      if (by.length) break
+    }
+  }
+  return [...years, ...days, ...by, ...offered.filter((s) => s.chip.type !== 'year')]
 }
 
 /** Whether one medium's facts pass every chip and the folded text `t` (the original's name; a place is a chip's). */
 function keeps(fact: GalleryFact, chips: readonly GalleryChip[], t: string): boolean {
-  for (const c of chips) if (c.type === 'day' ? fact.day !== c.day : !satisfies(fact.doc, c)) return false
+  for (const c of chips) if (c.type === 'day' ? fact.day !== c.day : c.type === 'by' ? fact.owner !== c.ownerKey : !satisfies(fact.doc, c)) return false
   if (!t) return true
   const rank = textRank(fact.doc, t)
   return rank !== null && rank < Rank.place

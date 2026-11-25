@@ -379,6 +379,33 @@ class GalleryModelTest {
         assertTrue(door.reads.isEmpty() && door.readers.isEmpty())
     }
 
+    // inbox #1356: the filter's added-by chip names its contributors by the lightbox's uploader read, asked once
+    @Test
+    fun theFiltersContributorsAreReadOnceAndNamedAsTheContributionsTabNamesThem() = runTest {
+        val door = Door(listOf(item("a", at = 3), item("b", at = 2, owner = "share:g1"), item("c", at = 1)))
+        val g = open(door)
+        assertEquals(emptyMap(), g.contributors(), "nothing named before the read")
+        runCurrent()
+        assertEquals(listOf(setOf("user:u1", "share:g1")), door.uploaderReads)
+        val named = g.contributors()
+        assertEquals(me.raddatz.veyq.mobile.words.Piece.Plain("Anna"), named["user:u1"])
+        assertEquals(Msg.MEMORY_BUCKETS_CONTRIBUTOR, (named["share:g1"] as me.raddatz.veyq.mobile.words.Piece.Said).notice.msg, "an unnamed guest")
+        g.filter(GalleryFilter.State(text = "ann"))
+        val offered = g.suggestions("Photo", "Video", named.mapValues { (it.value as? me.raddatz.veyq.mobile.words.Piece.Plain)?.text ?: "Contribution" })
+        assertEquals(listOf(GalleryFilter.Chip.AddedBy("user:u1", "Anna") to ""), offered.filter { it.first is GalleryFilter.Chip.AddedBy })
+        g.filter(GalleryFilter.State(chips = listOf(GalleryFilter.Chip.AddedBy("user:u1", "Anna"))))
+        assertEquals(listOf("a", "c"), g.current.shown!!.map { it.mediaId }, "the grid and the lightbox page what Anna added")
+        g.contributors()
+        runCurrent()
+        assertEquals(1, door.uploaderReads.size, "asked once")
+        // one contributor narrows nothing: no read, nothing named
+        val one = Door(listOf(item("a", at = 3), item("c", at = 1)))
+        val solo = open(one)
+        assertEquals(emptyMap(), solo.contributors())
+        runCurrent()
+        assertEquals(emptyList(), one.uploaderReads)
+    }
+
     @Test
     fun theUploadersAreReadOncePerGalleryAndTheExifOncePerMedium() = runTest {
         val door = Door(listOf(item("a", at = 3), item("b", at = 2, owner = "share:g1"), item("c", at = 1, owner = "user:u2")))

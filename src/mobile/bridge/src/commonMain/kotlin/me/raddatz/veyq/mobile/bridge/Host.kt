@@ -529,6 +529,10 @@ internal class HostWords(private val host: Host) : me.raddatz.veyq.mobile.search
         said[msg] ?: (runCatching { (host.asking(HostRequest.WordsSay(Notice(msg))) as? HostReply.Value)?.value }.getOrNull()
             ?.takeIf { it.isNotBlank() } ?: msg.key).also { said[msg] = it }
     }
+
+    /** [notice] with its arguments as the host says it (the gallery filter's *added by* chip, inbox #1356); null where it says nothing. */
+    suspend fun say(notice: Notice): String? =
+        runCatching { (host.asking(HostRequest.WordsSay(notice)) as? HostReply.Value)?.value }.getOrNull()?.takeIf { it.isNotBlank() }
 }
 
 /**

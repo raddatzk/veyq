@@ -2273,8 +2273,22 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val noBuckets = Answer.Refused(Answer.Why.NO_SUCH_BUCKETS)
 
     /** A gallery's filter suggestions for its text, the kinds' words in the host's language. */
-    private suspend fun suggestions(g: me.raddatz.veyq.mobile.memories.GalleryModel) =
-        g.suggestions(parts.await().words.say(Msg.SEARCH_KIND_PHOTO), parts.await().words.say(Msg.SEARCH_KIND_VIDEO))
+    private suspend fun suggestions(g: me.raddatz.veyq.mobile.memories.GalleryModel) = g.suggestions(
+        parts.await().words.say(Msg.SEARCH_KIND_PHOTO), parts.await().words.say(Msg.SEARCH_KIND_VIDEO),
+        // who added the media, named as the Contributions view names them (inbox #1356): read once the text first asks
+        if (g.current.filter.text.isBlank()) emptyMap() else g.contributors().mapValues { said(it.value) },
+    )
+
+    /** A notice as the host says it ([HostWords]); its key and arguments where no host does (a test's composition). */
+    private suspend fun said(n: Notice): String =
+        (parts.await().words as? HostWords)?.say(n) ?: (listOf(n.msg.key) + n.args.map { it.toString() }).joinToString(" ")
+
+    /** A piece of words as the host says it: a plain one as it is, a notice by [said]. */
+    private suspend fun said(p: me.raddatz.veyq.mobile.words.Piece): String = when (p) {
+        is me.raddatz.veyq.mobile.words.Piece.Plain -> p.text
+        is me.raddatz.veyq.mobile.words.Piece.Said -> said(p.notice)
+        else -> ""
+    }
     private val noMap = Answer.Refused(Answer.Why.NO_SUCH_MAP)
     private val noMapServices = Answer.Refused(Answer.Why.NO_MAP_SERVICES)
     private val noDate = Answer.Refused(Answer.Why.NO_SUCH_DATE)
@@ -3430,8 +3444,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         )
     }
 
-    /** A filter chip as it reads: a year by its number, a day, a place or a kind by its label. */
-    private fun chipLabel(c: me.raddatz.veyq.mobile.memories.GalleryFilter.Chip): me.raddatz.veyq.mobile.words.ShownText = when (c) {
+    /** A filter chip as it reads: a year by its number, a day, a place or a kind by its label, who added it in the host's words. */
+    private suspend fun chipLabel(c: me.raddatz.veyq.mobile.memories.GalleryFilter.Chip): me.raddatz.veyq.mobile.words.ShownText = when (c) {
+        is me.raddatz.veyq.mobile.memories.GalleryFilter.Chip.AddedBy -> me.raddatz.veyq.mobile.words.ShownText.written(said(Notice(Msg.MEDIA_FILTER_ADDED_BY, c.name)))
         // labelled by the calendar the host's composition hands (`GalleryFilter.Calendar.local`: the web's day chip)
         is me.raddatz.veyq.mobile.memories.GalleryFilter.Chip.Day -> me.raddatz.veyq.mobile.words.ShownText.written(c.label)
         is me.raddatz.veyq.mobile.memories.GalleryFilter.Chip.Search -> me.raddatz.veyq.mobile.words.ShownText.written(when (val k = c.chip) {
