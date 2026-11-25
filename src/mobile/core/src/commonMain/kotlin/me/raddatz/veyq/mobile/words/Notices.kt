@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.words
 
+import kotlinx.serialization.InternalSerializationApi
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -7,6 +8,9 @@ import kotlinx.serialization.SerializationException
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.descriptors.SerialKind
+import kotlinx.serialization.descriptors.StructureKind
+import kotlinx.serialization.descriptors.buildSerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.modules.SerializersModule
@@ -165,7 +169,33 @@ object MsgKey : KSerializer<Msg> {
     override fun serialize(encoder: Encoder, value: Msg) = encoder.encodeString(value.key)
     override fun deserialize(decoder: Decoder): Msg {
         val key = decoder.decodeString()
-        return Msg.entries.firstOrNull { it.key == key } ?: throw SerializationException("no word has the key $key")
+        return MsgName.byKey[key] ?: throw SerializationException("no word has the key $key")
+    }
+}
+
+/**
+ * A [Msg] on the wire where no field says [MsgKey]: the enum by its name (`TRASH_MOVED`) it was until inbox #1341 made it a
+ * class — the same descriptor a Kotlin enum's serializer has (its kind, its name, an element per word in the catalog's
+ * order), so the desktops' generated wire types (`Bindings`: a Rust and a C# enum) stay as they were.
+ */
+@OptIn(InternalSerializationApi::class)
+object MsgName : KSerializer<Msg> {
+    private const val NAME = "me.raddatz.veyq.mobile.words.Msg"
+
+    override val descriptor: SerialDescriptor by lazy {
+        buildSerialDescriptor(NAME, SerialKind.ENUM) {
+            for (m in Msg.entries) element(m.name, buildSerialDescriptor("$NAME.${m.name}", StructureKind.OBJECT))
+        }
+    }
+
+    /** Each word by its key, and its place in the catalog's order. */
+    internal val byKey: Map<String, Msg> by lazy { Msg.entries.associateBy { it.key } }
+    private val index: Map<String, Int> by lazy { Msg.entries.withIndex().associate { (i, m) -> m.key to i } }
+
+    override fun serialize(encoder: Encoder, value: Msg) = encoder.encodeEnum(descriptor, index.getValue(value.key))
+    override fun deserialize(decoder: Decoder): Msg {
+        val at = decoder.decodeEnum(descriptor)
+        return Msg.entries.getOrNull(at) ?: throw SerializationException("no word at $at")
     }
 }
 
