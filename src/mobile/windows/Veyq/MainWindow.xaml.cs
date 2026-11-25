@@ -252,8 +252,8 @@ public sealed partial class MainWindow : Window
                 Face(_shell.Page);
                 break;
             default:
-                // only the share extension reaches it (NeedsApp, ADR 0138), which this app has none of: said in the log,
-                // the window stays where it is
+                // only the share extension reaches NeedsApp (ADR 0138), which this app has none of, and only a TV's session
+                // the Picker (ADR 0159): said in the log, the window stays where it is
                 Log.Write($"the session is at a gate this slice does not draw: {gate.GetType().Name}");
                 break;
         }

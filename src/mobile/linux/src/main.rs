@@ -108,7 +108,7 @@ impl Screens {
                 self.recover.show(gate);
                 self.face(&self.recover.page);
             }
-            Gate::Unlock { record, working, error } => {
+            Gate::Unlock { record, working, error, .. } => {
                 self.unlock.show(gate);
                 self.face(&self.unlock.page);
                 if record.method == Method::Device
@@ -131,6 +131,8 @@ impl Screens {
             // Only the share extension reaches it (ADR 0138), which this app has none of: said on stderr, the window
             // stays where it is.
             Gate::NeedsApp => eprintln!("veyq: the session is at a gate this app does not draw: NeedsApp"),
+            // A TV's account picker (ADR 0159): only a TV's session reaches it, never a desktop's.
+            Gate::Picker { .. } => eprintln!("veyq: the session is at a gate this app does not draw: Picker"),
         }
     }
 }
