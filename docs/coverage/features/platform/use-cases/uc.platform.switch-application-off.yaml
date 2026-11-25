@@ -31,7 +31,7 @@ acceptanceCriteria:
       backend:
         integration: [MediaNodeRekeySliceTest.aRekeyLandsWhileMemoriesIsSwitchedOff, ApplicationSwitchSweepTest.eachWriteIsRefusedWhileItsApplicationIsOffAndOnlyThen]
   - id: the-client-removes-every-write
-    text: "With an application off, a member's client offers none of its kinds to create, removes every write function from its nodes but the delete, offers no cover or copy of them, and shows one banner at the top of veyq that it is switched off here and what is there can still be opened and downloaded; an upload the server refuses for it (a guest's included) fails at once, with no retry, saying so."
+    text: "With an application off, a member's client offers none of its kinds to create, removes every write function from its nodes but the delete, offers no cover or copy of them, and, where the tenant holds something of it (the server names a day), shows one banner at the top of veyq that it is switched off here and what is there can still be opened and downloaded until that day — where it holds nothing, no banner; an upload the server refuses for it (a guest's included) fails at once, with no retry, saying so."
     coverage:
       web:
         unit: [src/core/blob/applicationOff.test.ts, src/core/blob/queue.test.ts, src/features/memories/components/OptimisticTile.test.ts, src/features/memories/rights.test.ts, src/features/depot/rights.test.ts, src/views/LevelNewMenu.entries.test.ts, src/core/node/cover/rights.test.ts, src/core/export/copyActions.test.ts, src/core/applications/registry.test.ts, src/views/SpaceView.golden.test.ts]

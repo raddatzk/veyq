@@ -3,6 +3,9 @@ package me.raddatz.veyq.core.admin.setup
 import me.raddatz.veyq.core.generated.api.SetupApi
 import me.raddatz.veyq.core.platform.capabilities.capabilityWire
 import me.raddatz.veyq.core.generated.model.CreateServerOwnerRequest
+import me.raddatz.veyq.core.generated.model.SetupApplication
+import me.raddatz.veyq.core.generated.model.SetupApplicationText
+import me.raddatz.veyq.core.platform.capabilities.CapabilityText
 import me.raddatz.veyq.core.generated.model.SetupResult
 import me.raddatz.veyq.core.generated.model.SetupStatus
 import me.raddatz.veyq.core.generated.model.Version
@@ -28,8 +31,9 @@ import me.raddatz.veyq.core.ratelimit.RateLimitExempt
 @RateLimitExempt(
     reason = "First-run setup status is the client bootstrap read (instance salt, suites, capabilities, " +
         "version) — every client calls it before it can do anything, so throttling it throttles startup. " +
-        "It is a constant, non-enumerable snapshot with no per-caller state. The one endpoint here that " +
-        "writes, createServerOwner, overrides this with key = IP.",
+        "It is a constant, non-enumerable snapshot with no per-caller state, and so is the setup page's " +
+        "list of applications (catalog words, admin channel, closed once setup is done). The one endpoint " +
+        "here that writes, createServerOwner, overrides this with key = IP.",
 )
 class SetupResource(private val handler: SetupHandler) : SetupApi {
 
@@ -46,6 +50,13 @@ class SetupResource(private val handler: SetupHandler) : SetupApi {
         ).build()
     }
 
+    override fun listSetupApplications(): Response =
+        try {
+            Response.ok(handler.applications().map { SetupApplication(id = it.id, title = it.texts.title.toWire(), purpose = it.texts.purpose.toWire()) }).build()
+        } catch (e: SetupAlreadyComplete) {
+            httpError(httpFailure("setup_already_complete", CONFLICT))
+        }
+
     // Per-IP bound on the pre-auth server-owner creation (defense in depth; not on the status read).
     @RateLimit(key = RateLimitKey.IP)
     override fun createServerOwner(createServerOwnerRequest: CreateServerOwnerRequest): Response =
@@ -58,8 +69,12 @@ class SetupResource(private val handler: SetupHandler) : SetupApi {
             httpError(httpFailure("setup_already_complete", CONFLICT))
         } catch (e: ModerationEpochInvalid) {
             httpError(Failures.invalidRequest)
+        } catch (e: ApplicationsOffInvalid) {
+            httpError(Failures.invalidRequest)
         }
 }
+
+private fun CapabilityText.toWire() = SetupApplicationText(en = en, de = de)
 
 private fun CreateServerOwnerRequest.toRegistration() = OwnerRegistration(
     email = normalizeEmail(email),
@@ -71,4 +86,5 @@ private fun CreateServerOwnerRequest.toRegistration() = OwnerRegistration(
     wraps = masterKeyWraps.map { WrapInput(method = it.method.value, wrappedKey = it.wrappedKey, kdfParams = it.kdfParams) },
     moderationEpoch = ModerationEpochOne(moderationEpoch.kemPublicKey, moderationEpoch.signPublicKey, moderationEpoch.sealedGrant),
     kitRecord = kitRecord,
+    applicationsOff = applicationsOff.orEmpty(),
 )

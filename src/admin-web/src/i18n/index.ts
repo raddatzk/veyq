@@ -606,7 +606,13 @@ const en = {
     "creating": "Creating the account…",
     "createFailed": "The account could not be created. Your kit is still valid — try again.",
     "alreadyComplete": "This server was set up by someone else in the meantime, so no account was created for you. Discard this kit; it belongs to no account.",
-    "dutiesTitle": "What you may have to state"
+    "dutiesTitle": "What you may have to state",
+    "applicationsTitle": "Which applications does this server offer?",
+    "applicationsLater": "Each can be switched on or off later under {page}.",
+    "applicationsAtLeastOne": "Keep at least one application ticked.",
+    "applicationsLoading": "Reading the applications…",
+    "applicationsFailed": "The applications could not be read. Please try again.",
+    "applicationsRetry": "Try again"
   },
   "members": {
     "copied": "Copied",
@@ -1306,7 +1312,13 @@ const de: typeof en = {
     "creating": "Konto wird angelegt…",
     "createFailed": "Das Konto konnte nicht angelegt werden. Dein Kit bleibt gültig — versuch es erneut.",
     "alreadyComplete": "Dieser Server wurde inzwischen von jemand anderem eingerichtet, für dich wurde kein Konto angelegt. Verwirf dieses Kit; es gehört zu keinem Konto.",
-    "dutiesTitle": "Was du womöglich angeben musst"
+    "dutiesTitle": "Was du womöglich angeben musst",
+    "applicationsTitle": "Welche Anwendungen bietet dieser Server an?",
+    "applicationsLater": "Jede lässt sich später unter {page} ein- oder ausschalten.",
+    "applicationsAtLeastOne": "Lass mindestens eine Anwendung angehakt.",
+    "applicationsLoading": "Die Anwendungen werden gelesen…",
+    "applicationsFailed": "Die Anwendungen konnten nicht gelesen werden. Bitte versuch es erneut.",
+    "applicationsRetry": "Erneut versuchen"
   },
   "members": {
     "copied": "Kopiert",

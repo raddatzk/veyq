@@ -350,7 +350,7 @@ class OperatorBlindProbeTest {
             "requestLoginChallenge", "verifyLogin", "refreshSession", "adoptSession", "logout",
             "requestPasswordRecovery", "releaseRecoveryMaterial", "completePasswordRecovery",
             "openPairingChannel", "answerPairingChannel", "collectPairingChannel",
-            "getSetupStatus", "createServerOwner",
+            "getSetupStatus", "createServerOwner", "listSetupApplications",
             "resolveShare", "getShareTerms", "resolveShareBlob", "createShareIdentity", "startShareBlobUploads",
             "presignShareBlobUploadWindows", "listShareMedia", "completeShareMedia", "deleteShareMedia",
             "createShareNode", "updateShareNode", "abandonShareNode", "listShareFiles", "completeShareFile", "ensureShareDropFolder",

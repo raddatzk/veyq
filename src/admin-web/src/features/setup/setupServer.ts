@@ -12,6 +12,7 @@ import {
   type CreateServerOwnerRequest,
   CreateServerOwnerRequestSuiteIdEnum,
   type MasterKeyWrapMethodEnum,
+  type SetupApplication,
 } from '../../api/generated'
 
 export type EmergencyKit = { secretKey: string }
@@ -85,10 +86,25 @@ export async function prepareServerOwner(
 }
 
 /**
- * Create the Server Owner from a [prepareServerOwner] request — after its kit was confirmed. This closes setup
- * (single-owner lock); 409 `setup_already_complete` when someone else finished it first.
+ * The applications setup asks about (uc.admin.setup-server step 5): the register's, with their words as the server
+ * serves them (ADR 0088 decision 13) — before sign-in, on the admin channel, only while setup is open (409
+ * `setup_already_complete` after).
  */
-export async function createServerOwner(request: PreparedServerOwner): Promise<{ userId: string }> {
-  const result = await setupApi().createServerOwner({ createServerOwnerRequest: request })
+export async function listSetupApplications(): Promise<SetupApplication[]> {
+  return setupApi().listSetupApplications()
+}
+
+/**
+ * Create the Server Owner from a [prepareServerOwner] request — after its kit was confirmed. This closes setup
+ * (single-owner lock); 409 `setup_already_complete` when someone else finished it first. [applicationsOff] are the
+ * applications the owner left out, switched off for the instance with the owner (ADR 0088 decision 12); none left out
+ * sends no field, which leaves every application on.
+ */
+export async function createServerOwner(
+  request: PreparedServerOwner,
+  applicationsOff: string[] = [],
+): Promise<{ userId: string }> {
+  const body = applicationsOff.length > 0 ? { ...request, applicationsOff } : request
+  const result = await setupApi().createServerOwner({ createServerOwnerRequest: body })
   return { userId: result.userId }
 }

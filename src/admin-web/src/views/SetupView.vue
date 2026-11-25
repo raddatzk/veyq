@@ -3,15 +3,23 @@
 // DNS exists (ADR 0065). It performs a real cold account birth (identity keypair, Master Key wraps, Emergency
 // Kit) through @veyq/crypto, the one module shared with `src/web/`: this is the most privileged single action an
 // instance ever takes, so it must not run against a second copy of that code.
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../shared/ui/VeyqButton.vue'
+import VeyqCheckbox from '../shared/ui/VeyqCheckbox.vue'
 import VeyqCard from '../shared/ui/VeyqCard.vue'
 import VeyqInput from '../shared/ui/VeyqInput.vue'
 import VeyqMessage from '../shared/ui/VeyqMessage.vue'
 import VeyqPassword from '../shared/ui/VeyqPassword.vue'
-import { createServerOwner, prepareServerOwner, type PreparedServerOwner } from '../features/setup/setupServer'
+import {
+  createServerOwner,
+  listSetupApplications,
+  prepareServerOwner,
+  type PreparedServerOwner,
+} from '../features/setup/setupServer'
+import type { SetupApplication } from '../api/generated'
+import { inLocale, type CapabilityLocale } from '../features/instance/capabilities'
 import OperatorDuties from '../features/instance/OperatorDuties.vue'
 import { decodeHttpError } from '../shared/httpError'
 import EmergencyKitSave from '../features/setup/EmergencyKitSave.vue'
@@ -23,7 +31,7 @@ import { useServerState } from '../shared/state/useServerState'
 import { useAsyncAction } from '../shared/state/useAsyncAction'
 
 const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const { setSetupCompleted } = useServerState()
 const email = ref('')
 const password = ref('')
@@ -37,6 +45,15 @@ let prepared: PreparedServerOwner | null = null
 // Step 4, after the kit and before the post: what a Server Owner may owe (ADR 0093 § 14), as information — nothing is
 // chosen or ticked, and every value stays optional, set later under Server → Operator.
 const informing = ref(false)
+// Step 5, after what may be owed and before the post: which applications this server offers (ADR 0088 decision 12),
+// every one ticked. Their words are the register's, read before sign-in (decision 13); what is unticked rides the post.
+const choosing = ref(false)
+const applications = ref<SetupApplication[] | null>(null)
+const offered = ref<Record<string, boolean>>({})
+const applicationsOff = computed(() => (applications.value ?? []).filter((a) => !offered.value[a.id]).map((a) => a.id))
+const noneOffered = computed(() => applications.value !== null && applicationsOff.value.length === applications.value.length)
+const capabilitiesPage = computed(() => `${t('admin.server')} → ${t('capabilities.navTitle')}`)
+const words = (text: SetupApplication['title']) => inLocale(text, locale.value as CapabilityLocale)
 
 const { run: runSubmit, pending: busy } = useAsyncAction(
   async () => {
@@ -47,6 +64,7 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
     secretKey.value = emergencyKit.secretKey
     kitReady.value = false
     informing.value = false
+    choosing.value = false
   },
   { onError: () => { error.value = t('setup.failed') } },
 )
@@ -61,7 +79,7 @@ async function submit() {
 // screen leaves setup open, not an owner nobody can unlock. A failed post keeps the kit: it is still this account's.
 const { run: runCreate, pending: creating } = useAsyncAction(
   async () => {
-    await createServerOwner(prepared!)
+    await createServerOwner(prepared!, applicationsOff.value)
     setSetupCompleted(true)
     finish()
   },
@@ -79,8 +97,34 @@ function toDuties() {
   informing.value = true
 }
 
-async function proceed() {
+const { run: runLoadApplications, pending: loadingApplications } = useAsyncAction(
+  async () => {
+    const listed = await listSetupApplications()
+    offered.value = Object.fromEntries(listed.map((a) => [a.id, true]))
+    applications.value = listed
+  },
+  {
+    onError: async (e) => {
+      const { code } = await decodeHttpError(e)
+      error.value = t(code === 'setup_already_complete' ? 'setup.alreadyComplete' : 'setup.applicationsFailed')
+    },
+  },
+)
+
+async function toApplications() {
   if (!kitReady.value || !prepared) return
+  error.value = ''
+  choosing.value = true
+  if (applications.value === null) await runLoadApplications()
+}
+
+async function retryApplications() {
+  error.value = ''
+  await runLoadApplications()
+}
+
+async function proceed() {
+  if (!kitReady.value || !prepared || applications.value === null || noneOffered.value) return
   error.value = ''
   await runCreate()
 }
@@ -99,7 +143,9 @@ function finish() {
 
 <template>
   <VeyqCard class="login-card">
-    <template #title>{{ informing ? t('setup.dutiesTitle') : secretKey ? t('setup.kitTitle') : t('setup.title') }}</template>
+    <template #title>
+      {{ choosing ? t('setup.applicationsTitle') : informing ? t('setup.dutiesTitle') : secretKey ? t('setup.kitTitle') : t('setup.title') }}
+    </template>
     <template #default>
       <template v-if="!secretKey">
         <p class="veyq-form-copy">{{ t('setup.sub') }}</p>
@@ -145,16 +191,50 @@ function finish() {
         />
       </template>
 
-      <template v-else>
+      <template v-else-if="!choosing">
         <OperatorDuties />
         <VeyqButton
           type="button"
-          class="setup-create"
-          :label="creating ? t('setup.creating') : t('setup.kitProceed')"
+          class="setup-duties-continue"
+          :label="t('setup.submit')"
           icon="arrow-right"
-          :loading="creating"
-          :disabled="creating"
-          @click="proceed"
+          @click="toApplications"
+        />
+      </template>
+
+      <template v-else>
+        <p v-if="loadingApplications" class="veyq-form-copy">{{ t('setup.applicationsLoading') }}</p>
+        <template v-else-if="applications">
+          <ul class="setup-applications" data-test="setup-applications">
+            <li v-for="app in applications" :key="app.id" class="setup-application">
+              <label class="setup-application__choice">
+                <VeyqCheckbox v-model="offered[app.id]" :input-id="`setup-app-${app.id}`" :disabled="creating" />
+                <span class="setup-application__words">
+                  <span class="setup-application__title">{{ words(app.title) }}</span>
+                  <span class="setup-application__purpose">{{ words(app.purpose) }}</span>
+                </span>
+              </label>
+            </li>
+          </ul>
+          <p class="setup-applications__later">{{ t('setup.applicationsLater', { page: capabilitiesPage }) }}</p>
+          <VeyqMessage v-if="noneOffered" tone="info" class="setup-applications__none">{{ t('setup.applicationsAtLeastOne') }}</VeyqMessage>
+          <VeyqButton
+            type="button"
+            class="setup-create"
+            :label="creating ? t('setup.creating') : t('setup.kitProceed')"
+            icon="arrow-right"
+            :loading="creating"
+            :disabled="creating || noneOffered"
+            @click="proceed"
+          />
+        </template>
+        <VeyqButton
+          v-else
+          type="button"
+          class="setup-applications-retry"
+          :label="t('setup.applicationsRetry')"
+          icon="refresh"
+          @click="retryApplications"
         />
       </template>
 
@@ -162,3 +242,40 @@ function finish() {
     </template>
   </VeyqCard>
 </template>
+
+<style scoped>
+.setup-applications {
+  list-style: none;
+  margin: 0 0 0.85rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.setup-application__choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  cursor: pointer;
+}
+.setup-application__words {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.setup-application__title {
+  font-weight: 600;
+}
+.setup-application__purpose,
+.setup-applications__later {
+  color: var(--app-muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.setup-applications__later {
+  margin: 0 0 0.85rem;
+}
+.setup-applications__none {
+  margin-bottom: 0.85rem;
+}
+</style>

@@ -21,7 +21,7 @@ info:
     major and its capabilities). A CORS preflight is answered `204` and every answer carries
     `Access-Control-Allow-Origin: *` and `Cross-Origin-Resource-Policy: cross-origin`, exactly as the guest share
     operations do (`sharing.openapi.yaml` § Cross-origin); never `Access-Control-Allow-Credentials`. `/api/setup/owner`
-    stays same-origin. A preflight is HTTP, not an operation, so no `options` is declared here.
+    and `/api/setup/applications` stay same-origin. A preflight is HTTP, not an operation, so no `options` is declared here.
 tags:
   - name: setup
     description: First-run instance setup and the single-owner lock.
@@ -77,6 +77,46 @@ paths:
                       - { id: core.remember-device.passwordless }
                       - { id: core.device-linking }
 
+  /api/setup/applications:
+    get:
+      tags: [setup]
+      operationId: listSetupApplications
+      x-veyq-channel: admin
+      summary: List the applications first-run setup asks about, with their words.
+      description: >
+        The applications of the capability register (`contracts/platform/capabilities.json`, ADR 0088): every root
+        entry of one segment (`memories`, `depot`, `expenses`, as the build carries them), in catalog order, each
+        with its `title` and its `purpose` in English and German exactly as `listInstanceCapabilities` serves them
+        (decision 13). The setup page asks with them which applications the instance offers, before any account
+        exists (uc.admin.setup-server step 5), so this read needs no session; what is left out travels as
+        `CreateServerOwnerRequest.applicationsOff`. No `whenOff`: nothing exists yet, so what switching off does to
+        existing data is not the question here.
+
+        Pre-auth and identical on every instance of a build: catalog words only, never member data. Closed with the
+        owner post: once setup is complete it answers `409 setup_already_complete`, as `createServerOwner` does.
+      responses:
+        "200":
+          description: The register's applications, in catalog order.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 8
+                items: { $ref: "#/components/schemas/SetupApplication" }
+              example:
+                - id: memories
+                  title: { en: "Memories", de: "Erinnerungen" }
+                  purpose: { en: "Members keep photos and videos in Memories …", de: "Mitglieder bewahren Fotos und Videos in Erinnerungen auf …" }
+                - id: depot
+                  title: { en: "Depot", de: "Depot" }
+                  purpose: { en: "Members keep documents and any other file in their spaces …", de: "Mitglieder bewahren Dokumente und jede andere Datei in ihren Bereichen auf …" }
+        "409":
+          description: Setup is already complete; the question is no longer asked.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: setup_already_complete }
+
   /api/setup/owner:
     post:
       tags: [setup]
@@ -93,6 +133,14 @@ paths:
         the layout of the Emergency Kit this setup printed, sealed under the new Master Key (ADR 0157 decision 4) — is
         stored in the same transaction; absent, nothing is. Setup asks for no operator value: every one is optional and
         set later in admin-web (ADR 0093 § 14).
+
+        An optional `applicationsOff` names the applications the Server Owner left out (uc.admin.setup-server step 5,
+        ADR 0088 decision 12): each is switched off for the instance in the same transaction, through the very switch
+        `setInstanceCapability` writes, and is switched on there again like any other. Absent or empty, every
+        application stays on. Each id must be an application of the register (`listSetupApplications`, a root entry of
+        one segment); an entry below one, a core entry, an unknown id or one id twice answers `400 invalid_request` and
+        nothing is stored, the owner included. Leaving every application out is not refused here: the console prevents
+        it at setup, and its switches allow it later.
       requestBody:
         required: true
         content:
@@ -110,6 +158,7 @@ paths:
               secretKeyProofPublicKey: c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5
               moderationEpoch: { kemPublicKey: a2VtLXB1YmxpYy1rZXk=, signPublicKey: c2lnbi1wdWJsaWMta2V5, sealedGrant: c2VhbGVkLWdyYW50 }
               kitRecord: AgoLDA0ODxAREhMUFeLq88pk/r0L1Z9YaKvlghAsoXg4hvbKef2nvYo=
+              applicationsOff: [expenses]
       responses:
         "201":
           description: The Server Owner was created and setup is now locked.
@@ -118,7 +167,9 @@ paths:
               schema: { $ref: "#/components/schemas/SetupResult" }
               example: { userId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
         "400":
-          description: The request was malformed (missing/invalid fields).
+          description: >
+            The request was malformed (missing/invalid fields), its moderation epoch is no public bundle, or an id in
+            `applicationsOff` is no application of the register or is named twice. Nothing is stored.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -333,9 +384,66 @@ components:
           # sweep's name set) reads the property, never the scalar it `$ref`s.
           $ref: "#/components/schemas/SealedKitRecord"
           contentEncoding: base64
+        applicationsOff:
+          x-veyq-visibility: public
+          type: array
+          description: >
+            The applications this instance does not offer, by their register id (`listSetupApplications`), switched off
+            for the instance with the owner (ADR 0088 decision 12). Optional; absent or empty = every application on.
+            The contract cannot know how many applications a build carries, so `maxItems` and the id's shape (a register
+            id, dotted) are bounds, not the list: the server checks each id against its register and refuses one that
+            is no application (an entry below one, a core entry, an unknown id), or one named twice, with
+            `400 invalid_request`.
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 64
+            pattern: '^[a-z][a-z0-9-]*(\.[a-z][a-z0-9-]*)*$'
+          example: [expenses]
+          # The generator types the list `List<String>` and cannot annotate its type argument, so the elements' bounds
+          # ride on the list as `EachElement` (inbox #354; `validate_request_bounds.py` holds them).
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8) @field:me.raddatz.veyq.core.http.EachElement(maxLength = 64, pattern = "^[a-z][a-z0-9-]*(\\.[a-z][a-z0-9-]*)*$")'
 
     SealedKitRecord:
       $ref: '_common.openapi.yaml#/components/schemas/SealedKitRecord'
+
+    SetupApplication:
+      type: object
+      description: >
+        One application of the capability register as first-run setup asks about it (ADR 0088 decisions 12 and 13):
+        its id and its words, the catalog's, identical on every instance of a build. Nothing here is member data.
+      required: [id, title, purpose]
+      properties:
+        id:
+          x-veyq-visibility: public
+          type: string
+          description: The application's register id, its one segment (`memories`, `depot`, `expenses`).
+          maxLength: 64
+          example: depot
+        title:
+          $ref: "#/components/schemas/SetupApplicationText"
+        purpose:
+          $ref: "#/components/schemas/SetupApplicationText"
+
+    SetupApplicationText:
+      type: object
+      description: >
+        One text of a register entry in each language the catalog carries (ADR 0088 decision 13), the shape of
+        `instance.openapi.yaml`'s `InstanceCapabilityText`. Both are always present.
+      required: [en, de]
+      properties:
+        en:
+          x-veyq-visibility: public
+          type: string
+          description: The English text.
+          maxLength: 1024
+          example: Depot
+        de:
+          x-veyq-visibility: public
+          type: string
+          description: The German text.
+          maxLength: 1024
+          example: Depot
 
     SetupResult:
       type: object

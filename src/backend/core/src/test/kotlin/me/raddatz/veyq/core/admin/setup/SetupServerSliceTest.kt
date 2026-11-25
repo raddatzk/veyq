@@ -2,6 +2,7 @@ package me.raddatz.veyq.core.admin.setup
 
 import me.raddatz.veyq.core.account.kitrecord.KitRecordEntity
 import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchEntity
+import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchFixtures
 import me.raddatz.veyq.core.admin.operator.OperatorDetailsEntity
 import me.raddatz.veyq.core.adminchannel.givenAdminChannel
 import me.raddatz.veyq.core.identity.ModeratorEntity
@@ -19,7 +20,10 @@ import io.restassured.http.ContentType
 import jakarta.inject.Inject
 import jakarta.persistence.PersistenceException
 import org.hamcrest.CoreMatchers.equalTo
+import org.hamcrest.CoreMatchers.hasItem
+import org.hamcrest.CoreMatchers.not
 import org.hamcrest.CoreMatchers.notNullValue
+import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -43,8 +47,9 @@ class SetupServerSliceTest {
         kdfParams: String = "AAAAAwAAgAAAAAABAAAAIHNhbHQtZXhhbXBsZS0xNmJ5dGVz",
         kemPublicKey: String = KEM_PUBLIC_KEY,
         kitRecord: String? = null,
+        applicationsOff: String? = null,
     ) = """
-        {"email":"$email","suiteId":"v1",${kitRecord?.let { "\"kitRecord\":\"$it\"," } ?: ""}
+        {"email":"$email","suiteId":"v1",${kitRecord?.let { "\"kitRecord\":\"$it\"," } ?: ""}${applicationsOff?.let { "\"applicationsOff\":$it," } ?: ""}
          "identityPublicKey":"aWRlbnRpdHktcHVibGljLWtleQ==",
          "wrappedIdentityPrivateKey":"d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==",
          "authPublicKey":"$authPublicKey",
@@ -313,6 +318,94 @@ class SetupServerSliceTest {
             .extract().path("userId")
         assertNull(kitRecordOf(userId))
     }
+
+    // --- the applications the instance offers (uc.admin.setup-server step 5, A1, E2; ADR 0088 decision 12) ---------------
+
+    /**
+     * The words the setup page asks with: the register's applications in catalog order, each with its title and purpose,
+     * no `whenOff`; on the admin channel only (the public port's 404, beside the admin listener's 200 for the same GET),
+     * and closed with setup (A1: the 409 beside the 200 while it is open).
+     */
+    @Test
+    @Order(20)
+    fun theApplicationsAreReadOnTheAdminChannelOnlyWhileSetupIsOpen() {
+        clearSetupRow()
+        given().`when`().get("/api/setup/applications").then().statusCode(404)
+        givenAdminChannel().`when`().get("/api/setup/applications")
+            .then().statusCode(200)
+            .body("id", equalTo(listOf("memories", "depot", "expenses")))
+            .body("[0].title.en", equalTo("Memories")).body("[0].title.de", equalTo("Erinnerungen"))
+            .body("[1].purpose.en", notNullValue()).body("[2].purpose.de", notNullValue())
+            .body("[0].whenOff", nullValue())
+        assertEquals(201, createOwner("apps-read-${UUID.randomUUID()}@example.com").first)
+        givenAdminChannel().`when`().get("/api/setup/applications")
+            .then().statusCode(409).body("code", equalTo("setup_already_complete"))
+    }
+
+    /**
+     * Step 6: what the Server Owner left out is the instance switch, stored with the owner — the console's row, and gone
+     * from `GET /api/setup`'s manifest at once (the cached set is forgotten after the commit). Control on the same
+     * manifest: an application not left out stays in it. Restores every switch.
+     */
+    @Test
+    @Order(21)
+    fun theApplicationsLeftOutAreSwitchedOffWithTheOwner() {
+        clearSetupRow()
+        try {
+            given().`when`().get("/api/setup").then().body("capabilities.id", hasItem("depot")) // read: the cache is warm
+            val userId: String = givenAdminChannel().contentType(ContentType.JSON)
+                .body(ownerBody(email = "apps-off-${UUID.randomUUID()}@example.com", applicationsOff = "[\"depot\",\"expenses\"]"))
+                .`when`().post("/api/setup/owner")
+                .then().statusCode(201).extract().path("userId")
+            assertTrue(QuarkusTransaction.requiringNew().call { VeyqUser.findById(userId) } != null)
+            assertEquals(setOf("depot", "expenses"), switchRows())
+            given().`when`().get("/api/setup").then().statusCode(200)
+                .body("capabilities.id", not(hasItem("depot")))
+                .body("capabilities.id", not(hasItem("expenses")))
+                .body("capabilities.id", hasItem("memories"))
+        } finally {
+            CapabilitySwitchFixtures.clear()
+        }
+    }
+
+    /**
+     * E2: an id that is no application — an entry below one, a core entry, an unknown id — or one named twice answers
+     * `400 invalid_request` and stores nothing, the owner included; each beside its positive control, the same body
+     * without the bad id, answering 201. Restores every switch and leaves the instance set up.
+     */
+    @Test
+    @Order(22)
+    fun anApplicationsOffThatNamesNoApplicationOrOneTwiceStoresNothing() {
+        val cases = listOf(
+            "[\"memories.places\"]" to "[]",
+            "[\"depot\",\"core.group-space\"]" to "[\"depot\"]",
+            "[\"depot\",\"files\"]" to "[\"depot\"]",
+            "[\"depot\",\"depot\"]" to "[\"depot\"]",
+        )
+        try {
+            cases.forEach { (bad, good) ->
+                clearSetupRow()
+                CapabilitySwitchFixtures.clear()
+                val email = "apps-bad-${UUID.randomUUID()}@example.com"
+                givenAdminChannel().contentType(ContentType.JSON).body(ownerBody(email = email, applicationsOff = bad))
+                    .`when`().post("/api/setup/owner")
+                    .then().statusCode(400).body("code", equalTo("invalid_request"))
+                assertEquals(0L, setupRows(), "$bad: setup stays open")
+                assertEquals(0L, QuarkusTransaction.requiringNew().call { VeyqUser.count("email", email) }, "$bad: no owner")
+                assertEquals(emptySet<String>(), switchRows(), "$bad: no switch")
+                // Control: the same body without the bad id is a setup.
+                givenAdminChannel().contentType(ContentType.JSON).body(ownerBody(email = email, applicationsOff = good))
+                    .`when`().post("/api/setup/owner")
+                    .then().statusCode(201)
+                assertEquals(good.removeSurrounding("[", "]").split(",").filter { it.isNotEmpty() }.map { it.trim('"') }.toSet(), switchRows())
+            }
+        } finally {
+            CapabilitySwitchFixtures.clear()
+        }
+    }
+
+    private fun switchRows(): Set<String> =
+        QuarkusTransaction.requiringNew().call { CapabilitySwitchEntity.listAll().map { it.id }.toSet() }
 
     private fun kitRecordOf(userId: String): String? =
         QuarkusTransaction.requiringNew().call<String?> { KitRecordEntity.findById(userId)?.sealedBlob }

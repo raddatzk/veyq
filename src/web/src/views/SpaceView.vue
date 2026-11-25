@@ -133,18 +133,16 @@ const nodeKey = computed(() => (isOpenable.value ? currentNodeKey.value : null))
 // The applications switched off for this tenant (uc.platform.switch-application-off): one manifest id each — the server
 // ANDs the instance's and the tenant's switches; each is named once in the banner above every page of the space.
 const applicationsOff = computed(() => registry.applications().filter((a) => isSwitchedOff(a.id)))
-// Each banner names the day the server erases the application's content here, while it names one
-// (uc.platform.erase-switched-off-application); `erasureDay` gives one only for an application the set says is off.
+// A banner only for an application with a day: it names the day the server erases the application's content here
+// (uc.platform.erase-switched-off-application); `erasureDay` gives one only for an application the set says is off. One
+// off without a day holds nothing here, so there is nothing to save: it is simply absent (ADR 0088 decision 5) — its
+// kinds are already missing from the create menu.
 const applicationOffBanners = computed(() =>
-  applicationsOff.value.map((app) => {
+  applicationsOff.value.flatMap((app) => {
     const day = erasureDay(app.id)
+    if (!day) return []
     const application = t(app.name)
-    return {
-      id: app.id,
-      text: day
-        ? t('applications.switchedOffUntil', { application, day: day.toLocaleDateString(locale.value) })
-        : t('applications.switchedOff', { application }),
-    }
+    return [{ id: app.id, text: t('applications.switchedOffUntil', { application, day: day.toLocaleDateString(locale.value) }) }]
   }),
 )
 const access = computed(() =>

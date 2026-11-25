@@ -16,7 +16,9 @@
   decision 5; owner 2026-10-24 and 2026-10-25).
 - **Preconditions:** The application's own entry (`memories`, `depot`, `expenses`) is switched off for the tenant, or
   for the instance ([uc.platform.switch-application-off](uc.platform.switch-application-off.md)). A child entry
-  (`memories.places`) erases nothing.
+  (`memories.places`) erases nothing. The tenant holds a node of the application, trashed ones included: where it holds
+  none, there is nothing to erase, and the application is simply absent there — no day, no banner, no mail (ADR 0088
+  decision 5, owner 2026-11-25).
 - **Postconditions (success):** On the day, every node of the application's kinds that was made before the day is
   erased in every scope of the tenant, with everything that hangs off it. The erasure is in the erasure ledger, its
   blobs are on the store reclaim, and every moderation hold keeps its copy. Core folders, scope keys and memberships
@@ -26,7 +28,8 @@
 ## Main flow
 
 1. **The day is set when the application goes off.** The server records, for the tenant and the application, when it
-   went off and the day it will be erased: that moment plus the window. A second level switching it off keeps the day
+   went off and the day it will be erased: that moment plus the window. It records one only where the tenant holds a
+   node of the application at that moment. A second level switching it off keeps the day
    that was set, so a day members were told is never moved earlier.
 2. **Every member is told the day.**
    - The banner at the top of veyq names the day ([uc.platform.switch-application-off](uc.platform.switch-application-off.md)
@@ -48,7 +51,8 @@
 
    Each scope is its own transaction.
 6. **The tenant's record of the window goes when every scope is done.** If the application is still, or again, off for
-   the tenant at that moment, a fresh window starts from then, and the notice is sent again.
+   the tenant at that moment and the tenant still holds a node of it (one made after a switch-on, A2), a fresh window
+   starts from then, and the notice is sent again; with nothing left, no window follows.
 
 ## Alternate / exception flows
 
@@ -58,14 +62,17 @@
   erased; what they add under a node made before it (a Chapter in an existing Memory) goes with that node, because a
   node is erased with its whole subtree.
 - **A3 — switched off for the instance:**
-  - every tenant gets its own window from that moment, and a tenant already off keeps its earlier day;
-  - every member of each tenant is mailed;
+  - every tenant that holds a node of it gets its own window from that moment, and a tenant already off keeps its
+    earlier day;
+  - every member of each such tenant is mailed;
   - the text names the operator as the one who switched it off, and as the only one who can switch it on again.
 
   Switched on for the instance, each window ends, except where the tenant's own switch still holds the application off.
   Two levels switching at once leave the record the final state implies.
-- **A4 — a tenant created while the instance holds the application off:** it gets its own window from its creation. It
-  has no members to mail yet, so no notice goes.
+- **A4 — a tenant created while the instance holds the application off,** or an instance whose Server Owner left the
+  application out at setup ([uc.admin.setup-server](../../admin/use-cases/uc.admin.setup-server.md)): the tenant holds
+  nothing of it, so it gets no window, no banner and no mail; the application is simply absent there. Switched on later,
+  it is there as in any tenant.
 - **A5 — no instance mail:** nothing is mailed. The banner and the owner's panel carry the day, the switch is not
   refused, and the window does not grow.
 - **A6 — a member who has not accepted the terms yet** (`pendingConsent`): gets no mail.
