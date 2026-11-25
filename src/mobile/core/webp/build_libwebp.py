@@ -39,6 +39,8 @@ APPLE_SLICES = {
     "macos_arm64": ("macosx", "arm64", "-mmacosx-version-min=14.0"),
     "ios_arm64": ("iphoneos", "arm64", "-mios-version-min=17.0"),
     "ios_simulator_arm64": ("iphonesimulator", "arm64", "-mios-simulator-version-min=17.0"),
+    "tvos_arm64": ("appletvos", "arm64", "-mtvos-version-min=17.0"),
+    "tvos_simulator_arm64": ("appletvsimulator", "arm64", "-mtvos-simulator-version-min=17.0"),
 }
 
 

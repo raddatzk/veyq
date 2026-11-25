@@ -1058,15 +1058,15 @@ private fun ObjectScreen(ref: ObjectRef, tab: BarTab?) {
 }
 
 @Composable
-private fun Empty() {
+internal fun Empty() {
     Box(Modifier.fillMaxSize().padding(24.dp)) { Text(stringResource(R.string.list_empty), color = role(LocalPalette.current.muted)) }
 }
 
 @Composable
-private fun appName(app: ApplicationId): String = say(me.raddatz.veyq.mobile.AppKinds.applicationWord(app))
+internal fun appName(app: ApplicationId): String = say(me.raddatz.veyq.mobile.AppKinds.applicationWord(app))
 
 /** The web's motifs (src/web/src/shared/ui/icons.ts) in Material Symbols: images, file, wallet. */
-private fun appIcon(app: ApplicationId): ImageVector = when (app) {
+internal fun appIcon(app: ApplicationId): ImageVector = when (app) {
     ApplicationId.MEMORIES -> Icons.Outlined.PhotoLibrary
     ApplicationId.DEPOT -> Icons.Outlined.InsertDriveFile
     ApplicationId.EXPENSES -> Icons.Outlined.AccountBalanceWallet
@@ -1093,7 +1093,7 @@ private fun tabIcon(tab: BarTab, kind: String?): ImageVector = when (tab.key) {
 }
 
 @Composable
-private fun tabLabel(tab: BarTab, kind: String?): String = say(me.raddatz.veyq.mobile.AppKinds.tabWord(tab, kind))
+internal fun tabLabel(tab: BarTab, kind: String?): String = say(me.raddatz.veyq.mobile.AppKinds.tabWord(tab, kind))
 
 /** What each object's row says beside its name, by node id (`AppModel.rowDetails`). */
 internal val LocalRowDetails = androidx.compose.runtime.compositionLocalOf<Map<String, List<String>>> { emptyMap() }

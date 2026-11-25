@@ -6,8 +6,21 @@ import VeyqCore
 /// anything is drawn (the app's `VeyqApp.init`, the share extension's `viewDidLoad`); on a Mac it hands the app the menu
 /// commands and the windows an application adds. `scripts/validate_mobile_ui_direction.py` holds every other file of the
 /// core UI from naming an application, and an application from naming another.
+///
+/// The TV's form (ADR 0159 decision 1, the target VeyqTV) composes its own pages here too: the one place an `os(tvOS)`
+/// branch stands outside `TV/`, because the guard admits one composition root and this file is it.
 @MainActor
 enum Applications {
+    #if os(tvOS)
+    /// Each application's TV pages into the TV's registry (`TV/TvRegistry.swift`), before anything is drawn.
+    static func register() {
+        if TvRegistry.isSealed { return }
+        MemoriesTv.register(TvRegistry.self)
+        DepotTv.register(TvRegistry.self)
+        ExpensesTv.register(TvRegistry.self)
+        TvRegistry.seal()
+    }
+    #else
     static func register() {
         if Registry.isSealed { return }
         KindPages.register(Registry.self)
@@ -16,6 +29,7 @@ enum Applications {
         ExpensesUi.register(Registry.self)
         Registry.seal()
     }
+    #endif
 
     #if os(macOS)
     /// The menu commands the applications add (Memories' "Open in New Window" for its lightbox).

@@ -30,5 +30,17 @@ class MasterKeyWrapEntity : PanacheEntityBase {
     @Column(name = "kdf_params")
     var kdfParams: String? = null
 
+    /** DEVICE_PIN only (ADR 0160 decision 3): the server share `S`, released only to a matching [pinVerifier]. */
+    @Column(name = "pin_share", length = 44)
+    var pinShare: String? = null
+
+    /** DEVICE_PIN only: the PIN's verifier `V`, worthless without the device's hardware factor. */
+    @Column(name = "pin_verifier", length = 44)
+    var pinVerifier: String? = null
+
+    /** DEVICE_PIN only: failed unlocks in a row; the tenth deletes the wrap, a success resets it. */
+    @Column(name = "pin_failures", nullable = false)
+    var pinFailures: Int = 0
+
     companion object : PanacheCompanionBase<MasterKeyWrapEntity, String>
 }

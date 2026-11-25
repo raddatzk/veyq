@@ -42,6 +42,7 @@ export default defineConfig({
                 'getting-started/sign-in',
                 'getting-started/install-the-app',
                 'getting-started/use-content-offline',
+                'getting-started/use-veyq-on-a-tv',
                 'getting-started/share-into-veyq',
                 'getting-started/keyboard-shortcuts',
               ],

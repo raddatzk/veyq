@@ -165,6 +165,8 @@ internal object DepotUi {
                 FilePage(page.model, page.node.name)
             }
         },
+        // a TV's page: images, video and audio in the viewers, any other file listed as opening elsewhere (ADR 0159 decision 3)
+        tv = { ref, model -> TvFilePage(ref, model) },
     )
 
     /** Depot's drop box: its guests' folders (`DropBoxScreen`); never renamed; its cover; its ZIP and its copy (a plain folder). */

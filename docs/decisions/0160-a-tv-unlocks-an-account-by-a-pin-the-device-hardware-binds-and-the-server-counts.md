@@ -1,7 +1,8 @@
 # ADR 0160 — A TV unlocks an account by a PIN the device's hardware binds and the server counts
 
-- Status: Proposed
-- Built: no
+- Status: Accepted (owner 2026-11-25: one PIN per account per TV, a constant 10, the idle lock fixed)
+- Built: yes — contract, backend, the core and both TV clients; the PIN never ran end to end: the Google TV
+  emulator's Keystore is software and the tvOS Simulator has no Secure Enclave, so a real TV owes the pass (inbox #1360)
 - Date: 2026-11-25
 - Model: [en.account.key-model](../features/account/enablers/en.account.key-model.md)
 
@@ -39,8 +40,10 @@ the server.
 
 1. **A fourth level, `PIN`, beside presence and login — offered where the device has a non-exportable hardware key
    and the level is the device's way to keep an account.** On a TV it is the only level offered: the choice is a PIN or
-   no wrap at all (each start a new pairing). It is the store's answer (`DeviceKeys.staySignedIn`), as the other levels
-   are, never a screen's probe. Six digits, digits only (a remote's number pad; the same length as ADR 0059's
+   no wrap at all (each start a new pairing). It is the store's answer (`DeviceKeys.pinFactors`, null where the store
+   has no hardware key), as the other levels are, never a screen's probe. In code it is no `StaySignedIn` entry but the
+   method `TrustedDevice.Method.DEVICE_PIN`: its key is per account, where a `StaySignedIn` level is one unlock key
+   shared by every account at it, and its open is the server's (decision 3), not the store's. Six digits, digits only (a remote's number pad; the same length as ADR 0059's
    transcribed code). One PIN per account on this device, never one per TV: the key material is per account, and a
    PIN shared by the household opens every account to every member of it — the separation it exists for.
 
@@ -58,7 +61,9 @@ the server.
    `KEK = Argon2id(PIN, salt = HKDF(F ‖ S, "veyq/v1/pin-kek"))` with the `DEVICE` wrap's Argon2id parameters, and
    the PIN's **verifier** `V = HKDF(F, "veyq/v1/pin-verifier" ‖ PIN)`. Both derivations are pinned as vectors in
    `contracts/crypto/vectors/v1.json` and held by the core's conformance suite (the web takes no PIN level, decision 8,
-   so `@veyq/crypto` implements neither).
+   so `@veyq/crypto` implements neither; the vectors were computed by an independent implementation over `@noble`). The
+   wrap's `kdfParams` carry the Argon2id parameters alone: the salt is derived on the device and never sent — with it,
+   whoever holds the wrap would search the PIN offline.
 
 3. **The server releases `S` only to a matching verifier, and counts.** An unlock sends `V`; the server compares it in
    constant time with the one stored at enrolment and answers `S` or a refusal with the attempts left. **The tenth
@@ -116,3 +121,30 @@ the server.
   here; more mechanism for no further guarantee.
 - **Rejected — one PIN per TV, or per instance or tenant:** see decision 1. What an instance or tenant can set is a
   policy honest clients follow (the count is the exception, decision 3), and on a TV a PIN is already the only way to stay signed in, so a "TVs must use a PIN" policy would change nothing.
+
+## Decision log (cr-tv-app, 2026-11-25)
+
+- **The wire:** `DEVICE_PIN` joins `MasterKeyWrap.method` and `AddWrapRequest` with `pinShare` and `pinVerifier` (32
+  bytes each, required for it, refused for every other method); `POST /api/account/wraps/{id}/pin-unlock` answers
+  `200 {pinShare}`, `403 pin_incorrect {attemptsLeft}` (its own body, `PinUnlockRefused`, written by `httpPinIncorrect`)
+  or `404 not_found` — never had, removed, or the tenth failure, alike on purpose. The row is locked for the count; a
+  per-account `USER` rate bucket sits on top. `PinUnlockSliceTest` pins it.
+- **It rides `core.remember-device.passwordless`:** a TV never sees the password, so enrolling is refused (422) and the
+  wrap withheld from the key material while that switch is off, exactly as DEVICE_KEY.
+- **The vectors** were computed by an independent implementation over `@noble` (it first re-derived
+  `seal.sym.master-key` byte for byte); `pin_kek` pins the production Argon2id cost, so the Kotlin conformance suite checks
+  it only at production cost, the verifier and the salts always.
+- **A TV's unlock renews its kept session first** (the refresh token kept as a remembered account keeps it), then asks for
+  the share; a refused refresh, a wrap gone or a missing factor forgets the account on that TV.
+- **Android's factor:** a Keystore HMAC-SHA256 key without user authentication, StrongBox first, the TEE otherwise —
+  offered only where a probe key's `KeyInfo` level is hardware (TEE, StrongBox or unknown-secure), and a key created
+  later is checked again. Measured: the Google TV emulator's level is software, so it offers no PIN.
+- **tvOS's factor:** a CryptoKit `SecureEnclave.P256.KeyAgreement.PrivateKey` per account
+  (`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` + `.privateKeyUsage`, its `dataRepresentation` a generic-password
+  item); the bridge returns the raw ECDH x-coordinate with the fixed point `P` and the core runs the HKDF with the same
+  label as Android. `P` is hash-to-curve by try-and-increment — x = SHA-256("veyq/v1/pin-bind/point" ‖ byte i), the first
+  i (here 1) whose x³ − 3x + b is a square on P-256, the even root — so nobody knows its discrete log (with the generator,
+  `F` would follow from the public key); the app recomputes and validates it at first use and offers no PIN if it does
+  not match. Offered only where `SecureEnclave.isAvailable`.
+
+The published pages: [Use veyq on a TV](../../site/src/content/docs/getting-started/use-veyq-on-a-tv.mdx); the residual in [Known limitations](../../site/src/content/docs/security/known-limitations.md#a-tvs-pin-the-operator-together-with-code-on-the-tv).

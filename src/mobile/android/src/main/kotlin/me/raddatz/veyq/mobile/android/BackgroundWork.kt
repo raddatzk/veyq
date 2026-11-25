@@ -17,6 +17,7 @@ import me.raddatz.veyq.mobile.android.core.Network
 import me.raddatz.veyq.mobile.android.core.PreferencesStore
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.session.BackgroundRun
+import me.raddatz.veyq.mobile.session.DeviceForm
 import me.raddatz.veyq.mobile.session.ThisDevice
 
 /**
@@ -38,17 +39,26 @@ object AndroidDevice {
         keys ?: KeystoreDeviceKeys(context.applicationContext) { host?.get() }.also { keys = it }
 
     @Synchronized
-    fun of(context: Context): ThisDevice = device ?: ThisDevice(
-        PreferencesStore(context.applicationContext),
-        keys(context),
-        android.os.Build.MODEL,
-        BouncyCastlePrimitives,
-        // ADR 0140 decision 3: app-private, credential-encrypted, left out of Auto Backup by the directory itself
-        offlineRoot = java.io.File(context.applicationContext.noBackupFilesDir, "offline").path,
-        offlineLimit = me.raddatz.veyq.mobile.offline.AccountOffline.PHONE_LIMIT,
-        // ADR 0153 decision 8: a phone syncs on the system's schedule
-        backgroundRuns = true,
-    ).also { device = it }
+    fun of(context: Context): ThisDevice = device ?: tv(context).let { tv ->
+        ThisDevice(
+            PreferencesStore(context.applicationContext),
+            keys(context),
+            android.os.Build.MODEL,
+            BouncyCastlePrimitives,
+            // ADR 0140 decision 3: app-private, credential-encrypted, left out of Auto Backup by the directory itself; a TV
+            // keeps no offline store (ADR 0159 decision 7)
+            offlineRoot = if (tv) null else java.io.File(context.applicationContext.noBackupFilesDir, "offline").path,
+            offlineLimit = me.raddatz.veyq.mobile.offline.AccountOffline.PHONE_LIMIT,
+            // ADR 0153 decision 8: a phone syncs on the system's schedule; a TV runs nothing in the background (ADR 0159 decision 7)
+            backgroundRuns = !tv,
+            // ADR 0159: the TV form views and never authors, decided by the core's plans
+            form = if (tv) DeviceForm.TV else DeviceForm.PHONE,
+        )
+    }.also { device = it }
+
+    /** Whether this device is a TV (Android TV, Google TV): the system's UI mode, as Google's TV guide reads it. */
+    fun tv(context: Context): Boolean =
+        context.getSystemService(android.app.UiModeManager::class.java)?.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION
 }
 
 /**

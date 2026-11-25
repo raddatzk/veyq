@@ -17,6 +17,7 @@ sources:
   - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
   - docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md
   - docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md
+  - docs/decisions/0160-a-tv-unlocks-an-account-by-a-pin-the-device-hardware-binds-and-the-server-counts.md
 ---
 
 This page collects what veyq does **not** protect against today, in one place. Each entry says why it remains, where
@@ -586,6 +587,31 @@ that keeps no trust keeps no store. What remains:
   [security-model § What a trusted device rests on](https://github.com/raddatzk/veyq/blob/main/docs/crosscutting/security-model.md#what-a-trusted-device-rests-on-per-platform).
 
 **Closed by:** accepted; a counter against a replay would live on the same disk it guards against.
+
+## A TV's PIN: the operator together with code on the TV
+
+A TV keeps each account behind a six-digit PIN ([ADR 0160](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0160-a-tv-unlocks-an-account-by-a-pin-the-device-hardware-binds-and-the-server-counts.md)). Six digits alone are worth nothing against an offline
+search, so the key that wraps the account's Master Key is derived from three parts: a **hardware factor** only the TV's
+non-exportable key computes (Android's Keystore, the Apple TV's Secure Enclave), a **server share** the server keeps
+and releases only to a matching **PIN verifier**, and the PIN. The server counts: the tenth wrong PIN in a row deletes
+the wrap, its share and its verifier. What each party can do:
+
+- **A thief with the TV**, without running code on it, guesses through the app, so through the server: ten tries.
+- **A thief who runs code on the TV** computes the factor and the verifier for any PIN there, but still needs the share
+  for each guess: still the server's ten tries.
+- **The operator** holds the wrap, the share and the verifier, never the hardware factor: it can test no PIN and open
+  no wrap.
+- **The operator together with someone who runs code on the TV** has every part and searches all 10⁶ PINs offline.
+  That is the residual, accepted: narrower than an app that stays signed in without asking, where the device alone opens
+  the account.
+
+Also: the unlock is online only (a TV keeps no offline store); a reinstall, or another Apple TV user, loses the hardware
+factor, so the account needs a new sign-in from a phone; and the server sees when an account on a TV is unlocked — an
+exact time, the metadata a session refresh at each start already shows.
+
+**Decided in:** [ADR 0160](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0160-a-tv-unlocks-an-account-by-a-pin-the-device-hardware-binds-and-the-server-counts.md) decisions 2 to 5.
+
+**Closed by:** accepted; a hardware-counted PIN would close it, and neither tvOS nor Android gives an app one.
 
 ## The desktop app: Flathub's runtime, Windows' trust, no auto-update
 

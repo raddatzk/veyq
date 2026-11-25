@@ -4,6 +4,8 @@ import me.raddatz.veyq.core.account.login.SessionService
 import me.raddatz.veyq.core.platform.capabilities.CapabilityIds
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
 import me.raddatz.veyq.core.http.FailureStatus.CONFLICT
+import me.raddatz.veyq.core.http.FailureStatus.FORBIDDEN
+import me.raddatz.veyq.core.http.FailureStatus.NOT_FOUND
 import me.raddatz.veyq.core.http.Failures
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpFailure
@@ -11,6 +13,8 @@ import me.raddatz.veyq.core.identity.AccountStore
 import me.raddatz.veyq.core.identity.WrapMethod
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
+import java.security.MessageDigest
+import java.util.Base64
 
 /** Outcome of adding a wrap, so the resource can map each case to its status without leaking detail. */
 sealed interface AddWrapOutcome {
@@ -20,6 +24,18 @@ sealed interface AddWrapOutcome {
     object CapabilityDisabled : AddWrapOutcome, HttpFailure by Failures.capabilityDisabled
     /** The caller's session was revoked by a reset, a password change or a rotation this request waited for. */
     object SessionEnded : AddWrapOutcome, HttpFailure by Failures.authenticationFailed
+    /** DEVICE_PIN without its share and verifier, or either of them on another method (ADR 0160 decision 3). */
+    object InvalidRequest : AddWrapOutcome, HttpFailure by Failures.invalidRequest
+}
+
+/** Outcome of a PIN unlock (ADR 0160 decision 3). */
+sealed interface PinUnlockOutcome {
+    /** The verifier matched: the wrap's server share, the count reset. */
+    data class Released(val share: String) : PinUnlockOutcome
+    /** A wrong verifier, counted; [attemptsLeft] failures remain (at least 1 — the last one deletes the wrap). */
+    data class Incorrect(val attemptsLeft: Int) : PinUnlockOutcome, HttpFailure by httpFailure("pin_incorrect", FORBIDDEN)
+    /** No DEVICE_PIN wrap of the caller's with this id: never one, removed, or deleted by the tenth failure. */
+    object Gone : PinUnlockOutcome, HttpFailure by httpFailure("not_found", NOT_FOUND)
 }
 
 /**
@@ -59,7 +75,10 @@ class KeyMaterialHandler(
             // Instance-only entries (ADR 0088 decision 12): the key material is the account's, not a tenant's, and the
             // sign-in screen that offers remembering reads the pre-auth manifest. So no tenant is asked.
             if (!capabilities.isActive(CapabilityIds.REMEMBER_DEVICE, null)) add(WrapMethod.DEVICE.name)
-            if (!capabilities.isActive(CapabilityIds.REMEMBER_DEVICE_PASSWORDLESS, null)) add(WrapMethod.DEVICE_KEY.name)
+            if (!capabilities.isActive(CapabilityIds.REMEMBER_DEVICE_PASSWORDLESS, null)) {
+                add(WrapMethod.DEVICE_KEY.name)
+                add(WrapMethod.DEVICE_PIN.name)
+            }
         }
         return store.find(userId)?.let { m -> m.copy(wraps = m.wraps.filterNot { it.method in withheld }) }
     }
@@ -81,13 +100,50 @@ class KeyMaterialHandler(
         method: String,
         wrappedKey: String,
         kdfParams: String?,
+        pinShare: String? = null,
+        pinVerifier: String? = null,
     ): AddWrapOutcome {
+        // A DEVICE_PIN wrap is worthless without its share and verifier, and no other method may carry them (the
+        // contract's 400): the shape is checked before anything else, so a malformed add learns nothing more.
+        val pin = if (method == WrapMethod.DEVICE_PIN.name) {
+            if (pinShare == null || pinVerifier == null || !is32Bytes(pinShare) || !is32Bytes(pinVerifier)) {
+                return AddWrapOutcome.InvalidRequest
+            }
+            PinParts(pinShare, pinVerifier)
+        } else {
+            if (pinShare != null || pinVerifier != null) return AddWrapOutcome.InvalidRequest
+            null
+        }
         // Instance policy first (ADR 0032): the capability this method needs must be active, else 422, server-enforced.
         if (!capabilities.isActive(capabilityFor(method), null)) return AddWrapOutcome.CapabilityDisabled // instance-only, as above
         accounts.lock(userId)
         if (!sessions.isLiveSessionOf(userId, presentedAccessToken)) return AddWrapOutcome.SessionEnded
         if (store.countWraps(userId, method) >= MAX_WRAPS_PER_METHOD) return AddWrapOutcome.LimitReached
-        return AddWrapOutcome.Created(store.addWrap(userId, method, wrappedKey, kdfParams))
+        return AddWrapOutcome.Created(store.addWrap(userId, method, wrappedKey, kdfParams, pin))
+    }
+
+    /**
+     * A PIN unlock (ADR 0160 decision 3): compare [verifier] in constant time with the one stored at enrolment; a match
+     * releases the server share and resets the count, a mismatch counts one failure, and the [PIN_ATTEMPTS]th failure in
+     * a row deletes the wrap with its share and verifier. The row is locked for the read-modify-write, so two racing
+     * unlocks count twice. The count is per wrap on the server: a reinstall or a second device does not reset it.
+     */
+    @Transactional
+    fun unlockWithPin(userId: String, id: String, verifier: String): PinUnlockOutcome {
+        val wrap = store.lockPinWrap(userId, id) ?: return PinUnlockOutcome.Gone
+        val stored = wrap.pinVerifier?.let(::decodeOrNull)
+        val presented = decodeOrNull(verifier)
+        if (stored != null && presented != null && MessageDigest.isEqual(stored, presented)) {
+            wrap.pinFailures = 0
+            return PinUnlockOutcome.Released(checkNotNull(wrap.pinShare) { "a DEVICE_PIN wrap without its share" })
+        }
+        val failures = wrap.pinFailures + 1
+        if (failures >= PIN_ATTEMPTS) {
+            wrap.delete()
+            return PinUnlockOutcome.Gone
+        }
+        wrap.pinFailures = failures
+        return PinUnlockOutcome.Incorrect(PIN_ATTEMPTS - failures)
     }
 
     /** Remove a wrap for the authenticated caller (idempotent) — a no-op for an unknown or another account's
@@ -104,9 +160,24 @@ class KeyMaterialHandler(
      *  a wrap that exists is withheld from the material while its switch is off ([forUser]), never deleted, and
      *  [deleteWrap] stays allowed. */
     private fun capabilityFor(method: String): String =
-        if (method == WrapMethod.DEVICE_KEY.name) CapabilityIds.REMEMBER_DEVICE_PASSWORDLESS else CapabilityIds.REMEMBER_DEVICE
+        // DEVICE_PIN is password-less too: a TV never sees the password (ADR 0160), so it needs the same switch.
+        if (method == WrapMethod.DEVICE_KEY.name || method == WrapMethod.DEVICE_PIN.name) {
+            CapabilityIds.REMEMBER_DEVICE_PASSWORDLESS
+        } else {
+            CapabilityIds.REMEMBER_DEVICE
+        }
+
+    private fun decodeOrNull(b64: String): ByteArray? =
+        runCatching { Base64.getDecoder().decode(b64) }.getOrNull()
+
+    private fun is32Bytes(b64: String): Boolean = decodeOrNull(b64)?.size == PIN_PART_BYTES
 
     companion object {
         const val MAX_WRAPS_PER_METHOD = 20L
+
+        /** Failed PIN unlocks in a row that delete a DEVICE_PIN wrap (ADR 0160 decision 3; a constant, owner 2026-11-25). */
+        const val PIN_ATTEMPTS = 10
+
+        private const val PIN_PART_BYTES = 32
     }
 }

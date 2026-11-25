@@ -27,6 +27,11 @@ camerax = "1.6.2"
 # an actively released library (its metadata updated 2026-09-23), nothing in it relocated or deprecated; the Kotlin
 # `CoroutineWorker` is in `work-runtime` itself (the `-ktx` artifact is an empty shell since 2.9).
 work = "2.12.0"
+# Compose for TV's Material (AndroidX, Apache-2.0): the TV form's UI — its navigation drawer, cards and focus look
+# (ADR 0159 decision 1). Checked 2026-11-25 on Google's Maven: 1.1.0 is the latest stable of an actively released library
+# (its metadata updated 2026-05-06), nothing in it relocated or deprecated; tv-foundation's lazy layouts are deprecated
+# for Compose's standard ones, which the TV UI uses, so tv-foundation is not added.
+tv-material = "1.1.0"
 # The one generator version the repository runs (scripts/validate_build_input_pins.py holds every site to it).
 openapi-generator = "7.23.0"
 # Test-only, the core's jvmTest (never shipped): draws the web's Emergency Kit fixtures' pages as the apps' renderers do.
@@ -77,6 +82,7 @@ camerax-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "ca
 camerax-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camerax" }
 camerax-view = { module = "androidx.camera:camera-view", version.ref = "camerax" }
 work-runtime = { module = "androidx.work:work-runtime", version.ref = "work" }
+tv-material = { module = "androidx.tv:tv-material", version.ref = "tv-material" }
 
 openapi-generator = { module = "org.openapitools:openapi-generator", version.ref = "openapi-generator" }
 

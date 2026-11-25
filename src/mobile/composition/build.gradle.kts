@@ -26,7 +26,8 @@ kotlin {
 
     // The Apple app's one framework (ADR 0123), its name kept: Swift's `import VeyqCore` and every Objective-C name stay.
     val xcf = XCFramework("VeyqCore")
-    listOf(iosArm64(), iosSimulatorArm64(), macosArm64()).forEach { target ->
+    // The TV's app (ADR 0159 decision 1) links the same framework, its tvOS slices in the same XCFramework.
+    listOf(iosArm64(), iosSimulatorArm64(), macosArm64(), tvosArm64(), tvosSimulatorArm64()).forEach { target ->
         target.binaries.framework {
             baseName = "VeyqCore"
             isStatic = true

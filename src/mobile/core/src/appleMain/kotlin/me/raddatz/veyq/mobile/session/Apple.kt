@@ -17,8 +17,6 @@ import platform.Foundation.NSURLSession
 import platform.Foundation.NSURLSessionConfiguration
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.create
-import platform.LocalAuthentication.LAContext
-import platform.LocalAuthentication.LAPolicyDeviceOwnerAuthentication
 import platform.posix.memcpy
 
 /**
@@ -49,6 +47,48 @@ interface KeychainBridge {
     fun store(account: String, data: NSData, protected: Boolean, passcode: Boolean): Boolean
     fun load(account: String, prompt: String, protected: Boolean): KeychainRead
     fun remove(account: String)
+
+    /**
+     * Whether this device keeps the PIN level's hardware keys (ADR 0160 decision 2): a Secure Enclave the app may create
+     * keys in — an Apple TV's (`SecureEnclave.isAvailable`); never the tvOS Simulator's, which has none, nor the iOS or
+     * macOS app's, which keep no PIN (their bridge answers false and the three calls below are never made). The defaults
+     * are a Kotlin implementer's (a test's fake); Swift sees an Objective-C protocol and implements all four.
+     */
+    fun pinKeysAvailable(): Boolean = false
+
+    /**
+     * A Secure Enclave P-256 key-agreement key created under [account] (replacing one there), its sealed representation
+     * kept `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`; false where it could not be made.
+     */
+    fun createPinKey(account: String): Boolean = false
+
+    /**
+     * The raw ECDH agreement (32 bytes, the shared point's x) of the key [account] with the PIN level's fixed public point
+     * — a point whose discrete log nobody knows, derived by hash-to-curve (`Veyq/TV/TvKeychain.swift` holds it and
+     * recomputes it); null where there is no such key (a reinstall, another Apple TV user).
+     */
+    fun pinAgreement(account: String): NSData? = null
+
+    fun removePinKey(account: String) {}
+}
+
+/**
+ * The PIN level's hardware factor over a Secure Enclave ([KeychainBridge.pinAgreement]): `F = HKDF-SHA256(ECDH(key, P),
+ * salt = none, info = [PinFactors.LABEL], 32 bytes)` (ADR 0160 decision 2). The enclave computes no HMAC, so the
+ * agreement with a fixed point is its fixed-input function; the HKDF is the suite's, as every derivation of the core.
+ */
+internal class ApplePinFactors(private val keychain: KeychainBridge, private val p: Primitives) : PinFactors {
+    override fun create(alias: String) {
+        keychain.removePinKey(alias)
+        check(keychain.createPinKey(alias)) { "PIN key not created" }
+    }
+
+    override fun factor(alias: String): ByteArray? {
+        val agreed = keychain.pinAgreement(alias)?.toByteArray() ?: return null
+        return try { p.hkdfSha256(agreed, ByteArray(0), PinFactors.LABEL, 32) } finally { agreed.fill(0) }
+    }
+
+    override fun delete(alias: String) = keychain.removePinKey(alias)
 }
 
 /**
@@ -70,6 +110,9 @@ class AppleDeviceKeys(private val keychain: KeychainBridge, private val prompt: 
     }
 
     override fun deleteBindKey(alias: String) = keychain.remove(alias)
+
+    /** The PIN level's factor where the bridge has a Secure Enclave (an Apple TV), else none: the level is not offered. */
+    override val pinFactors: PinFactors? = if (keychain.pinKeysAvailable()) ApplePinFactors(keychain, p) else null
 
     private fun unlockAccount(level: StaySignedIn) = when (level) {
         StaySignedIn.PRESENCE -> UNLOCK
@@ -137,10 +180,10 @@ class AppleDeviceKeys(private val keychain: KeychainBridge, private val prompt: 
     /**
      * Both levels where the device has a passcode, else none. `.userPresence` needs one; the login item could exist
      * without, but its guarantee is that the device's own sign-in authenticates, and without a passcode nothing does.
+     * A TV has none ([deviceOwnerAuthenticationAvailable]).
      */
-    @OptIn(ExperimentalForeignApi::class)
     override val staySignedIn: Set<StaySignedIn>
-        get() = if (LAContext().canEvaluatePolicy(LAPolicyDeviceOwnerAuthentication, null)) setOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN) else emptySet()
+        get() = if (deviceOwnerAuthenticationAvailable()) setOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN) else emptySet()
 
     private companion object {
         /** The presence item, the one unlock key there was before the levels: its seals still open. */
@@ -222,6 +265,16 @@ object AppleSessions {
         backgroundRuns: Boolean,
     ): ThisDevice =
         ThisDevice(UserDefaultsStore(defaults), AppleDeviceKeys(keychain, prompt), label, LibsodiumPrimitives, offlineRoot, offlineLimit, backgroundRuns)
+
+    /**
+     * This installation on a TV (ADR 0159): [DeviceForm.TV], no offline store and nothing run in the background (decision
+     * 7), its keys in [keychain] — whose Secure Enclave, where it has one, holds the PIN level's factors (ADR 0160).
+     */
+    fun tvDevice(keychain: KeychainBridge, label: String, prompt: String, defaults: NSUserDefaults): ThisDevice =
+        ThisDevice(
+            UserDefaultsStore(defaults), AppleDeviceKeys(keychain, prompt), label, LibsodiumPrimitives,
+            offlineRoot = null, backgroundRuns = false, form = DeviceForm.TV,
+        )
 
     @Throws(SignInFailure::class, kotlin.coroutines.cancellation.CancellationException::class)
     suspend fun signIn(server: String, email: String, password: String, secretKey: String, device: ThisDevice): VeyqAccount =

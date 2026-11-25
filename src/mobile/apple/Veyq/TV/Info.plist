@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The TV's own keys beside the generated Info.plist (ADR 0159 decision 1): the launch screen and App Transport
+	     Security's exception as the app's, and nothing else of the phone's — no background task, no URL scheme (a TV
+	     opens no received link, inbox #1351). -->
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>veyq-bg</string>
+		<key>UIImageName</key>
+		<string>VeyqMark</string>
+	</dict>
+	<!-- A Memory's music plays on while the app is in the background (ADR 0159 decision 3, "where the platform lets
+	     it"); the account locks at the return (decision 4, `IdleLock.foreground`). -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+	<!-- App Transport Security stays on everywhere but the developer's own dev instance, a *.localhost tenant. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>localhost</key>
+			<dict>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+</dict>
+</plist>

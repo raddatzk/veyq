@@ -139,6 +139,8 @@ dependencies {
     implementation(libs.camerax.lifecycle)
     implementation(libs.camerax.view)
     implementation(libs.work.runtime)
+    // the TV form (ADR 0159 decision 1): Compose for TV's Material, drawn by the same APK's TvActivity
+    implementation(libs.tv.material)
     testImplementation(libs.robolectric)
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)

@@ -32,6 +32,9 @@ import me.raddatz.veyq.mobile.session.TenantSession
  * and the ledger check over them, and every write. Expenses is an application: it uses core's session, never the reverse.
  */
 class PotSession internal constructor(private val door: PotDoor, private var node: OpenNode) {
+    /** Whether this device only views ([PotDoor.viewOnly], a TV): nothing of the Pot is written or downloaded. */
+    val viewOnly: Boolean get() = door.viewOnly
+
     private val suite = door.suite
     private val codec = RevisionCodec(suite)
 

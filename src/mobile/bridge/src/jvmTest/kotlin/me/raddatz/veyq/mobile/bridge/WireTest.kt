@@ -345,6 +345,8 @@ class WireTest {
             Update.Session(Gate.SignIn(notice = Msg.LOCKED_DONE, keepsNothing = true)),
             Update.Session(Gate.Locked("veyq.localhost:8080", "p@veyq.localhost", working = true, error = Msg.LOCKED_DONE_STILL_HERE)),
             Update.Session(Gate.Recover("veyq.localhost:8080", "p@veyq.localhost", sent = true, error = Msg.RECOVERY_MAIL_UNAVAILABLE)),
+            // a TV's picker (ADR 0159 decision 4): never on a desktop, but a Gate like every other
+            Update.Session(Gate.Picker(listOf(SessionModel.PickerTile("veyq.localhost#u1", "Anna", "veyq.localhost")), error = Msg.TV_PIN_GONE)),
             Update.Session(Gate.Signed("veyq.localhost#user-1", "t", offer = SessionModel.Offer("veyq.localhost#user-1", listOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN)))),
             Update.Session(Gate.Unlock(record)), Update.Session(Gate.Unlock(record.copy(method = TrustedDevice.Method.DEVICE_KEY, level = StaySignedIn.LOGIN))), Update.Session(Gate.Signed("veyq.localhost#user-1", "t", switching = true)),
             Update.Shell(ShellModel.State(shell, lists), shown), Update.Shell(null),

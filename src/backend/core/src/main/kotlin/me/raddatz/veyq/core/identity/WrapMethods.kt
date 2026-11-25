@@ -32,6 +32,8 @@ enum class WrapMethod(
     PASSKEY(survivesCredentialChange = false, deviceLocal = false),
     DEVICE(survivesCredentialChange = false, deviceLocal = true),
     DEVICE_KEY(survivesCredentialChange = false, deviceLocal = true),
+    /** A TV's PIN wrap (ADR 0160): carries a server share and a PIN verifier beside the ciphertext, and a failure count. */
+    DEVICE_PIN(survivesCredentialChange = false, deviceLocal = true),
     ;
 
     companion object {

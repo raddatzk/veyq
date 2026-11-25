@@ -39,7 +39,9 @@ object FileRights {
      * (not in an identity folder) and copies nothing. "Send a copy" is a download the platform hands on ([shares]), only of
      * a file that holds content.
      */
-    fun of(viewer: Viewer, inIdentityFolder: Boolean, hasContent: Boolean, shares: Boolean): Rights {
+    fun of(viewer: Viewer, inIdentityFolder: Boolean, hasContent: Boolean, shares: Boolean, viewOnly: Boolean = false): Rights {
+        // a TV only views (ADR 0159 decision 3): no download, replace, copy or send — a file it cannot show stays listed
+        if (viewOnly) return Rights(download = false, replace = false, copy = false, send = false)
         val download = true
         val replace = when (viewer) {
             Viewer.MEMBER, Viewer.READ_WRITE -> !inIdentityFolder
@@ -76,6 +78,8 @@ class FileModel(
         /** The file as it is listed now, or null where it is not (gone, or its listing did not read). */
         suspend fun file(node: NodeAt): DepotFiles.File?
         fun inIdentityFolder(node: NodeAt): Boolean
+        /** Whether this device only views (a TV, ADR 0159 decision 3). */
+        fun viewOnly(): Boolean = false
         /** [file]'s frames `first until until`, each to [sink] in order. */
         suspend fun read(file: DepotFiles.File, first: Int, until: Int, sink: suspend (ByteArray) -> Unit)
         /** [file]'s content read at any offset (a medium played). */
@@ -245,7 +249,7 @@ class FileModel(
         }
         val before = file
         file = f
-        val rights = FileRights.of(viewer, door.inIdentityFolder(node), f.hasContent, shares)
+        val rights = FileRights.of(viewer, door.inIdentityFolder(node), f.hasContent, shares, door.viewOnly())
         val header = Header(
             facts = AppKinds.Facts(canWrite = rights.replace, hasContent = f.hasContent && rights.download),
             own = listOfNotNull(

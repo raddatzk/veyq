@@ -67,6 +67,10 @@ subprojects {
             iosArm64()
             iosSimulatorArm64()
             macosArm64()
+            // tvOS (ADR 0159 decision 1): the TV's app links the same framework; `appleMain` is shared, and what the tvOS SDK
+            // lacks (LocalAuthentication) is branched below it, in `iosMain`/`macosMain` against `tvosMain`.
+            tvosArm64()
+            tvosSimulatorArm64()
             linuxArm64()
             linuxX64()
             mingwX64()

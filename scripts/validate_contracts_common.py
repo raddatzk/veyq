@@ -75,12 +75,12 @@ API = contract_specs.API
 CANONICAL_ENUMS: dict[str, tuple[str, ...]] = {
     "derivative-kind": ("PREVIEW", "THUMBNAIL"),
     "membership-role": ("MEMBER", "OWNER"),
-    "credential-method": ("DEVICE", "DEVICE_KEY", "PASSKEY", "PASSWORD", "RECOVERY"),
+    "credential-method": ("DEVICE", "DEVICE_KEY", "DEVICE_PIN", "PASSKEY", "PASSWORD", "RECOVERY"),
     "suite-version": ("v1",),
 }
 # Value sets that overlap a canonical family on purpose (documented, not drift).
 INTENTIONAL_ENUM_VARIANTS: set[tuple[str, ...]] = {
-    ("DEVICE", "DEVICE_KEY"),  # account.openapi.yaml — the device-only wrap-rotation subset of credential-method
+    ("DEVICE", "DEVICE_KEY", "DEVICE_PIN"),  # account.openapi.yaml — the device-local subset of credential-method (AddWrapRequest)
 }
 
 errors: list[str] = []

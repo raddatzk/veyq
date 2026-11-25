@@ -66,6 +66,50 @@ interface DeviceKeys {
      * it is asked when an offer is made, not on every frame.
      */
     val staySignedIn: Set<StaySignedIn>
+
+    /**
+     * The PIN level's hardware factor (ADR 0160 decision 2), or null where this store has no non-exportable key that runs
+     * without a lock screen — then the level is not offered. The answer is the store's, never a screen's probe.
+     */
+    val pinFactors: PinFactors? get() = null
+}
+
+/**
+ * The hardware factor `F` of the PIN level (ADR 0160 decision 2), one key per account per device: a fixed-input output
+ * of a key that never leaves the device's hardware — Android a Keystore HMAC-SHA256 key without user authentication
+ * (StrongBox first, the TEE otherwise) over [LABEL]; tvOS an ECDH agreement of a Secure Enclave P-256 key with a fixed
+ * point, through HKDF. 32 bytes; the same alias answers the same bytes for as long as its key lives.
+ */
+interface PinFactors {
+    /** Creates the key [alias], replacing one there. */
+    fun create(alias: String)
+
+    /** `F` under the key [alias] (32 bytes), or null when there is no such key (a reinstall, another Apple TV user). */
+    fun factor(alias: String): ByteArray?
+
+    fun delete(alias: String)
+
+    companion object {
+        /** What Android's HMAC key is computed over. */
+        val LABEL: ByteArray = "veyq/v1/pin-bind".encodeToByteArray()
+    }
+}
+
+/**
+ * The form of the device the app runs on (ADR 0159 decision 2): what its plans offer. [TV] views and never authors — every
+ * creating, editing, moving, sharing, uploading and deleting entry and every way to take content off the device
+ * (download, export, send, keep offline) is removed in the core, the way rights remove functions —, starts at its
+ * account picker and opens one account at a time behind its PIN (decision 4). [PHONE] and [DESKTOP] offer the same;
+ * nothing tells them apart yet.
+ */
+@Serializable
+enum class DeviceForm {
+    PHONE,
+    DESKTOP,
+    TV;
+
+    /** Whether this form only views ([TV]). */
+    val viewOnly: Boolean get() = this == TV
 }
 
 /**
@@ -102,7 +146,9 @@ enum class StaySignedIn {
 fun trustChanges(method: TrustedDevice.Method?, level: StaySignedIn?, levels: List<StaySignedIn>): List<StaySignedIn?> = when (method) {
     null -> levels + listOf(null)
     TrustedDevice.Method.DEVICE_KEY -> levels.filter { it != level } + listOf(null)
-    else -> levels
+    // a TV's PIN is its only way to stay (ADR 0160 decision 1): its own settings change the PIN, nothing here
+    TrustedDevice.Method.DEVICE_PIN -> emptyList()
+    TrustedDevice.Method.DEVICE -> levels
 }
 
 /** The person did not authenticate for the unlock key ([cancelled]), or the key no longer works. */
@@ -124,8 +170,20 @@ data class TrustedDevice(
     val alias: String,
     /** The level a DEVICE_KEY wrap was sealed at; null for DEVICE, and in a record kept before levels existed. */
     val level: StaySignedIn? = null,
+    /**
+     * A TV's name for the account on its picker (ADR 0159 decision 4): by default the account's profile name, kept in the
+     * clear beside the record — the one plaintext a TV keeps of an account, no avatar, no content. Null elsewhere.
+     */
+    val label: String? = null,
 ) {
-    enum class Method { DEVICE, DEVICE_KEY }
+    /**
+     * DEVICE: the password and this device (ADR 0005); DEVICE_KEY: staying signed in at a level ([StaySignedIn]);
+     * DEVICE_PIN: a TV's PIN, bound by its hardware ([PinFactors]) and counted by the server (ADR 0160).
+     */
+    enum class Method { DEVICE, DEVICE_KEY, DEVICE_PIN }
+
+    /** The name a picker shows: the TV's own ([label]) or the account's address. */
+    val pickerLabel: String get() = label ?: email
 
     /**
      * The level whose unlock key opens this DEVICE_KEY wrap, null for DEVICE. A record kept before the levels (ADR 0123 decision 8) is
@@ -159,7 +217,14 @@ class ThisDevice(
     val offlineRoot: String? = null,
     val offlineLimit: Long = me.raddatz.veyq.mobile.offline.AccountOffline.DESKTOP_LIMIT,
     val backgroundRuns: Boolean = false,
+    /** What this device is (ADR 0159): a [DeviceForm.TV] keeps no offline store and runs nothing in the background — its host names neither. */
+    val form: DeviceForm = DeviceForm.PHONE,
 ) {
+    /** Whether the plans on this device only view ([DeviceForm.viewOnly]). */
+    val viewOnly: Boolean get() = form.viewOnly
+
+    /** Whether this device can keep an account behind a PIN (ADR 0160 decision 1): a TV whose store has the hardware factor. */
+    val offersPin: Boolean get() = form == DeviceForm.TV && keys.pinFactors != null
     /** The accounts' offline stores on this device, where the host named their directory. */
     val offline: OfflineStores? by lazy { offlineRoot?.let { OfflineStores(it, store, primitives, offlineFiles, offlineClock) } }
 
@@ -329,6 +394,7 @@ class ThisDevice(
      */
     internal fun forgetLocked(record: TrustedDevice) {
         runCatching { keys.deleteBindKey(record.alias) }
+        runCatching { keys.pinFactors?.delete(record.alias) }
         runCatching { keys.deleteSecret(record.refreshAlias) }
         forget(record.key)
         setDeclined(record.key, false)

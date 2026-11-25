@@ -95,7 +95,7 @@ import me.raddatz.veyq.mobile.session.DeviceLink.Step
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DeviceLinkScreen(link: DeviceLink, onAgain: () -> Unit, onClose: () -> Unit) {
+fun DeviceLinkScreen(link: DeviceLink, onAgain: () -> Unit, onClose: () -> Unit, tv: Boolean = false) {
     val shown by link.state.collectAsStateWithLifecycle()
     val title = when (link.role) {
         Role.SHOW_FOR_NEW_DEVICE, Role.SCAN_SIGN_IN_CODE -> R.string.account_settings_add_device
@@ -121,7 +121,7 @@ fun DeviceLinkScreen(link: DeviceLink, onAgain: () -> Unit, onClose: () -> Unit)
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    LinkStep(link, shown, onAgain, onClose)
+                    LinkStep(link, shown, onAgain, onClose, tv)
                 }
             }
         }
@@ -129,7 +129,7 @@ fun DeviceLinkScreen(link: DeviceLink, onAgain: () -> Unit, onClose: () -> Unit)
 }
 
 @Composable
-private fun LinkStep(link: DeviceLink, shown: DeviceLink.Shown, onAgain: () -> Unit, onClose: () -> Unit) {
+private fun LinkStep(link: DeviceLink, shown: DeviceLink.Shown, onAgain: () -> Unit, onClose: () -> Unit, tv: Boolean = false) {
     val trusted = link.role == Role.SHOW_FOR_NEW_DEVICE || link.role == Role.SCAN_SIGN_IN_CODE
     when (shown.step) {
         Step.OPENING -> Waiting(if (link.role == Role.SHOW_FOR_SIGN_IN || link.role == Role.SHOW_FOR_NEW_DEVICE) R.string.link_sign_in_opening else null)
@@ -141,7 +141,8 @@ private fun LinkStep(link: DeviceLink, shown: DeviceLink.Shown, onAgain: () -> U
         } else {
             Copy(R.string.link_sign_in_intro)
             Code(link)
-            Copy(R.string.link_sign_in_scan_hint)
+            // a TV says where the code is scanned and the six digits come from (its sign-in is this code only, ADR 0159 decision 4)
+            Copy(if (tv) R.string.tv_signin_hint else R.string.link_sign_in_scan_hint)
             SixDigits(link)
         }
         Step.SCANNING -> Scanning(link, shown)
@@ -234,6 +235,7 @@ private fun Code(link: DeviceLink) {
 @Composable
 private fun SixDigits(link: DeviceLink) {
     var code by rememberSaveable { mutableStateOf("") }
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
     OutlinedTextField(
         code, { typed -> code = typed.filter(Char::isDigit).take(6) },
         label = { Text(stringResource(R.string.link_sign_in_code)) },
@@ -241,7 +243,10 @@ private fun SixDigits(link: DeviceLink) {
         singleLine = true,
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done),
         keyboardActions = KeyboardActions(onDone = { link.enterCode(code) }),
-        modifier = Modifier.fillMaxWidth().testTag("link-code-field"),
+        // a remote's down leaves the field for the send button (a TV, ADR 0159; measured: the field kept the key)
+        modifier = Modifier.fillMaxWidth().testTag("link-code-field").onPreviewKeyEvent { e ->
+            e.type == KeyEventType.KeyDown && e.key == Key.DirectionDown && focus.moveFocus(androidx.compose.ui.focus.FocusDirection.Down)
+        },
     )
     Button(onClick = { link.enterCode(code) }, enabled = code.length == 6, modifier = Modifier.fillMaxWidth().testTag("link-send")) {
         Text(stringResource(R.string.link_sign_in_send))

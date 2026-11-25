@@ -301,6 +301,12 @@ class ShellModel(
     /** Whether the account reaches its server: offline every write here is refused ([readOnly], ADR 0140 decision 7). */
     val online: Boolean get() = tenant.account.reach.value == Reach.Online
 
+    /**
+     * Whether this device only views (a TV, ADR 0159 decisions 2-3): the one place the shell's plans learn it — nothing is
+     * created, uploaded, dropped, shared, trashed or downloaded, and every header and row offers only what reads.
+     */
+    val viewOnly: Boolean get() = tenant.account.thisDevice.viewOnly
+
     /** The notice a write offline is refused with. */
     @PlatformApi
     @HiddenFromObjC
@@ -538,7 +544,7 @@ class ShellModel(
      * Whether the pick mode lets [ref] be chosen for what waits in [inbox] (ADR 0138 decisions 1 and 2): its kind's answer
      * (`AppKinds.share`), where this member may put files into it here, takes one of them. Anything else is dimmed.
      */
-    fun takesShare(inbox: ShareInbox, ref: NodeAt): Boolean = inbox.offers(
+    fun takesShare(inbox: ShareInbox, ref: NodeAt): Boolean = !viewOnly && inbox.offers(
         AppKinds.share(ref.kind),
         ShareAnswer.Place(ref.kind, tenant.applicationsOff(), online, inIdentityFolder(ref)),
     )
@@ -550,13 +556,13 @@ class ShellModel(
      * none branches on kinds.
      */
     fun addHere(inbox: ShareInbox, shell: Shell, page: PageIntake?): AddHere? =
-        AddHere.at(inbox, shell, page, ::levelPlace)
+        if (viewOnly) null else AddHere.at(inbox, shell, page, ::levelPlace)
 
     /**
      * The level [shell] shows where a file dropped onto it is uploaded at once (ADR 0138 decision 9, [AddHere.shown]): a
      * folder or a space's top where this member may put files here; null elsewhere, where a drop waits in the pick mode.
      */
-    fun dropLevel(shell: Shell): AddHere.Level? = AddHere.shown(shell, ::levelPlace)
+    fun dropLevel(shell: Shell): AddHere.Level? = if (viewOnly) null else AddHere.shown(shell, ::levelPlace)
 
     /** Where a level stands for a share: a folder's place (a space's top asks as one, [folder] null). */
     private fun levelPlace(folder: NodeAt?) =
@@ -574,6 +580,7 @@ class ShellModel(
      * ([FolderShare]'s answer: online, Depot on, no guest's identity folder). A host that skipped the gate is refused here.
      */
     fun takesUpload(scopeId: String, parentId: String?): Boolean {
+        if (viewOnly) return false
         if (_state.value?.lists?.spaces?.none { it.scopeId == scopeId } != false) return false
         // online into a folder made offline and not sent yet: the upload waits until the folder is sent (#1095)
         if (online && unsentFolder(parentId)) return false
@@ -620,6 +627,7 @@ class ShellModel(
      * boxes on. Every platform asks this (the phones through their `AppModel`, the desktops through `ShellShown.topLevelShare`).
      */
     fun offersTopLevelShare(shell: Shell): Boolean {
+        if (viewOnly) return false
         val space = shell.space ?: return false
         val rules = tenant.linkRules
         return topLevelShared(shell, space) && rules.on && rules.dropBox
@@ -631,6 +639,7 @@ class ShellModel(
      */
     val canCreateHere: Boolean
         get() {
+            if (viewOnly) return false
             val s = shell ?: return false
             val space = s.space ?: return false
             if (!online && createsHere(isHome = true).isEmpty()) return false
@@ -646,6 +655,7 @@ class ShellModel(
      * kept link), none where this device keeps no store. Every platform draws this list, never `createsWhere` beside it.
      */
     fun createsHere(isHome: Boolean, bookmarks: Boolean = false): List<AppKinds.Create> {
+        if (viewOnly) return emptyList()
         val all = AppKinds.createsWhere(isHome, bookmarks)
         if (online) return all
         return all.filter { c -> QUEUED_CREATES[c]?.let { tenant.account.queues(it) } == true }
@@ -671,7 +681,7 @@ class ShellModel(
      */
     fun trashOffered(shell: Shell): Boolean {
         val space = shell.space ?: return false
-        if (!online) return false
+        if (!online || viewOnly) return false
         return shell.folderAt(space)?.let { !inIdentityFolder(it) } ?: true
     }
 
@@ -693,7 +703,7 @@ class ShellModel(
         return NodeHeader.rights(
             row.kind, favoriteKnown = isFavorite(row) != null, shareable = kind.shareable, linksOn = tenant.linkRules.on,
             rename = kind.renames, takesCover = kind.takesCover, coverOffered = doors.coverOffered, copy = doors.copies,
-            download = doors.downloads, report = report, inGuestFolder = inIdentityFolder(row), online = online,
+            download = doors.downloads, report = report, inGuestFolder = inIdentityFolder(row), online = online, viewOnly = viewOnly,
         )
     }
 
@@ -916,6 +926,7 @@ class ShellModel(
             override fun closeOpen(ref: NodeAt) = closeOpen(ref)
             override fun changed() = changed()
             override suspend fun downloadName(ref: NodeAt) = AppKinds.downloadName(tenant, ref)
+            override fun viewOnly() = this@ShellModel.viewOnly
             override suspend fun cover(ref: NodeAt): NodeCover.Crop? {
                 val n = tenant.node(ref.scopeId, ref.nodeId) ?: return null
                 return NodeCover.read(NodeMetaWrite.openForWrite(tenant.account.suite, n.scopeId, n.id, n.key, n.wrappedMeta))?.crop
@@ -1145,7 +1156,8 @@ class ShellModel(
      * Natively the sink is a file by its path (`FileSink`, which removes a download that did not finish).
      */
     suspend fun download(ref: NodeAt, deletedName: String, nowMs: Long, sink: (ByteArray) -> Unit): List<NodeExport.Skipped>? =
-        downloadAs(ref.kind, own = { AppKinds.ownDownload(tenant, ref, it) == true }, zip = zip@{ out ->
+        // a TV takes nothing away (ADR 0159 decision 3): a host that skipped the plan is refused here
+        if (viewOnly) null else downloadAs(ref.kind, own = { AppKinds.ownDownload(tenant, ref, it) == true }, zip = zip@{ out ->
             val walked = NodeExport.walk(tenant, ref.scopeId, ref.nodeId, AppKinds.exports(deletedName)) ?: return@zip null
             NodeExport.write(walked.root, VeyqAccount.MAJOR.toString(), nowMs, out)
             walked.skipped
@@ -1193,6 +1205,8 @@ class ShellModel(
         override fun online() = online
         override fun people() = tenant.people.values
         override suspend fun settings(): List<me.raddatz.veyq.mobile.search.SettingsSection> {
+            // a TV's settings are its own few (Lock, change PIN, leave this TV): no account page to search into
+            if (viewOnly) return emptyList()
             val account = tenant.account
             val linking = online && runCatching {
                 account.call { me.raddatz.veyq.mobile.api.apis.SetupApi(account.server, account.http).getSetupStatus() }

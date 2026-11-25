@@ -8,8 +8,10 @@ import android.hardware.biometrics.BiometricManager.Authenticators.DEVICE_CREDEN
 import android.hardware.biometrics.BiometricPrompt
 import android.os.CancellationSignal
 import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyInfo
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
+import android.security.keystore.StrongBoxUnavailableException
 import android.security.keystore.UserNotAuthenticatedException
 import android.util.Base64
 import java.security.KeyStore
@@ -17,6 +19,7 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.Mac
 import javax.crypto.SecretKey
+import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -26,6 +29,7 @@ import kotlinx.coroutines.withContext
 import me.raddatz.veyq.mobile.android.R
 import me.raddatz.veyq.mobile.session.DeviceAuthFailed
 import me.raddatz.veyq.mobile.session.DeviceKeys
+import me.raddatz.veyq.mobile.session.PinFactors
 import me.raddatz.veyq.mobile.session.StaySignedIn
 
 /**
@@ -57,6 +61,69 @@ class KeystoreDeviceKeys(context: Context, private val host: () -> Activity?) : 
     private fun unlockAlias(level: StaySignedIn) = when (level) {
         StaySignedIn.PRESENCE -> UNLOCK
         StaySignedIn.LOGIN -> UNLOCK_LOGIN
+    }
+
+    /**
+     * A TV's PIN factor (ADR 0160 decision 2): one HMAC-SHA256 key per account, without user authentication (a TV has no
+     * lock screen to bind it to), in StrongBox where the device has it, else the TEE. Offered only where the Keystore's keys
+     * are hardware-backed — measured once per process on a probe key's [KeyInfo] security level (TEE, StrongBox, or a
+     * secure level the platform does not name): a software Keystore's key is exportable by whoever runs code on the device,
+     * and ADR 0160 decision 1 offers the level only where the device has a non-exportable hardware key. Null: not offered.
+     * The core asks this only on a TV (`ThisDevice.offersPin`).
+     */
+    override val pinFactors: PinFactors? by lazy { if (hardwareBacked()) KeystorePinFactors() else null }
+
+    private inner class KeystorePinFactors : PinFactors {
+        override fun create(alias: String) {
+            delete(alias)
+            val key = pinKey(alias)
+            // a key the hardware does not hold binds nothing: never kept, so no wrap is made over it
+            if (!hardware(key)) {
+                delete(alias)
+                throw IllegalStateException("the Keystore holds this device's PIN key in software")
+            }
+        }
+
+        override fun factor(alias: String): ByteArray? {
+            val key = keyStore.getKey(alias, null) as? SecretKey ?: return null
+            return Mac.getInstance("HmacSHA256").apply { init(key) }.doFinal(PinFactors.LABEL)
+        }
+
+        override fun delete(alias: String) {
+            if (keyStore.containsAlias(alias)) keyStore.deleteEntry(alias)
+        }
+    }
+
+    /** An HMAC-SHA256 key [alias] without user authentication: StrongBox first, the TEE where the device has none. */
+    private fun pinKey(alias: String): SecretKey {
+        fun generate(strongBox: Boolean): SecretKey = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_HMAC_SHA256, STORE).apply {
+            init(KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_SIGN).setIsStrongBoxBacked(strongBox).build())
+        }.generateKey()
+        return try {
+            generate(strongBox = true)
+        } catch (e: StrongBoxUnavailableException) {
+            generate(strongBox = false)
+        }
+    }
+
+    /** Whether [key] lives in the device's hardware (the TEE or StrongBox), never in software. */
+    private fun hardware(key: SecretKey): Boolean = runCatching { securityLevel(key) in HARDWARE_LEVELS }.getOrDefault(false)
+
+    /** Where the Keystore holds [key] (`KeyProperties.SECURITY_LEVEL_*`). */
+    private fun securityLevel(key: SecretKey): Int =
+        (SecretKeyFactory.getInstance(key.algorithm, STORE).getKeySpec(key, KeyInfo::class.java) as KeyInfo).securityLevel
+
+    /** The probe: a PIN key made and asked where it lives, then deleted; its level (or why it failed) to logcat, never a key. */
+    private fun hardwareBacked(): Boolean {
+        val level = runCatching {
+            try {
+                securityLevel(pinKey(PIN_PROBE))
+            } finally {
+                if (keyStore.containsAlias(PIN_PROBE)) keyStore.deleteEntry(PIN_PROBE)
+            }
+        }
+        android.util.Log.i("veyq-trust", "PIN factor's key level: ${level.getOrNull() ?: level.exceptionOrNull()?.javaClass?.simpleName}")
+        return level.getOrNull() in HARDWARE_LEVELS
     }
 
     override fun createBindKey(alias: String) {
@@ -190,6 +257,13 @@ class KeystoreDeviceKeys(context: Context, private val host: () -> Activity?) : 
         const val UNLOCK = "veyq.unlock"
         const val UNLOCK_LOGIN = "veyq.unlock.login"
         const val SECRETS = "veyq.secrets"
+        /** The PIN factor's probe key, made and deleted at once ([pinFactors]). */
+        const val PIN_PROBE = "veyq.pin.probe"
+
+        /** The levels a key is held in hardware at: the TEE, StrongBox, or a secure one the platform does not name. */
+        val HARDWARE_LEVELS = setOf(
+            KeyProperties.SECURITY_LEVEL_TRUSTED_ENVIRONMENT, KeyProperties.SECURITY_LEVEL_STRONGBOX, KeyProperties.SECURITY_LEVEL_UNKNOWN_SECURE,
+        )
 
         /** One authentication opens every remembered account of one start, and nothing after. */
         const val VALIDITY_SECONDS = 15

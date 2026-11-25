@@ -51,6 +51,15 @@ object SignInPlan {
      */
     fun entries(gate: SessionModel.Gate.SignIn, camera: Boolean): List<SignInEntry> = entries(gate.adding, camera)
 
+    /**
+     * A TV's sign-in (ADR 0159, ADR 0160): the QR code it shows is the only way in — a TV never sees the password or the
+     * Secret Key, which is why its PIN level exists — and Cancel back to the picker while another account is added.
+     */
+    fun tvEntries(adding: Boolean): List<SignInEntry> = listOfNotNull(
+        SignInEntry.LINK_SHOW,
+        SignInEntry.CANCEL.takeIf { adding },
+    )
+
     /** [entries] by what decides them: [adding] another account, a [camera] possible. */
     fun entries(adding: Boolean, camera: Boolean): List<SignInEntry> = listOfNotNull(
         SignInEntry.SUBMIT,

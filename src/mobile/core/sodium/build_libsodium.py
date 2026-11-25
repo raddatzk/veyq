@@ -9,7 +9,7 @@ The source is the release tarball, checked against the SHA-256 below before anyt
 from the tarball the 1.0.22 release publishes; its minisign signature verifies under libsodium's published key
 (RWQf6LRCGA9i5wo9HfNnazrIs0NImEukX60BIekT/3jXngTz10KIA0QNHhbHH8sobMtntYu/Y2j+3BP3lzI/elViHDtShDBTEAI=, the key in the
 `.minisig` beside the tarball names it) — check it with `minisign -Vm libsodium-1.0.22.tar.gz -P <key>` when moving
-the pin. Only the slices the build uses are compiled: macOS arm64, iOS arm64 and the iOS simulator on arm64 by Xcode's
+the pin. Only the slices the build uses are compiled: macOS arm64, iOS and tvOS arm64 and their simulators on arm64 by Xcode's
 clang (on a Mac only: elsewhere there is no Xcode, and no Apple target to link), and Linux arm64 and x86-64 and Windows x86-64 (mingw) by Kotlin/Native's own clang against the C library it
 links the core against (`core/konan_toolchain.py` says why, and finds it).
 
@@ -47,6 +47,9 @@ SLICES = {
     "macos_arm64": ("macosx", "arm64", "-mmacosx-version-min=14.0", "aarch64-apple-darwin23"),
     "ios_arm64": ("iphoneos", "arm64", "-mios-version-min=17.0", "aarch64-apple-darwin23"),
     "ios_simulator_arm64": ("iphonesimulator", "arm64", "-mios-simulator-version-min=17.0", "aarch64-apple-darwin23"),
+    # tvOS (ADR 0159 decision 1): iOS's floor, the same release year
+    "tvos_arm64": ("appletvos", "arm64", "-mtvos-version-min=17.0", "aarch64-apple-darwin23"),
+    "tvos_simulator_arm64": ("appletvsimulator", "arm64", "-mtvos-simulator-version-min=17.0", "aarch64-apple-darwin23"),
 }
 
 

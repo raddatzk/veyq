@@ -5,7 +5,7 @@ import java.security.MessageDigest
 // ADR 0079) — the v1 crypto suite, the platform's API client, the session, the navigation model, the registry of kinds
 // (`AppKinds`) the composition fills. It names no application: `scripts/validate_mobile_module_graph.py` holds it to no
 // project dependency. Its targets and hierarchy are every core module's (src/mobile/build.gradle.kts): the JVM (which
-// the Android app consumes, and where the conformance suite runs fastest), JavaScript, the Apple platforms (packed by
+// the Android app consumes, and where the conformance suite runs fastest), JavaScript, the Apple platforms (macOS, iOS and tvOS, packed by
 // `:composition` into one XCFramework, `VeyqCore`), Linux on arm64 and x86-64 (ADR 0136 decision 4) and Windows on
 // x86-64 (decision 5), cross-compiled from this build's host by Kotlin/Native's own toolchain.
 plugins {
@@ -56,7 +56,7 @@ val generateWords = tasks.register<Exec>("generateWords") {
 val libsodium = rootDir.resolve("build/libsodium")
 val buildLibsodium = tasks.register<Exec>("buildLibsodium") {
     group = "veyq"
-    description = "Builds libsodium for macOS, iOS, the iOS simulator (arm64), Linux (arm64, x86-64) and Windows (x86-64) into src/mobile/build/libsodium."
+    description = "Builds libsodium for macOS, iOS, the iOS simulator, tvOS, the tvOS simulator (arm64), Linux (arm64, x86-64) and Windows (x86-64) into src/mobile/build/libsodium."
     inputs.file("sodium/build_libsodium.py").withPropertyName("script")
     inputs.file("konan_toolchain.py").withPropertyName("toolchain")
     outputs.dir(libsodium)
@@ -82,7 +82,7 @@ val libwebp = rootDir.resolve("build/libwebp")
 val webpPin = rootDir.resolve("../web/webp-encoder/libwebp.pin").canonicalFile
 val buildLibwebp = tasks.register<Exec>("buildLibwebp") {
     group = "veyq"
-    description = "Builds libwebp for Linux (arm64, x86-64), Windows (x86-64) and Apple (macOS, iOS, the simulator) into src/mobile/build/libwebp."
+    description = "Builds libwebp for Linux (arm64, x86-64), Windows (x86-64) and Apple (macOS, iOS, tvOS, their simulators) into src/mobile/build/libwebp."
     inputs.file("webp/build_libwebp.py").withPropertyName("script")
     inputs.file("konan_toolchain.py").withPropertyName("toolchain")
     inputs.file(webpPin).withPropertyName("pin")
@@ -110,8 +110,11 @@ kotlin {
     }
 
     // The Apple primitives are libsodium (ADR 0123 decision 3): one slice of build_libsodium.py's output per target.
-    val sodiumSlices = mapOf("iosArm64" to "ios_arm64", "iosSimulatorArm64" to "ios_simulator_arm64", "macosArm64" to "macos_arm64")
-    listOf(iosArm64(), iosSimulatorArm64(), macosArm64()).forEach { target ->
+    val sodiumSlices = mapOf(
+        "iosArm64" to "ios_arm64", "iosSimulatorArm64" to "ios_simulator_arm64", "macosArm64" to "macos_arm64",
+        "tvosArm64" to "tvos_arm64", "tvosSimulatorArm64" to "tvos_simulator_arm64",
+    )
+    listOf(iosArm64(), iosSimulatorArm64(), macosArm64(), tvosArm64(), tvosSimulatorArm64()).forEach { target ->
         val slice = libsodium.resolve(sodiumSlices.getValue(target.name))
         target.compilations.getByName("main").cinterops.create("sodium") {
             definitionFile.set(file("sodium/sodium.def"))

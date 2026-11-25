@@ -161,7 +161,7 @@ private fun ShownText(s: FileModel.Shown.Text) {
 
 /** An image decoded off the main thread to core's edge at most (`FileView.IMAGE_EDGE`), from the bytes in memory. */
 @Composable
-private fun ShownImage(s: FileModel.Shown.Image, name: String) {
+internal fun ShownImage(s: FileModel.Shown.Image, name: String) {
     val image by produceState<ImageBitmap?>(null, s) {
         value = withContext(Dispatchers.Default) {
             val bytes = s.bytes

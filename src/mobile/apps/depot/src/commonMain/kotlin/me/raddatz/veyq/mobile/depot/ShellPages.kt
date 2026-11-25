@@ -21,6 +21,7 @@ fun ShellModel.fileModel(ref: NodeAt, shares: Boolean): me.raddatz.veyq.mobile.d
     me.raddatz.veyq.mobile.depot.FileModel(ref, object : me.raddatz.veyq.mobile.depot.FileModel.Door {
         override suspend fun file(node: NodeAt) = me.raddatz.veyq.mobile.depot.DepotFiles.one(tenant, node.scopeId, node.nodeId)
         override fun inIdentityFolder(node: NodeAt) = this@fileModel.inIdentityFolder(node)
+        override fun viewOnly() = this@fileModel.viewOnly
         override suspend fun read(file: me.raddatz.veyq.mobile.depot.DepotFiles.File, first: Int, until: Int, sink: suspend (ByteArray) -> Unit) =
             me.raddatz.veyq.mobile.depot.DepotFiles.read(tenant, file, first, until, sink)
         override fun reader(file: me.raddatz.veyq.mobile.depot.DepotFiles.File) = me.raddatz.veyq.mobile.depot.DepotFiles.reader(tenant, file)

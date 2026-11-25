@@ -496,7 +496,8 @@ class PotModel internal constructor(
      */
     @Throws(Exception::class)
     suspend fun download(deletedName: String, sink: (ByteArray) -> Unit): me.raddatz.veyq.mobile.export.NodeExport.Written? =
-        session?.let { PotExport.download(it, deletedName, now(), sink) }
+        // a TV takes nothing away (ADR 0159 decision 3)
+        session?.takeIf { !it.viewOnly }?.let { PotExport.download(it, deletedName, now(), sink) }
 
     /** The file the open Pot's download is saved as (`NodeExport.fileName`: the web's archive name), or null: none open. */
     fun archiveName(): String? = session?.let { me.raddatz.veyq.mobile.export.NodeExport.fileName(it.name) }

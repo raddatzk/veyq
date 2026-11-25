@@ -899,8 +899,11 @@ components:
           description: >
             Which unlock method opens this wrap. DEVICE mixes the password into the KEK
             (Argon2id(deviceFactor + password)); DEVICE_KEY is the password-less remember-me wrap — a
-            device-held key alone (no password, no KDF), so its kdfParams carries only the AEAD iv.
-          enum: [PASSWORD, PASSKEY, RECOVERY, DEVICE, DEVICE_KEY]
+            device-held key alone (no password, no KDF), so its kdfParams carries only the AEAD iv; DEVICE_PIN is a
+            TV's wrap (ADR 0160) — its KEK is Argon2id over a six-digit PIN, salted by the device's hardware factor
+            and a server share the server releases only to a matching PIN verifier, so its kdfParams carries the
+            Argon2id parameters alone.
+          enum: [PASSWORD, PASSKEY, RECOVERY, DEVICE, DEVICE_KEY, DEVICE_PIN]
           example: PASSWORD
         wrappedKey:
           type: string
