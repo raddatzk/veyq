@@ -6,8 +6,6 @@ import me.raddatz.veyq.core.identity.keychain.KeyChainStore
 import me.raddatz.veyq.core.backup.ErasureKind
 import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.identity.VeyqUser
-import me.raddatz.veyq.core.platform.capabilities.ApplicationErasureStore
-import me.raddatz.veyq.core.platform.capabilities.SwitchLevel
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.membership.MembershipStore
@@ -149,7 +147,6 @@ class TenantStore(
     private val membership: MembershipStore,
     private val hosts: TenantHostResolver,
     private val ledger: ErasureLedger,
-    private val erasures: ApplicationErasureStore,
 ) {
 
     /** Whether some tenant already claims [domain] — through the one Host→tenant lookup, so "taken" and "resolves"
@@ -522,10 +519,8 @@ class TenantStore(
         tokenHash: String,
         expiresAt: Instant,
     ): Pair<String, Instant> {
-        // The instance row's lock before the tenant exists (ApplicationErasureStore's lock order): an instance switch of
-        // an application either committed before this reads it, and the new tenant gets its erasure row below, or it
-        // waits and finds the tenant (uc.platform.erase-switched-off-application A4).
-        erasures.lockInstance()
+        // No erasure row, even while the instance holds an application off: a new tenant holds nothing of it, and a window
+        // exists only where there is something to erase (ADR 0088 decision 5, uc.platform.erase-switched-off-application A4).
         val now = Instant.now()
         val tenantId = UUID.randomUUID().toString()
         TenantEntity().apply {
@@ -536,11 +531,6 @@ class TenantStore(
             status = TenantEntity.PENDING
         }.persist()
         mintInvite(tenantId, ownerEmail, tokenHash, expiresAt, now)
-        TenantEntity.flush()
-        // Its own window from its creation, and no notice: nobody is a member yet. The reminder reaches who joins.
-        ApplicationErasureStore.APPLICATIONS.filter { erasures.isOff(tenantId, it) }.forEach {
-            erasures.reconcile(tenantId, it, SwitchLevel.INSTANCE, now, noticeOwed = false)
-        }
         return tenantId to expiresAt
     }
 

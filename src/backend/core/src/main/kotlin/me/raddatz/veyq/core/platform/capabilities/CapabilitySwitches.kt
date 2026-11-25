@@ -56,7 +56,8 @@ class CapabilitySwitchStore(private val erasures: ApplicationErasureStore) {
      * this write takes that lock first.
      *
      * **An application's own entry** ([ApplicationErasureStore.APPLICATIONS]) also keeps every tenant's erasure row
-     * (uc.platform.erase-switched-off-application): off makes it in each tenant that has none, on removes it in each
+     * (uc.platform.erase-switched-off-application): off makes it in each tenant that holds a node of the application and
+     * has none (a tenant that holds nothing gets no day, ADR 0088 decision 5), on removes it in each
      * tenant whose own switch is on, unless it is due. Each tenant's row is locked after the instance's, in ascending id
      * order — [ApplicationErasureStore]'s lock order. [now] is null in production (the clock is read under the locks).
      */
@@ -154,7 +155,8 @@ class TenantCapabilitySwitchStore(private val erasures: ApplicationErasureStore)
      * instance's: two writes of one entry would otherwise both read "no row" and the second fail on the key.
      *
      * **An application's own entry** ([ApplicationErasureStore.APPLICATIONS]) also keeps the tenant's erasure row
-     * (uc.platform.erase-switched-off-application): off makes it if none exists, on removes it unless the instance still
+     * (uc.platform.erase-switched-off-application): off makes it if none exists and the tenant holds a node of the
+     * application (else there is nothing to erase, ADR 0088 decision 5), on removes it unless the instance still
      * holds the application off or it is due. [now] is null in production (the clock is read under the locks).
      */
     fun set(tenantId: String, capabilityId: String, off: Boolean, now: Instant? = null) {

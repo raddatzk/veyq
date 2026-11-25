@@ -52,6 +52,7 @@ import me.raddatz.veyq.core.admin.tenant.VerificationMembershipEraser
 import me.raddatz.veyq.core.scope.ScopeEntity
 import me.raddatz.veyq.core.scope.ScopeEraser
 import me.raddatz.veyq.core.sharing.CoreTestGuestCreatableKinds
+import me.raddatz.veyq.core.platform.capabilities.CoreTestApplicationKinds
 import me.raddatz.veyq.core.sharing.CoreTestGuestPlaceholders
 import me.raddatz.veyq.core.sharing.FolderGuestPlaceholders
 import me.raddatz.veyq.core.sharing.GuestCreatableKinds
@@ -130,17 +131,19 @@ import org.junit.jupiter.api.Test
  * Each refusal sits beside a positive control through the same path; where core alone has nothing to accept, the
  * control is the composition's (`ModuleCompositionTest` shares a `MEMORY` and completes one through the same bodies).
  * [CoreAloneProfile]: the in-memory store cannot presign, and a window is nothing but presigned URLs; and `:core`'s
- * test sources hold one application stand-in, [CoreTestMemberBlobRoles], which this class alone excludes.
+ * test sources hold application stand-ins ([CoreTestMemberBlobRoles], [CoreTestApplicationKinds] and the guest ones the
+ * profile names), which this class alone excludes.
  */
 @QuarkusTest
 @TestProfile(CoreAloneSliceTest.CoreAloneProfile::class)
 class CoreAloneSliceTest {
 
-    /** `FakePresignProfile`'s store, without the member roles `:core`'s other tests declare ([CoreTestMemberBlobRoles]). */
+    /** `FakePresignProfile`'s store, without the application stand-ins `:core`'s other tests declare ([CoreTestMemberBlobRoles],
+     *  [CoreTestApplicationKinds]). */
     class CoreAloneProfile : QuarkusTestProfile {
         override fun getEnabledAlternatives(): Set<Class<*>> = setOf(FakePresigningBlobStore::class.java)
         override fun getConfigOverrides(): Map<String, String> =
-            mapOf("quarkus.arc.exclude-types" to listOf(CoreTestMemberBlobRoles::class, CoreTestGuestCreatableKinds::class, CoreTestGuestPlaceholders::class).joinToString(",") { it.java.name })
+            mapOf("quarkus.arc.exclude-types" to listOf(CoreTestMemberBlobRoles::class, CoreTestGuestCreatableKinds::class, CoreTestGuestPlaceholders::class, CoreTestApplicationKinds::class).joinToString(",") { it.java.name })
     }
 
     // `MutableList`, not `List`: ArC refuses `@All kotlin.List` (see `ScopePurge`'s constructor).

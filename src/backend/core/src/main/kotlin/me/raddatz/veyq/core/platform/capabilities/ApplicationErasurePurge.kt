@@ -16,9 +16,11 @@ import java.time.Instant
  * The erasure of an application left switched off (uc.platform.erase-switched-off-application, ADR 0079 decision 8,
  * ADR 0088 decision 5). Each tick, in this order:
  *
- *  1. **opens a missing row** — an application off for a tenant with no [ApplicationErasureEntity] (one switched off
- *     before this table existed) gets its window from now, as a fresh switch-off would: never a day earlier than
- *     members can be told;
+ *  1. **opens a missing row** — an application off for a tenant that holds a node of it ([ApplicationErasureStore.holds])
+ *     and has no [ApplicationErasureEntity] gets its window from now, as a fresh switch-off would: never a day earlier
+ *     than members can be told. That is one switched off before this table existed, and one whose switch found nothing
+ *     held while a write that had read the switch as on still committed a node (a write's gate reads the cached switch,
+ *     not under the tenant's row lock); a tenant that holds nothing of it gets none (ADR 0088 decision 5);
  *  2. **erases what is due** — for each row whose [ApplicationErasureEntity.dueAt] has come, every scope of the tenant
  *     (its personal spaces, its groups, a group in its grace) in a `requiringNew` transaction of its own: the tenant's
  *     row lock, the row read again under it (still there, still due), the scope's lock, then every node whose kind
@@ -28,7 +30,8 @@ import java.time.Instant
  *     apply unchanged. Core folders stay (they organise only), and so do scope keys and memberships. A scope that fails
  *     is logged and taken again at the next tick; an erased scope finds nothing the second time;
  *  3. **ends the window** once every scope succeeded: the row goes, or — when the application is still, or again, off
- *     for the tenant — starts again from now, its notice owed again;
+ *     for the tenant and the tenant still holds a node of it (one made after a switch-on, A2) — starts again from now,
+ *     its notice owed again. With nothing left, no window follows;
  *  4. **mails** the owed notices and the due reminders ([ApplicationErasureMail]).
  *
  * Core names no application: the applications are the register's roots ([ApplicationErasureStore.APPLICATIONS]) and a
@@ -99,12 +102,15 @@ class ApplicationErasurePurge(
         return if (doomed.isEmpty()) 0 else nodes.eraseNodes(scopeId, doomed)
     }
 
-    /** Every scope is done: end the row under both locks, or start a fresh window while the application is still off. */
+    /**
+     * Every scope is done: end the row under both locks, or start a fresh window while the application is still off and
+     * something of it is still held — the rule [ApplicationErasureStore.reconcile] makes a row by.
+     */
     private fun end(key: ApplicationErasureKey, now: Instant): Boolean {
         store.lockInstance()
         store.lockTenant(key.tenantId) ?: return false
         val row = ApplicationErasureEntity.findById(key)?.takeIf { !it.dueAt.isAfter(now) } ?: return false
-        if (store.isOff(key.tenantId, key.application)) {
+        if (store.isOff(key.tenantId, key.application) && store.holds(key.tenantId, key.application)) {
             row.switchedBy = store.levelOf(key.application).name
             row.offSince = now
             row.dueAt = now.plus(store.window)
@@ -117,7 +123,11 @@ class ApplicationErasurePurge(
         return true
     }
 
-    /** Step 1: a row for every application off for a tenant that has none, each under both locks. */
+    /**
+     * Step 1: a row for every application off for a tenant that holds a node of it and has none, each under both locks.
+     * The first read narrows the candidates to the tenants that hold something, without the locks, so a tenant that holds
+     * nothing of an application off costs no lock on any tick; [ApplicationErasureStore.reconcile] asks again under them.
+     */
     private fun openMissing(now: Instant): Int {
         val missing = QuarkusTransaction.requiringNew().call {
             val instanceOff = CapabilitySwitchEntity.listAll().map { it.id }.filter { it in ApplicationErasureStore.APPLICATIONS }
@@ -125,7 +135,11 @@ class ApplicationErasurePurge(
             val tenantOff = TenantCapabilitySwitchEntity.list("capabilityId in ?1", ApplicationErasureStore.APPLICATIONS)
                 .map { ApplicationErasureKey(it.tenantId, it.capabilityId) }
             val existing = ApplicationErasureEntity.listAll().mapTo(HashSet()) { it.key() }
-            (tenants.flatMap { t -> instanceOff.map { ApplicationErasureKey(t, it) } } + tenantOff).toSet() - existing
+            val candidates = (tenants.flatMap { t -> instanceOff.map { ApplicationErasureKey(t, it) } } + tenantOff).toSet() - existing
+            val held = candidates.map { it.tenantId }.distinct().associateWith { tenant ->
+                store.kindsHeld(tenant).mapNotNullTo(HashSet()) { store.applicationOf(it) }
+            }
+            candidates.filter { it.application in held.getValue(it.tenantId) }
         }
         return missing.sortedWith(compareBy({ it.tenantId }, { it.application })).count { key ->
             runCatching {
