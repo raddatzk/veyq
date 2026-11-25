@@ -338,8 +338,10 @@ here; the server is blind.
   `{ notModified: true }` (a `304`) as no work, drops a result for a view that moved on, and lets a failed `fetch` reject so the loop
   backs off; `reconcileItems` merges the keyset delta by id (a known item is patched in place through the application's `patch`, a
   `skip` keeps an optimistic removal out) and drops what the id set no longer lists; the keyset `cursor` the server answered with the last page
-  read (`readItemPages`) is the `since` the next poll echoes. An application supplies only its FETCH (its generated client) and its REDUCER: Memories' gallery
-  (`useMediaGalleryLive`, bound to the loop by `mediaRevisionPolling.ts`) is the first user. Core imports no application.
+  read (`readItemPages`) is the `since` the next poll echoes. An application supplies only its FETCH (its generated client) and its REDUCER. Memories'
+  gallery uses the conditional read and the reducer but not the loop: its cadence is its Kotlin model's (`GalleryModel`, core's `LivePoll`,
+  the same numbers, observed by `useGalleryModel.ts` and started while the tab is visible; ADR 0155 § The gallery model's move), and its
+  door (`galleryDoor.ts`) applies the delta. Core imports no application.
 
   **Covers are core's (inbox #411, `core/node/cover/`).** Any node whose kind carries a `cover` descriptor (`KindDescriptor.cover`: FOLDER
   pre-registered by core, Depot's drop box, Memories' MEMORY and CHAPTER, Expenses' Pot - the server's `NodeKindRules.takesCover` is the authority and must

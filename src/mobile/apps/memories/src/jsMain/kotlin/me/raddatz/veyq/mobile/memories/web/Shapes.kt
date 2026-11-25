@@ -66,3 +66,77 @@ external interface WavFormatShape {
     val dataOffset: Double
     val dataBytes: Double
 }
+
+/**
+ * One listed medium as the gallery's model reads it (`GalleryWeb.kt`): its id, its original's sealed type and name, whether
+ * the operator blocked it, who added it, and of its opened listed tier the geometry and the capture times. Times are epoch
+ * milliseconds as a `number`. No key: the web reads a medium's bytes itself.
+ */
+@JsExport
+external interface GalleryItemShape {
+    val mediaId: String
+    val type: String?
+    val name: String?
+    val blocked: Boolean
+    val ownerKey: String?
+    val width: Double?
+    val height: Double?
+    val capturedAt: Double?
+    val capturedAtOverride: Double?
+}
+
+/**
+ * What the gallery's model reads and writes through the web (its `GalleryModel.Door`): each a `Promise`, a rejection where
+ * it did not read or write.
+ */
+@JsExport
+external interface GalleryDoorShape {
+    /** The node's media as listed now, opened; null where it does not read. */
+    fun gallery(): kotlin.js.Promise<JsReadonlyArray<GalleryItemShape>?>
+
+    /** Whether the node's media moved since the last listing (the conditional read: a `304` is no). */
+    fun moved(): kotlin.js.Promise<Boolean>
+
+    /** Medium [mediaId] to the trash: `done`, `gone`, `scope_deleting`, `blocked` or `failed`. */
+    fun trash(mediaId: String): kotlin.js.Promise<String>
+
+    /** Medium [mediaId] back from the trash, answered as [trash]. */
+    fun restore(mediaId: String): kotlin.js.Promise<String>
+
+    /** Whether [mediaId] is one this device sent under the guest's link identity. */
+    fun isOwn(mediaId: String): Boolean
+
+    /** A guest's own medium [mediaId] purged for good; whether it went. */
+    fun purge(mediaId: String): kotlin.js.Promise<Boolean>
+
+    /** The settle (the `auto` date and place kept current) at the model's settle points: whether it wrote. */
+    fun settle(): kotlin.js.Promise<Boolean>
+}
+
+/**
+ * A page's state as the web draws it: `loading` before the first read, `error` where the last did not read (its rows stay),
+ * else `ready`; the media ids of its grid in order, of its music and of its GPX tracks; whether a trash's Undo is offered;
+ * the guest's own medium whose purge is asked; what the last Undo or purge left to say.
+ */
+@JsExport
+external interface GalleryStateShape {
+    val status: String
+    val rows: JsReadonlyArray<String>
+    val music: JsReadonlyArray<String>
+    val tracks: JsReadonlyArray<String>
+    val undo: Boolean
+    val purging: String?
+    val said: SaidShape?
+}
+
+/**
+ * What a delete or an Undo left to say: `restoreRefused` (by [name], else the [unnamedAt]th medium; [reason] `gone`,
+ * `scope_deleting`, `blocked` or `failed`) or `purgeFailed`.
+ */
+@JsExport
+external interface SaidShape {
+    val kind: String
+    val name: String?
+    val unnamedAt: Int?
+    val reason: String?
+}

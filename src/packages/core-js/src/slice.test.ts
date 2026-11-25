@@ -31,22 +31,27 @@ type Library = keyof typeof LIBRARIES
  *  absence), and the libraries it carries — a move that brings one in widens its row in the same commit, one that drops
  *  one narrows it. The platform's entries' code is the platform's module file (`package.json` maps its code to the module,
  *  its types to `dist/<entry>.d.mts`); each application's, its own module's file, which imports the platform's. */
+// Coroutines in every row since the gallery's model crossed (ADR 0155 decision 8, § The gallery model's move): the model's
+// flows, its poll and its writes are coroutines, and what the platform's part of them reaches — the state flows, the poll,
+// the jobs — lands in the platform's one module file, which every entry imports; a bundler drops none of it. No row carries
+// kotlinx.serialization or Ktor: the model reaches I/O only through its door (the move's D2 cut what it reached besides).
 const ENTRIES: Record<string, { control: string; carries: Library[] }> = {
-  search: { control: 'search/Query.kt', carries: [] },
-  tree: { control: 'tree/LevelOrder.kt', carries: [] },
-  sharing: { control: 'sharing/ReceivedLink.kt', carries: [] },
-  navigation: { control: 'navigation/NodeHeader.kt', carries: [] },
-  files: { control: 'blob/Sniff.kt', carries: [] },
-  media: { control: 'media/ExifReader.kt', carries: [] },
-  export: { control: 'export/ManifestRules.kt', carries: [] },
-  audio: { control: 'audio/Order.kt', carries: [] },
+  search: { control: 'search/Query.kt', carries: ['coroutines'] },
+  tree: { control: 'tree/LevelOrder.kt', carries: ['coroutines'] },
+  sharing: { control: 'sharing/ReceivedLink.kt', carries: ['coroutines'] },
+  navigation: { control: 'navigation/NodeHeader.kt', carries: ['coroutines'] },
+  files: { control: 'blob/Sniff.kt', carries: ['coroutines'] },
+  media: { control: 'media/ExifReader.kt', carries: ['coroutines'] },
+  export: { control: 'export/ManifestRules.kt', carries: ['coroutines'] },
+  audio: { control: 'audio/Order.kt', carries: ['coroutines'] },
 }
 const APPLICATIONS: Record<string, { control: string; carries: Library[] }> = {
-  expenses: { control: 'expenses/Ledger.kt', carries: [] },
+  expenses: { control: 'expenses/Ledger.kt', carries: ['coroutines'] },
   /** What an opened file is, a folder upload's plan, an SVG's raster and zoom steps. */
-  depot: { control: 'depot/FolderUpload.kt', carries: [] },
-  /** The gallery grid's geometry, a Memory's medoid, the participants' merge, the audio frame headers, a WAV's reading. */
-  memories: { control: 'memories/MediaGridLayout.kt', carries: [] },
+  depot: { control: 'depot/FolderUpload.kt', carries: ['coroutines'] },
+  /** The gallery grid's geometry, a Memory's medoid, the participants' merge, the audio frame headers, a WAV's reading, and
+   *  the gallery's model (`GalleryModel`: the page's rows, its live poll, a trash with its Undo, a guest's purge). */
+  memories: { control: 'memories/GalleryModel.kt', carries: ['coroutines'] },
 }
 
 /**

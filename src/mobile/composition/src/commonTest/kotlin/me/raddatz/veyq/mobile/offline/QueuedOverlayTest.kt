@@ -181,9 +181,10 @@ class QueuedOverlayTest {
         shell.load(openLastUsed = false)
         val gallery = shell.galleryModel(assertNotNull(shell.galleryAt(s.id, m.id)), shell.mediaUploads(UploadQueue(), deriver, {}, {}))
         val (x1, x2) = t.id("x1") to t.id("x2")
-        // neither has a time: by id, so the later id is last
-        val (first, last) = listOf(x1, x2).sorted().let { it[0] to it[1] }
-        assertEquals(listOf(first, last), waitFor { gallery.current.rows?.takeIf { it.size == 2 } }?.map { it.mediaId })
+        // neither has a time: in the listing's order (a tie keeps it, ADR 0155 § The gallery model's move, D3)
+        val listed = assertNotNull(waitFor { gallery.current.rows?.takeIf { it.size == 2 } }).map { it.mediaId }
+        assertEquals(setOf(x1, x2), listed.toSet())
+        val (first, last) = listed[0] to listed[1]
         val at = 1_780_000_000_000L
         val editor = assertNotNull(gallery.captureTimeEditor(last), "offline no capture time is offered although they are queued")
         assertIs<me.raddatz.veyq.mobile.memories.CaptureTime.Outcome.Done>(editor.set(at))

@@ -23,6 +23,12 @@ class UploadTile(
 ) {
     val tileId: String get() = PREFIX + id
 
+    // what the gallery's rows ask of the status, read once here: the model then names no status of the queue's — a
+    // serializable enum whose companion would carry kotlinx.serialization into the web's platform module (ADR 0155 § The
+    // gallery model's move, D2)
+    private val gone: Boolean = status == UploadQueue.Status.CANCELLED
+    private val done: Boolean = status == UploadQueue.Status.DONE
+
     /** What the tile says under its glyph while it waits ([waiting]); null otherwise. */
     val said: me.raddatz.veyq.mobile.words.Notice? get() = if (waiting) me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.OFFLINE_WAITING) else null
 
@@ -40,7 +46,7 @@ class UploadTile(
 
         /** [tiles] as the grid shows them over its listed [rows]: a cancelled one, and one whose medium is listed, left out. */
         internal fun shown(tiles: List<UploadTile>, listed: Set<String>): List<UploadTile> = tiles.filter { t ->
-            t.status != UploadQueue.Status.CANCELLED && !(t.status == UploadQueue.Status.DONE && (t.mediaId == null || t.mediaId in listed))
+            !t.gone && !(t.done && (t.mediaId == null || t.mediaId in listed))
         }
     }
 }
