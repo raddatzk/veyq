@@ -127,6 +127,46 @@ describe('a node with no cover yet', () => {
   })
 })
 
+describe('a picked image this browser cannot draw (an HEIC outside Safari)', () => {
+  const heic = () => new File([new Uint8Array([1, 2, 3])], 'IMG_0001.HEIC', { type: '' })
+  const failCropper = async () => {
+    cropperImg()!.dispatchEvent(new Event('error'))
+    await new Promise((r) => setTimeout(r))
+  }
+
+  it('is taken by its extension, and when the cropper cannot draw it the dialog says so instead of a blank, disabled Save', async () => {
+    const w = await mountDialog()
+    await pickFile(heic())
+    expect(body().querySelector('[role="alert"]'), 'an untyped .heic is an image by its name').toBeNull()
+    expect(cropperImg()).not.toBeNull()
+    await failCropper()
+    expect(body().querySelector('[role="alert"]')?.textContent).toBe(t('node.cover.cannotShow'))
+    expect(cropperImg(), 'the undrawable image is gone').toBeNull()
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:picked')
+    expect(button(t('node.cover.save'))!.disabled).toBe(true)
+    expect(w.emitted('save')).toBeUndefined()
+  })
+
+  it('goes back to the current cover, which can still be re-cropped and saved as it was', async () => {
+    const crop: CoverCrop = { x: 0.1, y: 0.2, width: 0.5, height: 0.5 }
+    const w = await mountDialog({ cover: { crop }, existingSrc: 'blob:existing' })
+    await pickFile(heic())
+    await failCropper()
+    expect(body().querySelector('[role="alert"]')?.textContent).toBe(t('node.cover.cannotShow'))
+    expect(cropperImg()!.getAttribute('src')).toBe('blob:existing')
+    await loadCropper(3200, 1800)
+    button(t('node.cover.save'))!.click()
+    expect(saved(w)?.kind, 'the current cover is kept, no upload').toBe('keep')
+  })
+
+  it('an error of the CURRENT cover\'s image is no pick of the member\'s: nothing is said', async () => {
+    await mountDialog({ cover: { crop: { x: 0, y: 0, width: 1, height: 1 } }, existingSrc: 'blob:existing' })
+    await new Promise((r) => setTimeout(r))
+    await failCropper()
+    expect(body().querySelector('[role="alert"]')).toBeNull()
+  })
+})
+
 describe('a node with a cover', () => {
   const crop: CoverCrop = { x: 0.1, y: 0.2, width: 0.5, height: 0.5 } // an achievable 16:9 window of a 3200x1800 image
 
@@ -221,6 +261,6 @@ describe('cancel and a11y', () => {
     const input = body().querySelector<HTMLInputElement>('input[type="file"]')!
     expect(input.tabIndex).toBe(-1)
     expect(input.getAttribute('aria-hidden')).toBe('true')
-    expect(input.accept).toBe('image/*')
+    expect(input.accept, 'an HEIC is offered too: the system names it no image type outside Safari').toBe('image/*,.heic,.heif')
   })
 })

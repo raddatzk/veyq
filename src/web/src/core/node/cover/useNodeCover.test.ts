@@ -165,6 +165,16 @@ describe('what each intent writes', () => {
     expect(lastWrite().cover).toEqual(upload(FOLDER.id, 'new-blob', crop))
   })
 
+  it.each([
+    ['IMG_0001.HEIC', 'image/heic'],
+    ['logo.svg', 'image/svg+xml'],
+  ])('upload: an untyped %s is uploaded as %s, the type its extension names - so the SVG is drawn, the HEIC decoded', async (name, type) => {
+    const api = harness([FOLDER])
+    api.save(FOLDER, { kind: 'upload', file: new File([new Uint8Array([1])], name, { type: '' }), crop })
+    await vi.waitFor(() => expect(writeNodeCover).toHaveBeenCalledOnce())
+    expect(vi.mocked(uploadCoverImage).mock.calls[0][3]).toMatchObject({ mediaType: type, name })
+  })
+
   it('upload: the node\'s freshest meta and version are the base, read AFTER the upload', async () => {
     const api = harness([FOLDER])
     vi.mocked(uploadCoverImage).mockImplementation(async () => {

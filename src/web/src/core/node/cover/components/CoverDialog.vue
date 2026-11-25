@@ -64,6 +64,23 @@ function onFilePicked(event: Event) {
   sourceUrl.value = upload.url.value ?? ''
 }
 
+// The browser could not draw the picked file (an HEIC outside Safari, a damaged image): say so, and go back to what the
+// dialog showed before - the current cover, else nothing - so Save never stays silently disabled on a blank cropper.
+function onImageError() {
+  if (pick.value?.kind !== 'upload') return
+  problem.value = t('node.cover.cannotShow')
+  upload.clear()
+  loaded.value = false
+  if (props.cover && props.existingSrc) {
+    pick.value = { kind: 'keep' }
+    restoreCrop.value = props.cover.crop
+    sourceUrl.value = props.existingSrc
+  } else {
+    pick.value = null
+    sourceUrl.value = ''
+  }
+}
+
 function save() {
   const p = pick.value
   const crop = cropper.value?.getCrop()
@@ -86,7 +103,7 @@ function remove() {
 
       <div class="veyq-cover-sources">
         <VeyqButton :label="t('node.cover.choose')" icon="upload" variant="secondary" appearance="outlined" @click="chooseUpload" />
-        <input ref="fileInput" type="file" accept="image/*" class="veyq-cover-file" tabindex="-1" aria-hidden="true" @change="onFilePicked" />
+        <input ref="fileInput" type="file" accept="image/*,.heic,.heif" class="veyq-cover-file" tabindex="-1" aria-hidden="true" @change="onFilePicked" />
       </div>
       <p v-if="problem" class="veyq-cover-problem" role="alert">{{ problem }}</p>
 
@@ -97,6 +114,7 @@ function remove() {
         :aspect="16 / 9"
         :initial-crop="restoreCrop"
         @load="loaded = true"
+        @error="onImageError"
       />
 
       <div class="veyq-dialog-action-row">

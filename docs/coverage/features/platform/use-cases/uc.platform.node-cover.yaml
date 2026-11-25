@@ -40,7 +40,7 @@ acceptanceCriteria:
       backend:
         integration: [NodeCoverCoreSliceTest.aTrashedNodeKeepsItsCoverForTheRestoreAndThePurgeFreesIt]
   - id: derive-seal-binds-the-node
-    text: The client derives the cover size with the existing pipeline (one JPEG, long edge 2048) and seals it as the node's own blob - wrapped under the node's key, bound to blob, node and role COVER, blob meta the JPEG type - refusing an unreadable image on a folder or drop box, and states its 40 MB limit; the upload bodies are sealed (no plaintext, the cover meta opens only under that node's key) and byte for byte what Memories' covers sent.
+    text: The client derives the cover size with the existing pipeline (one JPEG, long edge 2048) and seals it as the node's own blob - wrapped under the node's key, bound to blob, node and role COVER, blob meta the JPEG type; an SVG is drawn at that edge and stored as one WebP (its meta the WebP type), never as the SVG; an untyped .heic, .heif or .svg is an image by its extension - refusing an unreadable image, and states its 40 MB limit; the upload bodies are sealed (no plaintext, the cover meta opens only under that node's key) and byte for byte what Memories' covers sent.
     coverage:
       web:
         unit: [src/core/node/cover/coverWrite.test.ts, src/core/node/cover/pickImage.test.ts, src/features/memories/uploadWire.characterisation.test.ts]
@@ -55,7 +55,7 @@ acceptanceCriteria:
       web:
         unit: [src/core/node/cover/components/CoverDialog.test.ts, src/core/node/cover/useNodeCover.test.ts, src/core/node/cover/cover.dom.test.ts, src/features/depot/components/DropBoxDetail.test.ts, src/features/memories/components/MemoryDetailHost.cover.test.ts, src/features/expenses/components/PotDetail.test.ts]
   - id: dialog-crops-and-saves-one-write
-    text: The dialog frames the image in the shared 16:9 cropper and Save stores that crop in the cover meta in its existing format - a new image as one upload job + one setNodeCover write, a re-crop as a plain meta write that keeps the stored image, a removal as one write with no cover; a cover reopened restores its crop; a non-image, an empty file or one over 40 MB is refused inside the dialog before anything is read; a conflict or a stale slot re-opens the dialog on the current cover and says so.
+    text: The dialog frames the image in the shared 16:9 cropper and Save stores that crop in the cover meta in its existing format - a new image as one upload job + one setNodeCover write, a re-crop as a plain meta write that keeps the stored image, a removal as one write with no cover; a cover reopened restores its crop; a non-image, an empty file or one over 40 MB is refused inside the dialog before anything is read; a picked image the cropper cannot draw (an HEIC outside Safari) is said so and the dialog goes back to the current cover; a conflict or a stale slot re-opens the dialog on the current cover and says so.
     coverage:
       web:
         unit: [src/core/node/cover/components/CoverDialog.test.ts, src/core/node/cover/useNodeCover.test.ts, src/core/node/cover/cover.dom.test.ts]

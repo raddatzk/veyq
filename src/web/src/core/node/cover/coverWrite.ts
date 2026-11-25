@@ -15,7 +15,8 @@
 import { contentApi } from '../../../api/client'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { HttpStatus, isCodedError } from '../../../shared/httpError'
-import { createBrowserDeriver, type AddMediaSource, type MediaDeriver } from '../../../shared/image/mediaDeriver'
+import { createBrowserDeriver, SVG_TYPE, type AddMediaSource, type MediaDeriver } from '../../../shared/image/mediaDeriver'
+import { WEBP } from '../../../shared/image/mediaPixels'
 import { authedReserve, authedWindow, planBlob, reserveAndPump } from '../../blob/transport'
 import type { BlobMeta } from '../../blob/meta'
 import type { SharedBlobRequest } from '../../blob/sharedBlob'
@@ -29,7 +30,7 @@ import { COVER_ROLE, uploadBlobIdOf } from './coverModel'
 
 /**
  * Cover downscale spec: a cover is only ever shown small-to-medium (a tile, a header, a 34 px pin), so an uploaded cover is
- * downscaled to ONE cover-sized JPEG, no tiers. The long edge matches the preview tier; the normalized crop then renders it
+ * downscaled to ONE cover-sized JPEG (an SVG: drawn at this edge, one WebP), no tiers. The long edge matches the preview tier; the normalized crop then renders it
  * identically at any size. The very spec Memories' covers have always used.
  */
 export const COVER_SPEC = { maxEdge: 2048, quality: 0.85 }
@@ -39,6 +40,11 @@ export const MAX_COVER_SOURCE_BYTES = 40 * 1024 * 1024
 
 /** The sealed blob-meta of a derived cover: the JPEG it was re-encoded as - a shared cover's too (it shares a PREVIEW). */
 export const DERIVED_META: BlobMeta = { type: 'image/jpeg' }
+
+/** The sealed blob-meta of a cover drawn from an SVG: a WebP (libwebp, ADR 0127), so a logo's transparency stays
+ *  transparent - a JPEG would flatten it onto black. The SVG itself is never stored: no viewer ever draws a peer's
+ *  vector markup, and an app that shows covers needs no SVG renderer. */
+export const VECTOR_DERIVED_META: BlobMeta = { type: WEBP }
 
 /** The failure code of an image the browser cannot decode, when the caller does not accept the pristine bytes. */
 export const COVER_UNREADABLE = 'cover_unreadable'
@@ -55,9 +61,9 @@ export type UploadCoverOptions = {
   onProgress?: (fraction: number) => void
   signal?: AbortSignal
   /**
-   * Refuse an image the browser cannot decode (`cover_unreadable`) instead of sealing its pristine bytes. A folder's or
-   * drop box's cover is picked from files of any kind, and a cover nothing can draw is worse than none; a Memory's
-   * dialog has always taken the pristine bytes of an undecodable image (uc.memory.upload E4), and still does.
+   * Refuse an image the browser cannot decode (`cover_unreadable`) instead of sealing its pristine bytes: a cover nothing
+   * can draw is worse than none. Every pick in core's dialog is strict (`useNodeCover`, uc.platform.node-cover E3); the one
+   * caller that is not is a Memory's import (`features/memories/exportImport.ts`), which re-uploads a cover as exported.
    */
   strict?: boolean
 }
@@ -85,7 +91,16 @@ export async function uploadCoverImage(
   // The cover blob's meta is its type alone (inbox #397): the JPEG it was derived into, else the pristine source's.
   const given = source.mediaType.trim()
   let meta: BlobMeta = { type: given || 'application/octet-stream' }
-  if (source.mediaType.startsWith('image/')) {
+  if (given.split(';')[0].toLowerCase() === SVG_TYPE && deriver.rasterizeSvg) {
+    try {
+      const raster = await deriver.rasterizeSvg(source.blob, COVER_SPEC.maxEdge)
+      blob = new Blob([(await deriver.deriveImage(raster, { ...COVER_SPEC, mimeType: WEBP })).bytes as BlobPart])
+      meta = VECTOR_DERIVED_META
+    } catch {
+      if (opts.strict) throw new Error(COVER_UNREADABLE)
+      /* not drawable -> seal the pristine bytes, as an undecodable raster image */
+    }
+  } else if (source.mediaType.startsWith('image/')) {
     try {
       blob = new Blob([(await deriver.deriveImage(source.blob, COVER_SPEC)).bytes as BlobPart])
       meta = DERIVED_META
