@@ -60,10 +60,11 @@ fallback.
     from a state to a text) — the form ADR 0155's search façade already takes for the browser's collator
     (`src/mobile/core/src/jsMain/kotlin/me/raddatz/veyq/mobile/search/web/SearchWeb.kt:114`, `compareNames`), so no
     Yjs object crosses the façade — and Yrs through `yffi` behind the same port in #855.
-- **Size (ADR 0155 decision 7, the flows gate of its decision 8).** Remembered estimate, to be measured in phase 5: the
+- **Size (ADR 0155 decision 7, reported; no size gate since the owner's 2026-11-25, and flows cross: decision 8).**
+  Remembered estimate, to be measured and reported in phase 5: the
   search façade's 1,185 Kotlin lines (`wc -l` over `search/{Fold,Query,Results,Model}.kt`, `session/LocalDays.kt`,
   `jsMain/…/search/web/*.kt`) are 8,754 B gz of own code (ADR 0155 § Consequences); the journal's rules are of that
-  order. They count as Memories' own code, ≤ 25 KB gz, in the journal's lazy chunk. The risk is **granularity**: the
+  order. They count as Memories' own code, in the journal's lazy chunk. The risk is **granularity**: the
   package compiles one module for every entry (`src/packages/core-js/package.json:9-11`: `./search` →
   `./dist/veyq-mobile-core.mjs`), and a module a bundler cannot split lands where its first eager importer is — the
   search's chunk. Measured since on Expenses' parked move: one module put Expenses into the search's entry (ADR 0155
@@ -328,12 +329,10 @@ run check` exit codes and the web build's eager set and chunk sizes on the tip f
 the chunks `index.html` modulepreloads, gzip level 9, attributed by source map). The engine-bound fixture generated
 over the pinned Yjs, and ADR 0133 decision 4's fixed point measured (encode → apply → encode) — a Yjs that is no fixed point
 stops the phase and goes back to refine. Tests: the journal vectors through the shipped module over Yjs, a dropped
-gap rule turning them red; the slice check names no coroutines, serialization, Ktor or refusal file in the entry.
-Done when: the package's `pnpm run build && pnpm run check` green; **the eager set grows by at most 1 KB gz** and the
-façade's own code is at most 25 KB gz (ADR 0155 decision 7) — measured with a throwaway import of the entry from a
-lazy chunk; two clean builds byte-identical. If the one-module output puts the journal's Kotlin in the eager set and
-Expenses' move has not settled granularity, the phase measures Kotlin/JS's per-file output against the same gates; a
-miss goes to the owner with its number, as ADR 0155 decision 2 says.
+gap rule turning them red; the slice check finds no refusal in the entry and exactly the libraries its row declares
+(ADR 0155 decision 4). Done when: the package's `pnpm run build && pnpm run check` green; what the eager set and the
+façade's own code grow by is measured and reported (ADR 0155 decisions 7 and 10, no gate since 2026-11-25) — with a
+throwaway import of the entry from a lazy chunk; two clean builds byte-identical.
 
 **Phase 6 — web, the journal wired.** Decision 11, the dependencies. Unit tests (drawing and wiring only): the
 adapter's four functions over Yjs; a served page opened, handed to the façade and applied in its order; local edits

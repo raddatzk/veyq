@@ -324,6 +324,7 @@ raw ADTS file's count (`music/Frames`) and a WAV's header, samples and ends (`mu
 every client to them, so a change to one of these rules is made in the Kotlin core, never in the web. Memories' code is
 never in the eager set: the medoid and the participants' write sit in files of their own, off the eager
 `memoryLocation.ts` and `memoryParticipants.ts`. The meta's readers and the rest of Memories' rules are still the web's own
-(inbox #1320, #1321); its models with flows too (decision 8, inbox #1323).
+(inbox #1320, #1321); its models with flows too, which the owner decided on 2026-11-25 cross to the core as well (decision 8,
+inbox #1323: the gallery's model the first).
 
 - End-user view (docs site): [Memories](../../site/src/content/docs/memories/index.mdx)
