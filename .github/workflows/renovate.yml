@@ -1,15 +1,15 @@
 name: Renovate
 
 # The self-hosted Renovate of ADR 0158, as a GitHub App of its own (decision 3), so that its pull requests start
-# `Checks` like a person's. Built by changes/cr-renovate.md: Renovate writes its branches, its pull requests and the
-# Dependency Dashboard issue, for every pin in the tree; Dependabot proposes nothing any more. What a bump needs the
+# `Checks` like a person's. Renovate writes its branches, its pull requests and the Dependency Dashboard issue, for
+# every pin in the tree; Dependabot proposes nothing any more. What a bump needs the
 # bumped tree executed for is written by the Renovate follow (.github/workflows/renovate-follow*.yml), never here.
 #
 # Two configurations, kept apart. renovate.json5 at the repository root is the version policy: which updates, grouped
 # how, held back why. It names no forge, so it runs unchanged on another. The `env:` of the Renovate step below is the
 # operator's part: which repository, no onboarding, which commands a postUpgradeTask may run.
 #
-# Where the key is (ADR 0158 decision 3, the CR's second invariant). The App's Client ID (a variable) and its private
+# Where the key is (ADR 0158 decision 3). The App's Client ID (a variable) and its private
 # key (a secret) live in the environment `renovate`, whose deployment-branch rule admits `main` alone. So a job on any
 # other branch, and any pull request's run, never receives the key, even one that edits this file. The `if:` below says
 # the same thing for a reader. The token the action mints is scoped to this repository and expires within the hour; the
@@ -21,8 +21,13 @@ on:
   schedule:
     # Saturday 05:00 UTC (cron reads UTC; Dependabot's slot was 06:00 Europe/Berlin, owner 2026-11-07), so its pull
     # requests and their Checks runs are ready on Saturday, and what is merged over the weekend is in the snapshot
-    # publish.yml cuts on Monday at 03:17 UTC.
+    # publish.yml cuts on Monday at 03:17 UTC. Twice more that morning, 07:00 and 09:00: a lookup that fails in a run
+    # (Maven Central answers 429 to GitHub's shared runner addresses) makes Renovate leave every group branch as it was,
+    # in a run that is still green, so a single slot would hold a group back a week; a run with nothing to do is
+    # under a minute and changes nothing (renovate/webp-encoder, 2026-11-24).
     - cron: "0 5 * * 6"
+    - cron: "0 7 * * 6"
+    - cron: "0 9 * * 6"
   workflow_dispatch:
 
 permissions: {}

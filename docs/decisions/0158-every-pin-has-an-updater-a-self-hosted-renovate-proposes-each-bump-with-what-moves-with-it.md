@@ -1,7 +1,8 @@
 # ADR 0158 — Every pin has an updater: a self-hosted Renovate proposes each bump with what moves with it
 
 - Status: Accepted
-- Built: yes (cr-renovate, 2026-11-23; decisions 4 and 8 amended the same day, below)
+- Built: yes (2026-11-23; decisions 4 and 8 amended the same day, below; proven on Renovate's own pull requests
+  2026-11-23 to 2026-11-25, § Consequences, Helm's follow excepted)
 - Date: 2026-11-22
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 
@@ -74,6 +75,24 @@ archived, release 44.257.9 of 2026-11-21, and `renovatebot/github-action` v46.3.
    updater's own extraction is the authority for "reached"; a list kept beside it would drift the way the
    "Reached by no ecosystem" comments did.
 
+   As built:
+   - **The check is `pins` in `checks.yml`**: Renovate `--platform=local` (no token, the pinned image) writes its
+     extract report, and `scripts/pin_inventory.py` compares it with the pins it finds by shape. A new shape is added
+     to the inventory, never to an exception list.
+   - **A docs-only or site-only commit does not run it** (`checks.yml`'s `paths-ignore`). A site-only change can touch
+     `site/package.json`; its pins are checked by the next commit that runs `Checks`. Accepted: no shape lives only
+     under `site/`.
+   - **A rule holds a version back by `allowedVersions`, not by `enabled: false`** (TypeScript's major): the report
+     still lists an update a rule disabled, and `pins` reads that report. A disabled dependency is still extracted, so
+     `pins` stays meaningful under a disabling rule (measured).
+   - **The five bare `pip install pyyaml` install from `scripts/requirements-release.txt`, hashed**, like the jobs
+     with write permissions: PyYAML has one pin, which the `pip_requirements` manager reads.
+   - **`tests/fuzz/requirements.txt` is in `ignorePaths`**: `lock.py` writes it whole, and Renovate reading it as
+     requirements would bump each transitive package alone. Its one input, `SCHEMATHESIS` in `lock.py`, has a regex
+     manager.
+   - **Renovate's own version is a regex manager on `renovate.yml`** (the github-actions manager refuses
+     `<version>@<digest>`), grouped with the actions; `pins` reads the image from that one line.
+
 2. **The updater is Renovate, self-hosted.** It runs as a GitHub Action from the default branch, on Dependabot's
    weekly slot and on dispatch, and is pinned like everything else: the action by commit SHA, Renovate's own version by
    image digest. Renovate also proposes its own bumps.
@@ -81,6 +100,19 @@ archived, release 44.257.9 of 2026-11-21, and `renovatebot/github-action` v46.3.
      `postUpgradeTasks` that decision 4 needs.
    - **Never an LLM in the update path.** A pull request carries third-party release notes, and an LLM reading them
      is a prompt-injection path. This reason was already given in `dependabot_follow.py` and still holds.
+
+   As built:
+   - **Renovate's config is the repository's `renovate.json5`**; the workflow's `env:` sets only the operator's part
+     (which repository, no onboarding, the allowed commands), so the policy runs unchanged on another forge.
+   - **It runs three times on Saturday morning, 05:00, 07:00 and 09:00 UTC** (owner 2026-11-24), before `publish.yml`'s
+     Monday cut. A lookup that fails in a run — Maven Central answers 429 to GitHub's shared runner addresses — makes
+     Renovate leave every group branch as it was, in a run that is still green; with one slot that held a group back
+     a week. A run with nothing to do takes under a minute and changes nothing.
+   - **Neither a failed lookup nor a failed branch push turns the run red** (owner 2026-11-24). Renovate logs a refused
+     push at DEBUG and exits 0 (run 45197394644, the App still without `workflows`); only the log shows it. The next
+     slot retries both.
+   - **Rejected: a mirror registry or a persistent cache against the 429.** A mirror is a second source beside
+     Gradle's own and one vendor's; a weekly run outlives the cache.
 
 3. **Renovate acts as a GitHub App of its own, installed on this repository alone**, so that its pull requests and
    pushes start `Checks` like a person's.
@@ -93,6 +125,15 @@ archived, release 44.257.9 of 2026-11-21, and `renovatebot/github-action` v46.3.
      for contents alone. A job token is minted per run and expires within the hour.
    - This makes the close-and-reopen of the libwebp pull request and the approval of the follow's pushes unnecessary.
    - Creating the App and storing its key is the owner's step.
+
+   As built: the App is `veyq-renovate`, its bot account `veyq-renovate[bot]` (id 359998714), which
+   `scripts/release_notes.py` exempts from the release-note check beside Dependabot's logins (`UPDATERS`, matched
+   exactly; the hosted `renovate[bot]` is not exempt). The environment `renovate` holds the Client ID as a variable
+   (`actions/create-github-app-token` v3 deprecates the App ID input) and the key as a secret. Three permissions on
+   Renovate's list are left out: administration (it reads branch protection to rebase on its own when `main` demands
+   up-to-date branches, which `main`'s ruleset does not, and the failed read is handled), checks: write (see above), and
+   merge queues (there is none). Workflows: write is not optional: without it the first push of an actions bump was
+   refused.
 
 4. **What has to move with a version moves in the same pull request, written by the updater.** (Amended
    2026-11-23, when it was built: Renovate's Gradle artifact updates run the repository's Gradle, its plugins included,
@@ -118,6 +159,32 @@ archived, release 44.257.9 of 2026-11-21, and `renovatebot/github-action` v46.3.
      A guard does not care who wrote the bytes, so a hand-made bump is held to the same rules.
    - Dependencies' install scripts stay off in the Renovate job, as in CI.
 
+   As built:
+   - **`gradleWrapper` stays out of `allowedUnsafeExecutions`.** Without it Renovate's wrapper update moves
+     `distributionUrl` alone (read in the pinned image's `gradle-wrapper/artifacts.js`: "Not allowed to execute
+     gradle"); `pin_follow.py gradle-distribution` writes `distributionSha256Sum` from services.gradle.org's `.sha256`
+     and the zip's own hash, required equal. The wrapper JAR stays as it is.
+   - **The follow's commit is authored as the App's bot**, so the follow's gate still sees a branch only Renovate wrote
+     and Renovate still rebases it. Its push starts the derive again, which sees its own commit at the head and skips.
+   - **The root launcher's metadata is followed too**: Dependabot never reached the root wrapper, Renovate does. A cold
+     home that fetched nothing (Gradle's distribution brings what `help` needs) is listed as no module, not refused.
+   - **`build.py --write` takes the Dockerfile's image into the pin**, since that is the line an Emscripten bump moves;
+     the comparison still refuses a pin whose image is not the Dockerfile's. The first Emscripten bump found the write
+     refusing the image it was asked to take (#88, fixed by #89).
+   - **The metadata rule is a script `Checks` runs against the event's base, not a `validate_*.py`**: "only gains" is a
+     property of a change, and the guard glob reads one tree and never history. A first push or a local
+     `run_pipeline.py` run has no base and checks the form only.
+   - **Dropping a metadata entry is allowed**, whole components and single artifacts: a drop cannot widen trust, since
+     Gradle refuses an artifact with no entry, and history did it twice (7f28ce7d2, 408ce9c73). What is red is a
+     changed entry: the trust rules, or the bytes a kept artifact is trusted under. There is no exception for a
+     legitimate change of either: such a pull request merges red, by the owner, which is the decision the check is
+     there to make visible.
+   - **The Playwright match reads the lockfiles**: the manifest's exact pin was already held to the image, but what
+     installs is what pnpm resolves, which an override or a second copy can move.
+   - **`validate_workflow_paths.py` reads `renovate.json5` too**, through a JSON5 subset reader in the guard (the
+     standard library has none, and a dependency for one file is not worth it): a rule whose file moved stops applying
+     without a word, which `pins` sees only for a manager.
+
 5. **The version policy is configuration, and each rule keeps its reason.**
    - Dependabot's `ignore` rules become `packageRules`, each with its measured reason as the rule's `description`:
      - LTS lines only for Node, MariaDB and Ubuntu;
@@ -129,12 +196,34 @@ archived, release 44.257.9 of 2026-11-21, and `renovatebot/github-action` v46.3.
      release. Security fixes are exempt (decision 6).
    - Nothing merges by itself: a person merges after `green`.
 
+   As built:
+   - **The cool-down is three days and thirty minutes**: Renovate adds its default `minimumReleaseAgeBuffer` (30
+     minutes, read in 44.258.3's `config/options`) to `minimumReleaseAge`, and `internalChecksFilter: strict` opens no
+     branch inside it. Left at the default.
+   - **An image update takes `minimumReleaseAgeBehaviour: timestamp-optional`**: a digest move has no release time,
+     and Docker Hub's tag pages past the tenth answer 403, so with the timestamp required no digest update would ever
+     leave the cool-down. An image that has a release time still waits.
+   - **The `images` and `actions` groups keep their majors** (`separateMajorMinor: false`), as Dependabot's groups did.
+   - **A runtime major is one pull request across managers**: `node major` (the images' `node`, setup-node's
+     `node-version`, `@types/node`) and `java major` (`eclipse-temurin`, setup-java's `java-version`), so a job never
+     runs a major its image does not. `@types/node` then proposes only its newest allowed version, so its minors wait
+     with a pending Node major; that replaces Dependabot's held-back `@types/node` major.
+   - **Java follows its LTS releases by a positive regex** (25, 29, 33, 37): a release off Oracle's cadence is held,
+     never proposed by mistake. Dependabot's Node rule (no 23, 25, 27) is not ported: 27 becomes LTS on 2027-10-20
+     (nodejs/Release `schedule.json`), and removing the rule changed no proposal.
+   - **libwebp and the Emscripten image are a group of their own**, so a rebuild never holds back the images group; the
+     fuzzer's Python image is held to 3.13 by `allowedVersions`, since `lock.py` hashes `cp313` wheels.
+
 6. **Security updates come from Renovate too; GitHub's alerts stay.**
    - Dependabot alerts and the Gradle dependency submission (`dependency-submission.yml`) keep feeding GitHub's
      advisory view.
    - Dependabot's own security pull requests are switched off.
    - Renovate's `vulnerabilityAlerts` opens the fix at once, outside the schedule and the cool-down. This avoids two
      bots proposing the same fix.
+
+   As built: Renovate's `vulnerabilityAlerts` defaults (read in the pinned image: no cool-down, no group, at once) are
+   what this decision asks for, so `renovate.json5` only turns it on. Dependabot's security pull requests are off in the
+   repository's settings (`gh api repos/raddatzk/veyq/automated-security-fixes`: `enabled: false`, 2026-11-25).
 
 7. **Bumping a pin is no longer part of cutting a release.** This replaces ADR 0057 § 6's last sentence. Pins move
    when their updater proposes them, and they are tested on every push like any other change. A release promotes
@@ -152,7 +241,22 @@ archived, release 44.257.9 of 2026-11-21, and `renovatebot/github-action` v46.3.
 - **Dependabot's version updates and the libwebp updater go.** `.github/dependabot.yml` is deleted and
   `webp-encoder-update.yml` with it; the Dependabot follow became the Renovate follow (decision 4). The switch happened
   after a dry run, ecosystem by ecosystem for the actions, the images and npm, each proven by Renovate's first real pull
-  request, and for Gradle and the rest in one step (cr-renovate).
+  request, and for Gradle and the rest in one step.
+- **Each kind of follow-up was proven on Renovate's own pull request**, each of which started `Checks` by itself and
+  merged green:
+  - actions #65 (cosign and Renovate's own digest), images #67, npm and pnpm #71 and #72;
+  - the Gradle wrapper's checksum by `gradle-distribution` (#74, services.gradle.org's `.sha256` for 9.9.2), and the
+    verification metadata pushed by the Renovate follow (#74, #83);
+  - Schemathesis' `requirements.txt` re-locked and pushed by the follow (#75), PyYAML's hashes by `pypi-hashes` (#82,
+    all 16 equal to PyPI's);
+  - the generator JAR's SHA-256 by `openapi-generator-jar` (#76). 7.27.0 also needed `ClassPathKept`
+    (`src/backend/buildSrc`, whose comment holds why); no upstream issue was filed (owner 2026-11-24);
+  - Emscripten 7.0.1 (#88): the derive rebuilt the encoder byte-identical to 7.0.0's, the follow moved the pin's
+    `image` line alone, and `Checks`' byte-for-byte rebuild was green on the follow's commit (run 45585288594).
+
+  **Not yet proven: Helm's follow.** No Helm release has shipped since the switch, so `pin_follow.py helm` has run
+  only in its self-test and on a forced-back copy, never as Renovate's task. Its first bump is that proof; the same
+  holds for a libwebp tag move, whose derive step #88 ran with an unchanged tag.
 - **A write-capable job with a secret now exists, and a second one that pushes.** The Renovate job is the first job
   that holds a long-lived secret able to push to the repository and change workflows; the Renovate follow's push reads
   the same key, mints a token for contents alone, and runs no code of the pull request. What bounds them:
@@ -174,7 +278,8 @@ archived, release 44.257.9 of 2026-11-21, and `renovatebot/github-action` v46.3.
   3 removes.
 - **Rejected: the Mend-hosted app.** See decision 2.
 - **Not decided here:** the cool-down's length and the Dependency Dashboard's approval gate for majors. These are
-  tuning values, recorded where the configuration sets them (`renovate.json5`: three days, no approval gate).
+  tuning values, recorded where the configuration sets them (`renovate.json5`: three days plus Renovate's thirty-minute
+  buffer, decision 5; no approval gate).
 
 ## Related
 

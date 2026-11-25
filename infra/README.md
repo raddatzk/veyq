@@ -263,7 +263,11 @@ gh workflow run publish.yml --ref main               # the tip's snapshot now, a
   `imagePullSecrets` value, so public is the state it supports.
 - **Bumping a pin is no part of cutting a release** (ADR 0158 decision 7): Renovate proposes every pin's bump on
   Saturday with what moves with it (`.github/workflows/renovate.yml`, `renovate.json5`), and what is merged by Monday is
-  in that week's snapshot. A pull request of Renovate's that stays red is read like any other.
+  in that week's snapshot. A pull request of Renovate's that stays red is read like any other. A Renovate run is green
+  even where a lookup or a branch push failed (ADR 0158 decision 2): it runs three times on Saturday morning for that,
+  and a dispatch of `renovate.yml` on `main` retries at once. Its whole log is the run's log archive (`gh api
+  repos/<owner>/<repo>/actions/runs/<id>/logs`); `gh run view --log` cuts it short. To have Renovate rebase one of its
+  pull requests, tick the box at the end of its description, then dispatch.
 
 **A release promotes a snapshot** (ADR 0091 decision 5, `.github/workflows/release.yml`). Nothing is built: the
 images every lane tested get the release's names and a second signature, from `release.yml` — the identity Verify a

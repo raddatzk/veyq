@@ -38,9 +38,9 @@ without `/**` names a file of that name, never the directory). All were removed,
 nothing. The same run was red on `codeql.yml`'s `**/*.cjs` and `**/*.tsx`, which match nothing because no such file
 exists yet — that is a language's catch-all, not a stale place, and is why rule 1 exempts a location-free pattern.
 
-Rule 5 was added with cr-renovate phase 4 (ADR 0158), with no incident: Renovate's config names fifteen places
-since phase 3, and the guard that held Dependabot's `directories:` to the tree held none of them (that rule left with
-`.github/dependabot.yml` itself, cr-renovate phase 5).
+Rule 5 was added when Renovate was built (ADR 0158), with no incident: Renovate's config names fifteen places,
+and the guard that held Dependabot's `directories:` to the tree held none of them (that rule left with
+`.github/dependabot.yml` itself, ADR 0158).
 
 **Its limit — what a green run does NOT prove.** Existence, never aptness: a filter that matches some file can still
 miss the one it was written for, a location-free pattern (rule 1) is not checked at all, and a filter list can omit a tree

@@ -4,7 +4,7 @@
 # repository write access, and could sign or publish what nobody tested. scripts/validate_release_identity.py
 # (assertion 15) holds every `pip install` of such a job — release.yml's `check` and `promote`, checks.yml's `build` —
 # to this form. The jobs without a write permission (the guards, the chart checks, the stack lanes) install it the same
-# way since cr-renovate phase 3, so PyYAML has one pin, which Renovate's pip_requirements manager reads.
+# way since ADR 0158 was built, so PyYAML has one pin, which Renovate's pip_requirements manager reads.
 #
 # PyYAML 6.0.4, the manylinux wheels for x86_64 (ubuntu-latest) and aarch64 (ubuntu-24.04-arm), CPython 3.9 to 3.14
 # and 3.14t, so whichever python3 a hosted runner image carries finds its wheel. The hashes are PyPI's own, read from
