@@ -22,9 +22,16 @@
   module's running budget and retired the search-alone budget. Its second (2026-11-24: Depot's rules, `@veyq/core-js/depot`
   from `:apps:depot`'s own module file, a lazy chunk, § Depot's move). Its third (2026-11-24: Memories' pure rules,
   `@veyq/core-js/memories` from `:apps:memories`' own module file, never in the eager set, § Memories' move). Decision 8 is
-  not built; its gate was measured with Memories' move (§ Memories' move, D7: the gallery's model as it is would put
-  ~285 KB gz on every first load — an owner question, inbox #1323)
+  not built; its measurement was taken with Memories' move (§ Memories' move, D7: the gallery's model as it is would put
+  ~285 KB gz on every first load), and the owner decided 2026-11-25 that it crosses (inbox #1323)
 - Date: 2026-11-20
+- Amended: 2026-11-25 — **no size number gates a move any more** (the owner: "Wir gehen mit Kotlin, egal ob es ein
+  bisschen teurer wird"). Dropped as gates that day: decision 7.2's R = 3.0 and the per-slice ratios, 7.3's 25 KB gz
+  per application, decision 10's guest-path ceilings (Depot's 704 KiB, Memories' proposed 816 KiB, never set) and its
+  R rule for later moves, decision 4's ban on kotlinx.serialization, coroutines and Ktor, decision 8's gate of its own,
+  and 7.3's time ratio. Each is now **measured and reported with every move**; the numbers recorded below stay as they
+  were measured, against the bounds that held then. What still gates: identical answers, 100 ms per user action
+  (decision 7.3), no refusal reachable from a façade (decision 4)
 - Model: [native-apps](../crosscutting/native-apps.md)
 
 ## Context
@@ -67,7 +74,7 @@ Measured before the decision (2026-11-20):
 ## Decision
 
 1. **Core first, every client draws.** The Kotlin core becomes the one home of the web's logic too: its rules, formats,
-   codecs and — once decision 8 allows — its screen models. A moved application's feature is built in the core and
+   codecs and its screen models (decision 8). A moved application's feature is built in the core and
    drawn by the web and the apps; its TypeScript twin is deleted, not kept. What the web keeps is what only a browser
    does: the Vue UI and router, the service worker, the workers, IndexedDB, the streaming transport, PDF and WebP,
    the i18n rendering, and the raw primitives (`@noble/*`). These never move.
@@ -106,13 +113,23 @@ Measured before the decision (2026-11-20):
    of answers with a named refusal in one `jsMain` file, and nothing a façade reaches may reach it. The core's whole
    common code compiles for JavaScript from then on, as for every other target.
 
-4. **What the web consumes is variant B, held by the build.** Code reachable from a façade uses no
-   kotlinx.serialization, no coroutines and no Ktor. JSON goes through a platform seam in common code: on the JVM and
-   native targets kotlinx.serialization behind it, so the apps read and write exactly as today; on JavaScript
-   `JSON.parse` and `JSON.stringify`. The formats bound every integer to a safe one (`entry.v1.schema.json`'s
-   amounts and revisions), so `JSON.parse`'s numbers are exact and no reviver source text is needed; a format that
-   ever needs a larger number carries it as a string, as `rate` already is. The shipped module's source map lists
-   the files it carries; a kotlinx.serialization, coroutines, Ktor or refusal file among them fails the web's check.
+4. **What a façade carries is reported by the build, and declared per entry** (variant B until 2026-11-25, when the
+   owner dropped the size gates; the ban below was a size device). Until then code reachable from a façade used no
+   kotlinx.serialization, no coroutines and no Ktor. From then on a façade may reach them **once the move that needs
+   them is built**: each entry of `src/packages/core-js/src/slice.test.ts` declares which of the three it carries, and
+   the check fails where an entry carries one it does not declare or declares one it no longer carries — so the move that
+   brings one in widens that entry's row in the same commit, and an accidental reach (Memories' D7: a model reaching the
+   session pulled in all three) is seen in review, not discovered in a bundle. That is a declaration, not a bound: the
+   bytes it costs are printed beside it, never compared. Why a declaration and not a report alone: a report nobody reads
+   lets a 285 KB reach land silently, and the declaration costs one line per move. **What stays a ban:** a `NotOnTheWeb`
+   refusal reachable from a façade — it throws on the web, a correctness defect, not a cost. JSON goes through a platform
+   seam in common code: on the JVM and native targets kotlinx.serialization behind it, so the apps read and write exactly
+   as today; on JavaScript `JSON.parse` and `JSON.stringify` — the seam stays the default for a pure rule (it is smaller
+   and needs no serializer), and a façade that reaches kotlinx.serialization does so because a model it draws needs it.
+   The formats bound every integer to a safe one (`entry.v1.schema.json`'s amounts and revisions), so `JSON.parse`'s
+   numbers are exact and no reviver source text is needed; a format that ever needs a larger number carries it as a
+   string, as `rate` already is. The shipped module's source map lists the files it carries, through the compiled
+   modules' own maps to the Kotlin files; the check reads the libraries from it.
 
 5. **The boundary is a façade per application, of plain values.** Each application exports one façade from `jsMain`
    (`me.raddatz.veyq.mobile.<application>.web`); common code carries no `@JsExport`, so the apps see nothing new. A
@@ -139,10 +156,13 @@ Measured before the decision (2026-11-20):
       application, and a guard holds the direction from the build files. One compiled JavaScript module cannot carry a
       second façade without making the first one's users pay for it (§ Consequences, measured), so the split comes
       before any second entry, and with it each module is its own JavaScript file.
-   2. **The platform core moves to the web slice by slice.** Each slice grows the eager set by at most **R × the gzip
-      of the TypeScript it deletes**, R the pilot's measured ratio of its façade's own code to its deleted TypeScript,
-      rounded up to the next half: **R = 3.0** (the pilot's 8,754 B gz of own code against 3,129 B gz deleted, 2.80; the
-      probe had estimated ~2.9), and each of its hot rules meets 7.3's time bound. The order (2026-11-21; the deleted
+   2. **The platform core moves to the web slice by slice.** Each slice measures and reports what it grows the eager set
+      by against the gzip of the TypeScript it deletes — its ratio —, and each of its hot rules meets 7.3's time rule.
+      Until 2026-11-25 that ratio was a gate: at most **R = 3.0**, the pilot's measured ratio of its façade's own code to
+      its deleted TypeScript rounded up to the next half (8,754 B gz of own code against 3,129 B gz deleted, 2.80; the
+      probe had estimated ~2.9), a slice the owner granted more carrying its own (the node tree's 3.14×). The owner
+      dropped it that day with every other size gate (the header's amendment): every slice of the list below was built
+      under it, and its ratio stays recorded in its section. The order (2026-11-21; the deleted
       TypeScript's min+gz measured on sources, each slice's exports bundled alone with every other import external):
       1. **the node tree's rules** — a level's order, equal names numbered, a name's sibling collision, the move's plan
          (1,326 B gz): eager, every application builds on them, the app and the web answer them differently today, no
@@ -177,64 +197,77 @@ Measured before the decision (2026-11-20):
       a module of its own would not have spared the one lazy user, a worker, the standard library's floor: § The export
       archive's slice, D2; slice 7 measured its TypeScript eager already, and a module of its own would have paid that floor
       for 864 B gz of rules: § The music order and fades' slice, D2) — and the
-      package's size check becomes one running bound on that file: the split's measured search alone plus R × each moved
-      slice's deleted TypeScript (a slice the owner granted another ratio carries it, named with the owner's date, on its row
-      of `src/packages/core-js/src/slice.test.ts`; R stays the rule). Platform code an application's façade needs (Expenses'
-      JSON seam, money's formats) counts against that running bound, not against the search, and there is no separate
-      budget for the search alone: the platform module grows by design with every slice (the owner, 2026-11-22).
+      package's size check became one running bound on that file: the split's measured search alone plus R × each moved
+      slice's deleted TypeScript (80,094 B gz after the seventh slice). Platform code an application's façade needs (Expenses'
+      JSON seam, money's formats) counted against that running bound, not against the search, and there is no separate
+      budget for the search alone: the platform module grows by design with every slice (the owner, 2026-11-22). **Since
+      2026-11-25 the running bound is no gate:** `src/packages/core-js/src/slice.test.ts` prints the platform module's size
+      with every entry bundled, and its growth over the search alone against the TypeScript the slices deleted (each
+      slice's on its row) — the report a move cites.
    3. **Then application by application, Expenses first.** Each move: its façade, its TypeScript twin deleted, its own
-      size check and time check. The floor is paid, so a size check counts only a move's own code:
-      - **size:** an application grows the eager set and its own chunks together by at most **25 KB gz** (Expenses'
-        own code measured ~20 KB, its suite's `V1` among it), and the entries that do not use it grow by nothing;
-        where its rules are eager today, as Expenses' are, the eager set carries them;
-      - **time:** each rule a move names as its hot path runs at most **2.5×** the TypeScript's median **and at most
-        100 ms** absolute over the move's named corpus, the answers identical (the owner, 2026-11-21, replacing 1.5×
-        for an application move; the search's 1.5× of decision 2 was the pilot's and was met). For Expenses the hot
-        paths are `buildLedger` and `checkLedger` over the 10,010-revision Pot.
+      size report and time check. The floor is paid, so a size report counts only a move's own code:
+      - **size, reported:** what an application grows the eager set and its own chunks by, and that the entries that do
+        not use it grow by nothing; where its rules are eager today, as Expenses' are, the eager set carries them. Until
+        2026-11-25 this was a gate of at most **25 KB gz** (Expenses' own code measured ~20 KB, its suite's `V1` among it);
+        Expenses, Depot and Memories moved under it. Since then a move measures and reports it, never stops on it;
+      - **time:** each rule a move names as its hot path runs **at most 100 ms** absolute over the move's named corpus,
+        which is what one user action processes at the real use's upper end, **the answers identical** — both gates. Its
+        ratio to the TypeScript's median is measured and reported beside it; until 2026-11-25 it was a gate too, at most
+        **2.5×** (the owner, 2026-11-21, replacing 1.5× for an application move; the search's 1.5× of decision 2 was the
+        pilot's and was met). Why the 100 ms stays when the ratio goes (decided 2026-11-25): the ratio is a cost relative
+        to a TypeScript that is deleted with the move — the owner's "egal ob teurer" —, while 100 ms is what a person
+        perceives as an immediate answer, the same for any language and the bound the web's search already answers to
+        (ADR 0125, ADR 0146). It binds the experience, not the cost, so a miss is fixed in the core (as Depot's D3 did)
+        or goes to the owner with its number; it is not a reason to keep TypeScript. Identical answers are correctness:
+        two clients answering apart is the defect decision 1 exists to remove. For Expenses the hot paths are
+        `buildLedger` and `checkLedger` over the 10,010-revision Pot.
 
-8. **A screen model with flows is a gate of its own.** Moving a model that exposes a flow (ADR 0136 decision 2) brings
-   coroutines into the web once: variant A's floor measured ~75 KB gz above B's. That crossing is decided by a
-   measurement of its own. The web then observes a model as Swift and the bridge do, through its `watch(listener)`
-   and the `Watch` it returns (`blob/UploadQueue.kt`), behind one composable that replaces a `shallowRef` per state
-   and cancels the watch when its scope ends; never Vue's deep reactivity over a Kotlin object.
-   **Measured 2026-11-24** (§ Memories' move, D7; not built, an owner question, inbox #1323): coroutines alone add
-   4,680 B gz to the platform's module file and 15,239 B gz to the application's own code; Memories' gallery model as it
-   is reaches the session, the generated API client and with them Ktor and kotlinx.serialization, which then ship in the
-   platform's module file with every entry — +284,612 B gz on every first load.
+8. **Screen models with flows cross to the web** (the owner, 2026-11-25, inbox #1323: cross). Moving a model that
+   exposes a flow (ADR 0136 decision 2) brings coroutines into the web once: variant A's floor measured ~75 KB gz above
+   B's. Until 2026-11-25 that crossing was a gate of its own, decided by a measurement of its own; the owner decided it
+   that day — the models cross, and the measurement stays the record and the report each such move repeats (decision 4's
+   declaration names the libraries it brings). The web observes a model as Swift and the bridge do, through its
+   `watch(listener)` and the `Watch` it returns (`blob/UploadQueue.kt`), behind one composable that replaces a
+   `shallowRef` per state and cancels the watch when its scope ends; never Vue's deep reactivity over a Kotlin object.
+   **Measured 2026-11-24** (§ Memories' move, D7): coroutines alone add 4,680 B gz to the platform's module file and
+   15,239 B gz to the application's own code; Memories' gallery model as it is reaches the session, the generated API
+   client and with them Ktor and kotlinx.serialization, which then ship in the platform's module file with every entry —
+   +284,612 B gz on every first load. How the first model crosses — `GalleryModel` as it is, or reading through its
+   `Door` first so the session stays out of the platform's file — is that move's technical design, not this decision's.
 
 9. **The crypto suite and admin-web stay TypeScript.** `@veyq/crypto` and the Kotlin suite are two implementations
    answering to one set of vectors; that is a check worth more than the bytes it costs. A Kotlin `V1` runs in the web
    only where a moved application's codec needs it, over the same `@noble/*` primitives and the same vectors. admin-web
    holds no domain logic to move ([ADR 0065](0065-admin-ui-cli-separate-service.md)).
 
-10. **What a budget protects: the first load of a link guest, not a member's cached return** (the owner, 2026-11-24).
-    A member's browser holds the built chunks in its cache between visits, so a lazy chunk only members load costs
-    them once per release. Three costs stay that a cache does not remove, and they set where a budget binds:
+10. **What the size report watches: the first load of a link guest, not a member's cached return** (the owner,
+    2026-11-24; a gate until 2026-11-25, a report since). A member's browser holds the built chunks in its cache between
+    visits, so a lazy chunk only members load costs them once per release. Three costs stay that a cache does not
+    remove, and they are why a move keeps measuring and reporting the guest path though no number gates it any more:
     every release renames the hashed chunks it changes, and the platform module changes with almost every release, so
     each member pays its download again then; the engine parses and compiles every loaded script on every start, cached
     or not, which a weak phone feels; and a link guest is a first visitor — opened on a phone, on a mobile network, with
     nothing cached. Hence:
-    - **The guest path stays tight:** what a link guest's first load fetches — the eager set (decision 2's `main` and
-      `index.html`'s modulepreloads; the platform module sits in it, every entry importing it) plus the chunks the share
-      view of the guest's kind loads — has a ceiling of its own, measured per move as the eager set is today. Its number
-      is set from Depot's move, the first one measured against it, and recorded here with the owner's date. Until then
-      the running budget of decision 7.2 and 7.3's application bound hold as written.
-      **Set 2026-11-24 by the owner, from Depot's move:** a Depot link guest's first load at most **704 KiB gz
-      (720,896 B)** — the single-file link measured 702,621 B gz, the folder link 688,070, the drop box 691,778
-      (§ Depot's move, D8 names the method); every other application's ceiling is set at its own next move, from its
-      measurement, since one number does not fit (a Memory's page measured 811,620 B gz the same day). **The platform
-      module has no fixed budget of its own from then on:** it sits on every guest path, so its growth counts against
-      each kind's guest-path ceiling; the package's slice check keeps reporting its size with every move. A move's
-      time corpus is the move's to name where the real use is bounded (Depot's view decision over 1,000 openings,
-      accepted the same day).
-      **Proposed for Memories, not set** (§ Memories' move, its measurement 2026-11-24; inbox #1324): a Memory link guest's
-      first load at most **816 KiB gz (835,584 B)** — a Memory's page measured 814,770 B gz after the move, its share body
-      718,798; the larger plus Depot's relative headroom (2.6%). The owner sets it.
-    - **A chunk only members load is looser:** it is still measured and recorded with every move, but its growth is
-      not a gate; a move reports it, and the owner is asked only where it is unusual for what the move deletes.
-    - **Time still binds everywhere:** 7.3's time bound is about running, not loading, and holds for every rule moved.
-    - **Later moves of an application already moved** (inbox #1270, the owner 2026-11-24) are gated as a slice: at most
-      R = 3.0 times the gzip of the TypeScript they delete, on the guest path; a member-only chunk under the rule above.
+    - **The guest path is measured and reported with every move:** what a link guest's first load fetches — the eager
+      set (decision 2's `main` and `index.html`'s modulepreloads; the platform module sits in it, every entry importing
+      it) plus the chunks the share view of the guest's kind loads (§ Depot's move, D8 names the method), per kind the
+      move touches. A move that grows it says by how much and why; making it smaller is an optimisation of its own
+      (inbox #1310), never a condition of a move. **The platform module has no budget of its own:** it sits on every guest
+      path; the package's slice check reports its size with every move.
+      *History:* the guest path had a ceiling per kind from 2026-11-24 to 2026-11-25. **Set by the owner 2026-11-24, from
+      Depot's move:** a Depot link guest's first load at most **704 KiB gz (720,896 B)** — the single-file link measured
+      702,621 B gz, the folder link 688,070, the drop box 691,778; every other application's ceiling was to be set at its
+      own next move, since one number does not fit (a Memory's page measured 811,620 B gz the same day). **Proposed for
+      Memories, never set** (§ Memories' move, D8): at most **816 KiB gz (835,584 B)** — a Memory's page measured
+      814,770 B gz after the move, its share body 718,798; the larger plus Depot's relative headroom (2.6%). Both were
+      dropped with every other size gate on 2026-11-25 (the header's amendment; inbox #1324 closed with it).
+    - **A chunk only members load** is measured and recorded with every move, as it was before.
+    - **Time binds everywhere:** 7.3's time rule (100 ms per user action, identical answers) is about running, not
+      loading, and holds for every rule moved. A move's time corpus is the move's to name where the real use is bounded
+      (Depot's view decision over 1,000 openings, accepted 2026-11-24).
+    - **Later moves of an application already moved** (inbox #1270, the owner 2026-11-24) report their ratio to the
+      TypeScript they delete and their growth of the guest path as a slice does. Until 2026-11-25 they were gated as a
+      slice, at most R = 3.0 on the guest path; that rule went with R.
 
 ## Consequences
 
@@ -1359,9 +1392,10 @@ Measured before the decision (2026-11-20):
     (`ContentApi`, `ScopesApi`, …), the rekey, the outbox, the offline pages — and with them Ktor and kotlinx.serialization,
     which then ship in the platform's one module file with every entry; a bundler drops none of it. *What it would buy:*
     the 6.6 KB gz above deleted and one gallery for every client. *Answer:* not crossed; the owner question (inbox #1323)
-    is whether to cut the model from the session first (its reads only through its `Door`) and measure again.
+    was whether to cut the model from the session first (its reads only through its `Door`) and measure again — answered
+    2026-11-25: cross (decision 8); how is the gallery move's own design.
   - **D8 — Memories' guest-path ceiling, proposed:** 816 KiB gz (835,584 B), a Memory's page's 814,770 plus Depot's relative
-    headroom (decision 10; inbox #1324).
+    headroom (decision 10; inbox #1324). Never set: the owner dropped every ceiling on 2026-11-25.
 
 - **The operator-served web is unchanged in kind** ([ADR 0026](0026-client-trust-tiers.md)): still same-origin,
   content-hashed chunks, no new CSP source, no Subresource Integrity in use before or after; the Kotlin output is one
@@ -1370,7 +1404,7 @@ Measured before the decision (2026-11-20):
   a byte-identical rebuild — what the attested tier will need — is a criterion of the pilot, not an assumption.
 - **The apps pay only the JSON seam**, and only once Expenses moves: its format reads JSON through it; the apps'
   behaviour is held by the tests that hold it today. The search adds one parameter to the core's `Results`, defaulting
-  to today's order, so the web keeps its browser collator. Core code a façade reaches stays free of coroutines, serialization and Ktor; the build says so.
+  to today's order, so the web keeps its browser collator. What of coroutines, serialization and Ktor a façade reaches is declared per entry and the build holds the declaration (decision 4).
 - **After the go**, a CR touching a moved slice or application orders its phases contracts → backend → core → clients,
   and ADR 0154's vectors "from the web's own formatters" turn around for what moved: the core's output is the one
   source (the search's vectors are written by `SearchVectorsTest`). The root `CLAUDE.md`, `docs/ai/README.md` and
@@ -1394,7 +1428,7 @@ Measured before the decision (2026-11-20):
   for it (59,587 B gz in the search's entry), and per-file granularity missed Expenses' own 25 KB (§ Consequences).
   The split also gives the core the direction the backend and the web already hold, which no granularity setting does.
 - **Variant A for the pilot.** 97 KB gz against 35 KB, for coroutines and a serializer the pure rules do not need;
-  decision 8 keeps that cost for the day a flow must cross.
+  decision 8 took that cost once a flow crosses (2026-11-25).
 - **The status quo with more vector sets.** Each shared rule held by vectors still costs two implementations and their
   tests; the vectors catch a divergence, never the second implementation's cost.
 - **Committing the compiled JavaScript.** Reviewable as a file, but it drifts from the Kotlin that claims to produce it,
@@ -1403,3 +1437,7 @@ Measured before the decision (2026-11-20):
   ([ADR 0116](0116-the-javascript-packages-are-installed-by-pnpm.md)), and a Node distribution fetched from a
   repository `src/mobile/settings.gradle.kts` does not declare (it sets `FAIL_ON_PROJECT_REPOS`).
 - **Moving the crypto suite and admin-web too.** Decision 9.
+- **Keeping the size gates after the pilot** (held 2026-11-21 to 2026-11-25). They kept the web's growth in view, but every
+  move spent its effort squeezing bytes (Memories' D6, Expenses' platform placement) and the screen models, the larger half
+  of what the web holds twice, could not cross at all (decision 8's +284,612 B gz). The owner chose the direction over the
+  bytes (2026-11-25); the reports keep the growth in view without stopping a move.
