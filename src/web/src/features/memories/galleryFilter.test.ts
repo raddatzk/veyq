@@ -32,6 +32,7 @@ interface Medium {
   name?: string
   video?: boolean
   blocked?: boolean
+  owner?: string
 }
 function gallery(media: Medium[], timeZone = 'UTC', locale = 'de'): { items: MediaItem[]; facts: GalleryFacts } {
   opened.meta.clear()
@@ -41,7 +42,7 @@ function gallery(media: Medium[], timeZone = 'UTC', locale = 'de'): { items: Med
   const items = media.map((m) => {
     opened.meta.set(m.id, { ...(m.at !== undefined ? { capturedAt: m.at } : {}), ...(m.override !== undefined ? { capturedAtOverride: m.override } : {}), ...(m.place ? { placeName: m.place } : {}) } as MediaMeta)
     opened.blob.set(m.id, { ...(m.name ? { name: m.name } : {}), type: m.video ? 'video/mp4' : 'image/jpeg' } as OpenedBlobMeta)
-    return mediaItem({ mediaId: m.id, ...(m.blocked ? { blocked: true } : {}) })
+    return mediaItem({ mediaId: m.id, ...(m.blocked ? { blocked: true } : {}), ...(m.owner ? { ownerKey: m.owner } : {}) })
   })
   return { items, facts: galleryFacts({ scopeId: SCOPE, key: KEY, items, locale, timeZone }) }
 }
@@ -201,4 +202,44 @@ describe('the gallery\'s one predicate: the mark filter AND the facts', () => {
     expect(keep(galleryPredicate(null, ofDay(['a', 'b'])))).toEqual(['a', 'b'])
     expect(keep(galleryPredicate(marked(['b', 'c']), ofDay(['a', 'b'])))).toEqual(['b'])
   })
+})
+
+describe('who added it (inbox #1356)', () => {
+  const media: Medium[] = [
+    { id: 'a', name: 'Beach.jpg', owner: 'user:ana', at: Date.UTC(2024, 4, 3, 9) },
+    { id: 'b', name: 'Bridge.jpg', owner: 'share:ben', at: Date.UTC(2024, 4, 3, 10) },
+    { id: 'c', name: 'Beach evening.jpg', owner: 'user:ana', at: Date.UTC(2024, 4, 4, 9) },
+    { id: 'd', name: 'Old.jpg' },
+    { id: 'e', name: 'Hidden.jpg', owner: 'share:ben', blocked: true },
+  ]
+  const NAMES = new Map([['user:ana', 'Ana'], ['share:ben', 'Ben (guest)']])
+  const by = (ownerKey: string, label = NAMES.get(ownerKey)!): GalleryChip => ({ type: 'by', ownerKey, label })
+
+  it('keeps what that owner key added, ANDed with the other chips and the text; a medium without an owner matches none', () => {
+    const g = gallery(media)
+    expect([...g.facts.contributors]).toEqual(['user:ana', 'share:ben'])
+    expect(kept(g, [by('user:ana')])).toEqual(['a', 'c'])
+    expect(kept(g, [by('share:ben')])).toEqual(['b'])
+    expect(kept(g, [by('user:ana'), day('2024-05-03')])).toEqual(['a'])
+    expect(kept(g, [by('user:ana')], 'evening')).toEqual(['c'])
+    expect(kept(g, [by('user:ana'), by('share:ben')])).toEqual([])
+  })
+
+  it('is offered for a name the text begins at a word, once, and only where more than one contributed', () => {
+    const g = gallery(media)
+    expect(suggested2(g, 'ben')).toEqual(['by:Ben (guest)|'])
+    expect(suggested2(g, 'beach an')).toEqual(['by:Ana|beach'])
+    expect(suggested2(g, 'ben', [by('share:ben')])).toEqual([])
+    expect(galleryChipKey(by('share:ben'))).toBe('by:share:ben')
+    // one contributor narrows nothing: no chip
+    const one = gallery(media.filter((m) => m.owner !== 'share:ben'))
+    expect(suggested2(one, 'ana')).toEqual([])
+    // a contributor the caller has no name for is not offered
+    expect(suggestGalleryChips('ben', [], g.facts, WORDS, new Map([['user:ana', 'Ana']]))).toEqual([])
+  })
+
+  const suggested2 = (g: { facts: GalleryFacts }, text: string, chips: GalleryChip[] = []) =>
+    suggestGalleryChips(text, chips, g.facts, WORDS, NAMES)
+      .filter((s) => s.chip.type === 'by')
+      .map((s) => `${s.chip.type}:${s.chip.type === 'by' ? s.chip.label : ''}|${s.text}`)
 })
