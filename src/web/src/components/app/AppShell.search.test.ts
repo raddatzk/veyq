@@ -15,6 +15,7 @@ vi.mock('../../features/spaces/InvitationsBadge.vue', () => ({ default: { render
 vi.mock('../../app/activeSpace', async (orig) => ({ ...(await orig<typeof import('../../app/activeSpace')>()), enterScope: vi.fn() }))
 
 import AppShell from './AppShell.vue'
+import { loadMemberChrome } from './memberChrome'
 import { clearActiveSpace } from '../../app/activeSpace'
 import { setTokens, clearTokens } from '../../app/session'
 import { setUnlocked, clearVault } from '../../app/vault'
@@ -34,6 +35,8 @@ async function mountAt(path: string) {
   })
   await router.replace(path)
   await router.isReady()
+  // The member's chrome is a chunk of its own; the router's `appPage` has it loaded before an app page enters (inbox #1310).
+  await loadMemberChrome()
   const w = mount(AppShell, { global: { plugins: [router, realI18n()] }, attachTo: document.body })
   mounted.push(w)
   await flushPromises()

@@ -63,6 +63,82 @@ function cspPlugin(dev: boolean): Plugin {
   }
 }
 
+// What a link guest's first load fetches is the entry and its static imports (`index.html`'s modulepreloads, ADR 0155
+// decision 10) — and the member's pages and chrome are not in it (inbox #1310): every page is a chunk the router fetches
+// (`router.ts`), the member's chrome one `AppShell` fetches (`memberChrome.ts`). One static import from the entry's graph
+// puts such a module back into every guest's first load without a test noticing, so the build fails instead, naming the
+// module. Each module named here must be in the bundle at all, or a rename would leave the check guarding nothing.
+const MEMBER_ONLY_MODULES = [
+  'src/views/SpaceView.vue',
+  'src/views/SettingsHubView.vue',
+  'src/views/GroupInvitationsView.vue',
+  'src/views/LoginView.vue',
+  'src/views/ModerationView.vue',
+  'src/views/TenantJoinView.vue',
+  'src/views/RecoverView.vue',
+  'src/components/app/MemberChrome.vue',
+  'src/components/app/AppSidebar.vue',
+  'src/components/app/AppTopbar.vue',
+]
+function memberCodeOutOfTheEntryPlugin(): Plugin {
+  const root = fileURLToPath(new URL('./', import.meta.url))
+  return {
+    name: 'veyq-member-code-out-of-the-entry',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      const chunks = Object.values(bundle).filter((c) => c.type === 'chunk')
+      const entry = chunks.find((c) => c.isEntry && c.name === 'main')
+      if (!entry) return this.error('no `main` entry chunk to check')
+      const byFile = new Map(chunks.map((c) => [c.fileName, c]))
+      const eager = new Set<string>()
+      const todo = [entry.fileName]
+      while (todo.length) {
+        const file = todo.pop()!
+        if (eager.has(file)) continue
+        eager.add(file)
+        todo.push(...(byFile.get(file)?.imports ?? []))
+      }
+      for (const module of MEMBER_ONLY_MODULES) {
+        const id = join(root, module)
+        const holder = chunks.find((c) => c.moduleIds.includes(id))
+        if (!holder) return this.error(`${module} is in no chunk - renamed or moved? Name it again in MEMBER_ONLY_MODULES`)
+        if (eager.has(holder.fileName)) {
+          return this.error(`${module} is in ${holder.fileName}, which every first load fetches (the entry or its static imports): import it lazily (inbox #1310)`)
+        }
+      }
+    },
+  }
+}
+
+// The media Service Worker (`sw.js`, ADR 0047) runs without a window: a chunk of the app among its imports would run the
+// app's modules in the worker. The output's grouping (`codeSplitting` below) keeps the worker's modules out of the app's
+// chunks; this fails the build when anything but `src/sw/` is in what `sw.js` loads (inbox #1310).
+function serviceWorkerAlonePlugin(): Plugin {
+  const swDir = fileURLToPath(new URL('./src/sw/', import.meta.url))
+  return {
+    name: 'veyq-service-worker-alone',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      const chunks = Object.values(bundle).filter((c) => c.type === 'chunk')
+      const worker = chunks.find((c) => c.isEntry && c.name === 'media-sw')
+      if (!worker) return this.error('no `media-sw` entry chunk to check')
+      const byFile = new Map(chunks.map((c) => [c.fileName, c]))
+      const seen = new Set<string>()
+      const todo = [worker.fileName]
+      while (todo.length) {
+        const file = todo.pop()!
+        if (seen.has(file)) continue
+        seen.add(file)
+        const chunk = byFile.get(file)
+        if (!chunk) continue
+        const stranger = chunk.moduleIds.find((id) => !id.startsWith(swDir))
+        if (stranger) return this.error(`sw.js loads ${file}, which holds ${stranger} - the Service Worker must load only src/sw/ (inbox #1310)`)
+        todo.push(...chunk.imports, ...chunk.dynamicImports)
+      }
+    },
+  }
+}
+
 // Apple's Smart App Banner (ADR 0150 § O2, `src/core/openInApp/smartAppBanner.ts`): Safari on iOS reads the tag from the
 // document it loads, so it is written into `index.html` — and only once the app has an App Store id; until then nothing.
 function smartAppBannerPlugin(): Plugin {
@@ -391,7 +467,7 @@ function platformMajor(): number {
 
 export default defineConfig(({ command }) => {
   return {
-    plugins: [vue(), vueWithoutPassThroughPolicyPlugin(), cspPlugin(command === 'serve'), smartAppBannerPlugin(), pdfjsAssetsPlugin(), mediaSwDevPlugin(), devSeedCredentialsPlugin(), licenseSourcesPlugin(), coreJsWatchPlugin()],
+    plugins: [vue(), vueWithoutPassThroughPolicyPlugin(), cspPlugin(command === 'serve'), smartAppBannerPlugin(), pdfjsAssetsPlugin(), mediaSwDevPlugin(), devSeedCredentialsPlugin(), licenseSourcesPlugin(), memberCodeOutOfTheEntryPlugin(), serviceWorkerAlonePlugin(), coreJsWatchPlugin()],
     define: {
       __PDFJS_VERSION__: JSON.stringify(pdfjsPackage().version),
       // The platform's one major (ADR 0085 decision 1), read from the repository's VERSION as the backend's build reads
@@ -431,6 +507,22 @@ export default defineConfig(({ command }) => {
           // backend's static handler serves it with a script MIME type under `nosniff` - an `.mjs` is not in every MIME table.
           assetFileNames: (asset) =>
             (asset.names ?? []).some((n) => /^pdf\.worker/.test(n)) ? 'assets/[name]-[hash].js' : 'assets/[name]-[hash][extname]',
+          // What every first load fetches is a few files, not dozens (inbox #1310). Left to itself the bundler cuts the
+          // entry's static graph into one chunk per set of importers, and with every page lazy (`router.ts`) that set is
+          // different for almost every module: 82 files for the entry alone, measured 2026-11-25, which made a guest's
+          // first paint slower over HTTP/1.1 at 150 ms RTT although 61 KB lighter. So the modules the entry reaches
+          // statically (`$initial`) are one chunk — the npm libraries apart (`vendor`), which change with a dependency
+          // update rather than with every release, so a member's cache keeps them across most releases. The Service
+          // Worker's modules stay out of both: `sw.js` must never import the app (it would run it in the worker), so the
+          // two it shares with the app are a chunk of their own (`sw-shared`), and the rest of `src/sw/` is the worker's
+          // entry alone; `serviceWorkerAlonePlugin` checks what `sw.js` loads.
+          codeSplitting: {
+            groups: [
+              { name: 'sw-shared', test: /[\\/]src[\\/]sw[\\/](protocol|range)\.ts$/, priority: 3 },
+              { name: 'vendor', tags: ['$initial'], test: /[\\/]node_modules[\\/]/, priority: 2 },
+              { name: 'entry', tags: ['$initial'], test: /^(?!.*[\\/]src[\\/]sw[\\/])/, priority: 1 },
+            ],
+          },
         },
       },
     },

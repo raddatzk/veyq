@@ -5,24 +5,32 @@ import { session } from './app/session'
 import { vaultState } from './app/vault'
 import { rememberRoute } from './app/pendingRoute'
 import { termsStale } from './app/activeSpace'
-import NotSetUpView from './views/NotSetUpView.vue'
-import SpaceOfflineView from './views/SpaceOfflineView.vue'
-import LoginView from './views/LoginView.vue'
-import SettingsHubView from './views/SettingsHubView.vue'
-import TenantJoinView from './views/TenantJoinView.vue'
-import TermsAcceptView from './views/TermsAcceptView.vue'
-import OperatorTermsView from './views/OperatorTermsView.vue'
-import PrivacyNoticeView from './views/PrivacyNoticeView.vue'
-import SpaceView from './views/SpaceView.vue'
-import GroupInvitationsView from './views/GroupInvitationsView.vue'
-import ShareView from './views/ShareView.vue'
-import RecoverView from './views/RecoverView.vue'
-import ConfirmEmailView from './views/ConfirmEmailView.vue'
-import ConfirmEmailChangeView from './views/ConfirmEmailChangeView.vue'
-import ModerationView from './views/ModerationView.vue'
+import { loadMemberChrome } from './components/app/memberChrome'
 import { MODERATION_PATH } from './app/moderationPath'
 import { OPERATOR_TERMS_PATH } from './core/terms/operatorSection'
 import { PRIVACY_PATH } from './core/privacy/privacyNotice'
+
+// Every page is its own chunk, fetched when its route is entered (inbox #1310): the entry a link guest loads on `/s/…`
+// carries no sign-in, settings, moderation or member home, and a member's first load none of the share page. A page of
+// the signed-in app (`meta.layout: 'app'`) is entered together with the member's chrome around it (`memberChrome.ts`),
+// so neither draws before the other. `main.ts` starts the first route's fetch beside `boot()` (`preloadRoute`), so the
+// split adds no round trip after the server's answer.
+const appPage = <T>(page: () => Promise<T>) => () => Promise.all([page(), loadMemberChrome()]).then(([module]) => module)
+const NotSetUpView = () => import('./views/NotSetUpView.vue')
+const SpaceOfflineView = () => import('./views/SpaceOfflineView.vue')
+const LoginView = () => import('./views/LoginView.vue')
+const SettingsHubView = appPage(() => import('./views/SettingsHubView.vue'))
+const TenantJoinView = () => import('./views/TenantJoinView.vue')
+const TermsAcceptView = () => import('./views/TermsAcceptView.vue')
+const OperatorTermsView = () => import('./views/OperatorTermsView.vue')
+const PrivacyNoticeView = () => import('./views/PrivacyNoticeView.vue')
+const SpaceView = appPage(() => import('./views/SpaceView.vue'))
+const GroupInvitationsView = appPage(() => import('./views/GroupInvitationsView.vue'))
+const ShareView = () => import('./views/ShareView.vue')
+const RecoverView = () => import('./views/RecoverView.vue')
+const ConfirmEmailView = () => import('./views/ConfirmEmailView.vue')
+const ConfirmEmailChangeView = () => import('./views/ConfirmEmailChangeView.vue')
+const ModerationView = () => import('./views/ModerationView.vue')
 
 // A fresh instance lands on /not-set-up; an already-set-up one on /login. First-run setup is NOT a route here
 // any more — it moved to `admin-web` with the rest of the Server-Owner surface (ADR 0065), which is what lets
@@ -139,5 +147,21 @@ watch(
     if (suspended && router.currentRoute.value.name !== 'offline') void router.replace({ name: 'offline' })
   },
 )
+
+/**
+ * Start fetching the pages `path` would enter (inbox #1310) — `main.ts` calls it with the address the browser opened, beside
+ * `boot()`, so a page's chunk is on its way while the server answers. Only a start: the navigation that follows awaits the
+ * same module, and a redirect elsewhere leaves a fetched chunk unused. A page that needs an unlocked vault fetches the
+ * sign-in page beside it, where the gate (`beforeEach`) sends a browser that has none. A failure is the navigation's to
+ * report, not this.
+ */
+export function preloadRoute(path: string): void {
+  const target = router.resolve(path)
+  const records = target.meta.requiresUnlock ? [...target.matched, ...router.resolve({ name: 'login' }).matched] : target.matched
+  for (const record of records) {
+    const page = record.components?.default
+    if (typeof page === 'function') void Promise.resolve((page as () => unknown)()).catch(() => undefined)
+  }
+}
 
 export default router
