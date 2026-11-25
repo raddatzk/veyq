@@ -23,7 +23,9 @@
   from `:apps:depot`'s own module file, a lazy chunk, § Depot's move). Its third (2026-11-24: Memories' pure rules,
   `@veyq/core-js/memories` from `:apps:memories`' own module file, never in the eager set, § Memories' move). Decision 8's
   first model (2026-11-25: Memories' `GalleryModel` over a door the web writes, `@veyq/core-js/memories`, observed by one
-  composable, § The gallery model's move; the owner had decided that day that the models cross, inbox #1323)
+  composable, § The gallery model's move; the owner had decided that day that the models cross, inbox #1323). Decision 10's
+  optimisation of its own (2026-11-25, inbox #1310: every page lazy, the member's chrome apart, the entry in five files,
+  § The guest's first load)
 - Date: 2026-11-20
 - Amended: 2026-11-25 — **no size number gates a move any more** (the owner: "Wir gehen mit Kotlin, egal ob es ein
   bisschen teurer wird"). Dropped as gates that day: decision 7.2's R = 3.0 and the per-slice ratios, 7.3's 25 KB gz
@@ -252,8 +254,9 @@ Measured before the decision (2026-11-20):
     nothing cached. Hence:
     - **The guest path is measured and reported with every move:** what a link guest's first load fetches — the eager
       set (decision 2's `main` and `index.html`'s modulepreloads; the platform module sits in it, every entry importing
-      it) plus the chunks the share view of the guest's kind loads (§ Depot's move, D8 names the method), per kind the
-      move touches. A move that grows it says by how much and why; making it smaller is an optimisation of its own
+      it) plus the chunks the share view of the guest's kind loads (§ Depot's move, D8 names the method) — and, since every
+      page is a lazy chunk (§ The guest's first load), the share page's own (`ShareView` and what its import fetches),
+      per kind the move touches. A move that grows it says by how much and why; making it smaller is an optimisation of its own
       (inbox #1310), never a condition of a move. **The platform module has no budget of its own:** it sits on every guest
       path; the package's slice check reports its size with every move.
       *History:* the guest path had a ceiling per kind from 2026-11-24 to 2026-11-25. **Set by the owner 2026-11-24, from
@@ -1486,6 +1489,65 @@ Measured before the decision (2026-11-20):
   [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 - **The pnpm workspace holds a second package.** ADR 0065's "one package" was a rule against general code sharing;
   `@veyq/core-js` is no shared UI, router or state but the core's logic, compiled.
+
+- **The guest's first load** (decision 10's optimisation of its own, inbox #1310, built 2026-11-25, branch
+  `claude/guest-first-load-1310`, the work order cr-guest-first-load, deleted at harvest). What a link guest's first load
+  carried, by module and library (`vite build` of `94704dda1`, each chunk's sourcemap, ≈ B gz at the chunk's own ratio):
+  the web's `features/` ≈ 113,700 (account, moderation, spaces, tenant among them), its `core/` ≈ 81,600, the generated API
+  clients ≈ 76,800 (all through `api/client.ts`), the catalog in both locales ≈ 75,700, `reka-ui` ≈ 75,500, the Kotlin
+  platform module ≈ 71,800 (its words' enum ≈ 27,800, inbox #1341) and its standard library, coroutines and atomicfu
+  ≈ 48,600, Expenses' Kotlin module ≈ 17,400, Vue, the router, vue-i18n, `@noble/*` and the rest ≈ 90,000. The member's
+  code was there because `router.ts` imported all fifteen pages statically and `AppShell.vue` the member's chrome (the
+  sidebar, the top bar and through its search field the settings' sections, the notices, the shortcut overview). What
+  the applications' registration reaches (the share tree page, the level view, the node dialogs) is the guest's page too
+  (share view = member view), and what `app/boot.ts` reaches (unlock, the device wraps) is a key-handling path a guest
+  with a remembered session runs as well: both stay. Built: every page a route chunk (`router.ts`), the first fetched
+  beside `boot()` (`preloadRoute`); the member's chrome a chunk of its own (`components/app/MemberChrome.vue`, loaded by
+  `memberChrome.ts` for `AppShell` and with every app page, `appPage`); the entry's static graph grouped
+  (`vite.config.ts` `output.codeSplitting`: `$initial` into `entry`, its npm half into `vendor`, the Service Worker's two
+  shared modules into `sw-shared`). Two build-time guards, each bitten (a static `SettingsHubView` import in the router,
+  a static `AppSidebar` import in `AppShell.vue`, a renamed module in the list, the `sw-shared` group removed: the build
+  exits 1 naming the module): `memberCodeOutOfTheEntryPlugin` (no member page or chrome in the entry's static graph; a
+  listed module in no chunk is red too) and `serviceWorkerAlonePlugin` (`sw.js` loads nothing outside `src/sw/`). Its
+  measurements (JS gzip -9 per file; CSS beside; both builds of `94704dda1`'s tree):
+
+  | Criterion | Measured |
+  |---|---|
+  | size: the eager set | 752,751 → 625,317 B gz JS (−127,434), 23,952 → 18,639 CSS; 32 → 5 files |
+  | size: a link guest's first load (decision 10, with the share page's chunk) | a Memory's share body 797,875 → 692,213 (−105,662); a Memory's page 894,254 → 801,530 (−92,724); a Depot file 767,333 → 661,803 (−105,530); a folder 752,751 → 647,310 (−105,441); a drop box 756,443 → 650,907 (−105,536); a Pot's page 783,318 → 677,579 (−105,739) |
+  | size: a member's first load of the home (the eager set, `SpaceView`'s chunk, the chrome's) | 752,751 → 673,133 B gz JS (−79,618), 23,952 → 22,614 CSS |
+  | size: what a release makes a member fetch again | the `entry` chunk, 456,440 B gz, changes with every release (before: `main`, 300,998, and the chunks that changed with it); `vendor`, 167,953, only with a dependency |
+  | size: each step alone, against the step before | every page lazy: the eager set −64,226, a guest path −48,375 to −48,623 (the share page's chunk counted); the chrome apart: −23,142 to −23,143; the grouping: −33,000 on the eager set, −33,797 to −34,959 on a guest path |
+| time: a guest's first paint (headless system Chrome via the workspace Playwright, cold cache, 1.6 Mbit/s down, 150 ms RTT, CPU 4× slower; `/api/setup` answered from a fixture, every other call 401, so the share page draws its refusal; median of 5, two interleaved rounds; the machine at a load of 35–60 from other agents) | over HTTP/1.1: first contentful paint 4,732 / 4,748 → 4,456 / 4,476 ms, the share page's element 5,028 / 5,041 → 4,646 / 4,646; over HTTP/2 (TLS, as a Traefik in front serves): 4,708 / 4,780 → 4,212 / 4,220, element 5,045 / 5,075 → 4,538 / 4,231; requests 34 → 24, transferred 786,460 → 674,581 B. The ungrouped form (D4): 5,324 ms over HTTP/1.1 |
+  | time: a member's first paint of the sign-in page (`/`, no session; the same rig) | over HTTP/1.1: 4,788 / 4,796 → 4,932 / 4,936 ms (+140; the home's and the chrome's chunks fetched beside the sign-in page's, D2's cost: 38 requests, 719,121 B), element +124 / +134; over HTTP/2: 4,784 / 4,784 → 4,336 / 4,368, element 5,054 / 5,023 → 4,658 / 4,691. Not measured: a signed-in member's home (it needs a live instance and a session), a real share's content, Safari and Firefox, a real phone's CPU |
+  | behaviour | identical: the same components draw for member and guest; the AppShell tests await the chrome's chunk as the router does; CSP and every `verify:*` green |
+
+  Its decision log, kept by its implementer:
+  - **D1 — Three candidates built, by saving against risk.** The lazy pages and the chrome move only where code is
+    fetched — no component, no key path, no text changes; the grouping is a bundler setting under two guards. Left, each
+    its own row: one locale per first load (−47,948 on every path, measured by a build without the German halves; the
+    catalogs' layout two guards and ADR 0079 name, and an asynchronous locale switch, inbox #1400), Expenses' Kotlin module
+    out of the entry (≈ −16,800 for every guest but a Pot's; the Pot's content check alone saves only 1,574, the rest of
+    `features/expenses/register.ts` reaches the module too; a registry contract change, #1401), the API clients per API
+    (≈ −15,000 to −20,000; account and auth sit on the unlock path, #1402). The words' enum is #1341's.
+  - **D2 — The first page's chunk travels beside `boot()`.** A lazy page is otherwise requested only after the server's
+    answer — one round trip more than before. A page behind the unlock gate fetches the sign-in page beside it. *Cost:* a
+    remembered member opening `/` fetches the sign-in page's chunk unused, and a browser without a session the home's and
+    the chrome's: its sign-in page drew 140 ms later over HTTP/1.1 on the slow link, ~430 ms sooner over HTTP/2 (the time
+    rows). Narrowing the preload by whether a session is remembered would read the session vault before `boot()` — a
+    key-handling path, left as it is.
+  - **D3 — The chrome is entered with its page, never drawn after it.** The app routes' loader awaits the chrome's module,
+    so `defineAsyncComponent` finds it loaded and resolves before the first paint.
+  - **D4 — Few files, because many were slower.** Lazy pages and chrome alone cut the entry into 82 chunks (one per set
+    of importers): over HTTP/1.1 at 150 ms RTT a guest's first paint was 4.75 → 5.32 s, though 61 KB lighter. Grouped, the
+    entry is five files and compresses better. The npm libraries stay apart (`vendor`, 2,190 B gz more than one chunk) so
+    a release that changes no dependency leaves them cached; the Kotlin platform module stays in `entry`, it changes with
+    almost every release anyway.
+  - **D5 — `sw.js` must not import the app.** The grouping's first form put the Service Worker's shared `protocol` and
+    `range` into the app's entry, and `sw.js` imported it — the whole app in the worker; found by reading `sw.js`, then
+    held by `serviceWorkerAlonePlugin`.
+  - **D6 — Guards, not a number.** Decision 10 sets no size gate; what can silently undo this work is one static import,
+    so the build names it.
 
 ## Alternatives considered
 
