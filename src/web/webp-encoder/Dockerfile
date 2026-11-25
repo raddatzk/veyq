@@ -3,7 +3,7 @@
 # kept current by Renovate (its `webp encoder` group, with libwebp); a new one changes the output, which the Renovate
 # follow rebuilds with `build.py --write` on its pull request before the rebuild check compares it (README.md). Never published; the `runtime-` stage name and the
 # non-root USER are every veyq image's (scripts/validate_images_run_unprivileged.py), as for tests/fuzz/Dockerfile.
-FROM emscripten/emsdk:7.0.0@sha256:6bd7aef93408b10bf7b36642cb7c91119b302f720b9ec2d20439f73cf07fe894 AS runtime-webp-encoder
+FROM emscripten/emsdk:7.0.1@sha256:73aece2e0ab748487945ad117b79fc4d277e9f656e54fc800a9b1a0a6562715b AS runtime-webp-encoder
 # /work is the fixed path the compile reads from; writable, because the build runs as the caller's uid (build.py).
 RUN mkdir -p /work && chmod 0777 /work
 COPY build.py encoder.c /work/
