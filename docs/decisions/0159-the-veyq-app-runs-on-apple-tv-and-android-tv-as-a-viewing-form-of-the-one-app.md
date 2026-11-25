@@ -8,7 +8,8 @@
 ## Context
 
 The owner wants veyq on the TV soon, so that every surface is kept together from now on (owner 2026-11-25): Memories'
-slideshows, photos, video and music first, Depot and Expenses as far as viewing them makes sense. Sign-in is
+slideshows, photos, video and music first, Depot and Expenses as far as viewing them makes sense (owner 2026-11-25, on
+the CR: every application and Search, read-only, with no download — decision 3). Sign-in is
 [ADR 0059](0059-device-linking.md)'s *Sign in with a QR code*, already in the core (`session/DeviceLink.kt`,
 `crypto/Pairing.kt`): the TV shows the code, a signed-in phone scans it, the phone's six digits are typed with the
 remote. The new device's side needs no camera (`SignInPlan.entries` always offers *show a code*). A TV gets the whole
@@ -39,16 +40,24 @@ household's TV. The unlock a TV needs is [ADR 0160](0160-a-tv-unlocks-an-account
    what a remote cannot do well ([ADR 0122](0122-one-app-holds-every-application-the-drawer-chooses-the-bar-belongs-to-it.md)'s
    "share view = member view" is untouched; a TV opens no received link in this decision, inbox #1351).
 
-3. **What each application shows on a TV:**
+3. **Every application works on a TV, read-only and with no download** (owner 2026-11-25: "Alle Anwendungen sollten
+   auch auf TV funktionieren, aber wie du sagst nur lesend und ohne download"). Every application the one app registers
+   is in the TV's drawer; the TV form removes every authoring entry (decision 2) **and every way to take content off
+   the TV** — download, export, save a copy, send, open elsewhere, keep offline. What each shows:
    - **Memories** — its list (Favorites, Recent, All, ADR 0122 decision 5), a Memory's gallery and Chapters, the
      lightbox, the slideshow with the Memory's music, video, and music playing on (in the background where the platform
      lets it). Not its map and not its journal.
    - **Depot** — Home's tree (ADR 0122 decision 3), a file opened in the same viewers when it is an image, a video or
-     audio; any other file is listed and says it opens on another device.
-   - **Expenses** — absent on a TV (inbox #1350 holds the other answer, a Pot's overview read-only): a Pot's entries and balances are a household's money
-     on a shared screen, and nothing on it is better read there than on a phone.
-   - **Search** — absent in this decision (the client-side index, [ADR 0125](0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md),
-     is built per device, and a TV's storage is purgeable); inbox #1355.
+     audio; any other file stays listed, offers no download, and says it opens on another device.
+   - **Expenses** — a Pot read-only: its entries and balances as the member sees them, nothing recorded, edited,
+     settled or downloaded. A household's money on a shared screen is the account's to show: the TV opens one account
+     at a time behind its own PIN (decision 4), so a Pot shows only to the person who unlocked it.
+   - **Search** (the platform's, not an application, [ADR 0125](0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md))
+     — on the TV too (owner 2026-11-25): it only reads, and its index is held in memory for the session (the core's
+     `SearchModel` writes nothing), so a TV's purgeable storage does not touch it. Each platform draws it with its own
+     search component and its system keyboard (voice and dictation come with it), never a hand-built one: tvOS's
+     standard search layout — the keyboard grid beside the results as focusable tiles — and on Android TV the system
+     input method with the results as a Compose for TV tile grid. A result opens the same object the drawer would.
 
 4. **A TV starts at an account picker, and opens one account at a time.** Every account remembered on it is a tile
    under a name the person gives it on this TV (by default the account's own profile name; kept on this device in the

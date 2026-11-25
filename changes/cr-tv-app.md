@@ -1,7 +1,7 @@
 ---
 id: cr-tv-app
 title: The veyq app on Apple TV and Android TV — a viewing form of the one app, signed in by QR, each account behind a PIN the hardware binds and the server counts
-status: planned
+status: in-progress
 satisfies: ["uc.account.onboard-device", "uc.account.remember-this-device", "uc.account.unlock"]
 adrs: ["0159", "0160", "0059", "0005", "0122", "0123", "0154", "0140", "0142", "0058"]
 invariants:
@@ -12,15 +12,15 @@ invariants:
   - "a TV keeps no offline store and draws nothing of an account outside the lock (ADR 0159 decisions 7, 8)"
 ---
 
-> **Status: planned, waiting for the owner's answers (§ Owner questions) and the explicit go.** Refined 2026-11-25
+> **Status: in progress — the owner said go on 2026-11-25 and answered § Owner questions.** Refined 2026-11-25
 > from inbox #1331 (owner 2026-11-25: "zeitnah angehen, damit wir alle Oberflächen zusammen pflegen können").
 
 ## Goal
 
 The veyq app on Apple TV and Android TV / Google TV, as a form of the one app
 ([ADR 0159](../docs/decisions/0159-the-veyq-app-runs-on-apple-tv-and-android-tv-as-a-viewing-form-of-the-one-app.md)):
-signed in by [ADR 0059](../docs/decisions/0059-device-linking.md)'s *Sign in with a QR code* (built), viewing Memories
-and Depot's media, several household members each with their own account behind their own PIN
+signed in by [ADR 0059](../docs/decisions/0059-device-linking.md)'s *Sign in with a QR code* (built), viewing every application
+read-only and with no download (Memories, Depot, Expenses) and Search, several household members each with their own account behind their own PIN
 ([ADR 0160](../docs/decisions/0160-a-tv-unlocks-an-account-by-a-pin-the-device-hardware-binds-and-the-server-counts.md)).
 
 ## Context & constraints
@@ -166,21 +166,22 @@ there by construction), and the Secure Enclave path listed for the owner's pass 
 Security: what the PIN level guards against and its residual), ADRs 0159 and 0160 Accepted with `Built`, inbox #1331
 deleted, the CR deleted. **Done when:** every `scripts/validate_*.py` green (guard_gaps only if a validator changed).
 
-## Owner questions (each with the recommendation)
+## Owner questions — answered 2026-11-25
 
-1. **"PIN auf Instanz- oder Tenantebene".** Recommendation: the PIN is **per account on this TV** (ADR 0160 decision
-   1 — a PIN per TV, instance or tenant opens every account to whoever knows it). What an instance or tenant could set
-   is policy, and a client-side rule binds only honest clients; on a TV the PIN is the only way to stay signed in
-   anyway, so a "TVs must use a PIN" policy changes nothing. The one instance-level knob that the server enforces for
-   real is the attempt limit (question 2).
-2. **The attempt limit:** a constant 10, or a Server-Owner setting (both deployment targets, compose and Helm)?
-   Recommendation: the constant now; a setting only when an operator asks.
-3. **Expenses on a TV:** absent (recommended — a household's money on a shared screen, nothing read better there), or a
-   Pot's overview read-only (inbox #1350)?
-4. **The idle lock:** 15 minutes without input while nothing plays, and at every return from the background
-   (recommended), or a per-TV setting?
-5. **Older Android TVs:** keep `minSdk` 31 and leave Android 10/11 TVs out (recommended — lowering it touches the whole
-   app's Keystore and media paths), or measure what lowering costs (inbox #1353)?
+The owner accepted the recommendations 1, 2, 4 and 5 and changed question 3's scope:
+
+1. **The PIN is per account on this TV** — not per instance or tenant (ADR 0160 decision 1).
+2. **The attempt limit is a constant 10** — no Server-Owner setting.
+3. **Every application works on a TV, read-only and with no download** (owner, quote: "Alle Anwendungen sollten auch
+   auf TV funktionieren, aber wie du sagst nur lesend und ohne download"): Expenses too, read-only (this absorbs inbox
+   #1350); Memories and Depot as planned; any other application the one app registers. No download, export, save,
+   send, open-elsewhere or keep-offline action anywhere on a TV; Depot's files a TV cannot show stay listed and offer no
+   download. ADR 0159 decision 3 records it. **Search too** (owner 2026-11-25, through the coordinator): read-only like
+   every application, drawn with each platform's own search component and system keyboard — on tvOS the standard
+   layout (keyboard grid beside the results as focusable tiles), on Android TV the system input method and a Compose
+   for TV tile grid; never a hand-built keyboard.
+4. **The idle lock:** 15 minutes without input while nothing plays, and at every return from the background.
+5. **Android TV keeps `minSdk` 31** (inbox #1353 stays an idea).
 
 ## Definition of done
 
@@ -189,6 +190,12 @@ phase 3's); the owner's end-of-line steps listed in the PR: `VeyqTV` provisionin
 `com.apple.developer.user-management` = `runs-as-current-user` plus the iOS target's app group and keychain group, tvOS
 added to the App Store Connect record, the TV banner and the Play Console's TV form factor, and the device passes
 (Secure Enclave on a real Apple TV, two Apple TV users, Google TV profiles).
+
+## Decision log
+
+- **2026-11-25 — Search on a TV is in (owner):** see § Owner questions 3. Read-only by nature, and its index is the
+  core's `SearchModel` in memory (it writes nothing), so ADR 0159's objection — a TV's purgeable storage — does not
+  apply. Inbox #1355 resolved by it.
 
 ## Retrospective
 
