@@ -3298,6 +3298,11 @@
     "en": "“{1}”",
     "de": "„{1}“"
   },
+  "media_filter_added_by": {
+    "note": "the gallery filter's chip for who added a medium (inbox #1356); {1} the contributor as the Contributions tab names them (the web's media.filter.addedBy)",
+    "en": "Added by {1}",
+    "de": "Hinzugefügt von {1}"
+  },
   "media_filter_marks_mine": {
     "en": "your marks",
     "de": "deine Markierungen"

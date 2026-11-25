@@ -108,6 +108,7 @@ struct FilterSuggestion: Identifiable {
 enum GalleryFilterWords {
     static func label(_ chip: GalleryFilter.Chip) -> String {
         if let day = chip as? GalleryFilter.ChipDay { return day.label }
+        if let by = chip as? GalleryFilter.ChipAddedBy { return say(.mediaFilterAddedBy, by.name) }
         guard let search = (chip as? GalleryFilter.ChipSearch)?.chip else { return "" }
         if let year = search as? SearchChip.Year { return String(year.year) }
         if let place = search as? SearchChip.Place { return place.label }
@@ -117,6 +118,7 @@ enum GalleryFilterWords {
 
     static func symbol(_ chip: GalleryFilter.Chip) -> String {
         if chip is GalleryFilter.ChipDay { return "calendar" }
+        if chip is GalleryFilter.ChipAddedBy { return "person.crop.circle" }
         let search = (chip as? GalleryFilter.ChipSearch)?.chip
         if search is SearchChip.Place { return "mappin.and.ellipse" }
         if search is SearchChip.Kind { return "photo.on.rectangle" }
@@ -143,9 +145,12 @@ enum GalleryFilterWords {
         return say(.mediaFilterEmpty, parts.joined(separator: ", "))
     }
 
-    /// The chips core offers for the filter's text, in the person's words for a photo and a video.
+    /// The chips core offers for the filter's text, in the person's words for a photo and a video and for who added the
+    /// media (inbox #1356: named as the Contributions view names them, read once the text first asks).
     static func suggestions(_ gallery: GalleryModel) -> [FilterSuggestion] {
-        gallery.suggestions(photo: say(.searchKindPhoto), video: say(.searchKindVideo)).compactMap { pair in
+        let asked = !gallery.current.filter.text.trimmingCharacters(in: .whitespaces).isEmpty
+        let contributors = asked ? gallery.contributors().mapValues { say(piece: $0) } : [:]
+        return gallery.suggestions(photo: say(.searchKindPhoto), video: say(.searchKindVideo), contributors: contributors).compactMap { pair in
             guard let chip = pair.first else { return nil }
             return FilterSuggestion(token: FilterToken(chip), rest: (pair.second as String?) ?? "")
         }

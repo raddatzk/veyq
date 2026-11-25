@@ -282,6 +282,7 @@
     "media_captured_at_conflict": ["media.capturedAtConflict"],
     "media_captured_at_save_failed": ["media.capturedAtSaveFailed"],
     "media_edit_captured_at": ["media.editCapturedAt"],
+    "media_filter_added_by": ["media.filter.addedBy"],
     "media_filter_empty": ["media.filter.empty"],
     "media_filter_label": ["media.filter.label"],
     "media_filter_marks_everyone": ["media.filter.marksEveryone"],

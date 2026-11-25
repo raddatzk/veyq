@@ -35,6 +35,7 @@ import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.session.LivePoll
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
+import me.raddatz.veyq.mobile.words.Piece
 
 /**
  * A Memory's or a chapter's page (Memories' `MemoryDetail.vue` with `MediaGrid.vue`, ADR 0136 decision 2): the chapters a
@@ -400,6 +401,11 @@ class GalleryModel(
         val marksLoaded: Boolean = false,
         /** The page's filter (ADR 0149 decision 5): stored nowhere, gone with the page. */
         val filter: GalleryFilter.State = GalleryFilter.State(),
+        /**
+         * Who added the gallery's media as read for the filter's *added by* chip (inbox #1356, [GalleryModel.contributors]): the
+         * details' uploaders by owner key; null until the filter first asked.
+         */
+        val uploaders: Map<String, MediaDetails.Uploader>? = null,
         /** Shown offline where writes made here are queued (ADR 0153): marks, uploads, trashes and capture times are offered. */
         val queues: Boolean = false,
         /** What the last mark toggle said (too many, not saved); null once seen ([seen]). */
@@ -732,9 +738,40 @@ class GalleryModel(
     /** The filter changed to [filter] (its text, a chip added or taken, the marks' mode, cleared); the grid narrows at once. */
     fun filter(filter: GalleryFilter.State) = _state.update { it.copy(filter = filter).refiltered() }
 
-    /** The chips offered for the filter's text ([photo], [video]: the kinds' words), none already chosen. */
-    fun suggestions(photo: String, video: String): List<Pair<GalleryFilter.Chip, String>> =
-        if (!current.rights.filterFacts) emptyList() else GalleryFilter.suggest(current.filter.text, current.filter.chips, factsNow(), photo, video)
+    /**
+     * The chips offered for the filter's text ([photo], [video]: the kinds' words; [contributors]: [contributors]' names as the
+     * platform writes them), none already chosen.
+     */
+    fun suggestions(photo: String, video: String, contributors: Map<String, String>): List<Pair<GalleryFilter.Chip, String>> =
+        if (!current.rights.filterFacts) emptyList() else GalleryFilter.suggest(current.filter.text, current.filter.chips, factsNow(), photo, video, contributors)
+
+    /** The chips offered for the filter's text without who added them (a host that draws no *added by* chip yet). */
+    fun suggestions(photo: String, video: String): List<Pair<GalleryFilter.Chip, String>> = suggestions(photo, video, emptyMap())
+
+    /** The owner keys the filter has asked the uploaders of: each once, so a key that does not read is not asked on every draw. */
+    private val filterAsked = HashSet<String>()
+
+    /**
+     * Who added the gallery's media, for the filter's *added by* chip (inbox #1356): each owner key named as the
+     * *Contributions* tab names it ([GalleryFilter.contributorName]) — empty where the filter is not offered, where one
+     * contributor or none added them all (one narrows nothing), and until the uploaders are read: asking reads them once
+     * (the lightbox's read, [Door.uploaders], one request for every key not read yet), and [State.uploaders] changes then.
+     */
+    fun contributors(): Map<String, Piece> {
+        if (!current.rights.filterFacts) return emptyMap()
+        val keys = factsNow().contributors
+        if (keys.size < 2) return emptyMap()
+        val fresh = keys.filter { it !in filterAsked }
+        if (fresh.isNotEmpty()) {
+            filterAsked += fresh
+            scope.launch {
+                val read = details.withLock { readUploaders(); HashMap(uploaders) }
+                _state.update { it.copy(uploaders = read) }
+            }
+        }
+        val named = current.uploaders ?: return emptyMap()
+        return keys.associateWith { GalleryFilter.contributorName(it, named[it]) }
+    }
 
     /** Whether the marks' mode is offered (a member's, not in a personal scope, E4). */
     val marksModeOffered: Boolean get() = current.rights.mark && itemMarks?.personal == false
@@ -1221,17 +1258,21 @@ class GalleryModel(
         val item = row.item
         val exif = if (mediaId in exifs) exifs[mediaId] else runCatching { door.exif(item) }.getOrNull().also { exifs[mediaId] = it }
         val key = item.ownerKey
-        if (key != null && key !in asked) {
-            val all = current.rows.orEmpty().map { it.item }.filter { it.ownerKey != null && it.ownerKey !in asked }
-            val read = runCatching { door.uploaders(all) }.getOrNull()
-            if (read != null) {
-                uploaders.putAll(read)
-                // a member the space's list did not read is left out of the answer: asked again with the next
-                asked.addAll(read.keys)
-            }
-        }
+        if (key != null && key !in asked) readUploaders()
         val rows = MediaDetails.rows(item, exif)
         Lightbox.Details(mediaId, rows, key?.let { uploaders[it] }, MediaDetails.uploaderAt(rows), me.raddatz.veyq.mobile.memories.place.PhotoPlace.mapOf(item, exif))
+    }
+
+    /** The uploaders of every owner key the gallery shows not read yet, in one request (held under [details]' lock). */
+    private suspend fun readUploaders() {
+        val all = current.rows.orEmpty().map { it.item }.filter { it.ownerKey != null && it.ownerKey !in asked }
+        if (all.isEmpty()) return
+        val read = runCatching { door.uploaders(all) }.getOrNull()
+        if (read != null) {
+            uploaders.putAll(read)
+            // a member the space's list did not read is left out of the answer: asked again with the next
+            asked.addAll(read.keys)
+        }
     }
 
     /** Music track [mediaId]'s original saved through [into] as the lightbox saves a medium's ([Lightbox.save]); null where it is not one or may not be. */

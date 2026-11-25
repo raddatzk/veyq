@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -51,6 +52,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import me.raddatz.veyq.mobile.android.R
 import me.raddatz.veyq.mobile.android.core.LocalPalette
+import me.raddatz.veyq.mobile.android.core.piece
 import me.raddatz.veyq.mobile.android.core.say
 import me.raddatz.veyq.mobile.android.core.text
 import me.raddatz.veyq.mobile.android.words
@@ -112,9 +114,11 @@ internal fun MarkButton(mark: GalleryModel.Mark?, enabled: Boolean, onToggle: ()
     }
 }
 
-/** A filter chip's words: a day's label, a year, a place's or a kind's name. */
+/** A filter chip's words: a day's label, a year, a place's or a kind's name, who added it (inbox #1356). */
+@Composable
 internal fun chipLabel(chip: GalleryFilter.Chip): String = when (chip) {
     is GalleryFilter.Chip.Day -> chip.label
+    is GalleryFilter.Chip.AddedBy -> stringResource(R.string.media_filter_added_by, chip.name)
     is GalleryFilter.Chip.Search -> when (val k = chip.chip) {
         is SearchChip.Year -> k.year.toString()
         is SearchChip.Place -> k.label
@@ -145,7 +149,7 @@ internal fun filterEmptyText(filter: GalleryFilter.State): String {
 
 /**
  * A gallery's filter (`uc.memory.gallery` step 8, ADR 0149 decision 5), the Photos view's own toolbar under the switch:
- * the search field over the day, place, kind and name — the core's chips suggested under it as the text names one, the
+ * the search field over the day, place, kind, who added it and name — the core's chips suggested under it as the text names one, the
  * chosen ones as input chips — and the marks' mode beside it as a filter chip's menu (all, everyone's, only mine; a
  * member's, never in a personal space). Stored nowhere: the page's, gone with it.
  */
@@ -157,7 +161,10 @@ internal fun GalleryFilterBar(gallery: GalleryModel, state: GalleryModel.State) 
     LaunchedEffect(filter.text) { if (filter.text != text) text = filter.text }
     val photo = say(Msg.SEARCH_KIND_PHOTO)
     val video = say(Msg.SEARCH_KIND_VIDEO)
-    val suggestions = if (text.isBlank()) emptyList() else remember(filter, state.rows) { gallery.suggestions(photo, video) }
+    // who added the media, named as the Contributions tab names them (inbox #1356): read once the text first asks
+    val context = LocalContext.current
+    val contributors = if (text.isBlank()) emptyMap() else remember(state.rows, state.uploaders) { gallery.contributors().mapValues { context.piece(it.value) } }
+    val suggestions = if (text.isBlank()) emptyList() else remember(filter, state.rows, contributors) { gallery.suggestions(photo, video, contributors) }
     val label = stringResource(R.string.media_filter_label)
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
