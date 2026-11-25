@@ -12,7 +12,7 @@ options:
   # script runs; each target's pre-build script keeps its own current (ADR 0136 decision 3). The manifest's words
   # (the usage descriptions: InfoPlist.xcstrings, and InfoPlist.xcconfig, the app's config file) exist before the
   # project does, since a build reads its config files before any script runs.
-  preGenCommand: python3 ../words/generate_words.py --apple-strings build/generated/app/Words.xcstrings --apple-infoplist build/generated/app && python3 ../words/generate_words.py --apple-strings build/generated/share/Words.xcstrings
+  preGenCommand: python3 ../words/generate_words.py --apple-strings build/generated/app/Words.xcstrings --apple-swift build/generated/app/Msg+Words.swift --apple-infoplist build/generated/app && python3 ../words/generate_words.py --apple-strings build/generated/share/Words.xcstrings --apple-swift build/generated/share/Msg+Words.swift
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -39,6 +39,10 @@ targets:
       - path: build/generated/app/Words.xcstrings
         optional: true
         buildPhase: resources
+      # Each word as `Msg.<name>` in Swift: the core's `Msg` is a class Swift reaches through its companion (inbox #1341).
+      - path: build/generated/app/Msg+Words.swift
+        optional: true
+        buildPhase: sources
       # The usage descriptions in English and German (the permission prompts), from the same catalog.
       - path: build/generated/app/InfoPlist.xcstrings
         optional: true
@@ -77,11 +81,11 @@ targets:
           python3 "$SRCROOT/../theme/generate_theme.py" --apple-assets "$SRCROOT/Veyq/Assets.xcassets"
       - name: Generate the words
         basedOnDependencyAnalysis: false
-        outputFiles: ["$(SRCROOT)/build/generated/app/Words.xcstrings", "$(SRCROOT)/build/generated/app/InfoPlist.xcstrings"]
+        outputFiles: ["$(SRCROOT)/build/generated/app/Words.xcstrings", "$(SRCROOT)/build/generated/app/Msg+Words.swift", "$(SRCROOT)/build/generated/app/InfoPlist.xcstrings"]
         script: |
           # The catalog's English and German as the String Catalog `Words` (ADR 0136 decision 3), and the usage
           # descriptions' (InfoPlist.xcconfig, read before this runs, is current as of the project's generation).
-          python3 "$SRCROOT/../words/generate_words.py" --apple-strings "$SRCROOT/build/generated/app/Words.xcstrings" --apple-infoplist "$SRCROOT/build/generated/app"
+          python3 "$SRCROOT/../words/generate_words.py" --apple-strings "$SRCROOT/build/generated/app/Words.xcstrings" --apple-swift "$SRCROOT/build/generated/app/Msg+Words.swift" --apple-infoplist "$SRCROOT/build/generated/app"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.veyq
@@ -126,6 +130,9 @@ targets:
       - path: build/generated/share/Words.xcstrings
         optional: true
         buildPhase: resources
+      - path: build/generated/share/Msg+Words.swift
+        optional: true
+        buildPhase: sources
     preBuildScripts:
       - name: Build VeyqCore
         basedOnDependencyAnalysis: false
@@ -143,10 +150,10 @@ targets:
           python3 "$SRCROOT/../theme/generate_theme.py" --apple-assets "$SRCROOT/Veyq/Assets.xcassets"
       - name: Generate the words
         basedOnDependencyAnalysis: false
-        outputFiles: ["$(SRCROOT)/build/generated/share/Words.xcstrings"]
+        outputFiles: ["$(SRCROOT)/build/generated/share/Words.xcstrings", "$(SRCROOT)/build/generated/share/Msg+Words.swift"]
         script: |
           # The catalog's English and German as the String Catalog `Words` (ADR 0136 decision 3).
-          python3 "$SRCROOT/../words/generate_words.py" --apple-strings "$SRCROOT/build/generated/share/Words.xcstrings"
+          python3 "$SRCROOT/../words/generate_words.py" --apple-strings "$SRCROOT/build/generated/share/Words.xcstrings" --apple-swift "$SRCROOT/build/generated/share/Msg+Words.swift"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.veyq.share
