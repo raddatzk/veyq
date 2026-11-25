@@ -60,6 +60,7 @@ import { MetaConflictError } from '../../../core/node/sealedMetaWrite'
 import OptimisticTile from './OptimisticTile.vue'
 import { enqueueUploads, collectPickedFiles, inferMediaType, retryFile } from '../uploadQueue'
 import { useMediaGalleryLive } from '../useMediaGalleryLive'
+import { useCaptureTimeShift, type CaptureTimeShift } from '../useCaptureTimeShift'
 import { useTabScroll } from '../tabScroll'
 import { isMarkedByMe, markCount, markedByAnyone, clearItemFavorites } from '../itemFavoritesStore'
 import { ItemMarksTooMany } from '../itemFavorites'
@@ -282,6 +283,8 @@ const {
   sortDir,
   lightboxItems,
   lightboxIndex,
+  lightboxSelection,
+  lightboxEditing,
   openLightboxAt,
   openLightboxOn,
   openBucketLightbox,
@@ -835,6 +838,24 @@ const metaResolver = (it: MediaItem) => loaders.meta(it, lightboxKey.value)
 const blobMetaResolver = (it: MediaItem) => loaders.blobMeta(it, lightboxKey.value)
 const exifLoader = loaders.exif ? (it: MediaItem) => loaders.exif!(it, lightboxKey.value) : undefined
 
+// A capture time is a medium's meta: its correction is offered where `editMeta` holds and the source carries the door — a
+// guest's has none, and a pending deletion or a switched-off application has no `editMeta`.
+const mediaMetaDoor = computed(() => (can.value.editMeta ? props.source.mediaMeta : undefined))
+// A selection's capture-time shift (uc.memory.buckets): the lightbox plans it, this writes it — each medium through the
+// same door, the grid patched as each lands — and holds its Undo, which outlives the lightbox.
+const shift = useCaptureTimeShift({
+  door: () => mediaMetaDoor.value,
+  scopeId: () => props.scopeId,
+  memoryKey: () => props.memoryKey,
+  node: () => props.node,
+  metaOf: metaResolver,
+  onUpdated: onCapturedAtUpdated,
+})
+/** What the lightbox is handed for a shift: the organizer's selection it opened from, where the door is offered. */
+const lightboxShift = computed<CaptureTimeShift | undefined>(() =>
+  lightboxSelection.value && mediaMetaDoor.value ? { selected: lightboxSelection.value, run: shift.run } : undefined,
+)
+
 // The grids a lightbox opens from: closing it scrolls the shown item's tile into view and focuses it (ADR 0105
 // decision 5) — in the gallery, or in the contributors' view when it was opened there.
 type FocusableGrid = { focusItem: (id: string) => Promise<void> | void }
@@ -1204,7 +1225,9 @@ watch(
       :memory-name="node.name"
       :suspend-keys="coverEditing || bannerDialog"
       :can-delete="canDeleteInLightbox"
-      :media-meta="can.editMeta ? source.mediaMeta : undefined"
+      :media-meta="mediaMetaDoor"
+      :capture-time-shift="lightboxShift"
+      :start-editing="lightboxEditing"
       :uploader-of="uploaderNames.uploaderOf"
       :preview-loader="previewLoader"
       :original-loader="originalLoader"

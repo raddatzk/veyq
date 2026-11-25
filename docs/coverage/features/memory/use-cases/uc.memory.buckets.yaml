@@ -112,12 +112,55 @@ acceptanceCriteria:
           - MediaLockOrderRaceSliceTest.aMoveToThePrimaryLocksItBeforeTheNode
           - MediaLockOrderRaceSliceTest.aSubBucketDeleteLocksThePrimaryBeforeTheNode
           - MediaLockOrderRaceSliceTest.aSubBucketCreateThatWaitedForTheNodeRunsAgainWhenThePrimaryAppeared
+  - id: selection-capture-time-shift
+    text: >-
+      A selection is corrected through one of its media: opened from the Beiträge tab's selection (a tile, or "Shift
+      capture time" — from two selected on — on the first selected medium in grid order with the editor open), the save
+      of a selected medium with a capture time offers only it, or all N shifted by its offset, written out ("+1 h 12 min")
+      with how many have no capture time. The offset is taken against the edited medium's effective time as the
+      minute-granular editor showed it; every selected medium with a capture time gets its effective time plus the
+      offset, one with none is skipped and counted, one landing on its own original drops its override, and nothing
+      outside the selection is written. Each medium is the lightbox's own meta write, a few at a time — no bulk write.
+    coverage:
+      web:
+        unit:
+          - src/features/memories/captureTimeShift.test.ts
+          - src/features/memories/components/MediaLightbox.test.ts
+          - src/features/memories/components/MemoryBuckets.test.ts
+          - src/features/memories/components/MemoryDetail.captureShift.test.ts
+  - id: selection-shift-refuses-a-changed-medium
+    text: >-
+      A medium whose capture time a peer changed after the selection was read is never shifted from the peer's value: its
+      write starts from the medium as the shift read it — also when the peer's change was patched into the grid between
+      the question and the choice — so the server's newer revision refuses it (ADR 0077); it is named, one line per
+      reason, while the others are written in the same run, and the grid shows the peer's time.
+    coverage:
+      web:
+        unit: [src/features/memories/components/MediaLightbox.test.ts]
+  - id: selection-shift-undo
+    text: >-
+      An Undo bar after a shift restores each written medium's override as it was — none, or an earlier correction — by
+      the same per-medium write from the state the shift wrote, names a refused restore, and leaves a medium the shift
+      refused untouched.
+    coverage:
+      web:
+        unit: [src/features/memories/components/MediaLightbox.test.ts]
+  - id: capture-time-edit-needs-edit-meta
+    text: >-
+      The capture-time editor and the selection's shift are offered only where the medium's meta may be edited — the
+      rights' editMeta and the source's media-meta door: not while the scope is pending deletion or the application is
+      switched off, and never to a link's guest, whose source carries no such door.
+    coverage:
+      web:
+        unit: [src/features/memories/components/MemoryDetail.rights.test.ts, src/features/memories/components/MemoryBuckets.test.ts]
 gaps:
   stack: >-
-    Lane L1's browser suite (`tests/e2e/tests/features/account/field-seal.spec.ts`) drives `sub-bucket-endpoints`,
-    `contributions-tab-primary-grouping`, `guest-names-for-members-only` in Chromium against the release candidate's two
-    images, installed through `veyqctl` (ADR 0090), each test tagged with its criterion. A sub-bucket created under the
-    member's own primary, and a contributing guest's name, read back in the Contributions picker after a reload and on a
-    second device. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`checks.yml` → `stack`) awaits
+    Lane L1's browser suite (`tests/e2e/tests/features/account/field-seal.spec.ts`,
+    `tests/e2e/tests/features/memories/capture-time-shift.spec.ts`) drives `sub-bucket-endpoints`,
+    `contributions-tab-primary-grouping`, `guest-names-for-members-only` and `selection-capture-time-shift` in Chromium
+    against the release candidate's two images, installed through `veyqctl` (ADR 0090), each test tagged with its
+    criterion. A sub-bucket created under the member's own primary, and a contributing guest's name, read back in the
+    Contributions picker after a reload and on a second device; three photos selected and shifted through the middle
+    one, their corrected times and order read back after a reload. Green only in local runs of `scripts/run_stack_e2e.py`: the lane's CI job (`checks.yml` → `stack`) awaits
     the first CI run (no remote), and ADR 0040 admits `stack` refs only once a run's log shows the suite executed. On
     that run each file becomes a ref on the criteria its tests are tagged with, and this gap goes.

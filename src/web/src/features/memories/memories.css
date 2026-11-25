@@ -795,7 +795,15 @@ a.lightbox-icon-button,
 
 .media-lightbox-date-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+/* A selection's shift (uc.memory.buckets): what the save offers and how far it got, said under the choices. */
+.media-lightbox-date-note {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 0.85rem;
 }
 
 .media-lightbox-error {

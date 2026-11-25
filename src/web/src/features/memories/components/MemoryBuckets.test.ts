@@ -94,10 +94,10 @@ const memberView = (scopeId: string) => ({
   [MEMORY_VIEW as symbol]: { source: memberMemorySource({ scopeId: () => scopeId }), rights: computed(() => memberMemoryRights()) },
 })
 
-function mountBuckets(mediaItems: MediaItem[]) {
+function mountBuckets(mediaItems: MediaItem[], provide: Record<symbol, unknown> = memberView('s-1')) {
   return mount(MemoryBuckets, {
     props: { scopeId: 's-1', nodeId: 'n-1', nodeEpoch: 0, memoryKey: new Uint8Array(32), media: mediaItems, thumbs: new Map() },
-    global: { plugins: [realI18n()], stubs: { VeyqSelect: SelectStub, VeyqMenu: MenuStub, MediaGrid: MediaGridStub }, provide: memberView('s-1') },
+    global: { plugins: [realI18n()], stubs: { VeyqSelect: SelectStub, VeyqMenu: MenuStub, MediaGrid: MediaGridStub }, provide },
   })
 }
 
@@ -348,6 +348,68 @@ describe('MemoryBuckets — selection + delete-to-trash + undo (cr-0122)', () =>
     const w2 = mountBuckets([media('m3', 'share:x', 'b-share')]) // re-enter the same node → restores the last pick
     await flushPromises()
     expect(w2.find('.select-stub').text()).toContain('Aaa Contributor')
+  })
+})
+
+// uc.memory.buckets § Correct a selection's capture time: the selection reaches the lightbox, and "Shift capture time" opens
+// it on the first selected medium in grid order with the editor open — offered from two selected on, and only where a
+// capture time may be edited (editMeta and the source's media-meta door).
+describe('MemoryBuckets — a selection\'s capture-time shift', () => {
+  const shiftButton = (w: ReturnType<typeof mountBuckets>) => w.find('.bucket-selection-bar .bucket-shift-button')
+  const ORDER = ['m1', 'm2', 'm3'] // the grid's order: the tiles carry no id of their own here
+  const check = (w: ReturnType<typeof mountBuckets>, id: string) => w.findAll('.media-tile-check input')[ORDER.indexOf(id)]
+
+  async function threeOwn(provide?: Record<symbol, unknown>) {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 3)])
+    const w = mountBuckets(ORDER.map((id) => media(id, 'user:me', 'b-own')), provide)
+    await flushPromises()
+    return w
+  }
+
+  it('opens the lightbox on the first selected medium in grid order, the selection and the editor with it', async () => {
+    const w = await threeOwn()
+    expect(shiftButton(w).text()).toBe(t('memory.buckets.shiftCapturedAt'))
+    expect(shiftButton(w).attributes('disabled'), 'nothing selected').toBeDefined()
+    await check(w, 'm3').trigger('change')
+    expect(shiftButton(w).attributes('disabled'), 'one selected: there is nothing to shift with it').toBeDefined()
+    await check(w, 'm2').trigger('change')
+    expect(shiftButton(w).attributes('disabled'), 'control: two selected').toBeUndefined()
+    await shiftButton(w).trigger('click')
+    const [payload] = w.emitted('openLightbox')!.at(-1) as [{ items: MediaItem[]; index: number; selected: string[]; editCapturedAt?: boolean }]
+    expect(payload.items.map((m) => m.mediaId)).toEqual(['m1', 'm2', 'm3'])
+    expect(payload.index, 'm2: the first selected in grid order, not the first clicked').toBe(1)
+    expect([...payload.selected].sort()).toEqual(['m2', 'm3'])
+    expect(payload.editCapturedAt).toBe(true)
+  })
+
+  it('a tile opened while a selection stands hands the selection to the lightbox, the editor closed', async () => {
+    const w = await threeOwn()
+    await check(w, 'm1').trigger('change')
+    await check(w, 'm3').trigger('change')
+    await w.findAll('.media-tile-open')[ORDER.indexOf('m3')].trigger('click')
+    const [payload] = w.emitted('openLightbox')!.at(-1) as [{ index: number; selected: string[]; editCapturedAt?: boolean }]
+    expect(payload.index).toBe(2)
+    expect([...payload.selected].sort()).toEqual(['m1', 'm3'])
+    expect(payload.editCapturedAt).toBeFalsy()
+  })
+
+  it('is not offered where the capture time may not be edited: no editMeta, or a source without the media-meta door', async () => {
+    const source = memberMemorySource({ scopeId: () => 's-1' })
+    const views = {
+      'no editMeta': { source, rights: computed(() => ({ ...memberMemoryRights(), editMeta: false })) },
+      'no door': { source: { ...source, mediaMeta: undefined }, rights: computed(() => memberMemoryRights()) },
+    }
+    for (const [why, view] of Object.entries(views)) {
+      const w = await threeOwn({ [MEMORY_VIEW as symbol]: view })
+      await w.find('.bucket-selection-bar .veyq-text-button').trigger('click') // "Select all"
+      expect(shiftButton(w).attributes('disabled'), why).toBeDefined()
+      await shiftButton(w).trigger('click')
+      expect(w.emitted('openLightbox'), why).toBeUndefined()
+      w.unmount()
+    }
+    const control = await threeOwn()
+    await control.find('.bucket-selection-bar .veyq-text-button').trigger('click')
+    expect(shiftButton(control).attributes('disabled'), 'control: a member').toBeUndefined()
   })
 })
 

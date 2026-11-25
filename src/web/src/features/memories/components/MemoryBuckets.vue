@@ -6,7 +6,9 @@
 // MediaGrid filtered to the active bucket with a per-tile checkbox (top-left) + 3-dot (top-right), and a selection
 // bar with a select-all toggle + visible Move/Delete. Delete is a straight soft-delete to trash with a local undo
 // bar (no confirm modal), and names every medium the server refused to trash (inbox #427) or, on Undo, to restore
-// (#429). The primary bucket is VIRTUAL until the first sub-bucket or upload materializes it (the
+// (#429). The selection also reaches the lightbox (`openLightbox`'s `selected`): there a correction of one selected
+// medium's capture time may shift every other one by the same offset, and "Shift capture time" opens it on the first
+// selected medium with the editor open (uc.memory.buckets § Correct a selection's capture time); the detail runs it. The primary bucket is VIRTUAL until the first sub-bucket or upload materializes it (the
 // server's lazy ensurePrimaryBucket). Names are sealed under K_node — the client unseals; the server never sees one.
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -41,7 +43,9 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   changed: [] // a bucket/media mutation landed — the parent should reload media (ownerKey/bucketId change)
-  openLightbox: [{ items: MediaItem[]; index: number }]
+  /** Open the lightbox on `items` at `index`, with the selection (a capture-time shift reaches it) and, from "Shift
+   *  capture time", the capture-time editor open. */
+  openLightbox: [{ items: MediaItem[]; index: number; selected: string[]; editCapturedAt?: boolean }]
   uploadBucket: [string | null] // open the upload scoped to this bucket (null = your primary)
   /** The tiles its grid mounts, nearest first: the parent gallery reads their thumbnails (ADR 0105 decision 2). */
   window: [ids: string[]]
@@ -53,11 +57,15 @@ const toast = useToast()
 // its buckets door — the scope's buckets and its members' display names, the tree's ancestor keys. A member's only; the
 // detail mounts this where the rights AND the source say so, and outside a detail, or on a source without the door, it
 // throws rather than reach for the member's API itself.
+const view = useMemoryView()
 const buckets = (() => {
-  const door = useMemoryView().source.buckets
+  const door = view.source.buckets
   if (!door) throw new Error('MemoryBuckets mounted without a buckets door')
   return door
 })()
+// A capture time is a medium's meta: corrected where the rights allow editing it and the source carries the door, as the
+// lightbox's editor is offered.
+const canEditCapturedAt = computed(() => view.rights.value.editMeta && !!view.source.mediaMeta)
 const SELF_PRIMARY = '__veyq_self_primary__'
 
 type BucketVM = {
@@ -411,7 +419,13 @@ function onDrop(event: DragEvent) {
   emit('uploadBucket', activeBucket.value.virtual ? null : activeBucket.value.id)
 }
 
-function openTile(index: number) { emit('openLightbox', { items: filteredMedia.value, index }) }
+function openTile(index: number) { emit('openLightbox', { items: filteredMedia.value, index, selected: [...selected.value] }) }
+/** "Shift capture time": the lightbox on the first selected medium in grid order, its capture-time editor open. */
+function shiftSelected() {
+  const index = filteredMedia.value.findIndex((m) => selected.value.has(m.mediaId))
+  if (index < 0 || selected.value.size < 2 || !canEditCapturedAt.value) return
+  emit('openLightbox', { items: filteredMedia.value, index, selected: [...selected.value], editCapturedAt: true })
+}
 </script>
 
 <template>
@@ -479,6 +493,15 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
           </button>
           <button type="button" class="bucket-action-button" :disabled="!selected.size || !moveTargets.length" :title="t('memory.buckets.moveTitle')" @click="openMove">
             <VeyqIcon name="arrow-right-arrow-left" /><span class="bucket-action-label">{{ t('memory.buckets.move') }}</span>
+          </button>
+          <button
+            type="button"
+            class="bucket-action-button bucket-shift-button"
+            :disabled="selected.size < 2 || !canEditCapturedAt"
+            :title="t('memory.buckets.shiftTitle')"
+            @click="shiftSelected"
+          >
+            <VeyqIcon name="clock" /><span class="bucket-action-label">{{ t('memory.buckets.shiftCapturedAt') }}</span>
           </button>
           <button type="button" class="bucket-action-button bucket-action-danger" :disabled="!selected.size" :title="t('memory.buckets.deleteMediaAction')" @click="deleteSelected">
             <VeyqIcon name="trash" /><span class="bucket-action-label">{{ t('memory.buckets.delete') }}</span>

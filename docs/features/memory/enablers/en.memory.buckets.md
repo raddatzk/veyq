@@ -73,10 +73,10 @@
   `owner_key`; there is **no cross-owner move**. Any member may do it, even re-bucketing a contributor's media
   within that contributor's root (see authz below).
 
+- **A selection's capture-time shift** is a client-only flow over the existing per-medium meta write — no bucket
+  endpoint, no bulk write ([uc.memory.buckets](../use-cases/uc.memory.buckets.md) § Correct a selection's capture time).
 - **Not built:** uploading straight into a chosen sub-bucket (an upload lands in its uploader's primary and a move
-  files it; the complete call carries no target bucket) and a camera/source filter. A selection's capture-time shift
-  is planned as a client-only flow over the existing per-medium meta write
-  ([uc.memory.buckets](../use-cases/uc.memory.buckets.md) § Correct a selection's capture time).
+  files it; the complete call carries no target bucket) and a camera/source filter.
 
 ## Ownership & operator-blindness
 
