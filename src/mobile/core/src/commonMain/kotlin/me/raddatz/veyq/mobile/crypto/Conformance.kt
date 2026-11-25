@@ -32,6 +32,7 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
         check("suite") { eq(v.str("suite"), "v1") }
         primitives()
         kek(argonAtProductionCost)
+        pin(argonAtProductionCost)
         if (argonAtProductionCost) auth()
         kdfParams()
         xwing()
@@ -420,6 +421,31 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
             k.obj("recovery_argon2id_m32768").let { c ->
                 check("kek recovery m=32768") { eqHex(suite.kekRecovery(c.hex("recovery_code"), c.hex("salt"), params(c)), c.str("kek")) }
             }
+        }
+    }
+
+    /** ADR 0160 decision 2: the PIN's verifier, and (at production cost — the KEK runs Argon2id at m=32 MiB) its KEK and wrap. */
+    private fun pin(production: Boolean) {
+        val pv = v.obj("pin_verifier")
+        check("pin verifier") { eqHex(suite.pinVerifier(pv.hex("hardware_factor"), pv.str("pin_utf8")), pv.str("verifier")) }
+        check("pin verifier: one digit changes it") {
+            eqHex(suite.pinVerifier(pv.hex("hardware_factor"), pv.str("other_pin_utf8")), pv.str("other_verifier"))
+        }
+        val pk = v.obj("pin_kek")
+        check("pin salt") { eqHex(suite.pinSalt(pk.hex("hardware_factor"), pk.hex("server_share")), pk.str("salt")) }
+        check("pin salt: the share changes it") {
+            eqHex(suite.pinSalt(pk.hex("hardware_factor"), pk.hex("other_server_share")), pk.str("other_share_salt"))
+        }
+        check("pin kdfParams") {
+            eq(suite.decodePinKdfParams(suite.encodePinKdfParams(params(pk))), params(pk))
+            if (runCatching { suite.decodePinKdfParams(suite.encodePinKdfParams(ArgonParams(3, 8192, 1, 32))) }.isSuccess) fail("m=8192 was accepted")
+        }
+        if (!production) return
+        check("pin kek and wrap") {
+            val kek = suite.kekPin(pk.str("pin_utf8"), pk.hex("salt"), params(pk))
+            eqHex(kek, pk.str("kek"))
+            eqHex(suite.seal(Context("master-key"), kek, pk.hex("master_key"), pk.hex("nonce")), pk.str("wrap"))
+            eqHex(suite.open(Context("master-key"), kek, pk.hex("wrap")), pk.str("master_key"))
         }
     }
 

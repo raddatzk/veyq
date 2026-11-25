@@ -1253,7 +1253,8 @@ class GalleryModel(
         return name
     }
 
-    internal fun reader(row: Row): RangeReader? = if (rights.download && row.isVideo && !row.blocked) door.reader(row.item) else null
+    internal fun reader(row: Row): RangeReader? =
+        if ((rights.download || rights.play) && row.isVideo && !row.blocked) door.reader(row.item) else null
 
     internal fun save(row: Row, index: Int, into: suspend (produce: suspend (sink: (ByteArray) -> Unit) -> Boolean) -> Boolean): FileSave? {
         if (row.blocked || !rights.download) return null

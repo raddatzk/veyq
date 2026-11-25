@@ -7188,5 +7188,116 @@
     "note": "the app asks for the recovery link; the mailed link opens the web's page, which finishes the reset (ADR 0148 decision 6, ADR 0150 § O)",
     "en": "The link opens in your browser, on any device. There you enter the Secret Key from your Emergency Kit and choose a new password — then sign in here with it.",
     "de": "Der Link öffnet sich in deinem Browser, auf jedem Gerät. Dort gibst du den Secret Key aus deinem Notfall-Kit ein und wählst ein neues Passwort — damit meldest du dich dann hier an."
+  },
+  "tv_picker_title": {
+    "note": "a TV's account picker's heading (ADR 0159 decision 4): each household member picks their own account",
+    "en": "Who's watching?",
+    "de": "Wer schaut?"
+  },
+  "tv_picker_add": {
+    "note": "the picker's tile that signs in another account with a QR code from a phone (ADR 0159 decision 4)",
+    "en": "Add someone",
+    "de": "Jemanden hinzufügen"
+  },
+  "tv_pin_enter_title": {
+    "note": "the PIN unlock's heading on a TV (ADR 0160): the six digits of the picked account",
+    "en": "Enter your PIN",
+    "de": "Gib deine PIN ein"
+  },
+  "tv_pin_set_title": {
+    "note": "after a TV's QR sign-in: choosing the account's six-digit PIN on this TV (ADR 0160 decision 1)",
+    "en": "Choose a PIN for this TV",
+    "de": "Wähle eine PIN für diesen Fernseher"
+  },
+  "tv_pin_set_hint": {
+    "note": "under tv_pin_set_title: what the PIN is for and what ten wrong tries do (ADR 0160 decision 3)",
+    "en": "Six digits. Anyone with the remote needs it to open your account here. Ten wrong tries in a row remove the account from this TV.",
+    "de": "Sechs Ziffern. Wer die Fernbedienung hat, braucht sie, um dein Konto hier zu öffnen. Zehn falsche Versuche hintereinander entfernen das Konto von diesem Fernseher."
+  },
+  "tv_pin_confirm_title": {
+    "note": "the second entry of a new PIN on a TV",
+    "en": "Enter the PIN again",
+    "de": "Gib die PIN noch einmal ein"
+  },
+  "tv_pin_mismatch": {
+    "note": "the two entries of a new PIN differ",
+    "en": "The two PINs differ. Try again.",
+    "de": "Die beiden PINs unterscheiden sich. Versuch es nochmal."
+  },
+  "tv_pin_skip": {
+    "note": "the PIN offer's way out on a TV: nothing is kept, the next start needs a new QR sign-in",
+    "en": "Don't keep me signed in",
+    "de": "Nicht angemeldet bleiben"
+  },
+  "tv_pin_not_offered": {
+    "note": "a TV whose store has no hardware key, or whose server switched password-less trust off: nothing can be kept",
+    "en": "This TV can't keep your account. You'll sign in with your phone again at the next start.",
+    "de": "Dieser Fernseher kann dein Konto nicht behalten. Beim nächsten Start meldest du dich wieder mit dem Handy an."
+  },
+  "tv_pin_wrong": {
+    "note": "a wrong PIN on a TV (ADR 0160 decision 3): {1} the tries left before the account leaves this TV",
+    "en": {
+      "one": "Wrong PIN. One more wrong try removes the account from this TV.",
+      "other": "Wrong PIN. {1:int} tries left."
+    },
+    "de": {
+      "one": "Falsche PIN. Noch ein falscher Versuch entfernt das Konto von diesem Fernseher.",
+      "other": "Falsche PIN. Noch {1:int} Versuche."
+    }
+  },
+  "tv_pin_gone": {
+    "note": "the picker after the tenth wrong PIN, or after the account's saved key on this TV was removed elsewhere",
+    "en": "The account was removed from this TV. Sign it in again with your phone.",
+    "de": "Das Konto wurde von diesem Fernseher entfernt. Melde es mit deinem Handy wieder an."
+  },
+  "tv_pin_delete": {
+    "note": "the PIN pad's key that removes the last digit",
+    "en": "Delete",
+    "de": "Löschen"
+  },
+  "tv_lock": {
+    "note": "a TV's Lock (ADR 0160 decision 6): back to the picker, the account closed until its PIN is typed again",
+    "en": "Lock",
+    "de": "Sperren"
+  },
+  "tv_change_pin": {
+    "note": "a TV's settings: change this account's PIN (ADR 0160 decision 7)",
+    "en": "Change PIN",
+    "de": "PIN ändern"
+  },
+  "tv_pin_old_title": {
+    "note": "changing a PIN: the current one first, counted like an unlock",
+    "en": "Enter your current PIN",
+    "de": "Gib deine aktuelle PIN ein"
+  },
+  "tv_pin_changed": {
+    "note": "a TV's PIN was changed",
+    "en": "PIN changed.",
+    "de": "PIN geändert."
+  },
+  "tv_remove_here": {
+    "note": "a TV's settings: this account leaves this TV (its saved key deleted); the other accounts stay",
+    "en": "Remove from this TV",
+    "de": "Von diesem Fernseher entfernen"
+  },
+  "tv_picker_name": {
+    "note": "a TV's settings: the account's name on this TV's picker (kept on the TV in the clear, ADR 0159 decision 4)",
+    "en": "Name on this TV",
+    "de": "Name auf diesem Fernseher"
+  },
+  "tv_opens_elsewhere": {
+    "note": "a Depot file a TV cannot show: it stays listed, offers no download (ADR 0159 decision 3)",
+    "en": "This file opens on another device.",
+    "de": "Diese Datei öffnet sich auf einem anderen Gerät."
+  },
+  "tv_signin_hint": {
+    "note": "a TV's sign-in: the QR code is the only way in (ADR 0159), the phone scans it",
+    "en": "Open veyq on your phone, choose Add a device and scan this code. Then type the six digits your phone shows.",
+    "de": "Öffne veyq auf deinem Handy, wähle „Gerät hinzufügen“ und scanne diesen Code. Gib dann die sechs Ziffern ein, die dein Handy zeigt."
+  },
+  "tv_picker_name_save": {
+    "note": "a TV's settings: saves the account's name on this TV's picker (tv_picker_name)",
+    "en": "Save name",
+    "de": "Namen speichern"
   }
 }

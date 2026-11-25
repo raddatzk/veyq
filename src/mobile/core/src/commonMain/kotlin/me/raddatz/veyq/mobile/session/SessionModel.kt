@@ -120,6 +120,18 @@ class SessionModel<A : Connection, T : Any>(
         /** The levels staying signed in can take on this device now ([DeviceKeys.staySignedIn]). */
         fun staySignedIn(): Set<StaySignedIn>
 
+        /** What this device is ([ThisDevice.form]): a TV starts at its picker and opens one account at a time (ADR 0159 decision 4). */
+        val form: DeviceForm get() = DeviceForm.PHONE
+
+        /** Whether this device can keep an account behind a PIN ([ThisDevice.offersPin], ADR 0160 decision 1). */
+        fun offersPin(): Boolean = false
+
+        /** [record]'s account opened by [pin] (ADR 0160): throws [PinRefused] on a wrong one. */
+        suspend fun unlockWithPin(record: TrustedDevice, pin: String): A = throw UnsupportedOperationException("this door keeps no PIN")
+
+        /** [account] kept on this device behind [pin] (a DEVICE_PIN wrap), replacing how it was trusted. */
+        suspend fun stayWithPin(account: A, pin: String): TrustChange = TrustChange.FAILED
+
         /** Whether the person answered [account]'s offer with "Not now" on this device ([ThisDevice.declined]). */
         fun declined(account: A): Boolean
         fun setDeclined(account: A, declined: Boolean)
@@ -178,7 +190,13 @@ class SessionModel<A : Connection, T : Any>(
      * run only, and the next start needs the password and Secret Key or the Emergency Kit — what the offer says.
      */
     @Serializable
-    data class Offer(val connection: String, val levels: List<StaySignedIn>, val linked: Boolean = false)
+    data class Offer(
+        val connection: String,
+        val levels: List<StaySignedIn>,
+        val linked: Boolean = false,
+        /** A TV's offer (ADR 0160 decision 1): its one way to stay is a PIN, asked twice ([stayWithPin]); [levels] is empty. */
+        val pin: Boolean = false,
+    )
 
     /** Where the way in stands; serializable, since the native bridge sends it as it is (ADR 0123's Consequences, the bridge). */
     @Serializable
@@ -241,7 +259,24 @@ class SessionModel<A : Connection, T : Any>(
 
         /** An account this device trusts: the password alone (DEVICE), or the person's authentication (DEVICE_KEY). */
         @Serializable @SerialName("Unlock")
-        data class Unlock(val record: TrustedDevice, val working: Boolean = false, @Serializable(with = MsgKey::class) val error: Msg? = null) : Gate()
+        data class Unlock(
+            val record: TrustedDevice,
+            val working: Boolean = false,
+            @Serializable(with = MsgKey::class) val error: Msg? = null,
+            /** A TV's PIN unlock after a wrong PIN (ADR 0160 decision 3): how many tries remain before the account leaves this TV. */
+            val attemptsLeft: Int? = null,
+        ) : Gate() {
+            /** Whether this unlock asks a TV's PIN ([unlockWithPin]) rather than a password or the person's authentication. */
+            val asksPin: Boolean get() = record.method == TrustedDevice.Method.DEVICE_PIN
+        }
+
+        /**
+         * A TV's account picker (ADR 0159 decision 4): each account kept on it under the name it was given here, the most
+         * recently used first; picking one asks its PIN ([pick]); *Add someone* is the QR sign-in ([addServer]). [error]: why
+         * the picker shows again (a wrap gone, the tenth wrong PIN). No account is open while it shows.
+         */
+        @Serializable @SerialName("Picker")
+        data class Picker(val tiles: List<PickerTile>, @Serializable(with = MsgKey::class) val error: Msg? = null) : Gate()
 
         /**
          * Signed in, the shell over tenant [tenantId] of connection [connectionKey] — while [switching], still the one
@@ -261,6 +296,10 @@ class SessionModel<A : Connection, T : Any>(
      */
     @Serializable
     data class KitShown(val email: String, val server: String?, val serverFrom: KitImport.ServerFrom, val typedServer: String? = null)
+
+    /** One account on a TV's picker: its record's key ([TrustedDevice.key], `host#userId`) as [account], the name given it here, and the server's host. */
+    @Serializable
+    data class PickerTile(val account: String, val label: String, val host: String)
 
     /** A tenant opened: the shell goes over [session]. */
     class Opened<A : Any, T : Any>(val account: A, val tenant: TenantRef, val session: T)
@@ -332,6 +371,8 @@ class SessionModel<A : Connection, T : Any>(
             show(if (signInElsewhere) Gate.NeedsApp else Gate.SignIn())
             return null
         }
+        // a TV resumes nothing: each account waits behind its own PIN on the picker (ADR 0159 decision 4)
+        if (tv) return picker()
         var stopped: TrustedDevice? = null
         for (r in records.filter { it.method == TrustedDevice.Method.DEVICE_KEY }) {
             try {
@@ -521,6 +562,8 @@ class SessionModel<A : Connection, T : Any>(
     private fun linkedOffer(account: A): Offer? {
         if (signInElsewhere) return null
         if (door.trustedBy(account)?.method == TrustedDevice.Method.DEVICE_KEY) return null
+        // a TV's one level: its PIN, where its store has the hardware factor; else nothing is kept (ADR 0160 decision 1)
+        if (tv) return Offer(account.key, emptyList(), linked = true, pin = door.offersPin())
         return Offer(account.key, StaySignedIn.entries.filter { it in door.staySignedIn() }, linked = true)
     }
 
@@ -536,6 +579,7 @@ class SessionModel<A : Connection, T : Any>(
             val account = when (record.method) {
                 TrustedDevice.Method.DEVICE -> door.unlockOnDevice(record, password)
                 TrustedDevice.Method.DEVICE_KEY -> door.resume(record)
+                TrustedDevice.Method.DEVICE_PIN -> door.unlockWithPin(record, password)
             }
             add(account)
             if (record.method == TrustedDevice.Method.DEVICE) offer = offerFor(account)
@@ -725,8 +769,101 @@ class SessionModel<A : Connection, T : Any>(
     }
 
     fun cancelAdd() {
-        val o = opened ?: return
+        val o = opened ?: run { if (tv) showPicker(); return }
         show(signed(o.account.key, o.tenant.tenantId))
+    }
+
+    // ---- a TV (ADR 0159 decision 4, ADR 0160)
+
+    private val tv: Boolean get() = door.form == DeviceForm.TV
+
+    /** The picker's tiles: every account this TV keeps behind a PIN, the most recently used first. */
+    private fun tiles(): List<PickerTile> = door.trusted().filter { it.method == TrustedDevice.Method.DEVICE_PIN }
+        .map { PickerTile(it.key, it.pickerLabel, io.ktor.http.Url(it.server).host) }
+
+    private fun showPicker(error: Msg? = null) {
+        val tiles = tiles()
+        show(if (tiles.isEmpty()) Gate.SignIn(error = error) else Gate.Picker(tiles, error))
+    }
+
+    private fun picker(error: Msg? = null): Opened<A, T>? {
+        showPicker(error)
+        return null
+    }
+
+    /** A TV's picker: the PIN unlock of the account [key] names ([unlockWithPin]); false where the picker shows no such tile. */
+    fun pick(key: String): Boolean {
+        if (current !is Gate.Picker) return false
+        val record = door.trusted().firstOrNull { it.key == key && it.method == TrustedDevice.Method.DEVICE_PIN } ?: return false
+        show(Gate.Unlock(record))
+        return true
+    }
+
+    /** From a PIN unlock back to the picker, nothing opened. */
+    fun backToPicker() {
+        if ((current as? Gate.Unlock)?.asksPin == true && current.let { !(it as Gate.Unlock).working }) showPicker()
+    }
+
+    /**
+     * The PIN unlock the gate shows (ADR 0160 decision 3): one account at a time on a TV, so whatever is open closes first;
+     * a wrong PIN stays on the unlock with the attempts left; a wrap gone (the tenth wrong PIN, or removed elsewhere) back
+     * to the picker, which no longer lists it.
+     */
+    suspend fun unlockWithPin(pin: String): Opened<A, T>? {
+        val state = current as? Gate.Unlock ?: return null
+        if (!state.asksPin || state.working) return null
+        show(state.copy(working = true, error = null))
+        closeAll()
+        return try {
+            add(door.unlockWithPin(state.record, pin))
+            val (held, tenant) = connections.current!!
+            openTenant(held, tenant)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: PinRefused) {
+            show(state.copy(working = false, error = Msg.TV_PIN_WRONG, attemptsLeft = e.attemptsLeft))
+            null
+        } catch (e: Exception) {
+            val reason = reasonOf(e)
+            when (reason) {
+                SignInFailure.Reason.DEVICE_NOT_TRUSTED, SignInFailure.Reason.SESSION_ENDED -> picker(Msg.TV_PIN_GONE)
+                else -> { show(state.copy(working = false, error = words(reason))); null }
+            }
+        }
+    }
+
+    /**
+     * A TV locks (ADR 0160 decision 6): *Lock*, the switcher, a return from the background, the idle lock ([IdleLock]) —
+     * every open account closed (its Master Key zeroed, its session kept for the next unlock) and the picker shown. Nothing
+     * on another form.
+     */
+    suspend fun lock() {
+        if (!tv) return
+        closeAll()
+        showPicker()
+    }
+
+    /** Every held connection retired: the keys zeroed, the records and the kept sessions stay. */
+    private suspend fun closeAll() {
+        offer = null
+        opened = null
+        for (a in connections.all.toList()) {
+            watchedEnds.remove(a.key)?.cancel()
+            connections.remove(a)
+            runCatching { door.retire(a) }
+        }
+    }
+
+    /**
+     * The offer's PIN on a TV ([Offer.pin]): the account kept behind [pin] (ADR 0160 decision 1). Anything short of
+     * [TrustChange.DONE] leaves the offer standing.
+     */
+    suspend fun stayWithPin(pin: String): TrustChange? {
+        val o = offer?.takeIf { it.pin } ?: return null
+        val account = connections.all.firstOrNull { it.key == o.connection } ?: return null.also { endOffer() }
+        val change = door.stayWithPin(account, pin)
+        if (change == TrustChange.DONE) endOffer()
+        return change
     }
 
     /** The offer's answer: stay signed in at [level] ([stay] for the offer's account); null without an offer. */
@@ -957,6 +1094,7 @@ class SessionModel<A : Connection, T : Any>(
 
     /** The unlock for [preferred], else the most recent account this device trusts, else the sign-in. */
     private suspend fun locked(preferred: TrustedDevice? = null, error: Msg? = null): Opened<A, T>? {
+        if (tv) return picker(error)
         val record = preferred ?: door.trusted().firstOrNull()
         show(when {
             record != null -> Gate.Unlock(record, error = error)
@@ -1079,6 +1217,13 @@ class AccountDoor(
     override suspend fun forgetRecord(record: TrustedDevice) = device.forgetLocked(record)
     override fun waiting(record: TrustedDevice): Int = device.offline?.waiting(record.key) ?: 0
     override fun staySignedIn(): Set<StaySignedIn> = device.keys.staySignedIn
+    override val form: DeviceForm get() = device.form
+    override fun offersPin(): Boolean = device.offersPin
+    override suspend fun unlockWithPin(record: TrustedDevice, pin: String): VeyqAccount =
+        VeyqAccount.unlockWithPin(primitives, record, pin, device, client)
+    override suspend fun stayWithPin(account: VeyqAccount, pin: String): TrustChange = changed("the PIN") {
+        if (account.trustWithPin(pin) == VeyqAccount.TrustOutcome.REMEMBERED) TrustChange.DONE else TrustChange.FAILED
+    }
     override fun declined(account: VeyqAccount): Boolean = device.declined(account.key)
     override fun setDeclined(account: VeyqAccount, declined: Boolean) = device.setDeclined(account.key, declined)
     override fun relay(server: String): DeviceLink.Relay = HttpRelay.of(server, client)

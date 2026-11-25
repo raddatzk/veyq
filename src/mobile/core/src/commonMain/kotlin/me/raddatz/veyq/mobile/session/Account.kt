@@ -43,6 +43,7 @@ import io.ktor.client.statement.bodyAsText
 import kotlinx.serialization.json.JsonObject
 import me.raddatz.veyq.mobile.api.models.AccountKeyMaterial
 import me.raddatz.veyq.mobile.api.models.AddWrapRequest
+import me.raddatz.veyq.mobile.api.models.PinUnlockRequest
 import me.raddatz.veyq.mobile.api.models.DeviceRegister
 import me.raddatz.veyq.mobile.api.models.DeviceRegisterUpdate
 import me.raddatz.veyq.mobile.api.models.IdentityPinEntryPage
@@ -88,6 +89,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.serialization.builtins.ListSerializer
 
 /** Why a sign-in did not complete, in words a member can act on (the platform localizes by [reason]). */
+/** A wrong PIN on a TV (ADR 0160 decision 3): the server counted it; [attemptsLeft] remain before the account leaves this TV. */
+class PinRefused(val attemptsLeft: Int) : Exception("PIN refused, $attemptsLeft left")
+
 class SignInFailure(val reason: Reason, detail: String? = null) : Exception(detail ?: reason.name) {
     enum class Reason {
         UNREACHABLE, INCOMPATIBLE, CREDENTIALS, SECRET_KEY, NO_TENANT, PROTOCOL,
@@ -385,7 +389,11 @@ class VeyqAccount private constructor(
             val now = r.body()
             val record = trusted
             if (record != null) {
-                val method = if (record.method == TrustedDevice.Method.DEVICE_KEY) MasterKeyWrap.Method.DEVICE_KEY else MasterKeyWrap.Method.DEVICE
+                val method = when (record.method) {
+                    TrustedDevice.Method.DEVICE_KEY -> MasterKeyWrap.Method.DEVICE_KEY
+                    TrustedDevice.Method.DEVICE_PIN -> MasterKeyWrap.Method.DEVICE_PIN
+                    TrustedDevice.Method.DEVICE -> MasterKeyWrap.Method.DEVICE
+                }
                 val wrap = now.wraps.firstOrNull { it.method == method && it.id == record.wrapId }
                     ?: return@withLock false.also { end(SignInFailure.Reason.DEVICE_NOT_TRUSTED, forgetRecord = false) }
                 device.keepWrap(key, ThisDevice.KeptWrap(record.wrapId, wrap.wrappedKey, wrap.kdfParams))
@@ -778,7 +786,8 @@ class VeyqAccount private constructor(
      * (DEVICE) stays trusted, as on the web (`uc.account.sign-out`): the next sign-in needs only the password.
      */
     suspend fun signOut() {
-        trusted?.takeIf { it.method == TrustedDevice.Method.DEVICE_KEY }?.let { forget(it) }
+        // a TV's PIN trust is how the account stays on it: signing out of it there is leaving (ADR 0159 decision 4)
+        trusted?.takeIf { it.method == TrustedDevice.Method.DEVICE_KEY || it.method == TrustedDevice.Method.DEVICE_PIN }?.let { forget(it) }
         wipeOffline()
         close()
     }
@@ -803,7 +812,7 @@ class VeyqAccount private constructor(
 
     /** Whether this connection's session is the one this device keeps for its remembered record (its refresh token). */
     private fun holdsKeptSession(): Boolean {
-        val record = trusted?.takeIf { it.method == TrustedDevice.Method.DEVICE_KEY } ?: return false
+        val record = trusted?.takeIf { it.method == TrustedDevice.Method.DEVICE_KEY || it.method == TrustedDevice.Method.DEVICE_PIN } ?: return false
         val refresh = tokens.refresh ?: return false
         return runCatching { device.keys.secret(record.refreshAlias) }.getOrNull() == refresh
     }
@@ -906,6 +915,86 @@ class VeyqAccount private constructor(
     }
 
     /**
+     * Keeps this account on a TV behind [pin] (ADR 0160 decisions 1-2): a DEVICE_PIN wrap whose KEK is
+     * Argon2id(PIN, HKDF(F ‖ S)) — `F` this device's hardware factor under a key of its own, `S` 32 random bytes the server
+     * keeps with the PIN's verifier `V = HKDF(F, PIN)` and releases only to a matching one — and the refresh token kept as a
+     * remembered account keeps it. `S`, the salt, the KEK and the PIN are forgotten here. Replaces how this device trusted
+     * the account (the new wrap recorded before the old one is deleted, ADR 0160 decision 7). [label] is the picker's name
+     * for it. NOT_OFFERED where the server switched password-less trust off; throws where the device has no hardware factor.
+     */
+    suspend fun trustWithPin(pin: String, label: String? = null): TrustOutcome {
+        require(PIN.matches(pin)) { "a PIN is six digits" }
+        val pins = device.keys.pinFactors ?: throw IllegalStateException("this device keeps no PIN")
+        val refresh = tokens.refresh ?: throw SignInFailure(SignInFailure.Reason.PROTOCOL, "no refresh token to keep")
+        val previous = trusted
+        val alias = device.newAlias()
+        pins.create(alias)
+        val factor = pins.factor(alias) ?: throw IllegalStateException("PIN key not created")
+        val share = primitives.randomBytes(32)
+        val salt = suite.pinSalt(factor, share)
+        val verifier = suite.pinVerifier(factor, pin)
+        factor.fill(0)
+        val kek = suite.kekPin(pin, salt)
+        salt.fill(0)
+        val wrapped = try { suite.seal(Context("master-key"), kek, masterKey) } finally { kek.fill(0) }
+        val kdf = suite.encodePinKdfParams()
+        val id = try {
+            addWrap(AddWrapRequest.Method.DEVICE_PIN, wrapped, kdf, share, verifier)
+        } catch (e: Exception) {
+            pins.delete(alias)
+            throw e
+        } finally {
+            share.fill(0)
+            verifier.fill(0)
+        } ?: return TrustOutcome.NOT_OFFERED.also { pins.delete(alias) }
+        val record = TrustedDevice(server, email, userId, TrustedDevice.Method.DEVICE_PIN, id, alias, label = label ?: previous?.label)
+        try {
+            device.keys.putSecret(record.refreshAlias, refresh)
+        } catch (e: Exception) {
+            // a store that cannot keep the token cannot unlock again: the wrap just added would open nothing
+            runCatching { respond { AccountWrapsApi(server, http).deleteAccountWrap(id) } }
+            pins.delete(alias)
+            throw e
+        }
+        device.remember(record)
+        trusted = record
+        previous?.let { drop(it) }
+        releaseUnlockKeys()
+        runCatching { register().remember(device.id, device.label, null, record.wrapId, now()) }
+        return TrustOutcome.REMEMBERED
+    }
+
+    /** What changing a PIN came to: [CHANGED]; the old PIN was [WRONG] ([attemptsLeft] remain) or the wrap is [GONE]. */
+    class PinChange(val outcome: Outcome, val attemptsLeft: Int? = null) {
+        enum class Outcome { CHANGED, WRONG, GONE, FAILED }
+    }
+
+    /**
+     * A TV's PIN changed (ADR 0160 decision 7): [old] asked first, through the server's same count — a wrong one counts, the
+     * tenth deletes the wrap — then the wrap replaced under [new] with a new share and verifier.
+     */
+    suspend fun changePin(old: String, new: String): PinChange {
+        val record = trusted?.takeIf { it.method == TrustedDevice.Method.DEVICE_PIN } ?: return PinChange(PinChange.Outcome.FAILED)
+        val factor = device.keys.pinFactors?.factor(record.alias) ?: return PinChange(PinChange.Outcome.FAILED)
+        val verifier = try { suite.pinVerifier(factor, old) } finally { factor.fill(0) }
+        when (val answer = askShare(server, http, record.wrapId, verifier)) {
+            is ShareAnswer.Released -> answer.share.fill(0)
+            is ShareAnswer.Wrong -> return PinChange(PinChange.Outcome.WRONG, answer.attemptsLeft)
+            ShareAnswer.Gone -> { forget(record); return PinChange(PinChange.Outcome.GONE) }
+        }
+        return if (trustWithPin(new, record.label) == TrustOutcome.REMEMBERED) PinChange(PinChange.Outcome.CHANGED)
+        else PinChange(PinChange.Outcome.FAILED)
+    }
+
+    /** The picker's name for this account on this TV changed (ADR 0159 decision 4); nothing where it keeps no PIN trust. */
+    fun renameOnPicker(label: String) {
+        val record = trusted?.takeIf { it.method == TrustedDevice.Method.DEVICE_PIN } ?: return
+        val renamed = record.copy(label = label.trim().ifEmpty { null })
+        device.remember(renamed)
+        trusted = renamed
+    }
+
+    /**
      * Each level's unlock key that no DEVICE_KEY record on this device uses any more is deleted (one per level, shared by
      * every account remembered at it): after a sign-out, a stop, or a change of level.
      */
@@ -983,12 +1072,22 @@ class VeyqAccount private constructor(
     private suspend fun drop(record: TrustedDevice) {
         runCatching { respond { AccountWrapsApi(server, http).deleteAccountWrap(record.wrapId) } }
         device.keys.deleteBindKey(record.alias)
+        runCatching { device.keys.pinFactors?.delete(record.alias) }
         device.keys.deleteSecret(record.refreshAlias)
     }
 
     /** `POST /api/account/wraps`: the new wrap's id, or null while the server switched this kind of trust off. */
-    private suspend fun addWrap(method: AddWrapRequest.Method, wrappedKey: ByteArray, kdfParams: ByteArray): String? {
-        val r = respond { AccountWrapsApi(server, http).addAccountWrap(AddWrapRequest(method, b64(wrappedKey), b64(kdfParams))) }
+    private suspend fun addWrap(
+        method: AddWrapRequest.Method,
+        wrappedKey: ByteArray,
+        kdfParams: ByteArray,
+        pinShare: ByteArray? = null,
+        pinVerifier: ByteArray? = null,
+    ): String? {
+        val request = AddWrapRequest(
+            method, b64(wrappedKey), b64(kdfParams), pinShare = pinShare?.let(::b64), pinVerifier = pinVerifier?.let(::b64),
+        )
+        val r = respond { AccountWrapsApi(server, http).addAccountWrap(request) }
         if (r.success) return r.body().id
         if (r.status == 422 && errorCode(r) == "capability_disabled") return null
         throw SignInFailure(SignInFailure.Reason.PROTOCOL, "add wrap ${r.status}")
@@ -1817,6 +1916,109 @@ class VeyqAccount private constructor(
                 return Redeemed(r.status, pair.accessToken, pair.refreshToken)
             } finally {
                 once.close()
+            }
+        }
+
+        /** A PIN: six digits, digits only (ADR 0160 decision 1). */
+        val PIN = Regex("[0-9]{6}")
+
+        /** What the server answered a verifier (`POST /api/account/wraps/{id}/pin-unlock`, ADR 0160 decision 3). */
+        internal sealed class ShareAnswer {
+            class Released(val share: ByteArray) : ShareAnswer()
+            class Wrong(val attemptsLeft: Int) : ShareAnswer()
+            object Gone : ShareAnswer()
+        }
+
+        internal suspend fun askShare(base: String, http: HttpClient, wrapId: String, verifier: ByteArray): ShareAnswer {
+            val r = try {
+                AccountWrapsApi(base, http).unlockAccountWrapWithPin(wrapId, PinUnlockRequest(b64(verifier)))
+            } catch (e: Exception) {
+                throw SignInFailure(SignInFailure.Reason.UNREACHABLE, e.message)
+            }
+            return when {
+                r.success -> ShareAnswer.Released(unb64(r.body().pinShare))
+                r.status == 403 -> ShareAnswer.Wrong(attemptsLeft(r) ?: 1)
+                r.status == 404 -> ShareAnswer.Gone
+                r.status == SignInFailure.TOO_MANY_REQUESTS -> throw SignInFailure.refused("pin-unlock", r.status)
+                r.status in 500..599 -> throw SignInFailure(SignInFailure.Reason.UNREACHABLE, "pin-unlock ${r.status}")
+                else -> throw SignInFailure(SignInFailure.Reason.PROTOCOL, "pin-unlock ${r.status}")
+            }
+        }
+
+        private suspend fun attemptsLeft(r: HttpResponse<*>): Int? = runCatching {
+            (Json.parseToJsonElement(r.response.bodyAsText()) as? JsonObject)?.get("attemptsLeft")?.jsonPrimitive?.content?.toInt()
+        }.getOrNull()
+
+        /**
+         * A TV's account opened by its PIN (ADR 0160 decisions 3, 5): online only — the kept refresh token renews the
+         * session, the PIN's verifier asks the server for the share (a wrong one throws [PinRefused] with the attempts left;
+         * a wrap gone — the tenth failure, or removed elsewhere — forgets the account here and throws DEVICE_NOT_TRUSTED),
+         * then the KEK derived from the hardware factor, the share and the PIN opens the wrap.
+         */
+        suspend fun unlockWithPin(
+            primitives: Primitives,
+            record: TrustedDevice,
+            pin: String,
+            device: ThisDevice,
+            client: (block: io.ktor.client.HttpClientConfig<*>.() -> Unit) -> HttpClient,
+        ): VeyqAccount {
+            require(record.method == TrustedDevice.Method.DEVICE_PIN) { "not a PIN record" }
+            require(PIN.matches(pin)) { "a PIN is six digits" }
+            val pins = device.keys.pinFactors
+            val factor = pins?.factor(record.alias)
+            if (factor == null) {
+                // a reinstall or another Apple TV user lost F: the wrap can never open here again (ADR 0160's Consequences)
+                device.forgetLocked(record)
+                throw SignInFailure(SignInFailure.Reason.DEVICE_NOT_TRUSTED, "no hardware factor")
+            }
+            val c = connect(primitives, record.server, client, device)
+            return guarded(c) {
+                val token = device.keys.secret(record.refreshAlias) ?: run {
+                    device.forgetLocked(record)
+                    throw SignInFailure(SignInFailure.Reason.SESSION_ENDED, "no refresh token kept")
+                }
+                val r = try {
+                    TokenApi(c.base, c.http).refreshSession(RefreshRequest(token))
+                } catch (e: Exception) {
+                    throw SignInFailure(SignInFailure.Reason.UNREACHABLE, e.message)
+                }
+                if (r.status == SignInFailure.TOO_MANY_REQUESTS) throw SignInFailure.refused("refresh", r.status)
+                if (r.status in 400..499) {
+                    device.forgetLocked(record)
+                    throw SignInFailure(SignInFailure.Reason.SESSION_ENDED, "refresh ${r.status}")
+                }
+                if (!r.success) throw SignInFailure(SignInFailure.Reason.UNREACHABLE, "refresh ${r.status}")
+                val pair = r.body()
+                c.tokens.access = pair.accessToken
+                c.tokens.refresh = pair.refreshToken
+                pair.refreshToken?.let { device.keepRefresh(record.refreshAlias, it) }
+                val verifier = c.suite.pinVerifier(factor, pin)
+                val share = when (val answer = askShare(c.base, c.http, record.wrapId, verifier)) {
+                    is ShareAnswer.Released -> answer.share
+                    is ShareAnswer.Wrong -> throw PinRefused(answer.attemptsLeft)
+                    ShareAnswer.Gone -> {
+                        device.forgetLocked(record)
+                        throw SignInFailure(SignInFailure.Reason.DEVICE_NOT_TRUSTED, "PIN wrap gone")
+                    }
+                }
+                verifier.fill(0)
+                val material = keyMaterial(c)
+                val wrap = material.wraps.firstOrNull { it.method == MasterKeyWrap.Method.DEVICE_PIN && it.id == record.wrapId }
+                    ?: throw SignInFailure(SignInFailure.Reason.DEVICE_NOT_TRUSTED, "wrap not served")
+                val masterKey = try {
+                    c.suite.decodePinKdfParams(unb64(wrap.kdfParams ?: throw OpenRefused("no kdfParams")))
+                    val salt = c.suite.pinSalt(factor, share)
+                    val kek = try { c.suite.kekPin(pin, salt) } finally { salt.fill(0) }
+                    try { c.suite.open(Context("master-key"), kek, unb64(wrap.wrappedKey)) } finally { kek.fill(0) }
+                } catch (e: OpenRefused) {
+                    throw SignInFailure(SignInFailure.Reason.DEVICE_NOT_TRUSTED, "wrap does not open")
+                } catch (e: IllegalArgumentException) {
+                    throw SignInFailure(SignInFailure.Reason.DEVICE_NOT_TRUSTED, "wrap does not open")
+                } finally {
+                    share.fill(0)
+                    factor.fill(0)
+                }
+                finish(c, primitives, record.email, material, masterKey, device, null)
             }
         }
 

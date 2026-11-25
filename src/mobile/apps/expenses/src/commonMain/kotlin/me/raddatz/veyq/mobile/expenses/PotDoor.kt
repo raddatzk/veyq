@@ -46,6 +46,9 @@ interface PotDoor {
     /** Whether the Pot's settings (base currency, own categories) and its people's standing are changed here: a member's. */
     val changesSettings: Boolean
 
+    /** Whether this device only views (a TV, ADR 0159 decision 3): a Pot read-only, and nothing of it downloaded. */
+    val viewOnly: Boolean get() = false
+
     /**
      * Whether a member reads the Pot here: its Settings show the base currency and the categories, and its people's standing
      * (deactivate, delete) is managed. A link's guest — a READ_WRITE one adds and renames people alone (the web's
@@ -134,8 +137,9 @@ internal class TenantPotDoor(private val tenant: TenantSession) : PotDoor {
     override val queueAccount get() = account
     private val api get() = ExpensesApi(tenant.base, account.http)
     override val suite: V1 get() = account.suite
-    override val writesEntries: Boolean get() = "expenses" !in tenant.applicationsOff()
-    override val changesSettings: Boolean get() = "expenses" !in tenant.applicationsOff()
+    override val viewOnly: Boolean get() = account.thisDevice.viewOnly
+    override val writesEntries: Boolean get() = "expenses" !in tenant.applicationsOff() && !viewOnly
+    override val changesSettings: Boolean get() = "expenses" !in tenant.applicationsOff() && !viewOnly
     override val tenantId: String get() = tenant.tenant.tenantId
     override val directory: Map<String, String> get() = tenant.people.mapValues { it.value.displayName }
 

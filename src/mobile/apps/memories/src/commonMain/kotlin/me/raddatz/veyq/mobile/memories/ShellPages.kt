@@ -261,7 +261,7 @@ fun ShellModel.galleryModel(
 
 /** Who looks at Memory or chapter [ref] from this shell: a member, as the tenant's switches and the folder say. */
 private fun ShellModel.memoryAccess(ref: NodeAt) = me.raddatz.veyq.mobile.memories.MemoryRights.Access.Member(
-    memoriesOn = "memories" !in tenant.applicationsOff(), inIdentityFolder = inIdentityFolder(ref),
+    memoriesOn = "memories" !in tenant.applicationsOff(), inIdentityFolder = inIdentityFolder(ref), viewOnly = viewOnly,
 )
 
 /** What a member may do on Memory or chapter [ref] here. */

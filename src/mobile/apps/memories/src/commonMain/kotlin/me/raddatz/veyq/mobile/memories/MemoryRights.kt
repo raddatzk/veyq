@@ -23,7 +23,13 @@ object MemoryRights {
          * server's exemptions), [inIdentityFolder] where the level is a guest's identity folder (Depot's drop box: no Memory
          * there).
          */
-        data class Member(val readonly: Boolean = false, val memoriesOn: Boolean = true, val inIdentityFolder: Boolean = false) : Access()
+        data class Member(
+            val readonly: Boolean = false,
+            val memoriesOn: Boolean = true,
+            val inIdentityFolder: Boolean = false,
+            /** On a device that only views (a TV, ADR 0159 decisions 2-3): it reads — the gallery, its filters, the participants — and nothing else. */
+            val viewOnly: Boolean = false,
+        ) : Access()
 
         /** A link's guest, by the link's role ([ShareLinks.READ], [ShareLinks.READ_WRITE], [ShareLinks.WRITE_ONLY]). */
         data class Guest(val role: String) : Access()
@@ -40,6 +46,11 @@ object MemoryRights {
         val navigate: Boolean = false,
         /** Open a medium and download its original. */
         val download: Boolean = false,
+        /**
+         * Play a video read in ranges, never saved (a TV, ADR 0159 decision 3: viewing, not taking away); [download]
+         * includes it.
+         */
+        val play: Boolean = false,
         /** Upload media into the node on screen (a Memory or a chapter). */
         val upload: Boolean = false,
         val deleteMedia: DeleteMedia = DeleteMedia.NONE,
@@ -88,8 +99,10 @@ object MemoryRights {
         // do reading, downloading and the member's own marks (the server's exemptions).
         val remove = !access.readonly
         val write = remove && access.memoriesOn
-        if (isLevel(kind)) return Rights(navigate = true, createMemory = write && !access.inIdentityFolder)
+        if (isLevel(kind)) return Rights(navigate = true, createMemory = write && !access.inIdentityFolder && !access.viewOnly)
         if (!isMemoriesNode(kind)) return NONE
+        // a TV: no write, no mark, no download, no trash, no contributions (ADR 0159 decision 3)
+        if (access.viewOnly) return Rights(navigate = true, play = true, filterFacts = true, participants = kind == MEMORY)
         return Rights(
             navigate = true,
             download = true,

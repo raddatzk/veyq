@@ -58,6 +58,9 @@ class NodeHeaderModel(
         fun inIdentityFolder(ref: NodeAt): Boolean
         /** Whether the tenant's links are on (its capability set). */
         fun linksOn(): Boolean
+
+        /** Whether this device only views (a TV, ADR 0159 decision 2): the header offers nothing that writes or takes the node away. */
+        fun viewOnly(): Boolean = false
         /** Whether the tenant's server takes reports: asked of the server once per tenant. */
         suspend fun reportOffered(): Boolean
         /** Pins or unpins [ref]; false when it was not stored. */
@@ -175,7 +178,7 @@ class NodeHeaderModel(
             node.kind, favoriteKnown = pinned != null, shareable = kind?.shareable == true, linksOn = door.linksOn(),
             rename = kind?.renames != false, takesCover = kind?.takesCover == true, coverOffered = doors.coverOffered,
             copy = doors.copies, download = doors.downloads, report = reportOffered, inGuestFolder = door.inIdentityFolder(node),
-            offline = offlineNodes != null, online = online, offlineOn = state.offline?.on == true,
+            offline = offlineNodes != null, online = online, offlineOn = state.offline?.on == true, viewOnly = door.viewOnly(),
         )
     }
 

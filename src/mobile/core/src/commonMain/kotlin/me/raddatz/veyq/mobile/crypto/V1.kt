@@ -175,6 +175,42 @@ class V1(val p: Primitives) {
 
     fun kekRecovery(recoveryCode: ByteArray, salt: ByteArray, params: ArgonParams = ARGON): ByteArray = argon(recoveryCode, salt, params)
 
+    // ---- the PIN level (ADR 0160 decision 2; vectors pin_kek, pin_verifier) ----
+
+    /**
+     * A DEVICE_PIN wrap's Argon2id salt: HKDF-SHA256(ikm = F ‖ S, salt = empty, info = "veyq/v1/pin-kek", 16) of the
+     * hardware factor [factor] and the server share [share]. Never sent: with it, whoever holds the wrap would search the
+     * PIN offline — the server holds the wrap and S, never F.
+     */
+    fun pinSalt(factor: ByteArray, share: ByteArray): ByteArray {
+        require(factor.size == 32 && share.size == 32) { "the hardware factor and the server share are 32 bytes each" }
+        val ikm = concat(factor, share)
+        return try { p.hkdfSha256(ikm, ByteArray(0), utf8("veyq/v1/pin-kek"), 16) } finally { ikm.fill(0) }
+    }
+
+    /** A DEVICE_PIN wrap's KEK: Argon2id(utf8(pin), [pinSalt]). */
+    fun kekPin(pin: String, salt: ByteArray, params: ArgonParams = ARGON): ByteArray = argonOnce(utf8(pin), salt, params)
+
+    /** The PIN's verifier the server compares: HKDF-SHA256(ikm = F, salt = empty, info = "veyq/v1/pin-verifier" ‖ utf8(pin), 32). */
+    fun pinVerifier(factor: ByteArray, pin: String): ByteArray {
+        require(factor.size == 32) { "the hardware factor is 32 bytes" }
+        return p.hkdfSha256(factor, ByteArray(0), concat(utf8("veyq/v1/pin-verifier"), utf8(pin)), 32)
+    }
+
+    /**
+     * A DEVICE_PIN wrap's `kdfParams`: `u32be t ‖ m ‖ p ‖ dkLen`, the parameters alone — its salt is derived on the device
+     * ([pinSalt]) and never leaves it.
+     */
+    fun encodePinKdfParams(a: ArgonParams = ARGON): ByteArray = concat(u32be(a.t), u32be(a.m), u32be(a.p), u32be(a.dkLen))
+
+    /** The parameters a DEVICE_PIN wrap names; anything but the suite's one set is refused before Argon runs. */
+    fun decodePinKdfParams(encoded: ByteArray): ArgonParams {
+        require(encoded.size == 16) { "a PIN wrap's kdfParams are 16 bytes" }
+        val a = ArgonParams(readU32be(encoded, 0), readU32be(encoded, 4), readU32be(encoded, 8), readU32be(encoded, 12))
+        require(a == ARGON) { "kdfParams are not the suite's Argon2id parameters" }
+        return a
+    }
+
     private fun argon(secret: ByteArray, salt: ByteArray, a: ArgonParams): ByteArray {
         require(salt.size == 16) { "an Argon2id salt is 16 bytes" }
         return p.argon2id(secret, salt, a.t, a.m, a.p, a.dkLen)

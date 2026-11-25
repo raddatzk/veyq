@@ -17,8 +17,6 @@ import platform.Foundation.NSURLSession
 import platform.Foundation.NSURLSessionConfiguration
 import platform.Foundation.NSUserDefaults
 import platform.Foundation.create
-import platform.LocalAuthentication.LAContext
-import platform.LocalAuthentication.LAPolicyDeviceOwnerAuthentication
 import platform.posix.memcpy
 
 /**
@@ -137,10 +135,10 @@ class AppleDeviceKeys(private val keychain: KeychainBridge, private val prompt: 
     /**
      * Both levels where the device has a passcode, else none. `.userPresence` needs one; the login item could exist
      * without, but its guarantee is that the device's own sign-in authenticates, and without a passcode nothing does.
+     * A TV has none ([deviceOwnerAuthenticationAvailable]).
      */
-    @OptIn(ExperimentalForeignApi::class)
     override val staySignedIn: Set<StaySignedIn>
-        get() = if (LAContext().canEvaluatePolicy(LAPolicyDeviceOwnerAuthentication, null)) setOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN) else emptySet()
+        get() = if (deviceOwnerAuthenticationAvailable()) setOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN) else emptySet()
 
     private companion object {
         /** The presence item, the one unlock key there was before the levels: its seals still open. */

@@ -56,8 +56,27 @@ class SoftwareDeviceKeys(private val p: Primitives) : DeviceKeys {
     override fun putSecret(alias: String, value: String) { secrets[alias] = value }
     override fun secret(alias: String): String? = secrets[alias]
     override fun deleteSecret(alias: String) { secrets.remove(alias) }
+
+    /** The PIN level's factor in memory ([pins], null: a store without a hardware key, so the level is not offered). */
+    private val pinKeys = HashMap<String, ByteArray>()
+
+    /** Set to null to play a TV without a hardware key (ADR 0160 decision 1: the level is then not offered). */
+    var pins: PinFactors? = object : PinFactors {
+        override fun create(alias: String) { pinKeys[alias] = p.randomBytes(32) }
+        override fun factor(alias: String): ByteArray? = pinKeys[alias]?.let { p.hmacSha256(it, PinFactors.LABEL) }
+        override fun delete(alias: String) { pinKeys.remove(alias) }
+    }
+
+    override val pinFactors: PinFactors? get() = pins
+
+    /** Whether a PIN key exists under [alias]: for a flow's test that a forgotten account's key is gone. */
+    fun hasPinKey(alias: String): Boolean = alias in pinKeys
 }
 
 /** A device for a test: preferences and keys in memory. */
-fun testDevice(p: Primitives, keys: DeviceKeys = SoftwareDeviceKeys(p), store: DeviceStore = MemoryDeviceStore()) =
-    ThisDevice(store, keys, "test device", p)
+fun testDevice(
+    p: Primitives,
+    keys: DeviceKeys = SoftwareDeviceKeys(p),
+    store: DeviceStore = MemoryDeviceStore(),
+    form: DeviceForm = DeviceForm.PHONE,
+) = ThisDevice(store, keys, "test device", p, form = form)
