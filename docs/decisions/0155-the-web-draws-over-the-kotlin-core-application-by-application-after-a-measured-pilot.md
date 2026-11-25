@@ -1418,7 +1418,7 @@ Measured before the decision (2026-11-20):
 
   | Criterion | Measured |
   |---|---|
-  | size: the platform module, every entry (the package's `slice.test.ts`, `@noble/*` external) | 79,874 → 145,049 B gz (+65,175), every first load: of it the words' enum (`Msg`, 1,574 entries, ~27.8 KB gz alone; inbox #1341), coroutines (~15.2 KB gz) and the standard library they reach (+17.2 KB gz); no kotlinx.serialization, no Ktor, no session or API client source in any entry's map |
+  | size: the platform module, every entry (the package's `slice.test.ts`, `@noble/*` external) | 79,874 → 145,049 B gz (+65,175), every first load: of it the words' enum (`Msg`, 1,574 entries, ~27.8 KB gz alone; since inbox #1341 a class whose unread words the link drops, 115,905 B gz: ADR 0136 § The words' form for JavaScript), coroutines (~15.2 KB gz) and the standard library they reach (+17.2 KB gz); no kotlinx.serialization, no Ktor, no session or API client source in any entry's map |
   | size: Memories over every platform entry | +4,249 → +20,578 B gz (the model, its door and its shapes; its module's own 58,632 B minified) |
   | size: the web's eager set (`vite build`, gzip -9 per chunk) | 688,246 → 752,759 (+64,513: `review`, which holds the platform module, +64,512) |
   | size: a link guest's first load (decision 10, Depot's move D8's method) | a Memory's share body 718,798 → 797,882 (+79,084); a Memory's page 814,770 → 894,262 (+79,492); a Depot file 702,776 → 767,341 (+64,565); a drop box 691,948 → 756,449 (+64,501); a Pot's page 718,924 → 783,329 (+64,405) |

@@ -578,6 +578,51 @@ Decision log (question, choice and why, evidence, cost):
   `CREDENTIALS` on a `429`, which ends nothing (the call fails, the next one retries). Not changed: the web's other
   logins (`TenantJoinView` after registering, `ModerationGate`) keep their own failure words.
 
+### The words' form for JavaScript (inbox #1341, built 2026-11-25, branch `claude/words-js-1341`)
+
+`Msg` is a **class of one getter per word, never an enum** (`generate_words.py --kotlin`). A Kotlin/JS enum builds every
+entry the first time any one is read, so since the gallery model's move (ADR 0155) the platform module every web entry
+imports carried all 1,574 words; a getter nothing reads is dropped by the JavaScript link, and 25 words remain in the
+platform's bundle. Everything the apps read of the enum is generated beside it: `key`, `args`, `plural`, `name` (the key
+in capitals), `toString()` (the name), equality and hash by the key, `Msg.entries` in the catalog's order (built once, on
+first use). On the wire a `Msg` is still the enum by its name where no field says `MsgKey` (`MsgName`: the descriptor an
+enum serializer has, so the desktops' generated `bridge.rs` and `Bridge.g.cs` are byte-identical); `CoreText.of` switches
+over the key, and Android's `Context.words` reads its resource from an array of ids in the catalog's order (a `when` over
+1,574 keys is a method larger than the JVM allows); Swift keeps `Msg.trashMoved` and `say(.trashMoved)` through a generated
+extension (`--apple-swift`, `Msg+Words.swift` in both Apple targets), each name the one the Objective-C export gave the
+enum's entry (camel case, `the` before a method family: `copy_done` → `theCopyDone`). `MsgFormTest` holds the form
+(equality, name, order, the wire's enum; bitten: equality by identity turns three of its four cases red, a descriptor one
+word short the wire's), Android's `WordsTest` the ids (every word its own key's resource, and German; bitten: the ids
+rotated by one turn both red).
+
+Decision log (question, choice and why, evidence, cost):
+- *Which form?* Three were weighed. Keeping the enum with slimmer entries (the key from the name, `args`/`plural` from
+  one string by ordinal) measured −10 KB gz on the bundled platform module (144,937 → 134,877, each entry's key and shape
+  stripped from the bundle): the names and constructions stay. An expect/actual split (the apps an enum, JavaScript a
+  class) cannot be written: an `expect class` is never actualised by an enum, and the common code's `Msg.X` needs one
+  declaration every compilation sees. The getters keep only what is read. *Cost:* reading a word allocates it (three
+  fields), and two words are equal by their key, not their identity — no site compares a `Msg` by identity.
+- *The wire's enum:* two bridge answers (`ReceivedProblem`, `BookmarkChecked`) carried a `Msg` through the plugin's enum
+  serializer, from which `Bindings` writes a Rust and a C# enum. `MsgName` builds that descriptor with
+  `buildSerialDescriptor` (opted into `InternalSerializationApi`): the alternative, a second 1,574-entry enum only for
+  the serializer, would have put the enum back into every native binary.
+- *Swift:* Kotlin/Native exports a companion's members as `Msg.companion.TRASH_MOVED`, and 1,082 Swift sites name a word
+  as `Msg.x` or `.x`; a generated extension keeps every one of them, where rewriting them would have touched every
+  screen. The generator's 1,574 names were compared with the class properties of `VeyqCoreMsg` in the enum build's
+  `VeyqCore.h`: equal, in order. The app target's Swift typechecked for macOS against the class build's framework
+  (`swiftc -typecheck` over `Veyq/**/*.swift` with the generated `Msg+Words.swift` and `Plans.swift`; no Xcode build):
+  no error; with an empty extension, red at the first word (`type 'Msg' has no member 'signinCancel'`).
+
+Measured (each against `d2a34455b`, the tree before, its own build; the machine at a load of ~12 from other agents):
+
+| Criterion | Before → after |
+|---|---|
+| the platform module, every entry (`@veyq/core-js`'s `slice.test.ts`, `@noble/*` external) | 450,765 → 347,275 B minified; **145,052 → 115,905 B gz (−29,147)** |
+| each application over every platform entry (the same) | Expenses +20,887 → +20,791, Depot +3,297 → +3,295, Memories +20,576 → +20,596 B gz |
+| the web's eager set (`vite build`, gzip -9 per chunk) | 752,751 → 723,860 (−28,891: `review`, which holds the platform module, −28,932) |
+| a link guest's first load (ADR 0155 decision 10, Depot's move D8's method) | a Memory's share body 797,875 → 768,905 (−28,970); a Memory's page 894,254 → 865,482 (−28,772); a Depot file 767,333 → 738,404 (−28,929); a drop box 756,443 → 727,570 (−28,873); a Pot's page 783,318 → 754,448 (−28,870) |
+| the desktops' wire types (`:bridge:generateBindings`) | `bridge.rs`, `Bridge.g.cs` byte-identical |
+
 ## Alternatives considered
 
 - **Compose Multiplatform for Android, Windows and Linux.** One Compose UI for three platforms, the cheapest by far.
