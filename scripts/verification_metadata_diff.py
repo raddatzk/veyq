@@ -27,7 +27,7 @@ skill's fourth edge), and this rule is about a change: one tree against another.
 same job, with the base the event names. `verification_metadata_diff_selftest.py` holds its verdicts.
 
 **The defect that bought it.** No incident: the rule is `scripts/dependabot_follow.py`'s, which accepted the metadata a
-cold Gradle home wrote over a Dependabot bump only when it was an append (cr-renovate phase 4). The follow guarded the
+cold Gradle home wrote over a Dependabot bump only when it was an append (ADR 0158 decision 4). The follow guarded the
 one writer it ran; a hand edit, or a Renovate branch, was held to nothing. A changed checksum of an artifact already
 pinned is the one edit in that file that silently accepts other bytes under a name the build already trusts, and in a
 diff of a thousand components it is one line among hundreds of added ones.

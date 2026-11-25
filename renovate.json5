@@ -1,8 +1,8 @@
-// The version policy of the self-hosted Renovate (ADR 0158 decision 5; changes/cr-renovate.md). The repository's
+// The version policy of the self-hosted Renovate (ADR 0158 decision 5). The repository's
 // config, read by `.github/workflows/renovate.yml`, whose environment sets only the operator's part (which repository,
 // no onboarding, the commands a task may run). Nothing here is specific to GitHub, so the same file runs on another forge.
 //
-// The rules were ported from Dependabot's config (deleted by cr-renovate phase 5; its history holds the comments with
+// The rules were ported from Dependabot's config (deleted when Renovate took over, ADR 0158; its history holds the comments with
 // each measured reason), and each rule here says its reason in its `description`. Rules are applied in order and a
 // later match wins, so the general groups come first and the exceptions after them.
 //
@@ -139,7 +139,7 @@
   // Renovate reports the wait as the commit status `renovate/stability-days`, which is why the App may write commit
   // statuses. `strict` opens no branch while the age is not reached. Security fixes are not held (decision 6): see
   // `vulnerabilityAlerts` below.
-  // Kept at three days after the dry run (cr-renovate), a judgement, not a measurement: long enough that a hijacked
+  // Kept at three days after the dry run (ADR 0158), a judgement, not a measurement: long enough that a hijacked
   // release is usually pulled before it is proposed, short enough that a Saturday run proposes what shipped by Wednesday. Majors
   // wait for no Dependency Dashboard approval: each is a pull request of its own (above), and a person merges it.
   minimumReleaseAge: "3 days",
@@ -293,7 +293,7 @@
       description: "typescript-eslint does not support TypeScript 7 (PR #4's CI: 'typescript-eslint does not support TS 7.0'). The site keeps the root's TypeScript major, so one major is checked repository-wide. Lifted when a typescript-eslint release declares typescript 7 in its peer range.",
       matchPackageNames: ["typescript"],
       // A range, not `enabled: false` on the major: Renovate's report still lists an update that a rule disabled, and
-      // phase 3's check reads that report. A range removes the version at lookup.
+      // `pins` in checks.yml reads that report. A range removes the version at lookup.
       allowedVersions: "<7",
     },
     {

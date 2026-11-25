@@ -92,7 +92,7 @@ jobs:
           echo "$count guards green"
 
       # A Gradle verification metadata change only adds trust: the trust rules and every checksum already committed for
-      # a kept artifact stay as the base has them (scripts/verification_metadata_diff.py; ADR 0158, cr-renovate phase 4).
+      # a kept artifact stay as the base has them (scripts/verification_metadata_diff.py; ADR 0158 decision 4).
       # It compares two trees, so it is no `validate_*.py`, which read one: the base is a pull request's base or a
       # push's previous tip, fetched alone. A first push reports an all-zero `before`, and a local run of
       # scripts/run_pipeline.py none; the check then holds the file's form only, and says so.

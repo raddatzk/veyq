@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """What a Renovate pull request needs and only an executed build can write, done deterministically and without a
-language model (ADR 0158 decision 4; cr-renovate phase 5d/5e).
+language model (ADR 0158 decision 4).
 
 Renovate writes a version and everything a manager or a `postUpgradeTask` (scripts/pin_follow.py) can derive from
 published bytes. Three follow-ups need the bumped tree EXECUTED, which never happens in Renovate's job, the one that
