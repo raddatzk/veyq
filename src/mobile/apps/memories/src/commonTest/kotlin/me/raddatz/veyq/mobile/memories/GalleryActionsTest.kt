@@ -95,6 +95,11 @@ class GalleryActionsTest {
             return restoreAnswer
         }
         override fun isOwn(mediaId: String) = mediaId in own
+        var settles = 0
+        override suspend fun settle(items: List<MemoryMedia.Item>): Boolean {
+            settles++
+            return false
+        }
         override suspend fun purge(mediaId: String): Boolean {
             sent += "purge:$mediaId"
             if (purgeAnswer) items = items.filter { it.mediaId != mediaId }
@@ -292,10 +297,12 @@ class GalleryActionsTest {
         advanceTimeBy(tick)
         assertTrue(door.asked >= 1, "the poll asked")
         assertEquals(read, door.listings, "nothing moved: nothing read")
+        val settled = door.settles
         door.items = door.items + item("d", 40)
         door.moves = true
         advanceTimeBy(tick)
         assertTrue(door.listings > read, "moved: read anew")
+        assertTrue(door.settles > settled, "media that moved are a settle point (ADR 0155 § The gallery model's move, D8)")
         assertEquals("d", g.ids()?.first())
         g.close()
         runCurrent()
@@ -303,6 +310,78 @@ class GalleryActionsTest {
         val asked = door.asked
         advanceTimeBy(tick * 3)
         assertEquals(asked, door.asked)
+    }
+
+    // ADR 0155 § The gallery model's move, D4: the page's one poll across its runs — a page shown again (the web's tab visible
+    // again, a phone's screen back) asks at once where no tick started within the gap, as the web's poller did; a run that
+    // starts right after one ticked waits the interval. A poll made anew per run waited the whole interval every time.
+    @Test
+    fun aPageShownAgainCatchesUpAtOnceButNotRightAfterATick() = runTest {
+        val door = Door(three())
+        val g = open(door)
+        val tick = (LivePoll.ITEMS.intervalMs * (1 + LivePoll.ITEMS.jitter)).toLong() + 1
+        val first = backgroundScope.launch { g.live() }
+        runCurrent()
+        assertEquals(0, door.asked, "a page just opened has just read: no tick at once")
+        var waited = 0L
+        while (door.asked == 0 && waited < tick) {
+            advanceTimeBy(100)
+            waited += 100
+        }
+        assertEquals(1, door.asked, "the first tick, within a jittered interval")
+        first.cancel() // hidden
+        val again = backgroundScope.launch { g.live() } // shown again within the gap
+        runCurrent()
+        assertEquals(1, door.asked, "a tick started within the gap: no catch-up")
+        again.cancel()
+        advanceTimeBy(LivePoll.ITEMS.minGapMs + 1)
+        door.items = door.items + item("d", 40)
+        door.moves = true
+        val shown = backgroundScope.launch { g.live() } // shown again after the gap
+        runCurrent()
+        assertEquals(2, door.asked, "shown again: it asks at once")
+        assertEquals("d", g.ids()?.first(), "and reads what moved")
+        shown.cancel()
+        g.close()
+    }
+
+    // The web's sort toggle (cr-0066), the gallery model's move D3: the grid oldest first or newest first, at once and for every
+    // read after; an undated medium last either way; a tie keeps the listing's order in both directions.
+    @Test
+    fun theGridTurnsOldestFirstAtOnceAnUndatedMediumLastEitherWay() = runTest {
+        val undated = MemoryMedia.Item(
+            "s", "m", "u", blob("o-u"), blob("t-u"), blob("p-u"), null, "image/jpeg", "u.jpg", "user:u1", false, ByteArray(0),
+        )
+        val door = Door(listOf(item("a", 10), item("b", 30), undated, item("c", 30)))
+        val g = open(door)
+        assertEquals(listOf("b", "c", "a", "u"), g.ids())
+        g.sort(oldestFirst = true)
+        assertEquals(listOf("a", "b", "c", "u"), g.ids(), "turned at once, no read")
+        assertTrue(g.current.oldestFirst)
+        door.items = door.items + item("d", 5)
+        g.readAnew()
+        assertEquals(listOf("d", "a", "b", "c", "u"), g.ids(), "a read after orders in the page's direction")
+        g.sort(oldestFirst = false)
+        assertEquals(listOf("b", "c", "a", "d", "u"), g.ids())
+        g.close()
+    }
+
+    // The gallery model's move D5: a medium trashed here and restored from the node's trash elsewhere (the web's Trash tab)
+    // before any read showed it gone was kept out of the rows for good; [GalleryModel.restored] lets the next read show it.
+    @Test
+    fun aMediumRestoredFromTheTrashElsewhereShowsWithTheNextRead() = runTest {
+        val door = Door(three())
+        val g = open(door)
+        g.trash("a")
+        runCurrent()
+        assertEquals(listOf("b", "c"), g.ids())
+        door.trashed -= "a" // restored from the Trash tab
+        g.readAnew()
+        assertEquals(listOf("b", "c"), g.ids(), "still kept out as trashed here")
+        g.restored(listOf("a"))
+        g.readAnew()
+        assertEquals(listOf("a", "b", "c"), g.ids())
+        g.close()
     }
 
     @Test

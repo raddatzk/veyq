@@ -21,9 +21,9 @@
   with it, § Expenses' move); the owner (2026-11-22) counts the platform code its façade needs against the platform
   module's running budget and retired the search-alone budget. Its second (2026-11-24: Depot's rules, `@veyq/core-js/depot`
   from `:apps:depot`'s own module file, a lazy chunk, § Depot's move). Its third (2026-11-24: Memories' pure rules,
-  `@veyq/core-js/memories` from `:apps:memories`' own module file, never in the eager set, § Memories' move). Decision 8 is
-  not built; its measurement was taken with Memories' move (§ Memories' move, D7: the gallery's model as it is would put
-  ~285 KB gz on every first load), and the owner decided 2026-11-25 that it crosses (inbox #1323)
+  `@veyq/core-js/memories` from `:apps:memories`' own module file, never in the eager set, § Memories' move). Decision 8's
+  first model (2026-11-25: Memories' `GalleryModel` over a door the web writes, `@veyq/core-js/memories`, observed by one
+  composable, § The gallery model's move; the owner had decided that day that the models cross, inbox #1323)
 - Date: 2026-11-20
 - Amended: 2026-11-25 — **no size number gates a move any more** (the owner: "Wir gehen mit Kotlin, egal ob es ein
   bisschen teurer wird"). Dropped as gates that day: decision 7.2's R = 3.0 and the per-slice ratios, 7.3's 25 KB gz
@@ -234,6 +234,8 @@ Measured before the decision (2026-11-20):
    client and with them Ktor and kotlinx.serialization, which then ship in the platform's module file with every entry —
    +284,612 B gz on every first load. How the first model crosses — `GalleryModel` as it is, or reading through its
    `Door` first so the session stays out of the platform's file — is that move's technical design, not this decision's.
+   **Built 2026-11-25** (§ The gallery model's move): the door was already the model's whole I/O; five static reaches beside
+   it were cut, so no entry carries the session, the client, Ktor or the serializer — every entry carries coroutines.
 
 9. **The crypto suite and admin-web stay TypeScript.** `@veyq/crypto` and the Kotlin suite are two implementations
    answering to one set of vectors; that is a check worth more than the bytes it costs. A Kotlin `V1` runs in the web
@@ -1396,6 +1398,77 @@ Measured before the decision (2026-11-20):
     2026-11-25: cross (decision 8); how is the gallery move's own design.
   - **D8 — Memories' guest-path ceiling, proposed:** 816 KiB gz (835,584 B), a Memory's page's 814,770 plus Depot's relative
     headroom (decision 10; inbox #1324). Never set: the owner dropped every ceiling on 2026-11-25.
+
+- **The gallery model's move** (decision 8's first model, built 2026-11-25, branch `claude/gallery-model-web`, the work
+  order cr-gallery-model-web, deleted at harvest; inbox #1323). Memories' `GalleryModel` — what a Memory's or a chapter's
+  page lists and splits (its photos and videos, its music, its GPX tracks), in which order, when it reads anew (its live
+  poll, an upload in, a restore), a member's trash with its Undo and a refused restore named, a link guest's purge of its
+  own medium asked first — runs on the web through `@veyq/core-js/memories` (`apps/memories/src/jsMain/…/memories/web/GalleryWeb.kt`:
+  an opaque `GalleryHandle`, a `GalleryWatch`, plain shapes), over a door the web writes (`features/memories/galleryDoor.ts`:
+  the member's or the guest's source, the listing opened in its Worker and held, the poll's keyset delta applied by core's
+  `reconcileItems`, the writes) and observed by one composable (`useGalleryModel.ts`: one `shallowRef`, the live poll
+  while the tab is visible, everything ended with the scope). The guest's Memory page and the member's draw the one model
+  (`MemoryDetail` through `useMediaGalleryLive`, share view = member view). No key crosses: the door hands the model the
+  opened facts it orders and splits by, and the web reads every byte itself. Deleted: the TypeScript's own listing state,
+  its order and split, its tombstone and Undo, `mediaRevisionPolling.ts` and its test. What stays TypeScript, and why: the
+  thumbnail pipeline (decoding and its cache are the platform's, ADR 0136 decision 1), the in-flight upload tiles with
+  their previews (inbox #1342), the lightbox's snapshot, slideshow and details (#1343), the marks (#1340; the model's port
+  exists), the filter and the rights matrix (#1321), the Trash tab (no Kotlin twin). Its measurements (each against
+  `ba2704c62`, the tree before the move, its own build; the machine at a load of 6–20 from other agents):
+
+  | Criterion | Measured |
+  |---|---|
+  | size: the platform module, every entry (the package's `slice.test.ts`, `@noble/*` external) | 79,874 → 145,049 B gz (+65,175), every first load: of it the words' enum (`Msg`, 1,574 entries, ~27.8 KB gz alone; inbox #1341), coroutines (~15.2 KB gz) and the standard library they reach (+17.2 KB gz); no kotlinx.serialization, no Ktor, no session or API client source in any entry's map |
+  | size: Memories over every platform entry | +4,249 → +20,578 B gz (the model, its door and its shapes; its module's own 58,632 B minified) |
+  | size: the web's eager set (`vite build`, gzip -9 per chunk) | 688,246 → 752,759 (+64,513: `review`, which holds the platform module, +64,512) |
+  | size: a link guest's first load (decision 10, Depot's move D8's method) | a Memory's share body 718,798 → 797,882 (+79,084); a Memory's page 814,770 → 894,262 (+79,492); a Depot file 702,776 → 767,341 (+64,565); a drop box 691,948 → 756,449 (+64,501); a Pot's page 718,924 → 783,329 (+64,405) |
+  | size: the chunks Memories loads | `media` 11,730 → 26,395 (+14,665: Memories' module, now with the model, inlined), `MemoryDetailHost` +410 |
+  | size: the TypeScript (each set bundled alone, every other import external, gzip -9) | 2,705 B gz deleted (`useMediaGalleryLive.ts`, `mediaRevisionPolling.ts`) against 3,317 B gz of glue after (the same composable, the door, the observing composable): +612 net — the rules left, the I/O the door now names explicitly stayed |
+  | time: a page's read of a 10,000-medium Memory (9,355 photos and videos, 395 music, 250 GPX; the order, the split and the state crossing; Node 22.23.4, median of 15 after 3 warm-ups) | 15.0–18.3 ms against the TypeScript's 2.6 (5.7–7.0×), four runs |
+  | time: the sort toggle, the same | 2.4–3.1 ms against 2.0–2.1 (1.13–1.48×) |
+  | time: a trash, out of the rows with its Undo | 1.3–1.5 ms |
+  | answers | identical (a digest over the rows newest and oldest first; the music and the tracks as sets) |
+  | behaviour | the web's tests pass with the twins' tests adapted: the guest page's poll driven through the model's timers, the purge through the model, one naming case re-pointed (D7); the core's: `LightboxPinsTest` pins the web's Undo toast's life (the window is the model's), `QueuedOverlayTest`'s undated pair keeps the listing's order (D3) |
+  | tests | `GalleryActionsTest` gained the catch-up, the direction and the restore; `MemoryMediaTest` the direction and the ties; the package's `gallery.test.ts` runs the model through the shipped module; the web's `useGalleryModel.test.ts` the observation. Bites: the poll made per run (D4) turns the catch-up red (`shown again: it asks at once`); the composable's visibility stop removed turns its background case red (7 polls for 1) |
+
+  Decision 4's rows: every entry of `slice.test.ts` declares coroutines since this move — what the platform's part of the
+  model reaches lands in the platform's one module file, which every entry imports. The move's decision log, kept by its
+  implementer (question, choice and why, evidence, cost):
+  - **D1 — The set: the gallery's listing state, not the page.** Every other part of the page has web state the model's
+    would duplicate until that part moves; six screens in one move were not wanted. *Cost:* the rows above.
+  - **D2 — The door is the port; five reaches beside it cut** (the row's question, re-derived: as-is or through the door).
+    The probe's 450 platform classes came not through the door but through `ItemMarks` (a concrete class over the tenant),
+    the initializers of `MemoriesSearch` (`val search`: the space's listing, Ktor), `MemoryMedia` and `MediaDetails` (a
+    `Json`), `NodeExport` (a `Json`, reached through `GalleryFilter.Calendar.UTC`), and `UploadQueue.Status` (a
+    `@Serializable` enum: every use of an entry initializes its companion's serializer). Cut: `GalleryModel.Marks`, a port
+    `ItemMarks` implements (the door's `marks()` returns it; `ItemMarks.setLocal` is public now — a public Kotlin signature
+    change), each initializer in an object of its own made on first use, `UploadTile` reading its status once. Measured,
+    every platform entry bundled: 380,894 as the probe left it, 150,385 with the first three cut, 148,170 with the fourth,
+    145,049 B gz with the fifth.
+  - **D3 — The grid's order is the model's, in the web's direction and with the web's ties** (ADR 0154's rule): the web
+    toggled newest/oldest and broke a tie by the listing's order, the core had one direction and broke ties by id.
+    `MemoryMedia.order(items, oldestFirst)` is a stable sort, an undated medium last either way; the model orders every
+    listing's rows itself (`GalleryModel.sort`, `State.oldestFirst`). The apps' order changes only on a tie; they draw no toggle yet
+    (#1344).
+  - **D4 — One poll per page.** `live()` made a `LivePoll` per run, its last start always now, so a page shown again waited
+    the whole interval — against `LivePoll`'s own contract and the web's poller. The page keeps one across its runs.
+  - **D5 — A restore from the Trash tab lifts the model's tombstone** (`GalleryModel.restored`): a medium trashed here and
+    restored before a read showed it gone stayed hidden; the web had `liftTombstone`, the model had no way in.
+  - **D6 — The web's model runs on microtasks.** The platform's default dispatcher queues each step through `postMessage`, so
+    the page drew a read a task late and the settle the model starts after a read ran before the web's state held the rows.
+    Each step is a microtask, as the TypeScript's awaits were; delays stay `setTimeout`; the web sets its state in the
+    model's own listener.
+  - **D7 — A refused restore names the medium by its place in the gallery's rows**, not in the web's lightbox snapshot,
+    which is still the web's (#1343) — the one answer that changed.
+  - **D8 — Settle points are the model's, and a poll that moved is one** (the web's answer: uc.memory.live-updates lets a
+    peer's additions reach the `auto` date sooner, uc.memory.date E5; the core settled only at the opening and a trash, so
+    the apps now settle after a moved poll too); an upload batch's end settles on the web, as the apps' `MediaUploads` do.
+  - **D9 — The model's rights are fed the web's delete reach only** (a contributor's purge, a member's trash, else none); the
+    page's other rights stay the web's matrix (#1321).
+  - **D10 — The music and the tracks keep the listing's order**, as before, in the model too (only the rows take the grid's
+    order; a test door listing unordered tracks showed the difference): the model decides membership, each tab its own order.
+  - *Not done here:* the browser pass (a member's Memory and a guest's, en and de: the poll, a trash and its Undo, a guest's
+    purge, the sort) — the tests above hold the behaviour; the pass is owed (inbox #1345).
 
 - **The operator-served web is unchanged in kind** ([ADR 0026](0026-client-trust-tiers.md)): still same-origin,
   content-hashed chunks, no new CSP source, no Subresource Integrity in use before or after; the Kotlin output is one

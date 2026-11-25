@@ -97,7 +97,11 @@ object MediaDetails {
         val gpsAccuracy: Double?, val width: Double?, val height: Double?,
     )
 
-    private val json = Json { ignoreUnknownKeys = true }
+    // in an object of its own, built on its first use: the object's own initializer would otherwise keep kotlinx.serialization
+    // in every bundle that reaches this object for a pure rule (the web's gallery model, ADR 0155 § The gallery model's move, D2)
+    private object Lenient {
+        val json = Json { ignoreUnknownKeys = true }
+    }
 
     /** [item]'s heavy EXIF tier, or null where none was sealed or it does not open (`loadMediaExif`). A member's read. */
     @Throws(Exception::class)
@@ -116,7 +120,7 @@ object MediaDetails {
         val api = MediaApi(tenant.base, tenant.account.http)
         val wrapped = tenant.account.call { api.getMediaExif(item.scopeId, item.mediaId) }.wrappedExif ?: return null
         return runCatching {
-            json.parseToJsonElement(
+            Lenient.json.parseToJsonElement(
                 tenant.account.suite.openField(Context("media-exif", "scopeId" to item.scopeId, "mediaId" to item.mediaId), item.key, unb64(wrapped)).decodeToString(),
             ) as JsonObject
         }.getOrNull()
@@ -124,7 +128,7 @@ object MediaDetails {
 
     internal fun openExif(suite: me.raddatz.veyq.mobile.crypto.V1, scopeId: String, mediaId: String, key: ByteArray, wrapped: String): Exif? = runCatching {
         val text = suite.openField(Context("media-exif", "scopeId" to scopeId, "mediaId" to mediaId), key, unb64(wrapped)).decodeToString()
-        exifOf(json.parseToJsonElement(text) as JsonObject)
+        exifOf(Lenient.json.parseToJsonElement(text) as JsonObject)
     }.getOrNull()
 
     internal fun exifOf(o: JsonObject): Exif {

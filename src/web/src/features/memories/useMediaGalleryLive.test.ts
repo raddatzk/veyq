@@ -13,10 +13,6 @@ vi.mock('./media', async (orig) => ({
   unsealMeta: vi.fn(),
   effectiveCapturedAt: vi.fn(),
 }))
-vi.mock('./mediaRevisionPolling', () => ({
-  startMediaRevisionPolling: vi.fn(),
-  stopMediaRevisionPolling: vi.fn(),
-}))
 // The optimistic tiles pull from the global upload queue — stub them out (no donations in these cases).
 vi.mock('./useOptimisticTiles', async () => {
   const { computed } = await import('vue')
@@ -268,9 +264,11 @@ describe('useMediaGalleryLive — a lightbox Undo whose restore is refused (inbo
     expect(listMediaPages).toHaveBeenCalledTimes(2) // the mount's list and the re-list after the refused restore
   })
 
-  it('names a medium without a sealed file name by its place in the grid the lightbox opened on, by reason', async () => {
+  // The gallery model names it by its place in the gallery's rows (`GalleryModel.nameOf`), not in the web's own lightbox
+  // snapshot (a bucket's order here, c, b, a): the lightbox is still the web's (ADR 0155 § The gallery model's move, D7).
+  it('names a medium without a sealed file name by its place in the gallery, by reason', async () => {
     vi.mocked(restoreMedia).mockRejectedValue(refusal(404, 'media_not_found')) // purged meanwhile
-    await deleteInLightboxAndUndo('a')
+    await deleteInLightboxAndUndo('c')
     expect(toastError.mock.calls.map(([line]) => line)).toEqual([
       'Not restored: Item 3. Already gone from this Memory, or you no longer have access.',
     ])
@@ -294,8 +292,8 @@ describe('useMediaGalleryLive — a lightbox Undo whose restore is refused (inbo
     expect(vm.items.map((i) => i.mediaId)).toEqual(['pic', 'bare'])
     expect(vm.layoutItems.map((t) => t.id).sort()).toEqual(['bare', 'pic'])
     expect(vm.openLightboxOn('trk')).toBe(false)
-    // a removal reaches a track as it reaches a photo
-    vm.removeMedia('trk')
+    // a removal reaches a track as it reaches a photo (the gallery model's trash)
+    await vm.onDeleteFromLightbox({ mediaId: 'trk' })
     expect(vm.tracks).toEqual([])
     expect(vm.items.map((i) => i.mediaId)).toEqual(['pic', 'bare'])
   })
@@ -315,7 +313,7 @@ describe('useMediaGalleryLive — a lightbox Undo whose restore is refused (inbo
     expect(vm.music.map((i) => i.mediaId)).toEqual(['song'])
     expect(vm.tracks.map((i) => i.mediaId)).toEqual(['trk'])
     expect(['song', 'trk'].map((id) => vm.openLightboxOn(id)), 'no lightbox opens on music or a track').toEqual([false, false])
-    vm.removeMedia('song')
+    await vm.onDeleteFromLightbox({ mediaId: 'song' })
     expect(vm.music).toEqual([])
   })
 })

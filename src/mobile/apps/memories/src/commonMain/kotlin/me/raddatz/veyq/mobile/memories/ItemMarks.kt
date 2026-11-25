@@ -37,11 +37,11 @@ class ItemMarks internal constructor(
     val scopeId: String,
     val nodeId: String,
     /** A personal scope: no count is shown. */
-    val personal: Boolean,
+    override val personal: Boolean,
     private val suite: V1,
     private val random: Primitives,
     private val store: Store,
-) {
+) : GalleryModel.Marks {
     /** One member's set, as opened: whether it is the caller's own, and its media ids. */
     class MemberSet(val own: Boolean, val ids: Set<String>)
 
@@ -80,16 +80,16 @@ class ItemMarks internal constructor(
     private fun edit(change: (List<MemberSet>) -> List<MemberSet>) = held.update { Held(change(it.sets), it.loaded, it.edits + 1) }
 
     /** How many members marked [mediaId]; null in a personal scope (no count, E4). */
-    fun count(mediaId: String): Int? = if (personal) null else sets.count { mediaId in it.ids }
+    override fun count(mediaId: String): Int? = if (personal) null else sets.count { mediaId in it.ids }
 
     /** Whether the caller's own set holds [mediaId] — its self-tagged set, never the count. */
-    fun markedByMe(mediaId: String): Boolean = sets.firstOrNull { it.own }?.ids?.contains(mediaId) == true
+    override fun markedByMe(mediaId: String): Boolean = sets.firstOrNull { it.own }?.ids?.contains(mediaId) == true
 
     /** Every medium anyone marked (the filter's *everyone*). */
-    fun markedByAnyone(): Set<String> = sets.flatMapTo(HashSet()) { it.ids }
+    override fun markedByAnyone(): Set<String> = sets.flatMapTo(HashSet()) { it.ids }
 
     /** The caller's own marks (the filter's *mine*). */
-    fun mine(): Set<String> = sets.firstOrNull { it.own }?.ids.orEmpty()
+    override fun mine(): Set<String> = sets.firstOrNull { it.own }?.ids.orEmpty()
 
     /**
      * Reads every member's set; false where the listing did not read (the toggle stays refused). [overlay] — the marks set
@@ -99,7 +99,7 @@ class ItemMarks internal constructor(
      * set as shown is newer than the one listed and the overlay read — the read takes every other member's set and keeps
      * the shown own set, never putting a mark just made back.
      */
-    suspend fun load(overlay: suspend () -> Map<String, Boolean> = { emptyMap() }): Boolean {
+    override suspend fun load(overlay: suspend () -> Map<String, Boolean>): Boolean {
         val since = held.value.edits
         val entries = try {
             store.list()
@@ -148,7 +148,7 @@ class ItemMarks internal constructor(
     }
 
     /** The caller's mark on [mediaId] flipped and the whole own set written; put back where the write did not land. */
-    suspend fun toggle(mediaId: String): Toggled {
+    override suspend fun toggle(mediaId: String): Toggled {
         if (!loaded) return Toggled.NOT_LOADED
         var before: MemberSet? = null
         var mine: Set<String> = emptySet()
@@ -172,7 +172,7 @@ class ItemMarks internal constructor(
     }
 
     /** The caller's own set as shown holding [mediaId] or not ([marked]): a mark made offline, waiting to be sent. */
-    internal fun setLocal(mediaId: String, marked: Boolean) = edit { sets ->
+    override fun setLocal(mediaId: String, marked: Boolean) = edit { sets ->
         sets.filter { !it.own } + MemberSet(true, withMarks(sets.firstOrNull { it.own }?.ids.orEmpty(), mapOf(mediaId to marked)))
     }
 

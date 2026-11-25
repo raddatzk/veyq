@@ -77,8 +77,12 @@ object NodeExport {
 
     class Written(val payloads: Int, val bytes: Long)
 
-    @OptIn(ExperimentalSerializationApi::class)
-    private val pretty = Json { prettyPrint = true; prettyPrintIndent = "  " }
+    // in an object of its own, made on its first use: the object's own initializer would otherwise keep kotlinx.serialization in
+    // every bundle that reaches this object for a pure rule ([isoMs]: the web's gallery model, ADR 0155 § The gallery model's move, D2)
+    private object Pretty {
+        @OptIn(ExperimentalSerializationApi::class)
+        val json = Json { prettyPrint = true; prettyPrintIndent = "  " }
+    }
 
     /** The file a download of node [name] is saved as (the web's `${archiveName(name)}.zip`). */
     fun fileName(name: String): String = ArchiveName.of(name, mutableSetOf()) + ".zip"
@@ -212,7 +216,7 @@ object NodeExport {
             put("applications", JsonArray(applications.map { (id, schema) -> buildJsonObject { put("id", id); put("contentSchema", schema) } }))
             put("root", node(tree))
         }
-        zip.addBytes(MANIFEST_PATH, pretty.encodeToString(JsonObject.serializer(), manifest).encodeToByteArray())
+        zip.addBytes(MANIFEST_PATH, Pretty.json.encodeToString(JsonObject.serializer(), manifest).encodeToByteArray())
         zip.finish()
         return Written(count, bytes)
     }

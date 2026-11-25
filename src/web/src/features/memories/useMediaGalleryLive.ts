@@ -1,29 +1,30 @@
-// uc.memory.gallery (web) — the live-gallery core of MemoryDetail, extracted into a composable (cr-0151, audit
-// #77/P4a). Owns the listed media, the thumbnail pipeline (cr-0150) + optimistic tiles (cr-0074), the cr-0107
-// live poll (load/merge/upsert), the justified layout, and the optimistic-delete/undo. MemoryDetail keeps only
-// orchestration + the template. Operator-blind: thumbnails decrypt on device under K_node; nothing plaintext crosses.
-import { ref, computed, watch, onBeforeUnmount } from 'vue'
+// uc.memory.gallery (web) — the live gallery of MemoryDetail, drawn over Memories' Kotlin gallery model (ADR 0155 decision
+// 8, § The gallery model's move): `GalleryModel` decides what the page lists — its photos and videos in the grid's order
+// (newest or oldest first), its GPX tracks, its music —, when it reads anew (its live poll, after an upload), a member's
+// trash with its Undo and a link guest's purge of its own medium. The web keeps what a browser does: the listing's I/O and
+// opening (`galleryDoor.ts`), the thumbnail pipeline (cr-0150), the in-flight upload tiles (cr-0074), the justified layout,
+// the lightbox's snapshot and the toasts. Operator-blind: thumbnails decrypt on device under K_node; no key crosses into
+// the model, and nothing plaintext leaves the device.
+import { computed, shallowRef, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
+import * as core from '@veyq/core-js/memories'
+import type { GalleryStateShape } from '@veyq/core-js/memories'
 import { useToast } from '../../shared/state/useToast'
-import { useUndo } from '../../shared/state/useUndo'
 import type { TreeNode } from '../../core/node/tree'
-import { hasDerivatives, effectiveCapturedAt, type MediaItem } from './media'
-import { closeListing, openListing, openedBlobMeta, openedMeta } from './openedListing'
-import { isTrackMeta } from './track/gpx'
-import { isAudioMeta } from './music/audio'
-import { isGalleryMedium } from './galleryMedium'
+import { hasDerivatives, type MediaItem } from './media'
+import { closeListing } from './openedListing'
 import type { MemorySource } from './source'
-import { MEDIA_REFUSAL_TEXT, mediaRefusalOf, sealedMediaName } from './mediaRefusal'
-import { startMediaRevisionPolling, stopMediaRevisionPolling } from './mediaRevisionPolling'
-import { itemsPollTick, reconcileItems } from '../../core/items/itemsLive'
-import { noteScopeGone } from '../../core/node/treeStore'
+import { MEDIA_REFUSAL_TEXT, type MediaRefusal } from './mediaRefusal'
 import { galleryDisplayAspectRatio } from './mediaGridLayout'
+import { openedMeta } from './openedListing'
 import { useThumbnailPipeline } from './useThumbnailPipeline'
 import { useOptimisticTiles, type OptimisticTileVM } from './useOptimisticTiles'
 import { byCaptureTime } from './optimisticUpload'
+import { galleryDoor, capturedAtOf, type GalleryDoor } from './galleryDoor'
+import { GALLERY_LOADING, useGalleryModel } from './useGalleryModel'
 
-/** The reactive context MemoryDetail hands the gallery core — getters so props stay reactive, plus the reconcile
- *  settle callback (auto-date + auto-location self-heal) run after every list refresh. */
+/** The reactive context MemoryDetail hands the gallery — getters so props stay reactive, plus the settle (auto-date +
+ *  auto-location self-heal) the model runs at its settle points: the opening, a trash, a poll that moved. */
 export interface MediaGalleryLiveCtx {
   /** The session's data source (`./source.ts`): the list, the tiles' bytes, the live poll and the delete — each only
    *  where the source carries it (a guest's has no trash, and its delete reaches its own media only). */
@@ -36,8 +37,7 @@ export interface MediaGalleryLiveCtx {
    * The gallery's filter - the item marks (ADR 0068) and the facts (uc.memory.gallery step 8), one predicate
    * (`galleryFilter.ts`' `galleryPredicate`) - or null when the gallery shows everything. It is applied to
    * `sortedItems` — the one list the grid, each tile's `index` and `openLightboxAt`'s snapshot all derive from
-   * — so filtering narrows the lightbox with the grid. Filtering only the grid would let prev/next page
-   * straight out of the selection the user just made.
+   * — so filtering narrows the lightbox with the grid.
    */
   filter?: () => ((item: MediaItem) => boolean) | null
 }
@@ -47,27 +47,49 @@ export type MemoryTileItem =
   | { id: string; aspectRatio: number; kind: 'optimistic'; optimistic: OptimisticTileVM }
   | { id: string; aspectRatio: number; kind: 'media'; media: MediaItem; index: number }
 
+/** The model's restore refusal reasons, as the web's words name them. */
+const REASON: Record<string, MediaRefusal> = { gone: 'gone', scope_deleting: 'scope_deleting', blocked: 'blocked_by_operator', failed: 'failed' }
+
 export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   const { t } = useI18n()
   const toast = useToast()
-  // Every listed medium of the node, and what this gallery shows of them: only a photo or a video (`isGalleryMedium`, one
-  // predicate for every photo view), known by its opened `blob-meta` - `items`, the one list every view of photos derives
-  // from (the grid, the lightbox, the count, the organizer, the search, the date and place reconcile). A GPX track (ADR
-  // 0130 decision 1) and a music track (ADR 0135 decision 2) are media too and no photo: each is handed to its own tab, as
-  // `tracks` (the Map tab) and `music` (the Music tab). The listing is opened before it is merged, so the meta is there;
-  // without the node's key nothing can be told apart, and every medium is the gallery's.
-  const listed = ref<MediaItem[]>([])
-  function blobMetaOf(item: MediaItem) {
-    const key = ctx.memoryKey()
-    return key ? openedBlobMeta(ctx.scopeId(), key, item) : undefined
+  /** The page's state as the model last said it — set in the model's own listener, so a settle the model runs right after
+   *  a read sees its rows (`GALLERY_LOADING` before; an `error` while no key opens the node). */
+  const state = shallowRef<GalleryStateShape>(GALLERY_LOADING)
+  const model = useGalleryModel(state)
+  let door: GalleryDoor | null = null
+
+  /** The model's ids drawn as the door's listed media (the same objects every view and the lightbox's snapshot hold). */
+  function itemsOf(ids: readonly string[]): MediaItem[] {
+    const byId = door?.byId
+    if (!byId) return []
+    const out: MediaItem[] = []
+    for (const id of ids) {
+      const m = byId.get(id)
+      if (m) out.push(m)
+    }
+    return out
   }
-  const items = computed(() => listed.value.filter((it) => { const meta = blobMetaOf(it); return meta === undefined || isGalleryMedium(meta) }))
-  const tracks = computed(() => listed.value.filter((it) => { const meta = blobMetaOf(it); return meta !== undefined && isTrackMeta(meta) }))
-  const music = computed(() => listed.value.filter((it) => { const meta = blobMetaOf(it); return meta !== undefined && isAudioMeta(meta) }))
+  // Every photo and video of the node in the grid's order (`GalleryMedium`, the model's split): the one list every view of
+  // photos derives from (the grid, the lightbox, the count, the organizer, the search, the date and place reconcile). A
+  // GPX track (ADR 0130 decision 1) and a music track (ADR 0135 decision 2) are media too and no photo: each is handed to its
+  // own tab, as `tracks` (the Map tab) and `music` (the Music tab), in the listing's order.
+  /** The model's ids in the listing's order, as the Map and the Music tab took them before (each tab orders its own). */
+  function listedOf(ids: readonly string[]): MediaItem[] {
+    const want = new Set(ids)
+    return (door?.listed ?? []).filter((m) => want.has(m.mediaId))
+  }
+  const items = computed(() => itemsOf(state.value.rows))
+  const tracks = computed(() => listedOf(state.value.tracks))
+  const music = computed(() => listedOf(state.value.music))
+  const status = computed(() => state.value.status as 'loading' | 'ready' | 'error')
+
   // Optimistic in-grid upload tiles (uc.memory.upload, cr-0074): the shared queue's still-in-flight files for THIS
   // node (grouping key = the node id) as instant preview tiles, reconciled into the real thumbnail by mediaId.
-  // `donorPreviewFor` feeds the thumbnail pipeline the preview to hand off.
-  const listedMediaIds = computed(() => new Set(listed.value.map((it) => it.mediaId)))
+  const listedMediaIds = computed(() => {
+    const s = state.value // read first: the state is what this follows (the door is no reactive value)
+    return new Set([...s.rows, ...s.music, ...s.tracks])
+  })
   const { optimisticTiles, donorPreviewFor, wantPreviews } = useOptimisticTiles(computed(() => ctx.source.batchKey(ctx.node().id)), listedMediaIds)
   // The gallery thumbnail pipeline (cr-0150) — decrypt-per-tile → object-URL map, the single revoke owner of every
   // thumbnail (incl. a donated optimistic preview). Decrypt = the grid tier under K_node (operator-blind).
@@ -81,44 +103,26 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     },
     donorPreviewFor,
   })
+  // the pipeline reads what the grid wants from the list it holds, and revokes a thumbnail whose medium the rows dropped
+  watch(items, (now) => pipeline.reconcile(now))
   const thumbs = pipeline.thumbs // mediaId → thumbnail object URL (derivable items only)
   const thumbFailed = pipeline.failed // mediaIds whose thumbnail read failed for good: the tile's error state
-  const status = ref<'loading' | 'ready' | 'error'>('loading')
-  // live media updates (uc.memory.live-updates, cr-0107): the list's tag — the ETag echoed as If-None-Match, opaque here
-  // (a member's: the node's item revision; a guest's: a digest of what its link serves, inbox #497); null until the first
-  // load, and while the source has no live poll — + deleteRevision (echoed as sinceDelete to gate the id-set).
-  const mediaTag = ref<string | null>(null)
-  const deleteRevision = ref(0)
-  // …and the keyset cursor the next poll continues from: the one the server answered with the last page it read (ADR
-  // 0033 decision 6) — never assembled from the items, whose order is the server's to say.
-  let pollSince: string | undefined
-  const lightboxIndex = ref<number | null>(null)
-  const lightboxItems = ref<MediaItem[]>([]) // a snapshot of the sorted order at open time (so an in-lightbox edit can't reorder underfoot)
-  // trash undo (cr-0110): a lightbox-only delete soft-deletes into a per-Memory trash; an undo-toast offers restore
-  // (cr-0157/ADR 0039). The soft-delete is eager, so the window elapsing commits nothing — it just lets the trash
-  // stand; only `onUndoDelete` (restore) is a real action, hence no `onExpire`.
-  const undo = useUndo<{ mediaId: string; name: string }>({ timeoutMs: 6000 })
-  // Tombstone of mediaIds optimistically removed by a trash but not yet confirmed gone (cr-0111): filtered out of
-  // the merge/poll paths so a stale live read (a poll firing before the delete commits) can't re-add them.
-  const pendingDelete = new Set<string>()
-  // date sort (cr-0066): tiles order by effective capturedAt; newest first by default.
-  const sortDir = ref<'newest' | 'oldest'>('newest')
-
-  // The effective capture time of an item (from its sealed metadata tier), or undefined when it has none.
-  function capturedAtOf(item: MediaItem): number | undefined {
-    const key = ctx.memoryKey()
-    return key ? effectiveCapturedAt(openedMeta(ctx.scopeId(), key, item)) : undefined
-  }
-  const sortDirection = computed<1 | -1>(() => (sortDir.value === 'newest' ? -1 : 1))
-  // The LISTED media in grid order — the lightbox's world: the `index` below and `openLightboxAt`'s snapshot are
-  // both positions in THIS list, never in the merged one, so an in-flight tile can never shift which photo a
-  // click opens. The merged list sorts on the same key, so the media order inside it is identical to this.
-  const sortedItems = computed(() => {
-    const keep = ctx.filter?.() ?? null
-    const shown = keep ? items.value.filter(keep) : items.value
-    return byCaptureTime(shown, capturedAtOf, sortDirection.value)
+  const lightboxIndex = shallowRef<number | null>(null)
+  const lightboxItems = shallowRef<MediaItem[]>([]) // a snapshot of the sorted order at open time (so an in-lightbox edit can't reorder underfoot)
+  // date sort (cr-0066): newest first by default; the order is the model's (`MemoryMedia.order`)
+  const sortDir = shallowRef<'newest' | 'oldest'>('newest')
+  watch(sortDir, (dir) => {
+    const h = model.handle()
+    if (h) core.memoriesGallerySort(h, dir === 'oldest')
   })
 
+  const capturedAt = (item: MediaItem) => capturedAtOf(ctx.scopeId(), ctx.memoryKey(), item)
+  // The LISTED media in grid order, narrowed by the filter — the lightbox's world: the `index` below and
+  // `openLightboxAt`'s snapshot are both positions in THIS list, never in the merged one.
+  const sortedItems = computed(() => {
+    const keep = ctx.filter?.() ?? null
+    return keep ? items.value.filter(keep) : items.value
+  })
   const aspectRatios = computed(() => {
     const key = ctx.memoryKey()
     const m = new Map<string, number>()
@@ -129,91 +133,87 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     return m
   })
   const FALLBACK_ASPECT = galleryDisplayAspectRatio(undefined, undefined)
-  // The tile list handed to [MediaGrid] — ONE order over both kinds of tile (uc.memory.gallery § "One order for
-  // every tile"), each carrying its content so the grid slot renders it without a lookup. An in-flight upload
-  // sorts on the capture time it will be sealed with, so it appears where it will stay: settling changes a
-  // tile's content, never its place. Optimistic tiles are passed first so an equal key resolves in their
-  // favour — that is how a settling tile hands its own slot to the media it becomes.
-  const layoutItems = computed<MemoryTileItem[]>(() =>
-    byCaptureTime<MemoryTileItem>(
-      [
-        // An in-flight upload carries no marks and no opened facts yet, so it is not part of a filtered view — showing
-        // it would put an unmarked tile inside "only mine". Unfiltered, it keeps its capture-time slot as always.
-        ...(ctx.filter?.()
-          ? []
-          : optimisticTiles.value.map((t) => ({ id: t.layoutId, aspectRatio: t.aspectRatio, kind: 'optimistic' as const, optimistic: t }))),
-        ...sortedItems.value.map((it, index) => ({
-          id: it.mediaId,
-          aspectRatio: aspectRatios.value.get(it.mediaId) ?? FALLBACK_ASPECT,
-          kind: 'media' as const,
-          media: it,
-          index,
-        })),
-      ],
-      (tile) => (tile.kind === 'optimistic' ? tile.optimistic.capturedAt : capturedAtOf(tile.media)),
-      sortDirection.value,
-    ),
-  )
+  // The tile list handed to [MediaGrid] — ONE order over both kinds of tile (uc.memory.gallery § "One order for every
+  // tile"): an in-flight upload sorts on the capture time it will be sealed with among the model's rows, which keep their
+  // order (the same key, ties in place), so it appears where it will stay; passed first, it hands its slot to the media it
+  // becomes. The in-flight tiles' own placement onto the model's is inbox #1342.
+  const layoutItems = computed<MemoryTileItem[]>(() => {
+    const media = sortedItems.value.map((it, index) => ({
+      id: it.mediaId,
+      aspectRatio: aspectRatios.value.get(it.mediaId) ?? FALLBACK_ASPECT,
+      kind: 'media' as const,
+      media: it,
+      index,
+    }))
+    // An in-flight upload carries no marks and no opened facts yet, so it is not part of a filtered view.
+    if (ctx.filter?.() || optimisticTiles.value.length === 0) return media
+    return byCaptureTime<MemoryTileItem>(
+      [...optimisticTiles.value.map((o) => ({ id: o.layoutId, aspectRatio: o.aspectRatio, kind: 'optimistic' as const, optimistic: o })), ...media],
+      (tile) => (tile.kind === 'optimistic' ? tile.optimistic.capturedAt : capturedAt(tile.media)),
+      sortDir.value === 'newest' ? -1 : 1,
+    )
+  })
   // Whether the gallery has anything to show — real media or in-flight optimistic uploads.
   const hasContent = computed(() => items.value.length > 0 || optimisticTiles.value.length > 0)
 
-  // --- optimistic delete / undo (uc.memory.delete-media, cr-0110/0111) ---
+  // --- a member's trash with its Undo (uc.memory.delete-media, cr-0110/0111): the model's ---
 
-  /** Trash the current lightbox photo: optimistic grid/lightbox removal, the server soft-delete, and a transient
-   *  undo-toast. The live poll would also drop it; the optimistic removal is instant. */
+  // The Undo's toast while the model offers it; a restore it refused, named with its reason (inbox #429).
+  watch(() => state.value.undo, (offered, was) => {
+    if (offered && !was) toast.showUndo({ summary: t('words.memory_moved_to_trash'), onUndo: onUndoDelete, life: 6000 })
+    else if (!offered && was) toast.dismissUndo()
+  })
+  watch(() => state.value.said, (said) => {
+    const h = model.handle()
+    if (!said || !h || said.kind !== 'restoreRefused') return
+    core.memoriesGallerySeen(h)
+    const name = said.name ?? t('memory.buckets.unnamedMedia', { n: said.unnamedAt ?? 1 })
+    toast.error(t('memory.buckets.restoreRefused', { names: name, reason: t(MEDIA_REFUSAL_TEXT[REASON[said.reason ?? 'failed'] ?? 'failed']) }))
+  })
+
+  /** Trash the current lightbox photo: out of the grid and the lightbox at once, the server's soft delete, an Undo. */
   async function onDeleteFromLightbox(payload: { mediaId: string }) {
-    const del = ctx.source.deleteMedia
-    if (!ctx.memoryKey() || del?.reach !== 'any') return // only a trash has an undo; a guest's purge is asked first
-    const name = mediaNameOf(payload.mediaId) // before the removal: the Undo names a refused restore by it (inbox #429)
-    removeFromGrid(payload.mediaId)
-    undo.arm({ mediaId: payload.mediaId, name })
-    toast.showUndo({ summary: t('words.memory_moved_to_trash'), onUndo: onUndoDelete, life: 6000 })
-    try {
-      await del.trash(payload.mediaId)
-    } catch {
-      undo.cancel() // the trash failed → drop the stale undo-toast, re-list to restore the true state
-      toast.dismissUndo()
-      void load()
-    }
+    const h = model.handle()
+    if (!h || ctx.source.deleteMedia?.reach !== 'any') return // only a trash has an undo; a guest's purge is asked first
+    dropFromLightbox(payload.mediaId)
+    pipeline.dropThumb(payload.mediaId)
+    await core.memoriesGalleryTrash(h, payload.mediaId)
   }
 
-  /** Drop a media from the open grid + lightbox snapshot (optimistic), revoking its thumbnail object URL. */
-  function removeFromGrid(mediaId: string) {
-    pendingDelete.add(mediaId) // cr-0111: tombstone so a racing live read can't re-add it before the delete commits
+  /** The Undo of the just-trashed medium: the model restores it and reads anew. */
+  async function onUndoDelete() {
+    const h = model.handle()
+    if (h) await core.memoriesGalleryUndo(h)
+  }
+
+  /**
+   * A guest's own medium purged, the guest having confirmed (inbox #361: irreversible, so the page asks first): out of the
+   * rows once it went. False where it did not (the tile stays, to try again).
+   */
+  async function purgeOwn(mediaId: string): Promise<boolean> {
+    const h = model.handle()
+    if (!h) return false
+    await core.memoriesGalleryTrash(h, mediaId) // the model asks: a guest's own medium is a purge
+    await core.memoriesGalleryPurge(h, true)
+    const said = state.value.said
+    if (said?.kind === 'purgeFailed') {
+      core.memoriesGallerySeen(h)
+      return false
+    }
+    dropFromLightbox(mediaId)
     pipeline.dropThumb(mediaId)
-    listed.value = listed.value.filter((it) => it.mediaId !== mediaId)
+    return true
+  }
+
+  function dropFromLightbox(mediaId: string) {
     lightboxItems.value = lightboxItems.value.filter((it) => it.mediaId !== mediaId)
   }
 
-  /** A medium's name for a refusal: the file name sealed in its original's blob meta, else its place in the grid the
-   *  lightbox was opened on (the organizer's wording, `memory.buckets.unnamedMedia`). */
-  function mediaNameOf(mediaId: string): string {
-    const opened = lightboxItems.value.findIndex((it) => it.mediaId === mediaId)
-    const list = opened >= 0 ? lightboxItems.value : sortedItems.value
-    const at = list.findIndex((it) => it.mediaId === mediaId)
-    const item = at >= 0 ? list[at] : items.value.find((it) => it.mediaId === mediaId)
-    return sealedMediaName(ctx.scopeId(), ctx.memoryKey(), item) || t('memory.buckets.unnamedMedia', { n: at >= 0 ? at + 1 : 1 })
+  /** A trash restore from the Trash tab (via useMediaTrash): the model shows it with its next read. */
+  const liftTombstone = (mediaId: string) => {
+    const h = model.handle()
+    if (h) core.memoriesGalleryRestored(h, [mediaId])
   }
-
-  /** Undo the just-trashed media: restore it server-side, then re-list so it re-appears in the grid. A refused restore
-   *  is named with its reason, as the organizer's Undo names one (inbox #429); a restore that went says nothing. */
-  async function onUndoDelete() {
-    const u = undo.cancel()
-    const del = ctx.source.deleteMedia
-    if (!u || del?.reach !== 'any') return
-    pendingDelete.delete(u.mediaId) // cr-0111: a genuine restore lifts the tombstone so the media can re-list
-    try {
-      await del.restore(u.mediaId)
-    } catch (e) {
-      const reason = t(MEDIA_REFUSAL_TEXT[await mediaRefusalOf(e)])
-      toast.error(t('memory.buckets.restoreRefused', { names: u.name, reason }))
-    } finally {
-      void load()
-    }
-  }
-
-  /** Lift the gallery tombstone for a media (a trash restore/purge from the Trash tab, via useMediaTrash). */
-  const liftTombstone = (mediaId: string) => pendingDelete.delete(mediaId)
 
   /** Open the lightbox on a grid tile, snapshotting the current sorted order so an in-lightbox edit can't reorder it. */
   function openLightboxAt(index: number) {
@@ -238,161 +238,25 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     lightboxItems.value = payload.items.slice()
     lightboxIndex.value = payload.index
   }
-  /** A date correction from the lightbox → patch the item's sealed tier so the grid re-sorts (no refetch). The item
-   *  object is shared with the open lightbox's snapshot, so the reopened detail stays consistent too. */
+  /** A date correction from the lightbox → the item's sealed tier patched (the object the lightbox shares), and the model
+   *  reads anew, so the grid re-sorts by the new time. */
   function onCapturedAtUpdated(payload: { mediaId: string; wrappedMeta: string | null; metaRevision: number }) {
-    const item = listed.value.find((it) => it.mediaId === payload.mediaId)
+    const item = door?.byId.get(payload.mediaId)
     if (!item) return
     item.wrappedMeta = payload.wrappedMeta ?? undefined
     item.metaRevision = payload.metaRevision // the base of the next meta write on this item (ADR 0077)
-    listed.value = [...listed.value] // reassign so sortedItems recomputes and the grid re-sorts
+    void load()
   }
 
-  /** Merge a fresh media list into `items` WITHOUT an empty-flash: the pipeline revokes only dropped thumbnails and
-   *  donates a done upload's preview for each newly-listed media (its optimistic tile hands off with no gray gap,
-   *  the real thumbnail replacing the donation once it decrypts); this keeps the `pendingDelete` tombstone. */
-  function mergeItems(fresh: MediaItem[]) {
-    for (const id of [...pendingDelete]) if (!fresh.some((m) => m.mediaId === id)) pendingDelete.delete(id) // cr-0111: confirmed gone
-    const visible = fresh.filter((m) => !pendingDelete.has(m.mediaId)) // cr-0111: keep optimistically-trashed media out until the delete commits
-    pipeline.reconcile(visible)
-    listed.value = visible
+  /** The gallery read anew (an upload's file in, a batch done, a restore): resolved once the rows hold that listing. */
+  async function load() {
+    const h = model.handle()
+    if (h) await core.memoriesGalleryReload(h)
   }
 
-  // `reset` (a Memory/chapter switch) clears the grid up front; an incremental reload (post-upload batch) merges
-  // the fresh list into place so existing tiles don't blink empty — jarring next to the optimistic tiles (cr-0074).
-  async function load({ reset = false }: { reset?: boolean } = {}) {
-    const key = ctx.memoryKey()
-    const nodeId = ctx.node().id
-    if (!key) {
-      pipeline.revokeAll()
-      listed.value = []
-      mediaTag.value = null // E4: no K_node (locked / not openable) → gallery unavailable, no live poll
-      deleteRevision.value = 0
-      pollSince = undefined
-      status.value = 'error'
-      return
-    }
-    if (reset) {
-      pipeline.revokeAll()
-      listed.value = []
-      mediaTag.value = null
-      deleteRevision.value = 0
-      pollSince = undefined
-    }
-    status.value = listed.value.length ? 'ready' : 'loading'
-    try {
-      const page = await ctx.source.listMedia(nodeId) // every page of it
-      if (ctx.node().id !== nodeId) return // navigated away while listing
-      // Every listed seal opened (in the listing opener Worker, once per seal) before a tile is placed: the order is the
-      // sealed capture time, so it is final only now (ADR 0105 decision 4) — until then the loading state stays.
-      await openListing(ctx.scopeId(), key, page.items)
-      if (ctx.node().id !== nodeId) return
-      mergeItems(page.items)
-      // The live poll continues from the FIRST page's revisions — read before its rows, so a change committed while the
-      // pages came in moves the server past them and the next poll pulls it — and from the LAST page's cursor (ADR 0033
-      // decision 6). None: this source has no live poll.
-      mediaTag.value = page.revision?.tag ?? null
-      deleteRevision.value = page.revision?.delete ?? 0
-      pollSince = page.cursor ?? undefined
-      status.value = 'ready'
-      // No thumbnail is read here: the grid asks for the tiles near its viewport, nearest first ([wantThumbs]).
-      if (ctx.node().id === nodeId) await ctx.onSettle() // settle: auto-date, then auto-location (RMW-safe)
-    } catch {
-      if (ctx.node().id === nodeId) status.value = 'error'
-    }
-  }
-
-  /** The live poll's tick (uc.memory.live-updates, cr-0107; the conditional read is core's `itemsPollTick`, inbox #410):
-   *  a conditional GET keyed on the cached `mediaTag`. A 304 is a no-op; a change upserts the keyset delta (new
-   *  tiles auto-insert), reconciles removals via the id-set, and decrypts just the delta's tiles. Node-race-guarded
-   *  (`isCurrent`) so a mid-poll navigation can't write into the wrong gallery, and fenced by the live poll's `signal`
-   *  so a poll still in flight when the loop stops (close, lock) writes nothing. A failed fetch REJECTS: the loop backs
-   *  off and the next successful poll re-syncs in one round-trip (E6) while the last grid stays. */
-  const pollTick = itemsPollTick<MediaItem, string, string>({
-    cursor: () => {
-      if (!ctx.memoryKey() || !ctx.source.poll || mediaTag.value === null) return null // no live poll here / not an open, loaded gallery
-      return {
-        key: ctx.node().id,
-        revision: mediaTag.value,
-        deleteRevision: deleteRevision.value,
-        since: pollSince,
-      }
-    },
-    fetch: async (cursor) => {
-      let page: Awaited<ReturnType<NonNullable<typeof ctx.source.poll>>>
-      try {
-        page = await ctx.source.poll!(cursor.key, {
-          tag: cursor.revision,
-          since: cursor.since,
-          deleteRevision: cursor.deleteRevision,
-        })
-      } catch (e) {
-        await noteScopeGone(ctx.scopeId(), e) // removed from the group: core's page says so and unmounts this (inbox #546)
-        throw e
-      }
-      return page.notModified
-        ? { notModified: true }
-        : { notModified: false, items: page.items, revision: page.tag, deleteRevision: page.deleteRevision, ids: page.mediaIds, cursor: page.cursor }
-    },
-    isCurrent: (nodeId) => ctx.node().id === nodeId,
-    apply: async (change, cursor, signal) => {
-      // A delta's seals are opened before it is merged, so an inserted tile takes its final place at once.
-      const key = ctx.memoryKey()
-      if (key) await openListing(ctx.scopeId(), key, change.items)
-      if (signal.aborted || ctx.node().id !== cursor.key) return
-      upsertItems(change.items, change.ids)
-      mediaTag.value = change.revision
-      deleteRevision.value = change.deleteRevision
-      pollSince = change.cursor ?? pollSince // a delta that carried no row (a removal only) leaves the cursor where it was
-      // a new tile's thumbnail is read when the grid announces it near the viewport ([wantThumbs])
-      if (!signal.aborted && ctx.node().id === cursor.key) await ctx.onSettle()
-    },
-  })
-
-  /** One live poll, errors swallowed (offline/transient: keep the current grid) - for a caller that polls by hand. */
-  async function pollMedia(signal: AbortSignal = new AbortController().signal) {
-    try {
-      await pollTick(signal)
-    } catch {
-      // the revision compare makes the next successful poll a single round-trip
-    }
-  }
-
-  /** Merge a live delta into `items` (cr-0107) by core's `reconcileItems`: upsert each delta media by `mediaId` - a new
-   *  media auto-inserts, an in-place meta edit patches the existing tile (keeping object identity, so an open lightbox
-   *  snapshot stays consistent) - and, **only when the id-set is present** (a delete advanced the delete revision),
-   *  drop any cached media absent from it, revoking its thumbnail. Reassigns `items` so the justified grid re-sorts. */
-  function upsertItems(delta: MediaItem[], mediaIds: string[] | null) {
-    const blockedNow: string[] = []
-    listed.value = reconcileItems(listed.value, delta, mediaIds, {
-      idOf: (m) => m.mediaId,
-      skip: (id) => pendingDelete.has(id), // cr-0111: don't re-add an optimistically-trashed media (a stale pre-commit read)
-      patch: (existing, m) => {
-        existing.wrappedMeta = m.wrappedMeta // a meta edit re-sealed the tier; patch in place (shared with the lightbox snapshot)
-        existing.metaRevision = m.metaRevision // …and the version it is at, or the next write from here would 409 once
-        existing.updatedAt = m.updatedAt
-        // A block or its lift (uc.moderation.take-a-measure, ADR 0093 § 6) bumps the item's revision, so it arrives here:
-        // the tile and an open lightbox (the same object) show "Blocked by the operator" at once, its decrypted thumbnail
-        // goes below; a lift shows the medium again, its thumbnail read anew when the grid wants it.
-        if (m.blocked && !existing.blocked) {
-          existing.blocked = true
-          blockedNow.push(m.mediaId)
-        } else if (!m.blocked && existing.blocked) delete existing.blocked
-      },
-      onIds: (listed) => {
-        for (const id of [...pendingDelete]) if (!listed.has(id)) pendingDelete.delete(id) // cr-0111: server confirmed it's gone → lift the tombstone
-      },
-      onDrop: (id) => pipeline.dropThumb(id),
-    })
-    for (const id of blockedNow) pipeline.dropThumb(id) // revoke the decrypted thumbnail its block withdrew
-    // The pipeline reads what the grid wants from the list it holds: hand it the merged one, so a medium the poll added,
-    // or one whose block was lifted, gets its thumbnail when its tile is near the viewport.
-    pipeline.reconcile(listed.value)
-  }
-
-  // The live-gallery lifecycle: on a Memory/chapter switch tear down the previous poll, clear the grid, reload, and
-  // (re)start the poll — but only for an open, unlocked gallery (E4: no K_node ⇒ no polling).
-  // The opened listing this gallery holds (`openedListing.ts`): left when the gallery moves to another node's key or
+  // The page's model: one per node and key. On a Memory/chapter switch the previous one ends (its poll, its Undo window —
+  // the trash stands), the grid clears, and the new one reads; no key (locked, not openable): no model, the gallery fails.
+  // The opened listing this gallery holds (`openedListing.ts`) is left when the gallery moves to another node's key or
   // unmounts, so the listing opener Worker forgets that Memory's keys (ADR 0105 decision 3).
   let holding: { scopeId: string; key: Uint8Array } | null = null
   function hold(key: Uint8Array | null) {
@@ -405,24 +269,43 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   watch(
     [() => ctx.node().id, () => ctx.memoryKey()] as const,
     () => {
-      hold(ctx.memoryKey())
+      const key = ctx.memoryKey()
+      hold(key)
       lightboxIndex.value = null
-      pendingDelete.clear()
-      undo.cancel() // a node switch drops any open undo window (the trash stands) + its toast
+      lightboxItems.value = []
       toast.dismissUndo()
-      stopMediaRevisionPolling()
-      void load({ reset: true }).then(() => {
-        if (ctx.memoryKey() && ctx.source.poll) startMediaRevisionPolling(pollTick)
+      model.close()
+      pipeline.revokeAll()
+      door = null
+      if (!key) {
+        state.value = { ...GALLERY_LOADING, status: 'error' } // E4: no K_node → gallery unavailable, no live poll
+        return
+      }
+      const node = ctx.node()
+      const del = ctx.source.deleteMedia
+      door = galleryDoor({
+        source: ctx.source, scopeId: ctx.scopeId(), nodeId: node.id, key,
+        onWithdrawn: (id) => pipeline.dropThumb(id),
+        settle: () => ctx.onSettle(),
       })
+      model.open({
+        door, scopeId: ctx.scopeId(), nodeId: node.id, kind: node.kind === 'CHAPTER' ? 'CHAPTER' : 'MEMORY',
+        // who looks, as far as the model's own decisions go — its delete (the page's other rights are still the web's matrix,
+        // inbox #1321): a link's contributor (a delete reaching its own media: a purge), a member who trashes, else one
+        // who deletes nothing (a viewing guest and a read-only member answer alike in the model)
+        role: del?.reach === 'own' ? 'READ_WRITE' : null,
+        readonly: del?.reach !== 'any',
+      })
+      if (sortDir.value === 'oldest') core.memoriesGallerySort(model.handle()!, true)
     },
     { immediate: true },
   )
 
   onBeforeUnmount(() => {
-    stopMediaRevisionPolling() // stop the live poll on close/navigate away
+    model.close()
     pipeline.revokeAll()
     hold(null)
-    toast.dismissUndo() // drop any lingering undo-toast (the `useUndo` window tears itself down)
+    toast.dismissUndo() // drop any lingering undo-toast
   })
 
   return {
@@ -445,9 +328,10 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     onDeleteFromLightbox,
     onCapturedAtUpdated,
     load,
-    pollMedia,
+    /** A targeted read after an upload's file is in: the model reads anew (the conditional read, its delta). */
+    pollMedia: load,
     liftTombstone,
-    removeMedia: removeFromGrid,
+    purgeOwn,
     /** The tiles `owner` (a grid, the cover) wants a thumbnail for, nearest first (ADR 0105 decision 2) - an in-flight
      *  upload's tile its tile-sized preview (inbox #785). */
     wantThumbs: (owner: string, ids: readonly string[]) => {

@@ -35,6 +35,11 @@ class MemoryMediaTest {
         )
         val ordered = MemoryMedia.order(listOf(item("a", 10), item("b", null), item("c", 30), item("d", 20, override = 40), item("e", 30)))
         assertEquals(listOf("d", "c", "e", "a", "b"), ordered.map { it.mediaId })
+        // the web's `byCaptureTime` (ADR 0155 § The gallery model's move, D3): oldest first an undated row is last too, and a
+        // tie keeps the listing's order either way — never the ids'
+        val listed = listOf(item("z", 30), item("b", null), item("y", 30), item("a", 10), item("x", null))
+        assertEquals(listOf("z", "y", "a", "b", "x"), MemoryMedia.order(listed).map { it.mediaId })
+        assertEquals(listOf("a", "z", "y", "b", "x"), MemoryMedia.order(listed, oldestFirst = true).map { it.mediaId })
     }
 
     @Test

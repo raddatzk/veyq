@@ -41,8 +41,6 @@ vi.mock('../../../core/favorites/favoritesStore', async (orig) => ({ ...(await o
 vi.mock('../itemFavoritesStore', async (orig) => ({ ...(await orig<object>()), loadItemFavoritesFor: vi.fn(), toggleItemFavorite: vi.fn() }))
 // The guest's upload is recorded at the share helper (its wire is `source.wire.test.ts`'s).
 vi.mock('../share', async (orig) => ({ ...(await orig<typeof import('../share')>()), addSharePhoto: vi.fn() }))
-// The live poll's loop is held here so a test runs its tick by hand (the loop itself is `shared/state/livePoller.ts`'s).
-vi.mock('../mediaRevisionPolling', () => ({ startMediaRevisionPolling: vi.fn(), stopMediaRevisionPolling: vi.fn() }))
 
 import ShareTreePage from '../../../core/sharing/ShareTreePage.vue'
 import { FOLDER_KIND } from '../../../core/node/kind'
@@ -61,7 +59,6 @@ import { addSharePhoto } from '../share'
 import { isFavorite } from '../../../core/favorites/favoritesStore'
 import { loadItemFavoritesFor } from '../itemFavoritesStore'
 import { rememberOwnShareMedia } from '../ownShareMedia'
-import { startMediaRevisionPolling } from '../mediaRevisionPolling'
 import { apiResponse } from '../../../test/apiResponse'
 import { httpError } from '../../../test/httpError'
 import { clearUploads } from '../uploadQueue'
@@ -135,6 +132,7 @@ beforeEach(async () => {
   await router.isReady()
 })
 afterEach(() => {
+  vi.useRealTimers()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
@@ -152,6 +150,18 @@ async function mountPage(role: ShareRole, extraMeta: Record<string, unknown> = {
   return w
 }
 type Page = Awaited<ReturnType<typeof mountPage>>
+
+/**
+ * The gallery model's live poll (core's `LivePoll`, ADR 0155 § The gallery model's move) run by hand: its waits are timers,
+ * faked from before the page mounts, and each call runs the one that is due — one tick — and what it settles.
+ */
+function pollByHand() {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+  return async (_signal?: AbortSignal) => {
+    await vi.runOnlyPendingTimersAsync()
+    await flushPromises()
+  }
+}
 
 const tabs = (w: Page) => w.findAll('[role="tab"]').map((b) => b.text().replace(/\d+$/, '').trim())
 const tiles = (w: Page) => w.findAll('[data-media-id]').map((e) => e.attributes('data-media-id')).sort()
@@ -203,8 +213,8 @@ function click(el: Element) {
 
 describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () => {
   it("READ: the gallery polls the link's listing on its tag — an idle poll changes nothing, a change shows without a reload", async () => {
+    const tick = pollByHand()
     const w = await mountPage(ShareRole.Read)
-    const tick = vi.mocked(startMediaRevisionPolling).mock.calls.at(-1)![0]
     const raw = vi.mocked(publicShareMediaApi('').listShareMediaRaw)
     const asked = () => raw.mock.calls.at(-1)![0]
 
@@ -230,8 +240,8 @@ describe("the member's Memory detail for a share guest (inbox #401 S4/S5)", () =
   // uc.moderation.take-a-measure: a guest sees a block as a member does - the tile turns to the placeholder on the poll that
   // carries it, and back on the one that carries its lift (the thumbnail's revoke is useMediaGalleryLive.test.ts's).
   it('READ: a medium blocked while the gallery is open turns to the placeholder without a reload, and back on its lift', async () => {
+    const tick = pollByHand()
     const w = await mountPage(ShareRole.Read)
-    const tick = vi.mocked(startMediaRevisionPolling).mock.calls.at(-1)![0]
     const raw = vi.mocked(publicShareMediaApi('').listShareMediaRaw)
     const blocked = () => w.find('[data-media-id="m-1"] .media-tile-blocked')
 

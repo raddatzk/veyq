@@ -263,7 +263,7 @@ opens every tier through the share presign, and — for `READ_WRITE` only — up
 (the root names none) and sealing under that node's key from the chain, and purges what this device sent
 (`ownShareMedia.ts`). It has no door for the media trash, the node's date, place and cover, a medium's meta, the item
 marks, the organizer or the heavy EXIF; a `WRITE_ONLY` link uploads and deletes through its drop page, never this source.
-It polls as the member's does (inbox #497, the same `useMediaGalleryLive` loop): its tag is the `ETag` of
+It polls as the member's does (inbox #497, the same gallery model's poll): its tag is the `ETag` of
 `listShareMedia`'s first page, a digest of everything the read serves ([ADR 0081](../decisions/0081-a-scopes-tree-revision-is-the-level-views-change-signal.md)
 decision 4, never the node's item revision), and a change answers the whole listing with every id in it — a guest is
 told no order of the Memory's changes to continue a keyset from — so another uploader's photo appears, and one gone
@@ -324,7 +324,10 @@ raw ADTS file's count (`music/Frames`) and a WAV's header, samples and ends (`mu
 every client to them, so a change to one of these rules is made in the Kotlin core, never in the web. Memories' code is
 never in the eager set: the medoid and the participants' write sit in files of their own, off the eager
 `memoryLocation.ts` and `memoryParticipants.ts`. The meta's readers and the rest of Memories' rules are still the web's own
-(inbox #1320, #1321); its models with flows too, which the owner decided on 2026-11-25 cross to the core as well (decision 8,
-inbox #1323: the gallery's model the first).
+(inbox #1320, #1321). **The gallery's model is the core's on the web too** (decision 8, § The gallery model's move): a
+Memory's page — the member's and a link guest's — lists, orders (newest or oldest first), splits, polls, trashes with its
+Undo and purges a guest's own medium through `GalleryModel`, drawn through `@veyq/core-js/memories` over a door the web
+writes (`galleryDoor.ts`) and observed by `useGalleryModel.ts`; the thumbnails, the in-flight tiles, the lightbox, the
+marks and the filter are still the web's (inbox #1340–#1343, #1321).
 
 - End-user view (docs site): [Memories](../../site/src/content/docs/memories/index.mdx)

@@ -109,7 +109,11 @@ object MemoryMedia {
      *  server unreachable — as of when ([offline]; null when it is the server's). */
     class Gallery(val items: List<Item>, val mediaRevision: Int, val deleteRevision: Int, val offline: me.raddatz.veyq.mobile.session.OfflineAsOf? = null)
 
-    private val json = Json { ignoreUnknownKeys = true }
+    // in an object of its own, built on its first use: the object's own initializer would otherwise keep kotlinx.serialization
+    // in every bundle that reaches this object for a pure rule (the web's gallery model, ADR 0155 § The gallery model's move, D2)
+    private object Lenient {
+        val json = Json { ignoreUnknownKeys = true }
+    }
 
     /**
      * Every live medium of [nodeId] of [scopeId], ordered as the grid shows them; null where the node is not opened here.
@@ -228,12 +232,22 @@ object MemoryMedia {
         }
     }
 
-    /** The grid's order (`useMediaGalleryLive`'s date sort, newest first): a row without a capture time last, ties by id. */
-    fun order(items: List<Item>): List<Item> = items.sortedWith(
-        compareBy<Item> { it.meta?.effectiveCapturedAt == null }
-            .thenByDescending { it.meta?.effectiveCapturedAt ?: 0L }
-            .thenBy { it.mediaId },
-    )
+    /**
+     * The grid's order (the web's date sort, `byCaptureTime`): by the effective capture time, newest first or — where
+     * [oldestFirst], the web's sort toggle — oldest first; a row without one last either way; a tie keeps the listing's
+     * order (a stable sort: the web's answer, ADR 0155 § The gallery model's move, D3 — ties went by id before).
+     */
+    fun order(items: List<Item>, oldestFirst: Boolean = false): List<Item> = items.sortedWith { a, b ->
+        val x = a.meta?.effectiveCapturedAt
+        val y = b.meta?.effectiveCapturedAt
+        when {
+            x == null && y == null -> 0
+            x == null -> 1
+            y == null -> -1
+            oldestFirst -> x.compareTo(y)
+            else -> y.compareTo(x)
+        }
+    }
 
     /**
      * [item] with its capture-time correction [overrideMs] (null: back to the derived time) — one set offline and not sent
@@ -255,7 +269,7 @@ object MemoryMedia {
         if (wrapped == null) return null
         return runCatching {
             val text = suite.openField(Context("media-meta", "scopeId" to scopeId, "mediaId" to mediaId), key, unb64(wrapped)).decodeToString()
-            metaOf(json.parseToJsonElement(text) as JsonObject)
+            metaOf(Lenient.json.parseToJsonElement(text) as JsonObject)
         }.getOrNull()
     }
 

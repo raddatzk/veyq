@@ -22,7 +22,6 @@ acceptanceCriteria:
       web:
         unit:
           - src/features/memories/media.test.ts
-          - src/features/memories/mediaRevisionPolling.test.ts
           - src/core/items/itemsLive.test.ts
   - id: keyset-delta-on-change
     text: On a revision change the server returns only media past the client's (position, mediaId) cursor — a keyset delta, not the whole list — so an active upload by another member streams the few new items each poll. The client upserts by mediaId and continues from the cursor the server answered. A medium's position is the node revision its last change bumped to (veyq_media.item_position), stamped under the revision row's lock, so positions become visible in commit order (ADR 0033 decision 3).
@@ -55,9 +54,9 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
-          - src/features/memories/mediaRevisionPolling.test.ts
+          - src/features/memories/useGalleryModel.test.ts
+          - src/features/memories/components/MemoryDetail.guest.test.ts
           - src/core/items/itemsLive.test.ts
-          - src/shared/state/livePoller.test.ts
           - src/features/memories/components/MemoryDetail.test.ts
   - id: operator-blind-live
     text: The server sees only an opaque revision counter, opaque mediaIds, a medium's position (a revision it handed out itself), exact timestamps (a medium's updatedAt, to the millisecond), a page size, and the poll access-pattern it already sees on reads — never content, never a key. No new operator-visible signal; K_node/K_share never touch the server.

@@ -2476,7 +2476,7 @@ internal sealed class Watched {
     @Serializable @SerialName("Gallery") data class Gallery(val gallery: Long) : Watched()
 
     /**
-     * Gallery [gallery]'s live poll (`GalleryModel.live`, the web's `mediaRevisionPolling.ts`), for as long as this watch
+     * Gallery [gallery]'s live poll (`GalleryModel.live`, the web's too since ADR 0155 § The gallery model's move), for as long as this watch
      * stands: a host watches it while the page shows and its window is active. It delivers no update of its own — a moved
      * gallery arrives on [Gallery]'s — and ends with the watch or the page.
      */

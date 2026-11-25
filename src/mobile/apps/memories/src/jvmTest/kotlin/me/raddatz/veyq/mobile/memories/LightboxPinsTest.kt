@@ -24,7 +24,8 @@ class LightboxPinsTest {
     @Test
     fun aTrashedMediumsUndoLastsTheWebsWindow() {
         val web = File(memories, "useMediaGalleryLive.ts").readText()
-        val m = assertNotNull(Regex("""useUndo<[^>]*>\(\{ timeoutMs: (\d+) }\)""").find(web), "the trash's useUndo in useMediaGalleryLive.ts")
+        // the window is the model's on the web too (ADR 0155 § The gallery model's move): what is pinned is the toast's life
+        val m = assertNotNull(Regex("""onUndo: onUndoDelete, life: (\d+)""").find(web), "the Undo toast's life in useMediaGalleryLive.ts")
         assertEquals(m.groupValues[1].toLong(), ShellModel.TRASH_UNDO_MS)
     }
 }

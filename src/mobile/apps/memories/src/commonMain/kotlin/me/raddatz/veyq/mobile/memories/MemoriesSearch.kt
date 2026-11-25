@@ -114,7 +114,14 @@ object MemoriesSearch {
     }
 
     /** Memories' part in the search of every space (`AppKinds.search`): [scopeMediaDocuments]. */
-    val search = ApplicationSearch { scopeMediaDocuments(it) }
+    val search: ApplicationSearch get() = Spaces.search
+
+    // in an object of its own, made on its first use: the object's own initializer would otherwise keep the space's listing —
+    // the session, the API client, Ktor — in every bundle that reaches this object for a medium's document (ADR 0155 §
+    // The gallery model's move, D2)
+    private object Spaces {
+        val search = ApplicationSearch { scopeMediaDocuments(it) }
+    }
 
     /**
      * Every photo and video of one space (the web's `scopeMediaDocuments`; ADR 0125 decision 8a): `listScopeMedia` read by the

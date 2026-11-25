@@ -281,9 +281,10 @@ watch(
   { immediate: true },
 )
 
-// The live-gallery core (uc.memory.gallery) — listed media, the thumbnail pipeline (cr-0150) + optimistic tiles,
-// the cr-0107 live poll (load/merge/upsert), the justified layout, and the optimistic-delete/undo — extracted into
-// `useMediaGalleryLive` (cr-0151). `onSettle` runs the auto-date then auto-location reconcile after a list refresh.
+// The live gallery (uc.memory.gallery) — Memories' Kotlin gallery model (what is listed, in which order, when it reads
+// anew, the trash with its Undo, a guest's purge; ADR 0155 § The gallery model's move) drawn with the thumbnail pipeline
+// (cr-0150), the optimistic tiles and the justified layout (`useMediaGalleryLive`). `onSettle` runs the auto-date then
+// auto-location reconcile at the model's settle points (the opening, a trash, a poll that moved); an upload batch settles here.
 const {
   items,
   tracks,
@@ -304,7 +305,7 @@ const {
   load,
   pollMedia,
   liftTombstone,
-  removeMedia,
+  purgeOwn,
   wantThumbs,
 } = useMediaGalleryLive({
   source: props.source,
@@ -560,7 +561,7 @@ watch(
   { immediate: true },
 )
 
-/** The reconcile settle point `useMediaGalleryLive` calls after each list refresh: auto-date first, then
+/** The reconcile at a settle point (the gallery model's, and an upload batch's end): auto-date first, then
  *  auto-location (which reads the date-reconciled wrappedMeta patched in place → read-modify-write safe). Both WRITE the
  *  node's sealed meta, so they run only where the meta may be edited (`rights.editMeta`).
  *  One settle at a time: an upload's last file both polls (`onFileDone`) and re-lists (`onComplete`), and each refresh
@@ -664,7 +665,7 @@ function enqueueBatch(picked: File[], bucketId: string | null = null) {
       },
       onComplete: () => {
         if (props.node.id !== targetNodeId) return
-        void load() // final settle (date/location self-heal)
+        void load().then(() => settle()) // the batch's settle point (date/location self-heal), on the listing it reads
         bucketsView.value?.reload?.() // the organizer's counts, and the primary the first upload materialized
       },
     },
@@ -700,7 +701,7 @@ function enqueueTracks(tracks: { file: File; label: TrackLabel }[]) {
     {
       label: props.node.name,
       onFileDone: () => { if (props.node.id === targetNodeId) void pollMedia() },
-      onComplete: () => { if (props.node.id === targetNodeId) void load() },
+      onComplete: () => { if (props.node.id === targetNodeId) void load().then(() => settle()) },
     },
   )
 }
@@ -735,7 +736,7 @@ function enqueueMusic(selections: { file: File; mediaType: string; facts: Restor
   enqueueUploads({ ...target, key: `${props.source.batchKey(targetNodeId)}${MUSIC_BATCH}` }, selections, {
     label: props.node.name,
     onFileDone: () => { if (props.node.id === targetNodeId) void pollMedia() },
-    onComplete: () => { if (props.node.id === targetNodeId) void load() },
+    onComplete: () => { if (props.node.id === targetNodeId) void load().then(() => settle()) },
   })
 }
 /** Core's one player; whether it plays THIS node's music, and which track. */
@@ -815,10 +816,8 @@ async function onDeleteOwn(mediaId: string, copy?: OwnDeleteCopy) {
   if (!confirmed) return
   deletingOwn.value = new Set(deletingOwn.value).add(mediaId)
   try {
-    await del.purge(mediaId)
-    removeMedia(mediaId)
-  } catch {
-    toast.error(copy?.failed ?? t('share.deleteFailed')) // the tile stays, so the guest can try again
+    // the gallery's model purges it and takes it out of the rows; one that did not go stays, so the guest can try again
+    if (!(await purgeOwn(mediaId))) toast.error(copy?.failed ?? t('share.deleteFailed'))
   } finally {
     const next = new Set(deletingOwn.value)
     next.delete(mediaId)

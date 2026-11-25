@@ -128,7 +128,7 @@ object GalleryFilter {
      * The gallery's one predicate over a medium id (`galleryPredicate`): the marks' [State.mode] — ignored in a [personal]
      * scope, which has no mode — AND every chip AND the folded text over the original's name; null where nothing narrows.
      */
-    fun predicate(state: State, facts: () -> Facts?, marks: ItemMarks?, personal: Boolean): ((String) -> Boolean)? {
+    fun predicate(state: State, facts: () -> Facts?, marks: GalleryModel.Marks?, personal: Boolean): ((String) -> Boolean)? {
         val mode = if (personal) Mode.ALL else state.mode
         val markTest: ((String) -> Boolean)? = when (mode) {
             Mode.ALL -> null

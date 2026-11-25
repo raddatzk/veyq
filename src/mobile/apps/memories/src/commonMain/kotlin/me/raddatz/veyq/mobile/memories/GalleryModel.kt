@@ -45,7 +45,7 @@ import me.raddatz.veyq.mobile.words.Notice
  * **When it reads anew is the core's:** on each revision of the shell's lists ([Door.revisions]), and when a medium this
  * device uploaded into this node is in ([Door.uploaded], [MediaUploads]); nothing else re-reads it. A lightbox opened on it
  * ([lightbox]) follows each read. The details' uploaders are read once per gallery for every owner key it shows. While a
- * screen shows the page it runs [live] (the web's poll, `mediaRevisionPolling.ts`: core's [LivePoll] at the item lists'
+ * screen shows the page it runs [live] (the web runs this model too, ADR 0155 § The gallery model's move: core's [LivePoll] at the item lists'
  * cadence, a conditional read that reads the gallery anew only when the node's media moved, and one of the scope's tree
  * that reads the shell's lists — and so this page — anew only when the tree moved: a peer's change of the node's meta,
  * [Door.treeMoved]), ended when the page closes.
@@ -246,7 +246,7 @@ class GalleryModel(
 
         /** The node's banner removed, the dialog having opened on [openedWith] (`BannerWrite.remove`). Absent: refused. */
         /** The node's item marks (ADR 0149 decision 4: `ItemMarks.of`); null: none read here (a guest's, a test's). */
-        fun marks(): ItemMarks? = null
+        fun marks(): Marks? = null
 
         /** [item] reported as an ITEM (`MediumReport.report`, ADR 0149 decision 6). */
         suspend fun report(item: MemoryMedia.Item, category: String, reason: String, contact: String): me.raddatz.veyq.mobile.session.NodeReport.Sent =
@@ -260,6 +260,37 @@ class GalleryModel(
 
         suspend fun removeBanner(openedWith: me.raddatz.veyq.mobile.memories.banner.Banner.Slots): me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome =
             me.raddatz.veyq.mobile.memories.banner.BannerWrite.Outcome.Refused("refused")
+    }
+
+    /**
+     * The node's item marks as the page reads and toggles them (ADR 0149 decision 4): core's [ItemMarks] over the tenant, a
+     * test's own. A port, not the class, so a page whose door reads none (a guest's, the web's — whose marks are still its
+     * own, inbox #1340) reaches no session, no API client and no serializer through it (ADR 0155 § The gallery model's move, D2).
+     */
+    interface Marks {
+        /** A personal scope: no count is shown. */
+        val personal: Boolean
+
+        /** How many members marked [mediaId]; null in a personal scope. */
+        fun count(mediaId: String): Int?
+
+        /** Whether the caller's own set holds [mediaId]. */
+        fun markedByMe(mediaId: String): Boolean
+
+        /** Every medium anyone marked (the filter's *everyone*). */
+        fun markedByAnyone(): Set<String>
+
+        /** The caller's own marks (the filter's *mine*). */
+        fun mine(): Set<String>
+
+        /** Every member's set read, [overlay] (the marks queued offline) laid over the own set; false where it did not read. */
+        suspend fun load(overlay: suspend () -> Map<String, Boolean> = { emptyMap() }): Boolean
+
+        /** The caller's mark on [mediaId] flipped and written; put back where it did not land. */
+        suspend fun toggle(mediaId: String): ItemMarks.Toggled
+
+        /** The caller's own set as shown holding [mediaId] or not: a mark made offline, waiting to be sent. */
+        fun setLocal(mediaId: String, marked: Boolean)
     }
 
     /** What a trash or a restore of a medium came to (`deleteMedia`, `restoreMedia`). */
@@ -373,6 +404,8 @@ class GalleryModel(
         val queues: Boolean = false,
         /** What the last mark toggle said (too many, not saved); null once seen ([seen]). */
         val markSaid: Notice? = null,
+        /** The grid's direction (the web's sort toggle, [sort]): oldest first, else newest first — an undated medium last either way. */
+        val oldestFirst: Boolean = false,
         /** The filter's predicate over a medium id, as the filter, the marks and the rows last made it; null: nothing narrows. */
         internal val keep: ((String) -> Boolean)? = null,
     ) {
@@ -551,6 +584,18 @@ class GalleryModel(
     /** The notice every write offline is refused with. */
     private val readOnlyNotice get() = Notice(Msg.OFFLINE_READ_ONLY)
 
+    /**
+     * The grid's direction turned ([State.oldestFirst]; the web's newest/oldest toggle): the rows put in it
+     * at once, no read; every read after orders in it ([MemoryMedia.order]).
+     */
+    fun sort(oldestFirst: Boolean) = _state.update { s ->
+        if (s.oldestFirst == oldestFirst) return@update s
+        s.copy(
+            oldestFirst = oldestFirst,
+            rows = s.rows?.let { r -> MemoryMedia.order(r.map { it.item }, oldestFirst).map(::Row) },
+        ).refiltered()
+    }
+
     /** The gallery read anew (a pull to refresh). */
     fun reload() {
         scope.launch { read() }
@@ -577,13 +622,10 @@ class GalleryModel(
         val listing = runCatching { door.gallery() }.getOrNull()
         val here = runCatching { door.queuedHere() }.getOrDefault(QueuedHere())
         val hidden = here.trashed
-        // a capture time set offline shows in place: the medium in the grid's order its new time gives it (#1040)
-        val read = listing?.takeIf { here.times.isNotEmpty() }?.let { g ->
-            MemoryMedia.Gallery(
-                MemoryMedia.order(g.items.map { i -> if (i.mediaId in here.times) MemoryMedia.withCaptureTime(i, here.times[i.mediaId]) else i }),
-                g.mediaRevision, g.deleteRevision, g.offline,
-            )
-        } ?: listing
+        // the grid's order is the model's, in the page's direction ([sort]); a capture time set offline shows in place: the
+        // medium in the grid's order its new time gives it (#1040)
+        val timed = listing?.items?.map { i -> if (i.mediaId in here.times) MemoryMedia.withCaptureTime(i, here.times[i.mediaId]) else i }
+        val read = listing?.let { g -> MemoryMedia.Gallery(MemoryMedia.order(timed!!, current.oldestFirst), g.mediaRevision, g.deleteRevision, g.offline) }
         val chapters = if (node.kind == MEMORY) {
             runCatching { MediaDetails.chapters(node.kind, node.nodeId, door.scopeNodes()) }.getOrNull()
         } else {
@@ -604,8 +646,9 @@ class GalleryModel(
             // a photo view's media only: a track and a music track are another view's (GalleryMedium, ADR 0135 decision 2)
             else withFacts.copy(
                 rows = read.items.filter { it.mediaId !in pending && it.mediaId !in hidden && GalleryMedium.shows(it.type, it.name) }.map(::Row),
-                music = MusicQueue.tracks(read.items.filter { it.mediaId !in pending && it.mediaId !in hidden }),
-                tracks = read.items.filter { it.mediaId !in pending && it.mediaId !in hidden && it.isTrack },
+                // the music and the tracks as the door listed them: each view orders its own (the grid's order is the rows')
+                music = MusicQueue.tracks(timed!!.filter { it.mediaId !in pending && it.mediaId !in hidden }),
+                tracks = timed.filter { it.mediaId !in pending && it.mediaId !in hidden && it.isTrack },
                 failed = false,
             ).let { it.copy(uploading = UploadTile.shown(queued, it.listedIds)) }.refiltered()
         }
@@ -624,7 +667,7 @@ class GalleryModel(
     // ---- the item marks and the filter (ADR 0149 decisions 4 and 5) ----
 
     /** The node's marks, made once ([Door.marks]); null where none are read here. */
-    private val itemMarks: ItemMarks? by lazy { if (granted.mark) door.marks() else null }
+    private val itemMarks: Marks? by lazy { if (granted.mark) door.marks() else null }
 
     /** The filter's facts of the rows they were made of, made at the first narrowing and again for other rows. */
     private var filterFacts: Pair<List<Row>?, GalleryFilter.Facts>? = null
@@ -754,7 +797,8 @@ class GalleryModel(
     private val settling = Mutex()
 
     /**
-     * The settle at the page's settle points — its opening and a medium's trash (an upload batch settles in [MediaUploads]):
+     * The settle at the page's settle points — its opening, a medium's trash and a live poll that found the media moved (an
+     * upload batch settles in [MediaUploads]):
      * the `auto` range and the `auto` place re-derived from the media listed now and re-sealed only where they changed,
      * where whoever looks may edit the meta and online; one at a time. The facts line reads anew when it wrote.
      */
@@ -850,19 +894,30 @@ class GalleryModel(
     private val closed = MutableStateFlow(false)
 
     /**
-     * The page's live poll (the web's `mediaRevisionPolling.ts`, core's [LivePoll] at [LivePoll.ITEMS]) for as long as the
+     * The page's one poll, across its [live] runs: a run that starts again — the page shown again — ticks at once unless a
+     * tick started within the cadence's gap ([LivePoll]'s catch-up, the web's return to a visible tab). A poll made anew
+     * per run never caught up, its last start always now (ADR 0155 § The gallery model's move, D4).
+     */
+    private val poll by lazy { LivePoll(now = now) }
+
+    /**
+     * The page's live poll (core's [LivePoll] at [LivePoll.ITEMS], the web's too) for as long as the
      * caller runs it — a screen while it shows the page, so nothing is asked in the background: each tick asks whether the
      * node's media moved since the last listing ([Door.moved], a conditional read) and reads the gallery anew only when they
      * did. It ends when the page closes.
      */
     suspend fun live() {
         if (closed.value) return
-        val poll = LivePoll(now = now)
         coroutineScope {
             val ticking = launch {
                 poll.run {
                     val since = listed ?: return@run LivePoll.Tick.SKIP
-                    if (door.moved(since)) read()
+                    // media that moved are a settle point too (uc.memory.live-updates: a peer's additions reach the `auto`
+                    // date sooner, uc.memory.date E5 — the web's answer, ADR 0155 § The gallery model's move, D8)
+                    if (door.moved(since)) {
+                        read()
+                        scope.launch { settle() }
+                    }
                     // a peer's change of the node's meta: the lists' new revision reads this page anew (inbox #953)
                     door.treeMoved()
                     LivePoll.Tick.DONE
@@ -1139,6 +1194,15 @@ class GalleryModel(
 
     /** What [State.said] said was seen: it goes. */
     fun seen() = _state.update { it.copy(said = null) }
+
+    /**
+     * Media [mediaIds] restored from the node's trash elsewhere (a Trash view; the web's `useMediaTrash`): trashed here, they
+     * were kept out of the rows until a listing no longer named them — a restore before that read would have stayed hidden
+     * (ADR 0155 § The gallery model's move, D5). The next read shows them.
+     */
+    fun restored(mediaIds: List<String>) {
+        pending.removeAll(mediaIds.toSet())
+    }
 
     // ---- the details: the EXIF tier once per medium, the uploaders once per gallery ----
 

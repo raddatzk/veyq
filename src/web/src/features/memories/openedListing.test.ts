@@ -13,7 +13,6 @@ vi.mock('./media', async (orig) => ({
   hasDerivatives: vi.fn(),
   unsealMeta: vi.fn(),
 }))
-vi.mock('./mediaRevisionPolling', () => ({ startMediaRevisionPolling: vi.fn(), stopMediaRevisionPolling: vi.fn() }))
 vi.mock('./useOptimisticTiles', async () => {
   const { computed } = await import('vue')
   return { useOptimisticTiles: () => ({ optimisticTiles: computed(() => []), donorPreviewFor: () => null }) }
