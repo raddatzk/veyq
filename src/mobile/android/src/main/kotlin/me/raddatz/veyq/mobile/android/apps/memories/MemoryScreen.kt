@@ -357,7 +357,7 @@ internal fun MemoryGallery(
  * (`GalleryModel.chapterCover`), decoded small and cropped to the tile; the kind's icon where it has none.
  */
 @Composable
-private fun ChapterCover(gallery: GalleryModel, chapter: me.raddatz.veyq.mobile.navigation.NodeRef) {
+internal fun ChapterCover(gallery: GalleryModel, chapter: me.raddatz.veyq.mobile.navigation.NodeRef) {
     val palette = LocalPalette.current
     val cover by produceState<ImageBitmap?>(null, chapter.nodeId) {
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {

@@ -90,8 +90,23 @@ sealed interface Screen {
         val error: me.raddatz.veyq.mobile.words.Msg? = null,
     ) : Screen
 
-    /** An account this device trusts: the password alone (DEVICE), or the person's authentication (DEVICE_KEY). */
-    data class Unlock(val record: TrustedDevice, val working: Boolean = false, val error: me.raddatz.veyq.mobile.words.Msg? = null) : Screen
+    /**
+     * An account this device trusts: the password alone (DEVICE), or the person's authentication (DEVICE_KEY) — or, on a
+     * TV, its PIN ([asksPin], DEVICE_PIN, ADR 0160), with the tries left after a wrong one ([attemptsLeft]).
+     */
+    data class Unlock(
+        val record: TrustedDevice,
+        val working: Boolean = false,
+        val error: me.raddatz.veyq.mobile.words.Msg? = null,
+        val asksPin: Boolean = false,
+        val attemptsLeft: Int? = null,
+    ) : Screen
+
+    /** A TV's account picker (core's `Gate.Picker`, ADR 0159 decision 4): each account kept here, and why it shows again. */
+    data class Picker(
+        val tiles: List<me.raddatz.veyq.mobile.session.SessionModel.PickerTile>,
+        val error: me.raddatz.veyq.mobile.words.Msg? = null,
+    ) : Screen
 
     data class Signed(
         val shell: Shell,
@@ -240,6 +255,27 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
 
+    // ---- a TV (ADR 0159, ADR 0160), declared above `init`: the gate's collector reads them ----
+
+    /** Whether the gate showed an account open at its last change: the next opening starts a TV's idle time. */
+    private var signedShown = false
+
+    /** Whether this device is a TV (core's `DeviceForm.TV`): it starts at the picker and views only. */
+    val tv: Boolean get() = device.form == me.raddatz.veyq.mobile.session.DeviceForm.TV
+
+    /** A TV's idle lock (core's `IdleLock`, ADR 0160 decision 6): the TV activity feeds it and asks it; a phone never does. */
+    val idle = me.raddatz.veyq.mobile.session.IdleLock(android.os.SystemClock::elapsedRealtime)
+
+    /** What plays now, by source (a video, the slideshow, the music): the idle lock waits while any does. */
+    private val playingNow = HashSet<String>()
+
+    /** [source] plays ([on]) or stopped: the idle lock hears whether anything plays. */
+    @Synchronized
+    fun playing(source: String, on: Boolean) {
+        if (on) playingNow += source else playingNow -= source
+        idle.playing(playingNow.isNotEmpty())
+    }
+
     // ---- what each application holds here (ADR 0154 decision 3), declared above `init`: the gate's collector asks them ----
 
     /**
@@ -274,7 +310,15 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         UploadWork.watch(app, viewModelScope)
         // the background sync scheduled while an account at the login level has it on (ADR 0153 decision 8)
         BackgroundWork.watch(app, viewModelScope)
+        // a TV's idle lock waits while the music plays (ADR 0160 decision 6)
+        if (tv) viewModelScope.launch { musicPlays().collect { playing(MUSIC_PLAYS, it) } }
     }
+
+    /** Whether the open account's music plays now (core's `MusicPlayer.State.nowPlaying`). */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private fun musicPlays(): kotlinx.coroutines.flow.Flow<Boolean> =
+        _music.flatMapLatest { player -> player?.state?.map { it.nowPlaying?.playing == true } ?: kotlinx.coroutines.flow.flowOf(false) }
+            .distinctUntilChanged()
 
     private fun gateChanged(g: me.raddatz.veyq.mobile.session.SessionModel.Gate) {
         // the session locked, signed out or starting again: the tenant's music stops with it (ADR 0142 decision 1)
@@ -299,12 +343,16 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.SignIn -> _screen.value = Screen.SignIn(g.working, g.error, g.adding, g.server, g.email, g.kit, g.notice, g.keepsNothing)
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Locked -> _screen.value = Screen.Locked(g.server, g.email, g.working, g.error)
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Recover -> _screen.value = Screen.Recover(g.server, g.email, g.working, g.sent, g.error)
-            is me.raddatz.veyq.mobile.session.SessionModel.Gate.Unlock -> _screen.value = Screen.Unlock(g.record, g.working, g.error)
+            is me.raddatz.veyq.mobile.session.SessionModel.Gate.Unlock -> _screen.value = Screen.Unlock(g.record, g.working, g.error, g.asksPin, g.attemptsLeft)
+            is me.raddatz.veyq.mobile.session.SessionModel.Gate.Picker -> _screen.value = Screen.Picker(g.tiles, g.error)
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed -> {
+                // an account opened: a TV's idle time starts from here (core's `IdleLock.opened`)
+                if (!signedShown) idle.opened()
                 shellModel?.state?.value?.let(::publish)
             }
             else -> _screen.value = Screen.Starting
         }
+        signedShown = g is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed
     }
 
     /** The activity a prompt for the unlock key is shown over, while one is resumed. */
@@ -595,6 +643,64 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     fun addServer() = session.addServer()
 
     fun cancelAdd() = session.cancelAdd()
+
+    // ---- a TV's way in and its own settings (ADR 0159 decision 4, ADR 0160) ----
+
+    /** The picker's tile of [account] picked: its PIN unlock. */
+    fun pick(account: String) {
+        session.pick(account)
+    }
+
+    /** From a PIN unlock back to the picker, nothing opened. */
+    fun backToPicker() = session.backToPicker()
+
+    /** The PIN typed at the unlock: only that account opens, whatever was open closes first. */
+    fun unlockWithPin(pin: String) {
+        viewModelScope.launch { session.unlockWithPin(pin)?.let { show(it) } }
+    }
+
+    /** *Lock*, a return from the background, the idle lock: every open account closed, the picker shown (a TV only). */
+    fun lock() {
+        viewModelScope.launch { session.lock() }
+    }
+
+    /**
+     * The offer's PIN, typed twice and the same: the account kept behind it ([SessionModel.stayWithPin]); [done] gets the
+     * outcome (null without an offer). A device that could not keep it says so in the shell, as a level's offer does.
+     */
+    fun stayWithPin(pin: String, done: (me.raddatz.veyq.mobile.session.TrustChange?) -> Unit) {
+        viewModelScope.launch {
+            val change = trusting { session.stayWithPin(pin) }
+            trustLog("offer answered: PIN -> $change")
+            if (change == me.raddatz.veyq.mobile.session.TrustChange.FAILED) trustFailed()
+            done(change)
+        }
+    }
+
+    /** The open account's PIN changed from [old] to [new] (ADR 0160 decision 7); a wrap gone locks the TV. */
+    fun changePin(old: String, new: String, done: (VeyqAccount.PinChange) -> Unit) {
+        val account = session.signedTo?.account ?: return
+        viewModelScope.launch {
+            val change = trusting { account.changePin(old, new) }
+            trustLog("PIN change: ${change.outcome}")
+            if (change.outcome == VeyqAccount.PinChange.Outcome.GONE) session.lock()
+            done(change)
+        }
+    }
+
+    /** The open account's name on this TV's picker (core's `TrustedDevice.pickerLabel`); null without a PIN trust. */
+    fun pickerLabel(): String? = session.signedTo?.account?.trusted
+        ?.takeIf { it.method == TrustedDevice.Method.DEVICE_PIN }?.pickerLabel
+
+    /** The open account's picker name set to [label] (empty: its address again). */
+    fun renameOnPicker(label: String) {
+        session.signedTo?.account?.renameOnPicker(label)
+    }
+
+    /** *Remove from this TV*: the open account signed out here, its PIN trust forgotten; the picker or the sign-in follows. */
+    fun removeHere() {
+        session.signedTo?.account?.let(::signOut)
+    }
 
     // ---- Manage servers ----
 
@@ -1998,3 +2104,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** A bookmark was made (New or a link's *Keep*): the lists read anew, so its row shows. */
     fun bookmarkMade() = refreshLists {}
 }
+
+/** The music as a source of what plays (`AppModel.playing`), beside a video's and the slideshow's own. */
+private const val MUSIC_PLAYS = "music"

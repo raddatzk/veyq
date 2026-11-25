@@ -26,6 +26,11 @@ internal class KindPage(
     val guest: (@Composable (GuestPage, GuestScreen, AppModel, SnackbarHostState) -> Unit)? = null,
     val guestActions: (@Composable (GuestPage, GuestScreen, AppModel, SnackbarHostState) -> Unit)? = null,
     val guestNamed: ((GuestPage, AppModel) -> Unit)? = null,
+    /**
+     * The kind's page on a TV (ADR 0159 decisions 3 and 6), drawn by the TV shell for focus and the remote: a Memory's
+     * gallery and lightbox, a file's viewer. Null: the TV shows [body], which the core's plans already keep to viewing.
+     */
+    val tv: (@Composable (ObjectRef, AppModel) -> Unit)? = null,
 )
 
 /**

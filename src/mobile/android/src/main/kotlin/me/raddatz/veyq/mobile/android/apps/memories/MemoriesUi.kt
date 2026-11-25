@@ -243,6 +243,8 @@ internal object MemoriesUi {
         guest = { page, screen, model, snackbar -> MemoryGuestPage(page, screen, model, snackbar) },
         // a Memory's music, played or stopped on the link's bar as on the member's header (#1034)
         guestActions = { page, _, _, _ -> if (page is MemoriesGuest.Gallery) GuestMusicAction(page) },
+        // a TV's page: the gallery as tiles, the lightbox and the slideshow for the remote (ADR 0159 decision 3)
+        tv = { ref, model -> TvMemoryPage(ref, model) },
     )
 
     fun register(registry: Registry) {

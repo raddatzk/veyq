@@ -288,7 +288,7 @@ private fun bold(parts: List<PartShown>): AnnotatedString = buildAnnotatedString
 }
 
 /** The icon kinds core names (the web's icon names) in Material Symbols, as [kindIcon] draws the kinds. */
-private fun searchIcon(kind: String): ImageVector = when (kind) {
+internal fun searchIcon(kind: String): ImageVector = when (kind) {
     "folder" -> Icons.Outlined.Folder
     "folder-open" -> Icons.Outlined.FolderOpen
     "bookmark" -> Icons.Outlined.Link

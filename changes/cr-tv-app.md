@@ -197,6 +197,67 @@ added to the App Store Connect record, the TV banner and the Play Console's TV f
   core's `SearchModel` in memory (it writes nothing), so ADR 0159's objection — a TV's purgeable storage — does not
   apply. Inbox #1355 resolved by it.
 
+- **2026-11-25 — the PIN is a level in meaning, not a `StaySignedIn` entry in code.** ADR 0160 decision 1 calls it the
+  fourth level; the code models it as `TrustedDevice.Method.DEVICE_PIN` plus `DeviceKeys.pinFactors` (null: not offered),
+  because its key is per account (a `StaySignedIn` level is one unlock key shared by every account at it) and its open is
+  the server's (`pin-unlock`), not `openUnlockable`. An entry in `StaySignedIn` would put a branch that can never run into
+  every desktop store and the bridge. The offer is `Offer.pin` on a TV; ADR 0160's wording follows at harvest.
+- **2026-11-25 — a DEVICE_PIN wrap's `kdfParams` carry the Argon2id parameters alone** (16 bytes,
+  `V1.encodePinKdfParams`): the salt is HKDF(F ‖ S) and never leaves the device — with it, whoever holds the wrap (the
+  server) would search the PIN offline. The contract's description says so.
+- **2026-11-25 — DEVICE_PIN rides `core.remember-device.passwordless`**: a TV never sees the password, so enrolling is
+  refused (422) and the wrap withheld from the key material while that switch is off, exactly as DEVICE_KEY.
+- **2026-11-25 — the unlock's answers:** `403 pin_incorrect` with `attemptsLeft` (a body of its own, `PinUnlockRefused`,
+  written by `httpPinIncorrect` beside the one other custom body), `404 not_found` for no wrap of the caller's with that id
+  (never had, removed, the tenth failure — indistinguishable on purpose), a per-account `USER` rate bucket on top of the
+  wrap's count. The row is locked (`PESSIMISTIC_WRITE`) for the count.
+- **2026-11-25 — the vectors** were computed by an independent implementation over `@noble` (the seal construction first
+  re-derived `seal.sym.master-key` byte for byte); `pin_kek` pins the production Argon2id cost (m = 32 MiB), so the
+  conformance suite checks it only at production cost, the verifier and the salts always.
+- **2026-11-25 — the TV form is one fact, `ThisDevice.form`** (`DeviceForm.PHONE | DESKTOP | TV`, the host sets it), read
+  as `ShellModel.viewOnly` — the shell's creates, uploads, drops, shares, trash and download answer nothing, and every
+  header and row goes through `NodeHeader.viewOnly` (all writes, the download and "Available offline" off). Memories reads
+  it through `MemoryRights.Access.Member.viewOnly`, Depot through `FileRights.of(…, viewOnly)`, Expenses through
+  `PotDoor.viewOnly` (writes and the Pot's download refused in the model, not only in the plan). Search's settings
+  sections are empty on a TV (its settings are its own few).
+- **2026-11-25 — no report on a TV (our reading, for the owner):** the report is a form a remote types badly; every other
+  device of the account offers it. We read the DSA's notice duty (Art. 16) as binding the service — reachable on every
+  other client — not each client. A question the law leaves open; if the owner reads it otherwise, `NodeHeader.viewOnly`
+  keeps `report` and both TV UIs draw the report flow.
+- **2026-11-25 — a TV signs in by its QR code only** (`SignInPlan.tvEntries`: *show a code*, and Cancel while adding):
+  the PIN level exists because a TV never sees the password or the Secret Key.
+- **2026-11-25 — the picker's default name is the account's address**, not its profile name: a profile name is a tenant's
+  and sealed under its keys, the picker shows before any key is open. The TV's settings rename it
+  (`VeyqAccount.renameOnPicker`); ADR 0159 decision 4's wording follows at harvest.
+- **2026-11-25 — a TV's unlock renews its kept session first** (the refresh token is kept as a remembered account keeps
+  it), then asks for the share; a refresh refused or a factor missing (a reinstall, another Apple TV user) forgets the
+  account here — it needs a new pairing (ADR 0160's Consequences).
+- **2026-11-25 — `lock()` retires every open connection** (keys zeroed, the kept session kept: `holdsKeptSession` counts
+  DEVICE_PIN), so the next unlock renews it; unlocking another account closes the open one first — one at a time.
+- **2026-11-25 — tvOS has no `LAContext`**: `staySignedIn` asks `deviceOwnerAuthenticationAvailable()`, an `expect`
+  whose iOS and macOS actuals are the LAContext probe and whose tvOS one is false — a TV offers neither presence nor login.
+
+- **2026-11-25 — a video plays on a TV through a right of its own** (`MemoryRights.Rights.play`, true on a TV,
+  included in `download`): `GalleryModel.reader` asked for `download`, which a TV lacks, so the Android pass found no video
+  playing. Reading a medium in ranges into a player is viewing; saving it is taking it away.
+- **2026-11-25 — Android: the PIN factor is offered only on hardware** — a probe key's `KeyInfo` level must be TEE,
+  StrongBox or unknown-secure; a key created later is checked again and refused if software-held (ADR 0160: a
+  non-exportable hardware key). Measured: the Google TV emulator's Keystore is software (level 0), so there the TV says
+  `tv_pin_not_offered` and keeps nothing.
+- **2026-11-25 — Android TV draws Memories and Depot on TV pages of their own** (`KindPage.tv`), the Pot, a person and a
+  kept link on the phone's page (its plans read-only on a TV already); every application's list is the core's arranged
+  list (Favorites, Recent, All as tiles). A TV page owns its whole page, so Memories' map tab is never drawn — the core's
+  `Shell.barTabs` still names it, which only a page that draws the bar would show.
+- **2026-11-25 — a Depot file a TV cannot show**: the TV page draws `FileModel.Shown.Text`, `Pdf` and `Message` as
+  `tv_opens_elsewhere` (an exhaustive drawing of the core's answer); images and media go to the viewers.
+- **2026-11-25 — Android TV's controls:** the slideshow starts the Memory's music with it; video plays in a D-pad player of
+  its own (`TvReaderPlayer`: centre/Enter/media key play-pause, left/right ±10 s) — `MediaController` is touch-only; Search
+  is a text field the system IME (Gboard for TV, voice included) fills and a tv-material card grid — no leanback
+  `SearchSupportFragment`; text fields are left with the D-pad (`tvField`); the idle lock is fed by `onUserInteraction`
+  (overriding `dispatchKeyEvent` is a `RestrictedApi` lint error), `onStop`/`onStart` and the players; the banner is the
+  mark on the dark surface, generated by `generate_theme.py`. Memories' header keeps MUSIC on a TV: it plays and stops
+  the Memory's music, which is viewing.
+
 ## Retrospective
 
 (filled by the implementer)

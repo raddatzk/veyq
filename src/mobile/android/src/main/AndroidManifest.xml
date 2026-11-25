@@ -18,6 +18,11 @@
     <uses-feature android:name="android.hardware.camera.any" android:required="false" />
     <!-- the CAMERA permission implies the back camera as required unless it is said otherwise -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <!-- One APK for phones and TVs (ADR 0159 decision 1, Google's "a single app that supports both"): the TV's launcher
+         and Compose for TV are used where the device has them, and a TV has no touchscreen, which Google Play otherwise
+         takes as required. -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <!-- A pin's fetch (ADR 0140 decision 9) and an upload (ADR 0145 decision 1): WorkManager's worker, promoted to a dataSync
          foreground service with its notification while it fetches or uploads, so leaving the app does not stop it. The
          notification is shown where the person allowed notifications (asked where a pin is made); the service runs either way. -->
@@ -93,6 +98,18 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="veyq" />
+            </intent-filter>
+        </activity>
+        <!-- The TV form (ADR 0159 decisions 1 and 6): the TV's launcher starts it, under the brand's banner (320 × 180 dp,
+             generated from the mark by src/mobile/theme/generate_theme.py); it takes no share, no link and no file. -->
+        <activity
+            android:name=".TvActivity"
+            android:banner="@drawable/tv_banner"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
     </application>

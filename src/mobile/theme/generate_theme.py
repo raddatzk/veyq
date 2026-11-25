@@ -10,7 +10,8 @@ for the apps' too. Its CSS reader is that guard's own (`modes`, `resolve`), impo
 Outputs (each optional, each a directory this script owns and rewrites whole):
   --kotlin DIR          `me/raddatz/veyq/mobile/theme/WebPalette.kt`: every colour role, light and dark, as ARGB.
   --android-res DIR     an Android res tree: the roles the window and splash need (`values[-night]/veyq_colors.xml`),
-                        the mark as vector drawables (`drawable[-night]/veyq_mark.xml`), the launcher icon's layers.
+                        the mark as vector drawables (`drawable[-night]/veyq_mark.xml`), the launcher icon's layers,
+                        the TV launcher's banner (`drawable/tv_banner.xml`, 320 x 180 dp).
   --apple-assets DIR    colour sets for every role and the mark's image set, inside an asset catalog
                         (`<DIR>/veyq-<role>.colorset`, `<DIR>/VeyqMark.imageset`), light and dark appearances, and
                         the app icon (`<DIR>/AppIcon.appiconset`: light, dark, tinted), rendered by macOS' Quick Look.
@@ -201,6 +202,27 @@ def vector(m: dict, size_dp: float, inset: float = 0.0, monochrome: str | None =
     return "\n".join(out)
 
 
+def banner(m: dict, background: str, width_dp: int = 320, height_dp: int = 180, mark_share: float = 0.5) -> str:
+    """The TV launcher's banner (Android TV: 320 x 180 dp): the mark centred on [background], `mark_share` of its height."""
+    _, _, vw, vh = m["viewBox"]
+    # `vector`'s groups centre the mark in a square of its longer side, which is placed here
+    side = max(vw, vh)
+    scale = height_dp * mark_share / side
+    ox, oy = (width_dp - side * scale) / 2, (height_dp - side * scale) / 2
+    out = [f'<vector xmlns:android="{A}" xmlns:aapt="{AAPT}"',
+           f'    android:width="{width_dp}dp" android:height="{height_dp}dp"',
+           f'    android:viewportWidth="{width_dp}" android:viewportHeight="{height_dp}">',
+           f'  <path android:fillColor="{background}" android:pathData="M0,0h{width_dp}v{height_dp}h-{width_dp}z"/>',
+           f'  <group android:translateX="{ox:.3f}" android:translateY="{oy:.3f}" android:scaleX="{scale:.6f}" android:scaleY="{scale:.6f}">']
+    # the mark's own drawable, its viewport the mark's: the inner groups as `vector` writes them
+    inner = vector(m, vh).splitlines()
+    start = next(i for i, line in enumerate(inner) if line.startswith("  <group"))
+    end = max(i for i, line in enumerate(inner) if line.strip() == "</group>")
+    out += ["  " + line for line in inner[start:end + 1]]
+    out += ['  </group>', '</vector>', '']
+    return "\n".join(out)
+
+
 def colour_hex(c: tuple) -> str:
     return "#{:02X}{:02X}{:02X}{:02X}".format(round(c[3] * 255), round(c[0]), round(c[1]), round(c[2]))
 
@@ -227,6 +249,8 @@ def write_android(out: Path, pal: dict[str, dict[str, tuple]]) -> None:
         '    <foreground android:drawable="@drawable/ic_launcher_foreground"/>',
         '    <monochrome android:drawable="@drawable/ic_launcher_monochrome"/>',
         '</adaptive-icon>', ''])
+    # The TV launcher's banner (ADR 0159 decision 1): the mark on the dark surface, as the TV's launcher is dark.
+    files["drawable/tv_banner.xml"] = banner(dark, colour_hex(pal["dark"]["surface"]))
     for rel, text in files.items():
         f = out / rel
         f.parent.mkdir(parents=True, exist_ok=True)

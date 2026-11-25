@@ -75,6 +75,8 @@ fun AppRoot(model: AppModel) {
             }
             is Screen.Locked -> LockedScreen(s, onSignOutEverywhere = model::signOutEverywhere, onBack = model::lockedBack)
             is Screen.Recover -> RecoverScreen(s, onSend = model::requestRecovery, onBack = model::backToSignIn)
+            // a TV's picker (core's `Gate.Picker`): drawn by the TV activity, never reached on a phone
+            is Screen.Picker -> StartingScreen()
             is Screen.Unlock -> UnderTray(model) {
                 UnlockScreen(s, model::unlock, model::otherAccount, onForget = model::forgetUnlocked, onOpenLink = model.guests::ask)
             }
@@ -407,7 +409,7 @@ private fun OpenLinkButton(onClick: () -> Unit) {
 }
 
 @Composable
-private fun StartingScreen() {
+internal fun StartingScreen() {
     Column(
         modifier = Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
         verticalArrangement = Arrangement.Center,
