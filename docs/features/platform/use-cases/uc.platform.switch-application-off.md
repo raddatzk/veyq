@@ -21,9 +21,11 @@
 ## Main flow
 
 1. The switch takes effect without a restart; the application's id is missing from every client's effective set.
-2. Every member of the tenant sees one banner at the top of veyq: the application is switched off here, and what is
-   there can still be opened and downloaded until the day it is erased, so there is time to save it (owner 2026-10-24;
-   the day is [uc.platform.erase-switched-off-application](uc.platform.erase-switched-off-application.md)'s). The create menu offers
+2. Where the tenant holds something of the application, every member sees one banner at the top of veyq: the
+   application is switched off here, and what is there can still be opened and downloaded until the day it is erased,
+   so there is time to save it (owner 2026-10-24; the day is
+   [uc.platform.erase-switched-off-application](uc.platform.erase-switched-off-application.md)'s). Where it holds
+   nothing, there is nothing to save and no banner: the application is simply absent (owner 2026-11-25). The create menu offers
    none of the application's kinds, and the application's nodes and records show with every write function removed.
 3. A member opens, reads and downloads what exists; a guest does the same through a link that exists, which keeps
    being served (owner 2026-10-24). A guest's page is not told the switch: the link's resolve carries no tenant

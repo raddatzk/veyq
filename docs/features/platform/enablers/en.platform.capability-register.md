@@ -87,7 +87,8 @@ through the kind's `NodeKindRules.applicationOf`; and by name, in each applicati
 measures, a rotation's re-key and a member's own item marks never ask it. `ApplicationSwitchSweepTest` derives every
 write operation of every application and holds each to refused or exempt with its reason. Its children are off with it
 by the AND. The web reads it as `MemberAccess.applicationsOff` through the registry's `applicationOf`, and the host shows
-one banner per application off; a guest's page is not told, and its write is refused by the server.
+one banner per application off that has a day (below); one without a day is simply absent. A guest's page is not told,
+and its write is refused by the server.
 
 **Off is a window with an end.** Switched off at either level, the tenant gets a day: that moment plus
 `veyq.application.off.retention` (default `P30D`, the Server Owner's alone). Core's `veyq_application_erasure` holds one
@@ -98,7 +99,15 @@ each scope's nodes of the application's kinds to `NodeSubtreePurge`, found by `N
 names no application. Switched on before the day, the row goes and nothing is lost; switched on after it, the erasure
 completes and spares a node of the application's kinds made after the switch-on. An instance switch gives every tenant
 its own day, and a tenant already off keeps its earlier one
-([uc.platform.erase-switched-off-application](../use-cases/uc.platform.erase-switched-off-application.md)).
+([uc.platform.erase-switched-off-application](../use-cases/uc.platform.erase-switched-off-application.md)). **A row exists
+only where there is something to erase** (ADR 0088 decision 5): every writer of a row's existence — both switches, a
+tenant's creation, the purge's opening of a missing row and its end of a window — makes or keeps one only while the
+tenant holds a node of the application's kinds, trashed ones included, so a tenant that holds nothing of an application
+switched off gets no day, no banner and no mail.
+
+**At first-run setup** the Server Owner may leave applications out: `POST /api/setup/owner`'s `applicationsOff` writes
+the instance switch in the owner's transaction, and the setup page reads the applications' words before sign-in from
+`GET /api/setup/applications` (admin channel, only while setup is open) ([uc.admin.setup-server](../../admin/use-cases/uc.admin.setup-server.md)).
 
 **An external service** is active only while the Server Owner has configured its address (`veyq_external_service`, seeded
 with OSM tiles, Nominatim, the HIBP range API and Frankfurter's ECB rates; admin-web's **External services**,

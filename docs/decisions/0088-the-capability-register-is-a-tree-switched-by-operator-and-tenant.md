@@ -1,7 +1,7 @@
 # ADR 0088 — The capability register is a tree, switched off by the operator and by a tenant owner
 
 - Status: Accepted
-- Built: partly (not built: decision 8's verified-identities and offline-cache requirements, decision 12's configuration as code, admin-web's own CSP under decision 7, § The register's entries the catalog does not hold)
+- Built: partly (not built: decision 5's window only where there is something to erase and decision 12's question at setup, cr-setup-asks-for-applications; decision 8's verified-identities and offline-cache requirements, decision 12's configuration as code, admin-web's own CSP under decision 7, § The register's entries the catalog does not hold)
 - Date: 2026-10-15
 - Model: [Applications](../apps/README.md)
 
@@ -64,7 +64,14 @@ instance and tenant layers.
    instance-wide value of the Server Owner (30 days by default), the application's content in the tenant is erased on
    a day every member is told — by the banner and, where the instance has mail, by a notice at switch-off and a reminder before the day. Switched on before that day, nothing is lost;
    switched on after it, the erasure completes and spares only what was made after the switch-on as a node of its own.
-   The day a member was told is never moved earlier, and a switch is never refused. The window is no requirement
+   The day a member was told is never moved earlier, and a switch is never refused.
+   **The window, its banner and its mails exist only where there is something to erase** (owner 2026-11-25): a tenant
+   gets them only while it holds a node of the application, trashed ones included, which the server sees by the
+   node's kind. An application off in a tenant that holds nothing of it is simply absent there — no banner, no day, no
+   mail. That is the case of a tenant created while the instance holds an application off, of an application the
+   Server Owner left out at setup (decision 12), and of a window that ends with nothing left, which then starts no next
+   one. While the application is off, every write of it is refused, so nothing of it can appear that would need a
+   window. The window is no requirement
    (decision 8): a tenant owner sets no value for it, and a tenant only narrows by switching the application off, never
    by shortening what the instance allows (decision 2). An instance switch gives every tenant its own day, and a tenant
    already off keeps its earlier one. Only the application's own entry erases; a child entry (`memories.places`) erases
@@ -108,6 +115,12 @@ instance and tenant layers.
     - **The Server Owner** switches in `admin-web` and its CLI, through the Admin API. The state lives in the
       database and takes effect without a restart. It is not a configuration property: the
       `veyq.capabilities.disabled` list retires, and with it any question of what an unknown id in it means.
+    - **At first-run setup** the Server Owner is asked once which applications the instance offers, every one on by
+      default (owner 2026-11-25, [uc.admin.setup-server](../features/admin/use-cases/uc.admin.setup-server.md)). What
+      is left out is the same instance switch the console writes, stored with the owner in one transaction, never a
+      preset beside it (decision 14's lesson): one state, switched back on in the console like any other. The page
+      has no session yet, so it reads the applications' words from a pre-auth read on the admin channel that serves
+      only the applications' entries, and only while setup is open.
     - **Configuration as code** (switches declared in compose or Helm values) is a later topic.
 13. **The register describes itself.** Every switchable entry carries, in English and German, *what it is for* and
     *what switching it off does*, both to new and to existing data (decision 5). The catalog holds that text and

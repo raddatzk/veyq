@@ -10,9 +10,9 @@
 - **Postconditions (success):** The Server Owner account exists with its own identity keys, Master Key
   wraps and a saved Emergency Kit; the instance is marked set up; the operator holds **no** content keys. The
   instance moderation key has its epoch 1, granted to the Server Owner alone, so reporting is on from the first day
-  ([uc.moderation.appoint-moderators](../../moderation/use-cases/uc.moderation.appoint-moderators.md)). No operator
-  value and no capability switch is set: every value is optional, set later
-  ([uc.admin.operator-details](uc.admin.operator-details.md)).
+  ([uc.moderation.appoint-moderators](../../moderation/use-cases/uc.moderation.appoint-moderators.md)). The applications
+  the Server Owner left out are switched off for the instance; no other capability switch and no operator value is set:
+  every value is optional, set later ([uc.admin.operator-details](uc.admin.operator-details.md)).
 
 ## Main flow
 
@@ -34,10 +34,18 @@
    space on the instance, and it is the Server Owner's own assessment, not veyq's
    ([ADR 0093](../../../decisions/0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md)
    § 14). Nothing is ticked or chosen; every value stays optional.
-5. The client uploads the **identity public key + wrapped blobs + a password-derived auth *public* key**
+5. The console asks once which applications this server offers — Memories, Depot, Expenses, every application the
+   build carries — each with its title and what it is for, in the console's language, and every one ticked. The words
+   come from the register (`GET /api/setup/applications`, ADR 0088 decision 13), served before sign-in on the admin
+   channel while setup is open. One line says that each can be switched on or off later under **Server →
+   Capabilities**. The owner unticks what the instance should not offer, or continues as it is; at least one
+   application stays ticked. Nothing is erased or announced by it: no space exists yet (ADR 0088 decision 5).
+6. The client uploads the **identity public key + wrapped blobs + a password-derived auth *public* key**
    (operator-blind password auth, [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md):
-   the server never sees the password and stores no credential/verifier — login is challenge-response);
-   the server stores ciphertext + the public key only and **marks setup complete** (single-owner lock). With it go
+   the server never sees the password and stores no credential/verifier — login is challenge-response) and the
+   applications left out (`applicationsOff`); the server stores ciphertext + the public key only, switches each
+   application left out off for the instance — the switch the console writes ([uc.admin.switch-capabilities](uc.admin.switch-capabilities.md)) —
+   and **marks setup complete** (single-owner lock). With it go
    epoch 1 of the instance moderation key — its public bundle and `M_1` sealed to the identity just born, `M_1` then
    forgotten ([ADR 0099](../../../decisions/0099-moderators-share-one-instance-moderation-key-and-review-without-a-vault.md)
    § 3) — stored in the same transaction, the Server Owner its first moderator.
@@ -58,20 +66,27 @@ sequenceDiagram
   O->>C: confirm saved
   C->>O: what an operator may owe (information)
   O->>C: continue
-  C->>S: POST setup/owner<br>{ email, identityPublicKey, wrapped blobs,<br>authPublicKey, suiteId, moderationEpoch }
-  S->>S: store ciphertext only#59;<br>mark setup complete (single-owner lock)
+  C->>S: GET setup/applications
+  S-->>C: each application's id, title, purpose
+  C->>O: which applications does this server offer?
+  O->>C: applications left out (or none)
+  C->>S: POST setup/owner<br>{ email, identityPublicKey, wrapped blobs,<br>authPublicKey, suiteId, moderationEpoch,<br>applicationsOff }
+  S->>S: store ciphertext only#59; switch the left-out<br>applications off#59; mark setup complete (single-owner lock)
   S-->>C: Server Owner created
 ```
 
 ## Alternate / exception flows
 
 - **A1 — already set up:** after setup completes, the setup endpoint is **closed**; there is no second
-  bootstrap.
+  bootstrap. `GET /api/setup/applications` is closed with it.
 - **E1 — kit not confirmed:** if the Emergency Kit backup is not confirmed, setup is **not finalized**: nothing
   has been sent, so a tab closed on the kit screen leaves setup open and the keys minted for it are simply gone.
   The owner is posted only after the confirmation (admin-web's `SetupView`, the order web's member registration
   already keeps). If someone else finishes setup in between, the post is refused (A1) and the console says the
   kit belongs to no account.
+- **E2 — an id that is no application** in `applicationsOff` (an entry below one, a core entry, an unknown id) or an id
+  twice: `400 invalid_request`, and nothing is stored — no owner either. Leaving every application out is the console's
+  to prevent (step 5), not the server's: the console's switches allow it later too.
 
 ## Setup state
 
