@@ -115,8 +115,8 @@ already holds:
 - to the **moderators** and the instance contact: moderation's notices; to a **reporter** and the people a decision
   concerns: the receipt and the statement of reasons, at an address their client sent ([Moderation](/run/moderation/));
 - to the **people an erasure concerns**: an account being erased, every member of a tenant you delete, and every member
-  of a tenant where an application was switched off — a notice naming the day its content there is erased, and a
-  reminder seven days before ([Capabilities](/run/capabilities/#what-acts-at-once-and-what-only-on-new-data)).
+  of a tenant where an application was switched off while the tenant holds something of it — a notice naming the day
+  its content there is erased, and a reminder seven days before ([Capabilities](/run/capabilities/#what-acts-at-once-and-what-only-on-new-data)).
 
 It never sends a tenant's mail, nor stands in for a tenant without one
 ([ADR 0097](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0097-an-instance-looks-for-new-releases-and-mails-its-server-owner.md)).

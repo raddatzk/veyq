@@ -1,7 +1,7 @@
 # ADR 0088 — The capability register is a tree, switched off by the operator and by a tenant owner
 
 - Status: Accepted
-- Built: partly (not built: decision 5's window only where there is something to erase and decision 12's question at setup, cr-setup-asks-for-applications; decision 8's verified-identities and offline-cache requirements, decision 12's configuration as code, admin-web's own CSP under decision 7, § The register's entries the catalog does not hold)
+- Built: partly (not built: decision 8's verified-identities and offline-cache requirements, decision 12's configuration as code, admin-web's own CSP under decision 7, § The register's entries the catalog does not hold)
 - Date: 2026-10-15
 - Model: [Applications](../apps/README.md)
 
