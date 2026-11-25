@@ -36,7 +36,7 @@ household's TV. The unlock a TV needs is [ADR 0160](0160-a-tv-unlocks-an-account
    `tvosSimulatorArm64` targets, its native libraries (libsodium, libwebp) a tvOS slice each.
 
 2. **A TV views; it does not author.** The core's plans take the device's form, and the TV form keeps an object's
-   viewing actions and removes creating, editing, moving, sharing, uploading and deleting — the same way rights remove
+   viewing actions (and the report, decision log) and removes creating, editing, moving, sharing, uploading and deleting — the same way rights remove
    functions ([ADR 0154](0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md)),
    decided once in the core, never per screen. This is not a guest view: what the TV shows is the member's view, minus
    what a remote cannot do well ([ADR 0122](0122-one-app-holds-every-application-the-drawer-chooses-the-bar-belongs-to-it.md)'s
@@ -122,9 +122,12 @@ The choices the build made inside these decisions, each with its reason.
 - **A video still plays** (`MemoryRights.Rights.play`, true on a TV and included in `download`): reading a medium in
   ranges into a player is viewing; saving it is taking it away. The Android pass found no video before it.
 - **Memories' header keeps MUSIC on a TV:** it plays and stops the Memory's music, which is viewing.
-- **No report on a TV — our reading, for the owner** (inbox #1360): the report is a form a remote types badly, and every
-  other device of the account offers it; we read the DSA's notice duty (Art. 16) as binding the service, not each
-  client. If the owner reads it otherwise, `NodeHeader.viewOnly` keeps `report` and both TV clients draw its flow.
+- **The report stays on a TV** (coordinator 2026-11-25, by CLAUDE.md's legal rule; the owner may still narrow it): reading
+  the DSA's notice duty (Art. 16) as owing the mechanism "easy to access" where the content is shown is plausible, and
+  keeping it is cheap, so the safe side is built — reporting is no authoring. `NodeHeader.viewOnly` keeps `report` where
+  the server takes one (`TvFormPlansTest.aTvKeepsTheReportWhereTheServerTakesOne`); both TV clients draw the core's
+  `ReportSheet` with the remote's conventions — a centred dialog on Android TV, a `Form` on Apple TV, the reason and the
+  contact in the system keyboard, the privacy notice's address as text and a QR (a TV has no browser).
 - **A TV signs in by its QR code only** (`SignInPlan.tvEntries`): the PIN level exists because a TV never sees the
   password or the Secret Key.
 - **The picker's default name is the account's address** (decision 4): `TrustedDevice.label`, renamed in the TV's

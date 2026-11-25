@@ -228,11 +228,37 @@ final class TvModel {
         covers = [:]
         details = [:]
         rows = RowDetails.ReadCompanion.shared.EMPTY
+        headers.values.forEach { $0.watch.stop() }
+        headers = [:]
         tenantSession?.close()
         tenantSession = nil
         playingNow = []
         idle.playing(on: false)
     }
+
+    // MARK: Core's actions on a node
+
+    /// The headers handed out, one per node and name (core's `NodeHeaderModel`), each watched: a header's view reads
+    /// `headerRevision` to be drawn anew. On a TV its plan holds the report alone, where the server takes one.
+    @ObservationIgnored private var headers: [String: (model: NodeHeaderModel, watch: NodeHeaderModel.Watch)] = [:]
+    private(set) var headerRevision = 0
+
+    /// The header of `node` over the shell. A TV writes nothing (its rights are `NodeHeader.viewOnly`), so no write closes
+    /// an open object or reads the lists anew; the facts are a writable page's, which on a TV opens no door either way.
+    func header(_ node: NodeAt) -> NodeHeaderModel? {
+        guard let m = shellModel else { return nil }
+        let key = "\(node.scopeId)/\(node.nodeId)/\(node.name)"
+        if let held = headers[key] { return held.model }
+        let made = m.header(node: node, facts: AppKinds.Facts(canWrite: true, hasContent: true), closeOpen: { @Sendable _ in }, changed: { @Sendable in })
+        let watch = made.watch { @Sendable _ in
+            Task { @MainActor [weak self] in self?.headerRevision += 1 }
+        }
+        headers[key] = (made, watch)
+        return made
+    }
+
+    /// The report of `node` to the tenant's moderators (core's `ReportSheet`).
+    func reportSheet(_ node: NodeAt) -> VeyqCore.ReportSheet? { shellModel?.reportSheet(node: node) }
 
     /// The shell moved, at once (its transitions are `Shell`'s).
     func move(_ change: @escaping (Shell) -> Shell) {

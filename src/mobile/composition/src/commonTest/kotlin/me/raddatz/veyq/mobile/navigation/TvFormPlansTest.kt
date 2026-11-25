@@ -29,13 +29,13 @@ class TvFormPlansTest {
     )
 
     @Test
-    fun aTvHeaderOrRowOffersNothingOnAnyKind() {
+    fun aTvHeaderOrRowOffersNothingButTheReportOnAnyKind() {
         for (kind in kinds) {
             assertNotNull(AppKinds.header(kind), "$kind has a page in this build")
             val plan = NodeHeader.plan(everything(kind, viewOnly = true), AppKinds.headerOrder(kind), maxButtons = 9)
-            assertFalse(plan.hasMenu, "$kind: a TV's header has no menu")
-            assertEquals(emptyList(), plan.buttons, "$kind: a TV's header has no button")
-            assertEquals(LevelRow.Plan(emptyList(), emptyList()), LevelRow.plan(everything(kind, viewOnly = true)), "$kind: a TV's row has no menu")
+            assertEquals(listOf(HeaderAction.REPORT), plan.buttons + plan.menu + plan.last, "$kind: a TV's header offers the report alone")
+            val row = LevelRow.plan(everything(kind, viewOnly = true))
+            assertEquals(listOf(HeaderAction.REPORT), row.menu + row.last, "$kind: a TV's row offers the report alone")
         }
     }
 
@@ -53,7 +53,18 @@ class TvFormPlansTest {
         val offline = everything("FOLDER", viewOnly = false, online = false)
         assertTrue(offline.download && offline.offline)
         val tv = everything("FOLDER", viewOnly = true, online = false)
-        assertFalse(tv.download || tv.offline || tv.report)
+        assertFalse(tv.download || tv.offline)
+    }
+
+    @Test
+    fun aTvKeepsTheReportWhereTheServerTakesOne() {
+        // the DSA's notice mechanism stays reachable where the content is shown (ADR 0159's decision log)
+        assertTrue(everything("FOLDER", viewOnly = true).report)
+        val none = NodeHeader.rights(
+            "FOLDER", favoriteKnown = true, shareable = true, linksOn = true, rename = true, takesCover = true, coverOffered = true,
+            copy = true, download = true, report = false, inGuestFolder = false, viewOnly = true,
+        )
+        assertFalse(none.report, "no report where the server publishes no moderation key")
     }
 
     @Test

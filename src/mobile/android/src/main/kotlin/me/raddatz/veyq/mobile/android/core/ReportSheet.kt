@@ -58,6 +58,11 @@ internal fun ReportSheet(ref: me.raddatz.veyq.mobile.navigation.NodeAt, model: A
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun ReportSheet(sheet: me.raddatz.veyq.mobile.navigation.ReportSheet, onClose: () -> Unit) {
+    // a TV draws the same form for the remote: this sheet's fields hold the D-pad's focus and its link needs a browser
+    if (LocalTvForm.current) {
+        TvReportDialog(sheet, onClose)
+        return
+    }
     val palette = LocalPalette.current
     val scope = rememberCoroutineScope()
     val context = LocalContext.current

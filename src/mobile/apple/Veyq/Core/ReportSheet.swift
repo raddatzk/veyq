@@ -136,23 +136,3 @@ struct ReportSheet: View {
     /// A server instant as the web writes a date and time (core's `Shown.moment`).
     private static func time(_ instant: String?) -> String { instant.map(shownMoment) ?? "" }
 }
-
-/// Core's report sheet as SwiftUI observes it: its state, moved by the sheet's watch onto the main actor.
-@MainActor @Observable
-final class ReportBox {
-    private(set) var sheet: VeyqCore.ReportSheet?
-    private(set) var state: VeyqCore.ReportSheet.State?
-    @ObservationIgnored private var watch: VeyqCore.ReportSheet.Watch?
-
-    func start(_ sheet: VeyqCore.ReportSheet) {
-        self.sheet = sheet
-        state = sheet.current
-        watch = sheet.watch { @Sendable _ in
-            Task { @MainActor [weak self] in
-                if let current = self?.sheet?.current { self?.state = current }
-            }
-        }
-    }
-
-    func stop() { watch?.stop() }
-}

@@ -86,6 +86,8 @@ private struct TvMemoryPage: View {
                     }
                     // the page's own entries of core's header plan, whole; on a TV the music alone is in it
                     ForEach(gallery.headerActions, id: \.self) { a in header(a, gallery, state) }
+                    // core's header plan of the node: on a TV the report alone, where the server takes one
+                    TvNodeHeader(model: model, node: ref.at)
                 }
                 .focusSection()
                 if let failure = state.failure { Text(say(failure)).foregroundStyle(Role.danger) }

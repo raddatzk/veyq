@@ -92,11 +92,11 @@ object NodeHeader {
 
     /**
      * [rights] on a device that only views (a TV, ADR 0159 decisions 2-3): every write [readOnly] takes away, and every way
-     * to take the node off the device too — the download and "Available offline" (a TV keeps no store). The report goes
-     * with them: it is a form a remote types badly, and every other device of the account offers it (our reading of the
-     * DSA's notice duty, which binds the service, not each client — ADR 0159's decision log).
+     * to take the node off the device too — the download and "Available offline" (a TV keeps no store). The report stays
+     * where the server takes one: reporting is no authoring, and the DSA's notice mechanism (Art. 16) is plausibly owed
+     * "easy to access" where the content is shown — the safe side, cheap to keep (ADR 0159's decision log).
      */
-    fun viewOnly(rights: Rights): Rights = readOnly(rights).copy(download = false, offline = false)
+    fun viewOnly(rights: Rights): Rights = readOnly(rights).copy(download = false, offline = false, report = rights.report)
 
     /** [rights] while the server is unreachable: no write (the heart, the link, rename, move, cover, copy, report, delete). */
     fun readOnly(rights: Rights): Rights = rights.copy(

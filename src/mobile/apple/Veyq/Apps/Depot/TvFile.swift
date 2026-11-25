@@ -43,7 +43,13 @@ private struct TvFilePage: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 30) {
-            Text(ref.name).font(.title2)
+            HStack(alignment: .firstTextBaseline, spacing: 30) {
+                Text(ref.name).font(.title2)
+                Spacer()
+                // core's header plan of the node: on a TV the report alone, where the server takes one
+                TvNodeHeader(model: model, node: ref.at)
+            }
+            .focusSection()
             if let held {
                 let facts = pieceLine(held.state.facts)
                 if !facts.isEmpty { Text(facts).foregroundStyle(.secondary) }

@@ -195,6 +195,10 @@ targets:
       - path: Veyq/Core/CoverImages.swift
       - path: Veyq/Core/ReaderPlayback.swift
       - path: Veyq/Core/MusicPlayback.swift
+      # the report (the DSA's notice where the content is shown, ADR 0159's decision log): its sheet observed, and the
+      # privacy notice's QR code, read on another device
+      - path: Veyq/Core/ReportBox.swift
+      - path: Veyq/Core/QrMatrixView.swift
       - path: Veyq/Assets.xcassets
       - path: build/generated/tv/Plans.swift
         optional: true

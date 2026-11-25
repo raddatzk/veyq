@@ -2606,6 +2606,11 @@
     "en": "How your contact is kept, and for how long",
     "de": "Wie dein Kontakt aufbewahrt wird, und wie lange"
   },
+  "report_privacy_elsewhere": {
+    "note": "a TV's report (ADR 0159): a TV opens no browser, so the privacy notice's passage (report_privacy) is offered as a QR code and its address, to read on another device",
+    "en": "Scan the code or open this address on another device:",
+    "de": "Scanne den Code oder öffne diese Adresse auf einem anderen Gerät:"
+  },
   "report_send": {
     "en": "Send report",
     "de": "Meldung senden"

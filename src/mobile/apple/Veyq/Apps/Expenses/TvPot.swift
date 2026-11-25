@@ -54,7 +54,11 @@ private struct TvPotPage: View {
             HStack(alignment: .firstTextBaseline, spacing: 20) {
                 Text(ref.name).font(.title2)
                 if let cur = held?.state?.view?.currency { Text(say(.potInCurrency, cur)).foregroundStyle(.secondary) }
+                Spacer()
+                // core's header plan of the node: on a TV the report alone, where the server takes one
+                TvNodeHeader(model: model, node: ref.at)
             }
+            .focusSection()
             if let state = held?.state {
                 if let failure = state.failure { Text(say(failure)).foregroundStyle(Role.danger) }
                 if let view = state.view { pot(view) } else if !state.failed { ProgressView() }

@@ -91,17 +91,20 @@ internal fun TvRoot(model: AppModel) {
     val offer by model.offer.collectAsStateWithLifecycle()
     val link by model.link.collectAsStateWithLifecycle()
     TvTheme {
-        Surface(Modifier.fillMaxSize()) {
-            when (val s = screen) {
-                Screen.Starting -> StartingScreen()
-                is Screen.SignIn -> TvSignIn(s, model)
-                is Screen.Picker -> TvPicker(s, model)
-                is Screen.Unlock -> if (s.asksPin) TvPinUnlock(s, model) else StartingScreen()
-                // a TV's sign-in is its QR code only (`SignInPlan.tvEntries`): the locked sign-in and the reset are not reached
-                is Screen.Locked, is Screen.Recover -> StartingScreen()
-                is Screen.Signed -> offer?.let { TvOffer(it, model) } ?: TvShell(s, model)
+        // a dialog the phone draws for touch is drawn for the remote below (the report, [TvReportDialog])
+        androidx.compose.runtime.CompositionLocalProvider(LocalTvForm provides true) {
+            Surface(Modifier.fillMaxSize()) {
+                when (val s = screen) {
+                    Screen.Starting -> StartingScreen()
+                    is Screen.SignIn -> TvSignIn(s, model)
+                    is Screen.Picker -> TvPicker(s, model)
+                    is Screen.Unlock -> if (s.asksPin) TvPinUnlock(s, model) else StartingScreen()
+                    // a TV's sign-in is its QR code only (`SignInPlan.tvEntries`): the locked sign-in and the reset are not reached
+                    is Screen.Locked, is Screen.Recover -> StartingScreen()
+                    is Screen.Signed -> offer?.let { TvOffer(it, model) } ?: TvShell(s, model)
+                }
+                link?.let { DeviceLinkScreen(it, onAgain = model::linkAgain, onClose = model::closeLink, tv = true) }
             }
-            link?.let { DeviceLinkScreen(it, onAgain = model::linkAgain, onClose = model::closeLink, tv = true) }
         }
     }
 }
