@@ -18,7 +18,7 @@ RUN apt-get update \
 # pnpm itself, at exactly the version the root package.json pins in `packageManager` — the one npm install this image
 # runs (scripts/validate_pnpm_installs_gated.py holds the two equal). A layer of its own, above every COPY, so only a
 # pnpm bump rebuilds it.
-RUN npm install -g pnpm@12.22.0
+RUN npm install -g pnpm@12.23.0
 COPY contracts/api /repo/contracts/api
 # The generator JAR's verifier and its pin, before the install for the same reason as the specs: `prepare` runs
 # generate:api, which runs ../../scripts/verify_openapi_generator_jar.mjs first (ADR 0057 §6).
