@@ -82,7 +82,7 @@ photo it took. So a selection is corrected through **one** of its media, and the
   choice, because every write starts from the medium as the shift read it; it is named, with every other medium the
   server refused, one line per reason, as a selection's trash names its refusals (inbox #427). A peer's unrelated write
   (a place name) merges as it does today. An Undo after such a change refuses the same way.
-- **A corrected medium moves to the grid's end** until the Beiträge grid sorts by capture time (inbox #863); the
+- **A corrected medium moves to the grid's end** until the Beiträge grid sorts by capture time (inbox #867); the
   Gallery tab sorts by it and shows the shifted order at once.
 - **Reset to original** stays per medium: it is not an offset.
 

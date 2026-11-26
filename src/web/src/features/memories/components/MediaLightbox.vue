@@ -13,9 +13,12 @@
 // photo (`shared/ui/usePanZoom.ts`, a drag or the arrow keys pan while zoomed); past the preview's resolution the ORIGINAL replaces it in
 // place where `../lightboxZoom.ts` allows - fetched as ciphertext through the source's `originalLoader`, decrypted here, its
 // object URL revoked on navigation / close like the preview's. A video does not zoom.
+// **Paging goes round** (owner 2026-11-26): past the last item comes the first and before the first the last - the
+// buttons, the arrow keys and the slideshow alike; only a single item has nowhere to go. The position ("3 of 42") says
+// where the viewer is, so a step round the end needs no notice of its own.
 // **Slideshow** (same CR): the toolbar's play control advances every 5 s through the items in their grid order
-// (`createVisibilityPoller`); a video shows its poster for one interval, never auto-played; it stops on the last item and
-// pauses on any key, pointer or wheel (the zoom and the details panel included), a hidden tab and `suspendKeys`. While it
+// (`createVisibilityPoller`); a video shows its poster for one interval, never auto-played; it goes round past the last
+// item until it is paused - it pauses on any key, pointer or wheel (the zoom and the details panel included), a hidden tab and `suspendKeys`. While it
 // runs no EXIF read and no place backfill happen — pausing on an item runs them.
 // **Paging is instant where it can be** (`../previewCache.ts`): the decrypted previews stay in memory while the lightbox is
 // open, bounded by size, so a step back shows the item at once; once an item's preview is shown its two neighbours are read
@@ -157,8 +160,10 @@ const shiftOffer = ref<{ plan: ShiftPlan; read: ShiftRead[]; afterMs: number | n
 const shiftProgress = ref<{ done: number; total: number } | null>(null)
 
 const item = computed(() => props.items[current.value])
-const canPrev = computed(() => current.value > 0)
-const canNext = computed(() => current.value < props.items.length - 1)
+// Paging goes round (see the header): any item has a previous and a next one as long as there is another item.
+const canPage = computed(() => props.items.length > 1)
+/** The index `step` places away from `at`, going round past either end. */
+const around = (at: number, step: number) => (((at + step) % props.items.length) + props.items.length) % props.items.length
 // A medium a moderator blocked (uc.moderation.take-a-measure) previews nothing: every byte of it answers 451.
 const previewable = computed(() => (item.value && !item.value.blocked ? hasDerivatives(item.value) : false))
 // The original's sealed blob meta (inbox #397): its type, the file name it was uploaded under, its modified time —
@@ -176,11 +181,10 @@ const videoType = computed(() => (isVideoMediaType(mediaType.value) ? mediaType.
 const SLIDESHOW_INTERVAL_MS = 5000
 const slideshow = createVisibilityPoller(SLIDESHOW_INTERVAL_MS)
 const playing = ref(false)
-const slideshowState = ref<'playing' | 'paused' | 'ended' | null>(null)
+const slideshowState = ref<'playing' | 'paused' | null>(null)
 const slideshowAnnouncement = computed(() =>
   slideshowState.value === 'playing' ? t('media.slideshowPlaying')
-    : slideshowState.value === 'paused' ? t('media.slideshowPaused')
-      : slideshowState.value === 'ended' ? t('media.slideshowEnded') : '',
+    : slideshowState.value === 'paused' ? t('media.slideshowPaused') : '',
 )
 // The current preview's load (`loadPreview`), which a tick waits for.
 let previewLoad: Promise<void> = Promise.resolve()
@@ -189,37 +193,38 @@ let detailsDeferred: string | null = null
 
 /** Whether `it` has a preview to read: not blocked (every byte of a blocked medium answers 451) and with derivatives. */
 const hasPreview = (it: MediaItem | undefined): it is MediaItem => !!it && !it.blocked && hasDerivatives(it)
-/** Read the shown item's two neighbours ahead - after its own preview, so they never queue before the item on screen. */
+/** Read the shown item's two neighbours ahead - after its own preview, so they never queue before the item on screen.
+ *  Round the ends too: on the last item the first is read ahead, so the step round shows it at once. */
 function prefetchNeighbours() {
-  for (const at of [current.value + 1, current.value - 1]) {
+  if (!canPage.value) return
+  for (const at of new Set([around(current.value, 1), around(current.value, -1)])) {
     const neighbour = props.items[at]
     if (hasPreview(neighbour)) previews.prefetch(neighbour)
   }
 }
 
 async function slideshowTick(signal: AbortSignal) {
-  if (!canNext.value) return stopSlideshow('ended')
-  current.value += 1
+  if (!canPage.value) return stopSlideshow() // the others were removed under it: nothing left to go to
+  current.value = around(current.value, 1)
   await nextTick() // the item's watchers ran: its preview load started (the neighbours' read ahead), its details were held back
   if (signal.aborted) return
-  if (!canNext.value) return stopSlideshow('ended') // stops ON the last item
   await previewLoad
 }
 function startSlideshow() {
-  if (playing.value || !canNext.value) return
+  if (playing.value || !canPage.value) return
   zoom.reset()
   playing.value = true
   slideshowState.value = 'playing'
   slideshow.start(slideshowTick)
 }
-function stopSlideshow(state: 'paused' | 'ended') {
+function stopSlideshow() {
   if (!playing.value) return
   slideshow.stop()
   playing.value = false
-  slideshowState.value = state
+  slideshowState.value = 'paused'
   if (detailsDeferred && detailsDeferred === item.value?.mediaId) void loadDetails()
 }
-const toggleSlideshow = () => (playing.value ? stopSlideshow('paused') : startSlideshow())
+const toggleSlideshow = () => (playing.value ? stopSlideshow() : startSlideshow())
 // The music's controls in the top bar (core's `AudioMiniControls`) are no interaction with the slideshow either: music and
 // slideshow run together. While they are drawn, a narrow screen gives them a row of their own under the title and the
 // actions (`has-music`, memories.css), which no longer fit one row beside them.
@@ -227,7 +232,7 @@ const musicShown = computed(() => audioPlayer().nowPlaying.value !== null)
 const isSlideshowToggle = (target: EventTarget | null) => target instanceof Element && !!target.closest('[data-slideshow-toggle], [data-audio-controls]')
 /** Any pointer or wheel in the lightbox pauses — the zoom's gestures and the details panel included; the toggle is its own. */
 function pauseOnInteraction(event: Event) {
-  if (playing.value && !isSlideshowToggle(event.target)) stopSlideshow('paused')
+  if (playing.value && !isSlideshowToggle(event.target)) stopSlideshow()
 }
 // Native capture listeners, not Vue's `@pointerdown.capture`: the first Vue invoker an event meets stamps it (`e._vts`),
 // and every later Vue handler on its path drops an event stamped no later than that handler was attached. With a Vue
@@ -243,11 +248,11 @@ onMounted(() => {
   rootEl.value?.addEventListener('wheel', pauseOnInteraction, { capture: true, passive: true })
 })
 function onVisibility() {
-  if (document.visibilityState === 'hidden') stopSlideshow('paused')
+  if (document.visibilityState === 'hidden') stopSlideshow()
 }
 document.addEventListener('visibilitychange', onVisibility)
 watch(() => props.suspendKeys, (suspended) => {
-  if (suspended) stopSlideshow('paused') // a modal opened over the lightbox
+  if (suspended) stopSlideshow() // a modal opened over the lightbox
 })
 
 /** Whether a read started for `target` must be dropped when it lands: the stage shows another item now, or a block reached
@@ -670,20 +675,20 @@ const uploader = computed(() => (item.value && props.uploaderOf ? props.uploader
 const hasDetail = computed(() => metadataRows.value.length > 0 || hasGps.value || uploader.value !== null)
 
 function prev() {
-  if (canPrev.value) current.value -= 1
+  if (canPage.value) current.value = around(current.value, -1)
 }
 function next() {
-  if (canNext.value) current.value += 1
+  if (canPage.value) current.value = around(current.value, 1)
 }
 
 // After a delete (cr-0110) the parent removes the item from `items`, shrinking the array: the item that shifted
-// into this slot shows (a natural advance), clamp to the last when the deleted one WAS last, and close when the
-// grid empties — so the lightbox stays consistent with the optimistic removal.
+// into this slot shows (a natural advance), the first when the deleted one WAS last (the advance goes round, as paging
+// does), and the lightbox closes when the grid empties — so it stays consistent with the optimistic removal.
 watch(
   () => props.items.length,
   (len) => {
     if (len === 0) close()
-    else if (current.value >= len) current.value = len - 1
+    else if (current.value >= len) current.value = 0
   },
 )
 
@@ -824,7 +829,6 @@ onBeforeUnmount(() => {
           data-slideshow-toggle
           :aria-label="t(playing ? 'media.slideshowPause' : 'media.slideshowStart')"
           :title="t(playing ? 'media.slideshowPause' : 'media.slideshowStart')"
-          :disabled="!playing && !canNext"
           @click="toggleSlideshow"
         >
           <VeyqIcon :name="playing ? 'pause' : 'play'" />
@@ -877,7 +881,7 @@ onBeforeUnmount(() => {
           type="button"
           class="veyq-icon-button lightbox-nav lightbox-nav-previous"
           :aria-label="t('media.previous')"
-          :disabled="!canPrev"
+          :disabled="!canPage"
           @click="prev"
         >
           <VeyqIcon name="chevron-left" />
@@ -948,7 +952,7 @@ onBeforeUnmount(() => {
           type="button"
           class="veyq-icon-button lightbox-nav lightbox-nav-next"
           :aria-label="t('media.next')"
-          :disabled="!canNext"
+          :disabled="!canPage"
           @click="next"
         >
           <VeyqIcon name="chevron-right" />

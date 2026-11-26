@@ -132,7 +132,7 @@ test(
     // the panel's date as the browser formats it, read back in the same runtime and zone
     const at = (taken: string) => Date.parse(taken.replace(/\u202f/g, ' ')) // ICU's narrow space before AM/PM
     // Each photo by its name: the two Munich ones are one file, taken at the same instant, so their places among each
-    // other follow the listing order a meta write moves (inbox #863) — the gallery's order is by time, asserted below.
+    // other follow the listing order a meta write moves (inbox #867) — the gallery's order is by time, asserted below.
     expect(after.map((p) => p.name).sort(), 'the same three photos').toEqual(before.map((p) => p.name).sort())
     for (const p of after) {
       const was = before.find((b) => b.name === p.name)!
