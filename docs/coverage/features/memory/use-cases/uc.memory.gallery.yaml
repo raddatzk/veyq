@@ -11,7 +11,10 @@ acceptanceCriteria:
       backend: { integration: [MediaSliceTest.derivativesRoundTripWithOwnWraps] }
       web: { unit: [src/features/memories/media.test.ts, src/features/memories/components/MemoryDetail.test.ts] }
   - id: lightbox-preview
-    text: Opening an item shows its preview (not the multi-MB original) full-view, with prev/next paging the grid order.
+    text: >
+      Opening an item shows its preview (not the multi-MB original) full-view, with prev/next paging the grid order and
+      going round at its ends (past the last the first, before the first the last, the arrow keys alike; a single item
+      pages nowhere; removing the shown last item shows the first).
     coverage:
       backend: { integration: [MediaSliceTest.derivativesRoundTripWithOwnWraps] }
       web: { unit: [src/features/memories/media.test.ts, src/features/memories/components/MediaLightbox.test.ts] }
@@ -37,7 +40,7 @@ acceptanceCriteria:
   - id: lightbox-slideshow
     text: >
       A play / pause control in the lightbox advances every 5 s through the grid order, shows a video's poster for one
-      interval and never plays it, waits for a preview still loading, and stops on the last item; any key, pointer or
+      interval and never plays it, waits for a preview still loading, and goes round past the last item; any key, pointer or
       wheel in the lightbox, a hidden tab and a dialog over it pause it, the toggle's own press excepted; the state is
       announced (aria-live). One preview is fetched ahead and dropped when it is not shown. While it runs no EXIF read and
       no place-name backfill happen; pausing on an item runs both (cr-lightbox-zoom-slideshow).

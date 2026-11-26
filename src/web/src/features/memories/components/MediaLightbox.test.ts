@@ -235,7 +235,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     expect(wrapper.emitted('setCover')).toBeFalsy()
   })
 
-  it('pages prev/next through the grid order, reading the next item’s preview ahead, and clamps at the ends', async () => {
+  it('pages prev/next through the grid order, reading the next item’s preview ahead, and goes round at the ends', async () => {
     const memoryKey = v1.randomBytes(32)
     const { store, items } = await seedTwo(memoryKey)
     store.blob.presignBlobDownloads.mockClear()
@@ -245,8 +245,8 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
 
-    // at the first item: previous is disabled (clamp), next enabled
-    expect(wrapper.find('.lightbox-nav-previous').attributes('disabled')).toBeDefined()
+    // at the first item both go somewhere: paging goes round (owner 2026-11-26)
+    expect(wrapper.find('.lightbox-nav-previous').attributes('disabled')).toBeUndefined()
     expect(wrapper.find('.lightbox-nav-next').attributes('disabled')).toBeUndefined()
     // media 1: PREVIEW=up-5 → read ahead once media 0's preview is shown, never its original (up-3)
     expect(presigned()).toContain(store.blobIdOfUpload('up-5'))
@@ -256,11 +256,55 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     await wrapper.find('.lightbox-nav-next').trigger('click')
     await flushPromises()
 
-    // next paged to it, shown from what was read ahead; now next is disabled at the end
+    // next paged to it, shown from what was read ahead; at the last item next is still offered
     expect(presigned(), 'nothing read again').toEqual([])
     expect(wrapper.find('.media-lightbox-stage img').attributes('src')).toMatch(/^blob:/)
-    expect(wrapper.find('.media-lightbox-title small').text()).toBe(t('media.itemPosition', { index: 2, count: 2 }))
+    const position = () => wrapper.find('.media-lightbox-title small').text()
+    expect(position()).toBe(t('media.itemPosition', { index: 2, count: 2 }))
+    expect(wrapper.find('.lightbox-nav-next').attributes('disabled')).toBeUndefined()
+
+    // past the last comes the first, before the first the last - on the buttons and the arrow keys alike
+    await wrapper.find('.lightbox-nav-next').trigger('click')
+    await flushPromises()
+    expect(position(), 'next on the last goes round to the first').toBe(t('media.itemPosition', { index: 1, count: 2 }))
+    await wrapper.find('.lightbox-nav-previous').trigger('click')
+    await flushPromises()
+    expect(position(), 'previous on the first goes round to the last').toBe(t('media.itemPosition', { index: 2, count: 2 }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    await flushPromises()
+    expect(position(), 'ArrowRight on the last').toBe(t('media.itemPosition', { index: 1, count: 2 }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))
+    await flushPromises()
+    expect(position(), 'ArrowLeft on the first').toBe(t('media.itemPosition', { index: 2, count: 2 }))
+    expect(presigned(), 'both were held: going round reads nothing again').toEqual([])
+  })
+
+  it('a single item has nowhere to page: both buttons off, no slideshow, the arrow keys stay put', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    const wrapper = mountLightbox(memoryKey, [items[0]], 0)
+    await flushPromises()
+    expect(wrapper.find('.media-lightbox-stage img').attributes('src'), 'control: the item shows').toMatch(/^blob:/)
+    expect(wrapper.find('.lightbox-nav-previous').attributes('disabled')).toBeDefined()
     expect(wrapper.find('.lightbox-nav-next').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-slideshow-toggle]').exists()).toBe(false)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))
+    await flushPromises()
+    expect(wrapper.find('.media-lightbox-title small').text()).toBe(t('media.itemPosition', { index: 1, count: 1 }))
+  })
+
+  it('removing the shown last item shows the first (the advance goes round, as paging does)', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedImages(memoryKey, 3)
+    const held = reactive(items.map((it) => ({ ...it })))
+    const wrapper = mountLightbox(memoryKey, held, 2)
+    await flushPromises()
+    expect(wrapper.find('.media-lightbox-title small').text(), 'control').toBe(t('media.itemPosition', { index: 3, count: 3 }))
+    held.splice(2, 1)
+    await flushPromises()
+    expect(wrapper.find('.media-lightbox-title small').text()).toBe(t('media.itemPosition', { index: 1, count: 2 }))
+    expect(wrapper.emitted('close'), 'one is left: it stays open').toBeFalsy()
   })
 
   // The previews read while the lightbox is open stay in memory (`../previewCache.ts`): a step back is instant, the
@@ -313,6 +357,21 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
       expect(items.map(props.readsOf), 'the shown one and its two neighbours, nothing further').toEqual([1, 1, 1, 0])
       expect(props.previewLoader.mock.calls[0][0].mediaId, 'the shown one first').toBe(items[1].mediaId)
       w.unmount()
+    })
+
+    it('reads ahead round the ends: on the last item the first, on the first the last', async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seedImages(memoryKey, 4)
+      const last = recordedPreview(memoryKey)
+      const w = mountLightbox(memoryKey, items, 3, last)
+      await flushPromises()
+      expect(items.map(last.readsOf), 'the last, the one before it, and the first').toEqual([1, 0, 1, 1])
+      w.unmount()
+      const first = recordedPreview(memoryKey)
+      const v = mountLightbox(memoryKey, items, 0, first)
+      await flushPromises()
+      expect(items.map(first.readsOf), 'the first, the one after it, and the last').toEqual([1, 1, 0, 1])
+      v.unmount()
     })
 
     it('reads nothing ahead of a blocked neighbour (every byte of it answers 451)', async () => {
@@ -1498,7 +1557,7 @@ describe('MediaLightbox — zoom (cr-lightbox-zoom-slideshow)', () => {
 
 // The slideshow (cr-lightbox-zoom-slideshow, uc.memory.gallery 3a), on fake interval/timeout/Date clocks (setImmediate stays
 // real, so `flushPromises` works): every 5 s one step through the items, a video's poster for one interval and never played,
-// a stop ON the last item, a pause on every interaction and a hidden tab, one preview ahead, and no EXIF read or place
+// round past the last item until paused, a pause on every interaction and a hidden tab, one preview ahead, and no EXIF read or place
 // backfill while it runs.
 describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
   beforeEach(() => vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'Date'] }))
@@ -1537,7 +1596,7 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
     return { ...p, previewLoader: vi.fn(p.previewLoader), originalLoader: vi.fn(p.originalLoader), exifLoader: vi.fn(p.exifLoader) }
   }
 
-  it('advances every 5 s through the items and stops on the last, announced', async () => {
+  it('advances every 5 s through the items and goes round past the last, announced', async () => {
     const memoryKey = v1.randomBytes(32)
     const { items } = await seed(memoryKey, ['image/png', 'image/jpeg', 'image/png'])
     const w = mountLightbox(memoryKey, items, 0)
@@ -1559,11 +1618,12 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
     expect(status(w)).toBe(t('media.slideshowPlaying'))
     await advance(5000)
     expect(position(w)).toBe(at(3))
-    expect(status(w), 'it stops ON the last item').toBe(t('media.slideshowEnded'))
-    expect(toggle(w).attributes('aria-label')).toBe(t('media.slideshowStart'))
-    expect(toggle(w).attributes('disabled'), 'nothing left to play').toBeDefined()
-    await advance(15000)
-    expect(position(w)).toBe(at(3))
+    expect(status(w), 'the last item is no end').toBe(t('media.slideshowPlaying'))
+    await advance(5000)
+    expect(position(w), 'past the last comes the first').toBe(at(1))
+    expect(toggle(w).attributes('aria-label')).toBe(t('media.slideshowPause'))
+    await advance(5000)
+    expect(position(w), 'and on, a second round').toBe(at(2))
     w.unmount()
   })
 
@@ -1685,15 +1745,16 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
 
   it('stays one preview ahead and shows each without a second fetch, paused or not', async () => {
     const memoryKey = v1.randomBytes(32)
-    const { items } = await seed(memoryKey, ['image/png', 'image/jpeg', 'image/png'])
+    // Four, so the one two steps on is neither neighbour: paging goes round, the last is the first one's other neighbour.
+    const { items } = await seed(memoryKey, ['image/png', 'image/jpeg', 'image/png', 'image/jpeg'])
     const props = recorded(memoryKey)
     const w = mountLightbox(memoryKey, items, 0, props)
     await flushPromises()
     const fetchedFor = (i: number) => props.previewLoader.mock.calls.filter(([it]) => it.mediaId === items[i].mediaId).length
-    expect([fetchedFor(0), fetchedFor(1), fetchedFor(2)], 'the next one, ahead, only one').toEqual([1, 1, 0])
+    expect(items.map((_, i) => fetchedFor(i)), 'one ahead each way, nothing further').toEqual([1, 1, 0, 1])
     await press(w)
     await advance(5000)
-    expect(position(w)).toBe(at(2))
+    expect(position(w)).toBe(at(2, 4))
     expect(w.find('.media-lightbox-stage img').attributes('src')).toBeTruthy()
     expect(fetchedFor(1), 'shown from the read ahead').toBe(1)
     expect(fetchedFor(2), 'and the next one ahead').toBe(1)
