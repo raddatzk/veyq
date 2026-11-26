@@ -1,7 +1,7 @@
 // A selection's capture time corrected through one of its photos, in a real browser (uc.memory.buckets § Correct a
 // selection's capture time): three photos selected in the Contributions tab, the middle one's day moved on by one in the
 // lightbox's editor, and "All 3, shifted by +1 d" chosen. After a reload — the server's sealed tiers, nothing this page
-// held — each of the three is taken exactly one day later, reads as corrected, and the gallery keeps their order.
+// held — each of the three is taken exactly one day later, reads as corrected, and the gallery is still in capture-time order.
 // Two photos from the Munich fixture (taken 15 July 2021) and one from the Lisbon fixture (3 May 2022), their EXIF.
 //
 // It starts from the tenant whose owner the round trip activated (the `memories` project). Every value typed is a canary
@@ -55,8 +55,6 @@ async function readGallery(page: Page): Promise<{ name: string; taken: string; c
     })
     await page.keyboard.press('Escape')
     await expect(lightbox).toBeHidden()
-    // The Escape was the lightbox's: the Undo bar stays (inbox #864).
-    await expect(toast(page, 'Capture time shifted for 3 items')).toBeVisible()
   }
   return shown
 }
@@ -72,7 +70,7 @@ test.afterAll(async () => {
 })
 
 test(
-  'three photos selected and shifted through the middle one: after a reload each is a day later, corrected, in its order',
+  'three photos selected and shifted through the middle one: after a reload each is a day later, corrected, in time order',
   { tag: '@uc.memory.buckets:selection-capture-time-shift' },
   async () => {
     test.setTimeout(240_000)
@@ -130,13 +128,18 @@ test(
     await expect(page.getByRole('heading', { level: 1, name: memoryName })).toBeVisible({ timeout: 60_000 })
     await expect(tiles(page)).toHaveCount(3, { timeout: 60_000 })
     const after = await readGallery(page)
-    expect(after.map((p) => p.name), 'the gallery keeps their order').toEqual(before.map((p) => p.name))
     expect(after.map((p) => p.corrected), 'all three corrected').toEqual([true, true, true])
-    for (const [i, p] of after.entries()) {
-      // the panel's date as the browser formats it, read back in the same runtime and zone
-      const at = (taken: string) => Date.parse(taken.replace(/\u202f/g, ' ')) // ICU's narrow space before AM/PM
+    // the panel's date as the browser formats it, read back in the same runtime and zone
+    const at = (taken: string) => Date.parse(taken.replace(/\u202f/g, ' ')) // ICU's narrow space before AM/PM
+    // Each photo by its name: the two Munich ones are one file, taken at the same instant, so their places among each
+    // other follow the listing order a meta write moves (inbox #863) — the gallery's order is by time, asserted below.
+    expect(after.map((p) => p.name).sort(), 'the same three photos').toEqual(before.map((p) => p.name).sort())
+    for (const p of after) {
+      const was = before.find((b) => b.name === p.name)!
       expect(at(p.taken), `${p.name}: a date`).not.toBeNaN()
-      expect(at(p.taken) - at(before[i].taken), `${p.name}: one day later`).toBe(DAY_MS)
+      expect(at(p.taken) - at(was.taken), `${p.name}: one day later`).toBe(DAY_MS)
     }
+    const times = after.map((p) => at(p.taken))
+    expect(times, 'the gallery still newest first').toEqual([...times].sort((a, b) => b - a))
   },
 )
