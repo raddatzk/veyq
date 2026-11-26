@@ -621,6 +621,13 @@ a.lightbox-icon-button,
   background: var(--app-hover);
 }
 
+.veyq-icon-button.lightbox-icon-button.lightbox-icon-button-pressed {
+  /* A pressed toggle (the slideshow's shuffle, inbox #862): the accent's tint and colour - tokens, so no dark twin. */
+  border-color: var(--app-accent);
+  background: var(--app-accent-soft);
+  color: var(--app-accent);
+}
+
 .lightbox-icon-button:focus-visible,
 .lightbox-nav:focus-visible {
   outline: 2px solid var(--app-focus);

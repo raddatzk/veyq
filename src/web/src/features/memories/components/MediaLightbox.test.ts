@@ -1807,4 +1807,126 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
     expect(store.api.updateMediaMeta.mock.calls.length).toBe(writes + 1)
     w.unmount()
   })
+
+  // The shuffle (inbox #862): rounds of every item once, the slideshow only. `Math.random` pinned to 0 makes the rounds
+  // exact: Fisher-Yates swaps each slot with the first, so after the start item (1) the round is 3, 4, 2; the next round
+  // would open with 2 - the one the last ended on - so its head is swapped with the second: 3, 2, 4, 1. The grid order
+  // (2, 3, 4, 1, 2, …) differs at the first step.
+  describe('shuffle (#862)', () => {
+    const shuffleToggle = (w: ReturnType<typeof mountLightbox>) => w.find('[data-slideshow-shuffle]')
+    async function pressShuffle(w: ReturnType<typeof mountLightbox>) {
+      shuffleToggle(w).element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, button: 0 }))
+      await shuffleToggle(w).trigger('click')
+      await flushPromises()
+    }
+    const four = ['image/png', 'image/jpeg', 'image/png', 'image/jpeg']
+
+    it('is offered from three items on, as a pressed toggle that does not pause a running slideshow', async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seed(memoryKey, ['image/png', 'image/jpeg', 'image/png'])
+      const two = mountLightbox(memoryKey, items.slice(0, 2), 0)
+      await flushPromises()
+      expect(toggle(two).exists(), 'control: the slideshow is offered').toBe(true)
+      expect(shuffleToggle(two).exists(), 'two items: the grid order or its reverse').toBe(false)
+      two.unmount()
+      const w = mountLightbox(memoryKey, items, 0)
+      await flushPromises()
+      expect(shuffleToggle(w).attributes('aria-pressed')).toBe('false')
+      expect(shuffleToggle(w).attributes('aria-label')).toBe(t('media.slideshowShuffle'))
+      await press(w)
+      await pressShuffle(w)
+      expect(shuffleToggle(w).attributes('aria-pressed')).toBe('true')
+      expect(status(w), 'pressing it is no interaction with the slideshow').toBe(t('media.slideshowPlaying'))
+      shuffleToggle(w).element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      await flushPromises()
+      expect(status(w), 'nor is Enter on it').toBe(t('media.slideshowPlaying'))
+      w.unmount()
+    })
+
+    it('shows each item once per round in a shuffled order, and the next round never opens with the last one', async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seed(memoryKey, four)
+      const w = mountLightbox(memoryKey, items, 0)
+      await flushPromises()
+      const random = vi.spyOn(Math, 'random').mockReturnValue(0)
+      try {
+        await pressShuffle(w)
+        await press(w)
+        const seen: string[] = []
+        for (let i = 0; i < 7; i++) {
+          await advance(5000)
+          seen.push(position(w))
+        }
+        expect(seen).toEqual([3, 4, 2, 3, 2, 4, 1].map((n) => at(n, 4)))
+      } finally {
+        random.mockRestore()
+      }
+      w.unmount()
+    })
+
+    it('orders the slideshow only: by hand it pages in the grid order, and off again the slideshow does too', async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seed(memoryKey, four)
+      const w = mountLightbox(memoryKey, items, 0)
+      await flushPromises()
+      const random = vi.spyOn(Math, 'random').mockReturnValue(0)
+      try {
+        await pressShuffle(w)
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+        await flushPromises()
+        expect(position(w), 'by hand: the grid order').toBe(at(2, 4))
+        await press(w)
+        await advance(5000)
+        expect(position(w), 'the slideshow: the round, here 3 after 2').toBe(at(3, 4))
+        await pressShuffle(w)
+        expect(shuffleToggle(w).attributes('aria-pressed')).toBe('false')
+        await advance(5000)
+        expect(position(w), 'off: the grid order again').toBe(at(4, 4))
+      } finally {
+        random.mockRestore()
+      }
+      w.unmount()
+    })
+
+    it("reads the round's next item ahead, though it is no neighbour of the shown one", async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seed(memoryKey, four)
+      const props = recorded(memoryKey)
+      const w = mountLightbox(memoryKey, items, 0, props)
+      await flushPromises()
+      const readsOf = (i: number) => props.previewLoader.mock.calls.filter(([it]) => it.mediaId === items[i].mediaId).length
+      expect(readsOf(2), 'control: two steps on is no neighbour').toBe(0)
+      const random = vi.spyOn(Math, 'random').mockReturnValue(0)
+      try {
+        await pressShuffle(w)
+      } finally {
+        random.mockRestore()
+      }
+      await flushPromises()
+      expect(readsOf(2), 'the round opens with it: read ahead').toBe(1)
+      w.unmount()
+    })
+
+    it('skips an item removed meanwhile', async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seed(memoryKey, four)
+      const held = reactive(items.map((it) => ({ ...it })))
+      const w = mountLightbox(memoryKey, held, 0)
+      await flushPromises()
+      const random = vi.spyOn(Math, 'random').mockReturnValue(0)
+      try {
+        await pressShuffle(w) // the round: 3, 4, 2
+        held.splice(2, 1) // item 3 goes; the grid is now 1, 2, 4 (4 at position 3)
+        await flushPromises()
+        await press(w)
+        await advance(5000)
+        expect(w.find('.media-lightbox-title small').text(), 'the round goes on with 4').toBe(at(3, 3))
+        await advance(5000)
+        expect(position(w), 'then 2').toBe(at(2, 3))
+      } finally {
+        random.mockRestore()
+      }
+      w.unmount()
+    })
+  })
 })
