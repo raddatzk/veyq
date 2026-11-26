@@ -288,8 +288,9 @@ describe('MemoryBuckets — selection + delete-to-trash + undo (cr-0122)', () =>
     await wrapper.find('.bucket-selection-bar .veyq-text-button').trigger('click') // "Select all"
     expect(wrapper.findAll('.media-tile.is-selected').length).toBe(2)
 
-    const del = wrapper.find('.bucket-selection-bar .bucket-action-danger')
-    expect(del.attributes('disabled')).toBeUndefined() // enabled with a selection
+    const del = wrapper.find('.bucket-selection-bar .bucket-delete-button')
+    expect(del.attributes('aria-label')).toBe(t('memory.buckets.deleteSelection')) // an icon: its words the name (and tooltip)
+    expect(del.attributes('aria-disabled')).toBeUndefined() // enabled with a selection
     await del.trigger('click')
     await flushPromises()
 
@@ -314,10 +315,12 @@ describe('MemoryBuckets — selection + delete-to-trash + undo (cr-0122)', () =>
     expect(wrapper.findAll('.media-tile-check').length).toBe(1) // selection ungated for a contributor bucket
 
     await wrapper.find('.bucket-selection-bar .veyq-text-button').trigger('click') // select all → 1 selected
-    const move = wrapper.find('.bucket-selection-bar .bucket-action-button:not(.bucket-action-danger)')
-    expect(move.attributes('disabled')).toBeDefined() // no same-owner sibling to move into
-    const del = wrapper.find('.bucket-selection-bar .bucket-action-danger')
-    expect(del.attributes('disabled')).toBeUndefined() // delete still works (any member soft-deletes)
+    const move = wrapper.find('.bucket-selection-bar .bucket-move-button')
+    expect(move.attributes('aria-disabled')).toBe('true') // no same-owner sibling to move into
+    await move.trigger('click') // aria-disabled, not disabled (its tooltip shows): the click itself must do nothing
+    expect(wrapper.findAllComponents({ name: 'VeyqDialog' }).some((d) => d.props('visible')), 'no move dialog').toBe(false)
+    const del = wrapper.find('.bucket-selection-bar .bucket-delete-button')
+    expect(del.attributes('aria-disabled')).toBeUndefined() // delete still works (any member soft-deletes)
   })
 
   it('contributor root: Move enables to a same-owner sibling sub-bucket (cr-0123)', async () => {
@@ -332,8 +335,8 @@ describe('MemoryBuckets — selection + delete-to-trash + undo (cr-0122)', () =>
     await selectBucket(wrapper, 'b-share') // switch into the contributor root (own is the default)
 
     await wrapper.find('.bucket-selection-bar .veyq-text-button').trigger('click') // select all → 1 selected
-    const move = wrapper.find('.bucket-selection-bar .bucket-action-button:not(.bucket-action-danger)')
-    expect(move.attributes('disabled')).toBeUndefined() // a same-owner sibling exists → Move is available
+    const move = wrapper.find('.bucket-selection-bar .bucket-move-button')
+    expect(move.attributes('aria-disabled')).toBeUndefined() // a same-owner sibling exists → Move is available
   })
 
   it('opens with YOUR OWN bucket preselected — not the alphabetically-first contributor (cr-0122 f/u)', async () => {
@@ -358,12 +361,10 @@ describe('MemoryBuckets — selection + delete-to-trash + undo (cr-0122)', () =>
 })
 
 // uc.memory.buckets § Correct a selection's capture time: the selection reaches the lightbox, and "Shift capture time" — an
-// entry of the selection bar's ⋯ — opens it over the selected media alone, in grid order, with the editor open; offered
-// from two selected on, and only where a capture time may be edited (editMeta and the source's media-meta door).
+// icon of the selection bar — opens it over the selected media alone, in grid order, with the editor open; offered from two
+// selected on, and only where a capture time may be edited (editMeta and the source's media-meta door).
 describe('MemoryBuckets — a selection\'s capture-time shift', () => {
-  const moreButton = (w: ReturnType<typeof mountBuckets>) => w.find('.bucket-selection-bar .bucket-more-button')
-  const shiftEntry = (w: ReturnType<typeof mountBuckets>) =>
-    w.findAll('.bucket-selection-bar .menu-entry').find((b) => b.text() === t('memory.buckets.shiftCapturedAt'))!
+  const shiftButton = (w: ReturnType<typeof mountBuckets>) => w.find('.bucket-selection-bar .bucket-shift-button')
   const ORDER = ['m1', 'm2', 'm3'] // the grid's order: the tiles carry no id of their own here
   const check = (w: ReturnType<typeof mountBuckets>, id: string) => w.findAll('.media-tile-check input')[ORDER.indexOf(id)]
 
@@ -376,15 +377,16 @@ describe('MemoryBuckets — a selection\'s capture-time shift', () => {
 
   it('opens the lightbox over the selected media alone, in grid order, with their grid numbers and the editor open', async () => {
     const w = await threeOwn()
-    expect(w.find('.bucket-selection-bar .bucket-shift-button').exists(), 'no button of its own: an entry of the ⋯').toBe(false)
-    expect(moreButton(w).attributes('aria-label')).toBe(t('memory.buckets.selectionMore'))
-    expect(moreButton(w).attributes('disabled'), 'nothing selected').toBeDefined()
+    expect(shiftButton(w).attributes('aria-label')).toBe(t('memory.buckets.shiftCapturedAt'))
+    expect(shiftButton(w).text(), 'an icon, no label').toBe('')
+    expect(shiftButton(w).attributes('aria-disabled'), 'nothing selected').toBe('true')
     await check(w, 'm3').trigger('change')
-    expect(moreButton(w).attributes('disabled'), 'control: something selected').toBeUndefined()
-    expect(shiftEntry(w).attributes('disabled'), 'one selected: there is nothing to shift with it').toBeDefined()
+    expect(shiftButton(w).attributes('aria-disabled'), 'one selected: there is nothing to shift with it').toBe('true')
+    await shiftButton(w).trigger('click')
+    expect(w.emitted('openLightbox'), 'an inactive click does nothing').toBeUndefined()
     await check(w, 'm2').trigger('change')
-    expect(shiftEntry(w).attributes('disabled'), 'control: two selected').toBeUndefined()
-    await shiftEntry(w).trigger('click')
+    expect(shiftButton(w).attributes('aria-disabled'), 'control: two selected').toBeUndefined()
+    await shiftButton(w).trigger('click')
     const [payload] = w.emitted('openLightbox')!.at(-1) as [
       { items: MediaItem[]; index: number; selected: string[]; editCapturedAt?: boolean; numbers?: Record<string, number> },
     ]
@@ -415,14 +417,12 @@ describe('MemoryBuckets — a selection\'s capture-time shift', () => {
     for (const [why, view] of Object.entries(views)) {
       const w = await threeOwn({ [MEMORY_VIEW as symbol]: view })
       await w.find('.bucket-selection-bar .veyq-text-button').trigger('click') // "Select all"
-      expect(moreButton(w).exists(), why).toBe(false)
-      expect(w.findAll('.bucket-selection-bar .menu-entry').some((b) => b.text() === t('memory.buckets.shiftCapturedAt') && b.attributes('disabled') === undefined), why).toBe(false)
+      expect(shiftButton(w).exists(), why).toBe(false)
       w.unmount()
     }
     const control = await threeOwn()
     await control.find('.bucket-selection-bar .veyq-text-button').trigger('click')
-    expect(moreButton(control).exists(), 'control: a member').toBe(true)
-    expect(shiftEntry(control).attributes('disabled'), 'control: a member').toBeUndefined()
+    expect(shiftButton(control).attributes('aria-disabled'), 'control: a member').toBeUndefined()
   })
 })
 

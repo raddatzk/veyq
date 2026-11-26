@@ -88,10 +88,7 @@ describe('MemoryDetail — a selection\'s capture-time shift from the Beiträge 
     const checks = w.findAll('.veyq-bucket-organizer .media-tile-check input')
     expect(checks, 'control: both photos in your own bucket').toHaveLength(2)
     for (const c of checks) await c.trigger('change')
-    await w.find('.bucket-more-button').trigger('click') // the selection bar's ⋯, the layer's real menu
-    await flushPromises()
-    const entry = [...document.querySelectorAll<HTMLElement>('.veyq-menu__item')].find((e) => e.textContent?.includes(t('memory.buckets.shiftCapturedAt')))!
-    entry.querySelector<HTMLElement>('.veyq-menu__item-content')!.click()
+    await w.find('.bucket-shift-button').trigger('click')
     await flushPromises()
 
     expect(w.find('.media-lightbox #captured-at-input').exists(), 'the editor is open').toBe(true)

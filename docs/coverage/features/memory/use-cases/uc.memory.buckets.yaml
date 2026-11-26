@@ -115,7 +115,7 @@ acceptanceCriteria:
   - id: selection-capture-time-shift
     text: >-
       A selection is corrected through one of its media: opened from the Beiträge tab's selection (a tile, or "Shift
-      capture time" in the selection bar's ⋯ — from two selected on — over the selected media alone in grid order, the
+      capture time", the clock among the selection bar's icons — from two selected on — over the selected media alone in grid order, the
       editor open on each one paged to, a refusal naming a medium by its grid number), the save
       of a selected medium with a capture time offers only it, or all N shifted by its offset, written out ("+1 h 12 min")
       with how many have no capture time. The offset is taken against the edited medium's effective time as the

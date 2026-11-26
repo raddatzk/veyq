@@ -18,6 +18,7 @@ import VeyqMenu from '../../../shared/ui/VeyqMenu.vue'
 import type { VeyqMenuItem } from '../../../shared/ui/menu'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
+import VeyqTooltip from '../../../shared/ui/VeyqTooltip.vue'
 import MediaGrid from './MediaGrid.vue'
 import MediaTile from './MediaTile.vue'
 import { galleryDisplayAspectRatio } from '../mediaGridLayout'
@@ -87,7 +88,6 @@ const selected = ref<Set<string>>(new Set())
 
 // The per-tile 3-dot is the only ellipsis menu left — the bucket + selection menus are now explicit buttons (cr-0122).
 const mediaMenu = ref<InstanceType<typeof VeyqMenu> | null>(null)
-const selectionMenu = ref<InstanceType<typeof VeyqMenu> | null>(null)
 const menuMediaId = ref<string | null>(null)
 
 const bucketDialog = ref<{ open: boolean; mode: 'create' | 'rename'; name: string; saving: boolean; error: string }>(
@@ -338,11 +338,6 @@ const mediaMenuItems = computed<VeyqMenuItem[]>(() => [
   { label: t('memory.buckets.deleteMediaAction'), icon: 'trash', command: () => { if (menuMediaId.value) { selected.value = new Set([menuMediaId.value]); void deleteSelected() } } },
 ])
 
-/** The selection bar's ⋯: what a selection may do beyond moving and deleting it. */
-const selectionMenuItems = computed<VeyqMenuItem[]>(() => [
-  { label: t('memory.buckets.shiftCapturedAt'), icon: 'clock', disabled: selected.value.size < 2 || !canEditCapturedAt.value, command: shiftSelected },
-])
-
 function openMove() {
   if (!selected.value.size || !moveTargets.value.length) return
   moveDialog.value = { open: true, target: moveTargets.value[0].id, saving: false, error: '' }
@@ -485,18 +480,26 @@ function shiftSelected() {
             </template>
           </VeyqSelect>
           <!-- Bucket actions — shown only where they apply (was the 3-dot menu). -->
-          <button v-if="activeBucket" type="button" class="bucket-action-button" :title="t('memory.buckets.upload')" :aria-label="t('memory.buckets.upload')" @click="uploadToActive">
-            <VeyqIcon name="upload" />
-          </button>
-          <button v-if="canCreateSub" type="button" class="bucket-action-button" :title="t('memory.buckets.createBucket')" :aria-label="t('memory.buckets.createBucket')" @click="openCreate">
-            <VeyqIcon name="folder-plus" />
-          </button>
-          <button v-if="canRenameBucket" type="button" class="bucket-action-button" :title="t('memory.buckets.rename')" :aria-label="t('memory.buckets.rename')" @click="openRename">
-            <VeyqIcon name="pencil" />
-          </button>
-          <button v-if="canDeleteBucket" type="button" class="bucket-action-button bucket-action-danger" :title="t('memory.buckets.delete')" :aria-label="t('memory.buckets.delete')" @click="openDeleteBucket">
-            <VeyqIcon name="trash" />
-          </button>
+          <VeyqTooltip v-if="activeBucket" :text="t('memory.buckets.upload')">
+            <button type="button" class="bucket-action-button" :aria-label="t('memory.buckets.upload')" @click="uploadToActive">
+              <VeyqIcon name="upload" />
+            </button>
+          </VeyqTooltip>
+          <VeyqTooltip v-if="canCreateSub" :text="t('memory.buckets.createBucket')">
+            <button type="button" class="bucket-action-button" :aria-label="t('memory.buckets.createBucket')" @click="openCreate">
+              <VeyqIcon name="folder-plus" />
+            </button>
+          </VeyqTooltip>
+          <VeyqTooltip v-if="canRenameBucket" :text="t('memory.buckets.rename')">
+            <button type="button" class="bucket-action-button" :aria-label="t('memory.buckets.rename')" @click="openRename">
+              <VeyqIcon name="pencil" />
+            </button>
+          </VeyqTooltip>
+          <VeyqTooltip v-if="canDeleteBucket" :text="t('memory.buckets.delete')">
+            <button type="button" class="bucket-action-button bucket-action-danger" :aria-label="t('memory.buckets.delete')" @click="openDeleteBucket">
+              <VeyqIcon name="trash" />
+            </button>
+          </VeyqTooltip>
         </div>
 
         <!-- Media selection bar — visible actions, active only with a selection. Shown for every bucket (cr-0122). -->
@@ -505,25 +508,42 @@ function shiftSelected() {
           <button type="button" class="veyq-text-button" @click="toggleSelectAll">
             {{ allSelected ? t('memory.buckets.deselectAll') : t('memory.buckets.selectAllVisible') }}
           </button>
-          <button type="button" class="bucket-action-button" :disabled="!selected.size || !moveTargets.length" :title="t('memory.buckets.moveTitle')" @click="openMove">
-            <VeyqIcon name="arrow-right-arrow-left" /><span class="bucket-action-label">{{ t('memory.buckets.move') }}</span>
-          </button>
-          <button type="button" class="bucket-action-button bucket-action-danger" :disabled="!selected.size" :title="t('memory.buckets.deleteMediaAction')" @click="deleteSelected">
-            <VeyqIcon name="trash" /><span class="bucket-action-label">{{ t('memory.buckets.delete') }}</span>
-          </button>
-          <!-- The selection's further actions; move and delete stay buttons, as the level's selection bar has them. -->
-          <button
-            v-if="canEditCapturedAt"
-            type="button"
-            class="bucket-action-button bucket-more-button"
-            :disabled="!selected.size"
-            :aria-label="t('memory.buckets.selectionMore')"
-            :title="t('memory.buckets.selectionMore')"
-            @click="selectionMenu?.toggle($event)"
-          >
-            <VeyqIcon name="ellipsis-h" />
-          </button>
-          <VeyqMenu ref="selectionMenu" :items="selectionMenuItems" />
+          <!-- Every action of the selection in sight, as icons like the bucket's own above: their words the name and the
+               tooltip (owner 2026-11-26). Inactive through aria-disabled, not disabled: a disabled button hears no pointer,
+               so with nothing selected its tooltip never said what it does. Each handler refuses on its own. -->
+          <VeyqTooltip :text="t('memory.buckets.moveTitle')">
+            <button
+              type="button"
+              class="bucket-action-button bucket-move-button"
+              :aria-disabled="!selected.size || !moveTargets.length || undefined"
+              :aria-label="t('memory.buckets.moveTitle')"
+              @click="openMove"
+            >
+              <VeyqIcon name="arrow-right-arrow-left" />
+            </button>
+          </VeyqTooltip>
+          <VeyqTooltip v-if="canEditCapturedAt" :text="t('memory.buckets.shiftCapturedAt')">
+            <button
+              type="button"
+              class="bucket-action-button bucket-shift-button"
+              :aria-disabled="selected.size < 2 || undefined"
+              :aria-label="t('memory.buckets.shiftCapturedAt')"
+              @click="shiftSelected"
+            >
+              <VeyqIcon name="clock" />
+            </button>
+          </VeyqTooltip>
+          <VeyqTooltip :text="t('memory.buckets.deleteSelection')">
+            <button
+              type="button"
+              class="bucket-action-button bucket-action-danger bucket-delete-button"
+              :aria-disabled="!selected.size || undefined"
+              :aria-label="t('memory.buckets.deleteSelection')"
+              @click="deleteSelected"
+            >
+              <VeyqIcon name="trash" />
+            </button>
+          </VeyqTooltip>
         </div>
       </div>
 
