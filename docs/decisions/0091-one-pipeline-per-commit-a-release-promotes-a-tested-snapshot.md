@@ -2,9 +2,9 @@
 
 - Status: Accepted
 - Built: partly (not built: decision 3's lanes L2 and L3, decision 5's rerun of moved lanes — a promotion refuses an
-  input it cannot compare instead — and the retention job, decision 6, decision 7; decision 5's snapshot — weekly and
-  by dispatch since its amendment of 2026-11-07, per green push before — its attestations, its `snapshot-` tag and the
-  promotion `release.yml` are built, and since its amendment of 2026-11-22 the release draft Publish writes — v1.312
+  input it cannot compare instead — and the snapshot retention job, decision 6, decision 7; decision 5's snapshot —
+  weekly and by dispatch since its amendment of 2026-11-07, per green push before — its attestations, its `snapshot-`
+  tag, the staging retention (first run 2026-11-23) and the promotion `release.yml` are built, and since its amendment of 2026-11-22 the release draft Publish writes — v1.312
   and v1.318 were released from such drafts)
 - Date: 2026-10-16
 - Model: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md)
