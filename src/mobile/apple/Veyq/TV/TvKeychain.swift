@@ -58,8 +58,9 @@ final class TvKeychain: NSObject, KeychainBridge {
 
     // MARK: The PIN level's factor (ADR 0160 decision 2)
 
-    /// An enclave this app may make keys in, and the fixed point recomputed as embedded: the tvOS Simulator has no
-    /// enclave, so it never offers the PIN level (by construction, not by a check of the simulator).
+    /// An enclave this app may make keys in, and the fixed point recomputed as embedded. The tvOS 27.2 Simulator on Apple
+    /// silicon reports one: it offered the PIN level, kept it and opened it (measured 2026-11-26, the tvOS pass) — no
+    /// check of the simulator either way.
     func pinKeysAvailable() -> Bool { SecureEnclave.isAvailable && Self.point != nil }
 
     func createPinKey(account: String) -> Bool {

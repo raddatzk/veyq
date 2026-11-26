@@ -75,7 +75,7 @@ struct TvPage<Content: View>: View {
 private struct TvSignIn: View {
     @Bindable var model: TvModel
     let gate: SessionModelGate.SignIn
-    @State private var server = ""
+    @State private var server = TvSignIn.devServer
     @FocusState private var showFocused: Bool
 
     var body: some View {
@@ -292,5 +292,17 @@ struct TvPinPad: View {
             digits = ""
             onPin(pin)
         }
+    }
+}
+
+extension TvSignIn {
+    /// Debug builds only: `VEYQ_DEV_SERVER` (handed by `simctl launch` as `SIMCTL_CHILD_VEYQ_DEV_SERVER`) fills the server
+    /// field, as the app's `DevLogin` does — a simulator pass types no address through the D-pad. A release build starts empty.
+    static var devServer: String {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["VEYQ_DEV_SERVER"] ?? ""
+        #else
+        ""
+        #endif
     }
 }

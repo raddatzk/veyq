@@ -1585,14 +1585,22 @@ class VeyqAccount private constructor(
             }
         }
 
-        /** Every failure of a sign-in as a [SignInFailure], the HTTP client closed. */
+        /** Every failure of a sign-in as a [SignInFailure] (or a [PinRefused], [asSignInFailure]), the HTTP client closed. */
         private suspend fun <T> guarded(c: Connected, f: suspend () -> T): T = try {
             f()
         } catch (e: Throwable) {
             c.http.close()
             c.outside.close()
-            throw if (e is SignInFailure) e else SignInFailure(SignInFailure.Reason.PROTOCOL, e.message)
+            throw asSignInFailure(e)
         }
+
+        /**
+         * What a sign-in throws for [e]: a [SignInFailure] as it is, a wrong PIN as it is — the server counted it and the
+         * TV says how many attempts remain (ADR 0160 decision 3; wrapped, it read as a failed sign-in, found in the tvOS
+         * pass 2026-11-26) —, anything else a PROTOCOL failure.
+         */
+        internal fun asSignInFailure(e: Throwable): Throwable =
+            if (e is SignInFailure || e is PinRefused) e else SignInFailure(SignInFailure.Reason.PROTOCOL, e.message)
 
         /**
          * Signs in and unlocks with the password and the Secret Key: the PASSWORD wrap under Argon2id(lp(secretKey) ‖
