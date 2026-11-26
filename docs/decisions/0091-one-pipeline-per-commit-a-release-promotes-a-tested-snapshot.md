@@ -226,6 +226,13 @@ several, or one on another tag is refused (`scripts/promote.py` check 1). A save
      refuses unless `snapshot-<version>` names the commit, and the job's whole `if:` is pinned by
      `validate_release_identity.py`. And the promotion refuses a draft that still lists anything under **Needs a note**
      (`promote.py` check 1): until then such a draft was publishable as it stood.
+     **Refined 2026-11-26 (owner):** the **schedule waits** for a Checks run still going. GitHub starts a schedule late and
+     at no fixed hour: on 2026-11-23 it ran at 12:56, not 03:17, minutes after a merge, and `checks-run` refused HEAD's
+     `pending` Checks run (run 45179033821) — the week had no snapshot and no draft until a dispatch. Now the
+     schedule's `checks-run` re-reads that run every minute for up to 120 minutes (`snapshot.py --wait-minutes`,
+     `await_completion`; the job's budget 130) and judges it once completed; a dispatch still refuses at once, the owner
+     being there to run it again. Rejected: falling back to an older green commit (the snapshot would be of something
+     other than `main`'s tested HEAD, and the next week would repeat it) and a second cron (both fire late together).
 
 6. **The backup archive.** Every release publishes the L1 run's capture (ADR 0056's tool, test data only) **with its
    object pool** (`--objects-to`: a capture's store leg is only its index, ADR 0056 §3) as a signed OCI artifact

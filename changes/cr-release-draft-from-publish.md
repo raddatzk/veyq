@@ -189,8 +189,14 @@ Section 4 above. **Done when:** the trust chain is green and no doc still tells 
   `claude/release-draft-refresh`: no run could refresh the draft (the job ran only after a new tag; a commit with its
   snapshot publishes nothing) — now a dispatch over an unreleased snapshot does (`draft_version`, the pinned `if:`,
   the tag check in `release_notes.py`); and Release would have published a draft with **Needs a note** — now
-  `promote.py` check 1 refuses it. Eleven bites red. Owed: merge that pull request, a dispatch to refresh draft
-  454786982, the owner's Release run, then a Monday with nothing new.
+  `promote.py` check 1 refuses it. Eleven bites red (#53).
+- 2026-11-23: dispatch run 45153047948 moved the untouched draft 454786982 onto `snapshot-1.269` (`update`, nine pull
+  requests) — #43's corrected note was in it. The **owner released v1.312 from that draft** (2026-11-25): the first
+  half of *Done when* holds. v1.318 followed from draft 459484280 (run 45833567685, 2026-11-26).
+- 2026-11-23: the **schedule** ran at 12:56, not 03:17, and refused HEAD's `pending` Checks run (45179033821): no
+  snapshot and no draft that week. Fixed on `claude/publish-schedule-waits`: the schedule waits up to 120 minutes for
+  a Checks run still going (ADR 0091 decision 5, refined 2026-11-26); ten bites red. Owed: merge it, then a Monday
+  with nothing new (no draft written) — and a Monday whose schedule meets a running Checks run, if one comes.
 
 ## Decisions (mine, at refine — 2026-11-22)
 
