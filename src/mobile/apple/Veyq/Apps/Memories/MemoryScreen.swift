@@ -238,6 +238,10 @@ struct MemoryScreen: View {
                     HStack {
                         if !shown.isEmpty { Text(say(.memoryItems, shown.count)).font(.footnote).foregroundStyle(Role.muted) }
                         Spacer(minLength: 0)
+                        // the grid's direction (the web's sort toggle, inbox #1344): a Sort menu, as Files and Photos sort
+                        if showsPhotos, !shown.isEmpty, let gallery = model.memories.galleryModel(node) {
+                            GallerySortMenu(gallery: gallery, oldestFirst: state?.oldestFirst ?? false)
+                        }
                         if showsPhotos, let gallery = model.memories.galleryModel(node), gallery.marksModeOffered, let filter = state?.filter {
                             MarksModeMenu(gallery: gallery, filter: filter)
                         }
@@ -677,6 +681,9 @@ private struct Lightbox: View {
     /// The report sheet shown, and how many were sent or closed (each makes a fresh sheet for the next).
     @State private var reporting: LightboxReport?
     @State private var reports = 0
+    /// The index the pages showed before the last move: a move of more than one page (round the ends, a shuffled
+    /// slideshow's jump) is drawn at once, not slid across every page between
+    @State private var shownIndex: Int32 = 0
     /// A link's guest looks: no window of its own (its models are the shell's), no person's profile.
     @Environment(\.guestGallery) private var guest
     #if os(macOS)
@@ -723,13 +730,37 @@ private struct Lightbox: View {
                     MusicCompactControls(now: now, commands: commands).padding(.horizontal).padding(.vertical, 8)
                 }
                 // the person's paging pages the model (and pauses its slideshow); the model's own step — the slideshow's, a
-                // re-read — moves the selection, which then asks nothing back
-                TabView(selection: Binding(get: { Int(state.index) }, set: { if $0 != Int(held.box.current.index) { held.box.go(index: Int32($0)) } })) {
+                // re-read — moves the selection, which then asks nothing back. Paging goes round the ends (core's
+                // `Lightbox`): on iOS a copy of the last stands before the first page and one of the first after the last,
+                // and a swipe onto either pages the model round (`previous`, `next`), which then shows the real page
+                TabView(selection: Binding(get: { Int(state.index) }, set: { to in
+                    // a copy is reported more than once while the pages settle onto the real page: only the first, from
+                    // the end beside it, pages round (measured on the iOS simulator: a second `next` showed the second)
+                    let count = state.rows.count
+                    let at = Int(held.box.current.index)
+                    // and only once the pages have come to rest on the copy: a jump while they still slide left them one
+                    // page past the real one (measured: `next` then a stray `go(1)`)
+                    let box = held.box
+                    if to == -1 { if at == 0 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { if box.current.index == 0 { box.previous() } } } }
+                    else if to == count { if at == count - 1 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { if Int(box.current.index) == count - 1 { box.next() } } } }
+                    else if to != Int(held.box.current.index) { held.box.go(index: Int32(to)) }
+                })) {
+                    #if os(iOS)
+                    if state.canPage, let last = state.rows.last {
+                        LightboxPage(model: model, held: held, row: last, playing: nil, current: false).tag(-1)
+                    }
+                    #endif
                     ForEach(Array(state.rows.enumerated()), id: \.element.mediaId) { i, row in
                         LightboxPage(model: model, held: held, row: row, playing: Int(state.index) == i ? state.reader : nil, current: Int(state.index) == i).tag(i)
                     }
+                    #if os(iOS)
+                    if state.canPage, let first = state.rows.first {
+                        LightboxPage(model: model, held: held, row: first, playing: nil, current: false).tag(state.rows.count)
+                    }
+                    #endif
                 }
-                .animation(.default, value: state.index)
+                .animation(abs(Int(state.index) - Int(shownIndex)) > 1 ? nil : .default, value: state.index)
+                .onChange(of: state.index, initial: true) { _, now in shownIndex = now }
                 #if os(iOS)
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 #endif
@@ -840,15 +871,34 @@ private struct Lightbox: View {
             }
     }
 
-    /// The slideshow (core's clock, its end on the last medium; here only its switch), Details, Save and Move to trash: the
-    /// iOS toolbar's primary group, a Mac's own bar.
+    /// The slideshow (core's clock, round past the last medium; here only its switch) with its shuffle, Details, Save and
+    /// Move to trash: the iOS toolbar's primary group, a Mac's own bar (with Previous and Next, ← and →, round the ends).
     @ViewBuilder private var actions: some View {
-        if state.rows.count > 1 {
+        #if os(macOS)
+        if state.canPage {
+            Button { held.box.previous() } label: { Label(say(.memoryPrevious), systemImage: "chevron.left") }
+                .keyboardShortcut(.leftArrow, modifiers: [])
+                .help(say(.memoryPrevious))
+            Button { held.box.next() } label: { Label(say(.memoryNext), systemImage: "chevron.right") }
+                .keyboardShortcut(.rightArrow, modifiers: [])
+                .help(say(.memoryNext))
+        }
+        #endif
+        if state.canPage {
             let playing = state.slideshow == .playing
             Button { held.box.slideshow(on: !playing) } label: {
                 Label(say(playing ? .memorySlideshowPause : .memorySlideshowStart), systemImage: playing ? "pause.fill" : "play.rectangle")
             }
-            .disabled(!playing && Int(state.index) >= state.rows.count - 1)
+        }
+        // the slideshow's shuffle (the web's, from three media on): a toggle drawn as a button, its symbol filled while on; pressing
+        // it keeps a running slideshow running
+        if state.canShuffle {
+            Toggle(isOn: Binding(get: { state.shuffled }, set: { held.box.shuffle(on: $0) })) {
+                // the symbol says the state too: a toolbar's glass draws a pressed toggle's own highlight faintly
+                Label(say(.memorySlideshowShuffle), systemImage: state.shuffled ? "shuffle.circle.fill" : "shuffle")
+            }
+            .toggleStyle(.button)
+            .help(say(.memorySlideshowShuffle))
         }
         // the mark (ADR 0149 decision 4): offered where whoever looks may mark, online, once the own marks are read
         if let row = current, gallery.state.marking, gallery.state.marksLoaded {

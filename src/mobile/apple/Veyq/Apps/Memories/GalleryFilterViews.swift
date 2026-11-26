@@ -77,6 +77,29 @@ struct MarksModeMenu: View {
     }
 }
 
+/// The grid's direction (the web's newest/oldest toggle, inbox #1344; core's `GalleryModel.sort`) as the platform's Sort
+/// menu — Files' and Photos' form: a picker of the two orders, the one shown checked. Stored nowhere, as the web's.
+struct GallerySortMenu: View {
+    let gallery: GalleryModel
+    let oldestFirst: Bool
+
+    var body: some View {
+        Menu {
+            Picker(say(oldestFirst ? .memorySortOldest : .memorySortNewest), selection: Binding(get: { oldestFirst }, set: { gallery.sort(oldestFirst: $0) })) {
+                Label(say(.memorySortNewest), systemImage: "arrow.down").tag(false)
+                Label(say(.memorySortOldest), systemImage: "arrow.up").tag(true)
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Label(say(oldestFirst ? .memorySortOldest : .memorySortNewest), systemImage: "arrow.up.arrow.down")
+                .labelStyle(.iconOnly)
+        }
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(say(oldestFirst ? .memorySortOldest : .memorySortNewest))
+    }
+}
+
 // MARK: The gallery's filter (ADR 0149 decision 5)
 
 /// A filter chip as the field's token: its key (core's `GalleryFilter.key`), the chip, its words and its symbol.

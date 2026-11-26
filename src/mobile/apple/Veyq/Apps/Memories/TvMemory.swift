@@ -262,6 +262,14 @@ private struct TvLightbox: View {
                         Label(say(state.slideshow == .playing ? .memorySlideshowPause : .memorySlideshowStart),
                               systemImage: state.slideshow == .playing ? "pause.fill" : "play.rectangle")
                     }
+                    // the shuffle beside it (the web's, from three media on): tvOS has no button-styled toggle, so a button
+                    // whose symbol is filled while on, announced as selected
+                    if state.canShuffle {
+                        Button { model.input(); held.box.shuffle(on: !state.shuffled) } label: {
+                            Label(say(.memorySlideshowShuffle), systemImage: state.shuffled ? "shuffle.circle.fill" : "shuffle")
+                        }
+                        .accessibilityAddTraits(state.shuffled ? .isSelected : [])
+                    }
                 }
                 .padding(50)
                 .opacity(state.slideshow == .playing ? 0 : 1)
@@ -271,8 +279,9 @@ private struct TvLightbox: View {
         .onMoveCommand { d in
             model.input()
             switch d {
-            case .left: go(state.index - 1, state)
-            case .right: go(state.index + 1, state)
+            // round the ends (core's `previous` / `next`)
+            case .left: held.box.previous()
+            case .right: held.box.next()
             default: break
             }
         }
@@ -284,11 +293,6 @@ private struct TvLightbox: View {
         .fullScreenCover(item: Binding(get: { video.map(TvVideoItem.init) }, set: { if $0 == nil { stopVideo() } })) { item in
             TvVideo(playback: item.playback, model: model, box: held.box) { stopVideo() }
         }
-    }
-
-    private func go(_ index: Int32, _ state: Lightbox.State) {
-        guard index >= 0, index < state.count else { return }
-        held.box.go(index: index)
     }
 
     private func toggleSlideshow(_ state: Lightbox.State) {
