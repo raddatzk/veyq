@@ -83,6 +83,13 @@ struct Inner {
     listed: Cell<Option<(bool, bool)>>,
     /// The filter over the photos (ADR 0149 decision 5).
     filter: FilterBar,
+    /// The grid's direction (the web's newest/oldest toggle, inbox #1344): GNOME's sort menu — a button with the sort
+    /// symbol whose popover holds the two orders as radio items; drawn where the grid holds media. Stored nowhere.
+    sort: gtk::MenuButton,
+    sort_newest: gtk::CheckButton,
+    sort_oldest: gtk::CheckButton,
+    /// While the state is set on the sort's radios: their own signals send nothing.
+    sort_drawing: Cell<bool>,
     /// The Contributions view's place and the view while it shows (ADR 0149 decision 6).
     contributions_slot: gtk::Box,
     contributions: RefCell<Option<ContributionsView>>,
@@ -203,6 +210,25 @@ impl MemoryPage {
         photos.append(&chapters);
         let filter = FilterBar::new();
         photos.append(filter.widget());
+        let sort_newest = gtk::CheckButton::with_label(&words::memory_sort_newest());
+        let sort_oldest = gtk::CheckButton::with_label(&words::memory_sort_oldest());
+        sort_oldest.set_group(Some(&sort_newest));
+        sort_newest.set_active(true);
+        let sort_list = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(6).build();
+        sort_list.append(&sort_newest);
+        sort_list.append(&sort_oldest);
+        let sort = gtk::MenuButton::builder()
+            .icon_name("view-sort-descending-symbolic")
+            .tooltip_text(words::memory_sort_newest())
+            .popover(&gtk::Popover::builder().child(&sort_list).build())
+            .halign(gtk::Align::End)
+            .margin_end(12)
+            .visible(false)
+            .build();
+        sort.add_css_class("flat");
+        sort.set_widget_name("gallery-sort");
+        sort.update_property(&[gtk::accessible::Property::Label(&words::memory_sort_newest())]);
+        photos.append(&sort);
         let status = gtk::Box::new(gtk::Orientation::Vertical, 0);
         photos.append(&status);
         let grid = gtk::Fixed::builder().hexpand(true).build();
@@ -225,6 +251,10 @@ impl MemoryPage {
             switch,
             listed: Cell::new(None),
             filter,
+            sort,
+            sort_newest,
+            sort_oldest,
+            sort_drawing: Cell::new(false),
             contributions_slot,
             contributions: RefCell::new(None),
             photos,
@@ -467,6 +497,18 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
 
 impl Inner {
     fn connect(this: &Rc<Self>) {
+        // a radio of the sort's menu chosen: the grid in that direction (`Gallery.Sort`)
+        let weak = Rc::downgrade(this);
+        this.sort_oldest.connect_toggled(move |b| {
+            let Some(i) = weak.upgrade() else { return };
+            if i.sort_drawing.get() {
+                return;
+            }
+            if let Some(gallery) = i.id.get() {
+                eprintln!("veyq: gallery sort oldest first {}", b.is_active());
+                bridge::send(Call::GallerySort { gallery, oldest_first: b.is_active() });
+            }
+        });
         // the grid laid out anew when its width changes (a window resized, the sidebar shown), checked once a frame
         let weak = Rc::downgrade(this);
         let id = this.root.add_tick_callback(move |_, _| {
@@ -1018,6 +1060,15 @@ impl Inner {
             Some((Some(_), _)) => {}
         }
         let Some(s) = shown.as_ref() else { return };
+        // the sort's menu: where the grid holds media, its radios and its words the order shown
+        self.sort.set_visible(s.rows.as_ref().is_some_and(|r| !r.is_empty()));
+        self.sort_drawing.set(true);
+        if s.oldest_first { self.sort_oldest.set_active(true) } else { self.sort_newest.set_active(true) }
+        self.sort_drawing.set(false);
+        let sort_words = if s.oldest_first { words::memory_sort_oldest() } else { words::memory_sort_newest() };
+        self.sort.set_icon_name(if s.oldest_first { "view-sort-ascending-symbolic" } else { "view-sort-descending-symbolic" });
+        self.sort.set_tooltip_text(Some(&sort_words));
+        self.sort.update_property(&[gtk::accessible::Property::Label(&sort_words)]);
         if let Some(gallery) = self.id.get() {
             self.filter.draw(s.filter.as_ref(), gallery);
             self.facts.draw(s, gallery);

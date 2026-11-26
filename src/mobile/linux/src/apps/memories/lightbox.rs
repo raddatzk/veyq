@@ -49,6 +49,8 @@ struct Inner {
     previous: gtk::Button,
     next: gtk::Button,
     slideshow: gtk::Button,
+    /// The slideshow's shuffle (the web's, from three media on): pressed while the slideshow runs shuffled.
+    shuffle: gtk::ToggleButton,
     details: gtk::Button,
     save: gtk::Button,
     trash: gtk::Button,
@@ -98,6 +100,10 @@ impl Lightbox {
         let previous = icon("go-previous-symbolic", &words::memory_previous());
         let next = icon("go-next-symbolic", &words::memory_next());
         let slideshow = icon("media-playback-start-symbolic", &words::memory_slideshow_start());
+        let shuffle_words = words::memory_slideshow_shuffle();
+        let shuffle = gtk::ToggleButton::builder().icon_name("media-playlist-shuffle-symbolic").tooltip_text(&shuffle_words).visible(false).build();
+        shuffle.update_property(&[gtk::accessible::Property::Label(&shuffle_words)]);
+        shuffle.set_widget_name("lightbox-shuffle");
         let details = icon("dialog-information-symbolic", &words::memory_details());
         let save = icon("folder-download-symbolic", &words::memory_download());
         let trash = icon("user-trash-symbolic", &words::memory_trash());
@@ -126,9 +132,11 @@ impl Lightbox {
         bar.pack_start(&previous);
         bar.pack_start(&next);
         bar.pack_start(&music);
-        for b in [&report, &trash, &save, &details, &mark, &slideshow] {
+        for b in [&report, &trash, &save, &details, &mark] {
             bar.pack_end(b);
         }
+        bar.pack_end(&shuffle);
+        bar.pack_end(&slideshow);
         let stage = gtk::Box::builder().orientation(gtk::Orientation::Vertical).hexpand(true).vexpand(true).build();
         stage.add_css_class("veyq-lightbox");
         let view = adw::ToolbarView::new();
@@ -143,6 +151,7 @@ impl Lightbox {
             previous,
             next,
             slideshow,
+            shuffle,
             details,
             save,
             trash,
@@ -206,8 +215,8 @@ async fn follow(weak: Weak<Inner>, updates: async_channel::Receiver<Result<Updat
         match update {
             Ok(Update::Lightbox { shown, .. }) => {
                 if let Some(s) = &shown {
-                    eprintln!("veyq: lightbox shown: {} of {}, {}, playing {}, slideshow {:?}, save {}, trash {}, mark {} (marked {}), report {}", s.index + 1, s.count,
-                        s.row.as_ref().map_or("-", |r| r.media_id.as_str()), s.playing, s.slideshow, s.download_name.is_some(), s.can_trash, s.can_mark, s.marked, s.can_report);
+                    eprintln!("veyq: lightbox shown: {} of {}, {}, playing {}, slideshow {:?}, shuffled {}, save {}, trash {}, mark {} (marked {}), report {}", s.index + 1, s.count,
+                        s.row.as_ref().map_or("-", |r| r.media_id.as_str()), s.playing, s.slideshow, s.shuffled, s.download_name.is_some(), s.can_trash, s.can_mark, s.marked, s.can_report);
                 }
                 let gone = shown.as_ref().is_none_or(|s| s.row.is_none());
                 *inner.shown.borrow_mut() = shown;
@@ -248,6 +257,15 @@ impl Inner {
                 bridge::send(Call::LightboxSlideshow { lightbox, on });
             }
         }));
+        // a press only (a drawn state sets it without a click): pressing it keeps a running slideshow running
+        let weak = Rc::downgrade(this);
+        this.shuffle.connect_clicked(move |b| {
+            if let Some(i) = weak.upgrade()
+                && let Some(lightbox) = i.id.get()
+            {
+                bridge::send(Call::LightboxShuffle { lightbox, on: b.is_active() });
+            }
+        });
         this.music_play.connect_clicked(call(this, |i| {
             let playing = i.shown.borrow().as_ref().and_then(|s| s.music.as_ref()).is_some_and(|m| m.playing);
             bridge::send(if playing { Call::PlayerPause } else { Call::PlayerResume });
@@ -323,13 +341,11 @@ impl Inner {
         });
     }
 
-    /// Pages by [by] (−1 back, 1 on) where there is a medium there.
+    /// Pages by [by] (−1 back, 1 on), round the ends (the core's `previous` / `next`), where there is anywhere to page.
     fn step(&self, by: i32) {
         let Some(lightbox) = self.id.get() else { return };
-        let Some((index, count)) = self.shown.borrow().as_ref().map(|s| (s.index, s.count)) else { return };
-        let to = index + by;
-        if (0..count).contains(&to) {
-            bridge::send(Call::LightboxGo { lightbox, index: to });
+        if self.shown.borrow().as_ref().is_some_and(|s| s.can_page) {
+            bridge::send(Call::LightboxStep { lightbox, forward: by > 0 });
         }
     }
 
@@ -355,10 +371,15 @@ impl Inner {
         self.title.set_title(&glib_escape(&position));
         self.title.set_subtitle(&glib_escape(&name));
         self.page.set_title(&name);
-        self.previous.set_sensitive(s.index > 0);
-        self.next.set_sensitive(s.index + 1 < s.count);
+        // paging goes round the ends: only a single medium has nowhere to page
+        self.previous.set_sensitive(s.can_page);
+        self.next.set_sensitive(s.can_page);
         let playing = s.slideshow == Some(SlideshowState::Playing);
-        self.slideshow.set_visible(s.count > 1);
+        self.slideshow.set_visible(s.can_page);
+        self.shuffle.set_visible(s.can_shuffle);
+        if self.shuffle.is_active() != s.shuffled {
+            self.shuffle.set_active(s.shuffled);
+        }
         self.slideshow.set_icon_name(if playing { "media-playback-pause-symbolic" } else { "media-playback-start-symbolic" });
         let label = if playing { words::memory_slideshow_pause() } else { words::memory_slideshow_start() };
         self.slideshow.set_tooltip_text(Some(&label));
