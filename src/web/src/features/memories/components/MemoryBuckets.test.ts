@@ -351,6 +351,51 @@ describe('MemoryBuckets — selection + delete-to-trash + undo (cr-0122)', () =>
   })
 })
 
+describe('MemoryBuckets — the counts follow the live media (an upload while the tab is open)', () => {
+  /** The count the picker shows beside the active bucket. */
+  const shownCount = (w: ReturnType<typeof mountBuckets>) => w.find('.bucket-select-value small').text()
+
+  it("the active bucket's count grows with the media the gallery hands in, not the count the list was read with", async () => {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 1)])
+    const wrapper = mountBuckets([media('m1', 'user:me', 'b-own')])
+    await flushPromises()
+    expect(shownCount(wrapper)).toBe('1')
+
+    await wrapper.setProps({ media: ['m1', 'm2', 'm3'].map((id) => media(id, 'user:me', 'b-own')) }) // two uploads landed
+    expect(shownCount(wrapper)).toBe('3')
+    expect(wrapper.findAll('.media-tile-check').length).toBe(3)
+    expect(listBuckets, 'a known bucket needs no re-read').toHaveBeenCalledTimes(1)
+  })
+
+  it('a stale server count never shows: each bucket counts its own media only', async () => {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 7), bucket('b-share', 'share:x', 9, 'ct')])
+    const wrapper = mountBuckets([media('m1', 'user:me', 'b-own'), media('m2', 'user:me', 'b-own'), media('m3', 'share:x', 'b-share')])
+    await flushPromises()
+    expect(shownCount(wrapper)).toBe('2')
+    await selectBucket(wrapper, 'b-share')
+    expect(shownCount(wrapper)).toBe('1')
+  })
+
+  it('the first upload that materializes your primary re-reads the list once, quietly, and shows the medium under it', async () => {
+    vi.mocked(listBuckets).mockResolvedValueOnce([]) // no primary of yours yet: the virtual one
+    const wrapper = mountBuckets([])
+    await flushPromises()
+    expect(shownCount(wrapper)).toBe('0')
+
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 1)])
+    await wrapper.setProps({ media: [media('m1', 'user:me', 'b-own')] }) // the server put it into the new primary
+    expect(wrapper.find('.media-grid-placeholder').exists(), 'the grid stays, no spinner').toBe(false)
+    await flushPromises()
+    expect(listBuckets).toHaveBeenCalledTimes(2)
+    expect(shownCount(wrapper)).toBe('1')
+    expect(wrapper.findAll('.media-tile-check').length).toBe(1)
+
+    await wrapper.setProps({ media: [media('m1', 'user:me', 'b-own'), media('m2', 'user:me', 'b-own')] })
+    await flushPromises()
+    expect(listBuckets, 'a bucket the list now holds is not read for again').toHaveBeenCalledTimes(2)
+  })
+})
+
 describe('MemoryBuckets — a guest\'s name is marked as a guest\'s (inbox #433)', () => {
   it('a contributor primary reads "<name> (guest)"; a member\'s primary and a member\'s sub-bucket stay as they are', async () => {
     vi.mocked(loadScopePeople).mockResolvedValue([person('u-anna', 'anna', 'Anna Meyer')])
