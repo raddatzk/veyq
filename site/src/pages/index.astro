@@ -1,7 +1,10 @@
 ---
 // The project website in the default language; the others: [lang]/index.astro. Its content: components/website/.
+// In a version build (ADR 0087 decision 6) there is no website: the page leads on into that version's docs.
 import Home from '../components/website/Home.astro';
+import ToDocs from '../components/website/ToDocs.astro';
 import { defaultLang } from '../components/website/strings';
+import { VEYQ_SITE_VERSION } from 'astro:env/server';
 ---
 
-<Home lang={defaultLang} />
+{VEYQ_SITE_VERSION ? <ToDocs lang={defaultLang} /> : <Home lang={defaultLang} />}

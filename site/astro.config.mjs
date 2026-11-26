@@ -1,14 +1,50 @@
 // @ts-check
-import { defineConfig } from 'astro/config';
+import { defineConfig, envField } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import starlightLinksValidator from 'starlight-links-validator';
+import { satteri } from '@astrojs/markdown-satteri';
+import baseLinks from './plugins/base-links.mjs';
 
 // The published documentation (ADR 0087). Static output only, so it is hostable anywhere; GitHub Pages serves it
 // at the domain root of https://veyq.app/ (the custom domain is a Pages setting: a site deployed by a workflow reads
-// no CNAME file), so there is no `base` and a page links another as `/run/upgrade/`. The old project URL
+// no CNAME file), so the root build has no `base` and a page links another as `/run/upgrade/`. The old project URL
 // https://raddatzk.github.io/veyq/… redirects there, which keeps links in shipped releases working.
+//
+// Versions (ADR 0087 decision 6): `main` is the root build; an older major's docs are the build of its newest
+// release, made with VEYQ_SITE_VERSION=<major> and served under `/v<major>/`. Only that variable sets the base, so
+// a version cannot be built under a path of another. VEYQ_SITE_OLDER (`1` or `1,2`) is the root build's list of the
+// older versions the deploy serves beside it, named in every root page's header; the two are never set together.
+const major = (/** @type {string | undefined} */ value, /** @type {string} */ name) => {
+  if (value && !/^[1-9][0-9]*$/.test(value)) throw new Error(`${name} is a major (1, 2, …), not ${JSON.stringify(value)}`);
+  return value || undefined;
+};
+const version = major(process.env.VEYQ_SITE_VERSION, 'VEYQ_SITE_VERSION');
+const older = (process.env.VEYQ_SITE_OLDER ?? '').split(',').filter(Boolean).map((m) => major(m, 'VEYQ_SITE_OLDER'));
+if (version && older.length) throw new Error('VEYQ_SITE_OLDER names the root build\'s older versions; a version build has none');
+const base = version ? `/v${version}/` : '/';
+
+const locales = {
+  root: { label: 'English', lang: 'en' },
+  de: { label: 'Deutsch', lang: 'de' },
+};
+// The project website's pages, one per locale (decision 7), exist at the root only: a version's docs link them there.
+const websitePages = ['/', ...Object.keys(locales).filter((key) => key !== 'root').map((key) => `/${key}/`)];
+
 export default defineConfig({
   site: 'https://veyq.app',
+  base,
+  // Read by the components the version shows itself with (src/components/starlight/, the website's pages).
+  env: {
+    schema: {
+      VEYQ_SITE_VERSION: envField.string({ context: 'server', access: 'public', optional: true }),
+      VEYQ_SITE_OLDER: envField.string({ context: 'server', access: 'public', optional: true }),
+    },
+  },
+  // Sätteri is Astro's default Markdown processor; it is named here only to hand it the plugin. Starlight adds its own
+  // plugins to whichever processor is configured.
+  markdown: {
+    processor: satteri({ hastPlugins: [baseLinks({ base, keep: websitePages })] }),
+  },
   integrations: [
     starlight({
       title: 'veyq',
@@ -16,10 +52,14 @@ export default defineConfig({
       // `de/`, which is how Starlight pairs them. A page without a translation falls back to English with
       // Starlight's notice — how Run and Security appear under /de/.
       defaultLocale: 'root',
-      locales: {
-        root: { label: 'English', lang: 'en' },
-        de: { label: 'Deutsch', lang: 'de' },
+      locales,
+      // A version names its major on every page and links the current docs; the root names the older versions in
+      // its header. A version is kept out of search engines, so it never ranks against the current docs.
+      components: {
+        Banner: './src/components/starlight/Banner.astro',
+        SocialIcons: './src/components/starlight/SocialIcons.astro',
       },
+      head: version ? [{ tag: 'meta', attrs: { name: 'robots', content: 'noindex' } }] : [],
       // One group per area and reader: Use (EN+DE, users), Run (EN, administrators), Security (EN, researchers).
       // Use is task-first in nine sections (cr-use-area-content): platform first (Getting started, Your account,
       // Spaces), then the applications (Memories, Depot, Expenses), then Sharing, the space owner's tasks, Privacy and Help.
@@ -218,8 +258,9 @@ export default defineConfig({
       // fallback page is valid: Run and Security are English-only by design. A German page linking the English URL
       // instead of its /de/ counterpart fails too (`errorOnInconsistentLocale`). That option matches `/de/` at the
       // start of the link, so it never fired while the site had a `/veyq/` base (bitten 2026-10-15: green on such a
-      // link); a `base` brought back turns it blind again.
-      plugins: [starlightLinksValidator({ errorOnFallbackPages: false, errorOnInconsistentLocale: true })],
+      // link); a `base` brought back turns it blind again. So it runs on the root build alone: a version is built
+      // from a commit whose root build it already passed, and the base it adds is held by site_version_check.py.
+      plugins: version ? [] : [starlightLinksValidator({ errorOnFallbackPages: false, errorOnInconsistentLocale: true })],
     }),
   ],
 });

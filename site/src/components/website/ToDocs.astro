@@ -1,0 +1,26 @@
+---
+// A version has no project website (ADR 0087 decisions 6 and 7): its `/v<major>/` and `/v<major>/<lang>/` send the
+// reader on to that version's own start page in the same language, so the address a reader types still leads into the
+// version's docs. Kept out of search engines like every page of a version.
+import { localePath, type Lang } from './strings';
+
+interface Props {
+  lang: Lang;
+}
+
+const { lang } = Astro.props;
+const target = import.meta.env.BASE_URL.replace(/\/?$/, '/') + localePath(lang, 'start/');
+---
+
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="robots" content="noindex" />
+    <meta http-equiv="refresh" content={`0; url=${target}`} />
+    <title>veyq</title>
+  </head>
+  <body>
+    <a href={target}>{target}</a>
+  </body>
+</html>
