@@ -2990,6 +2990,23 @@
     "de": "Diashow anhalten",
     "apple_en": "Pause Slideshow"
   },
+  "memory_slideshow_shuffle": {
+    "note": "The lightbox's toggle that runs the slideshow in random order (the web's slideshowShuffle; a pressed toggle, offered from three media on).",
+    "en": "Slideshow in random order",
+    "de": "Diashow in zufälliger Reihenfolge"
+  },
+  "memory_sort_newest": {
+    "note": "The gallery's sort toggle while the grid is newest first (the web's sortNewest); pressing it turns the grid oldest first.",
+    "en": "Newest first",
+    "de": "Neueste zuerst",
+    "apple_en": "Newest First"
+  },
+  "memory_sort_oldest": {
+    "note": "The gallery's sort toggle while the grid is oldest first (the web's sortOldest).",
+    "en": "Oldest first",
+    "de": "Älteste zuerst",
+    "apple_en": "Oldest First"
+  },
   "memory_previous": {
     "note": "The lightbox's previous medium (the web's previous).",
     "en": "Previous",

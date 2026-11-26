@@ -46,6 +46,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.PlayCircle
+import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.Slideshow as SlideshowIcon
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -265,8 +266,9 @@ internal fun MemoryGallery(
         stickyHeader(key = "views") {
             Column(Modifier.background(MaterialTheme.colorScheme.background)) {
                 viewSwitch()
-                // the filter in the Photos view's own toolbar, where the facts may be filtered and something is there to filter
-                if (state.rights.filterFacts && (!state.rows.isNullOrEmpty() || state.filter.narrows)) GalleryFilterBar(gallery, state)
+                // the Photos view's own toolbar where something is there to order or filter: the sort toggle, and the filter
+                // where the facts may be filtered (the web's gallery toolbar)
+                if (!state.rows.isNullOrEmpty() || (state.rights.filterFacts && state.filter.narrows)) GalleryFilterBar(gallery, state)
             }
         }
         if (state.chapters.isNotEmpty()) {
@@ -531,13 +533,26 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
             LaunchedEffect(Unit) { onClose() }
             return@Dialog
         }
-        val pager = rememberPagerState(state.index.coerceAtLeast(0)) { rows.size }
+        // paging goes round the ends (core's `Lightbox`, the web's): where there is anywhere to page, the pager holds the rows
+        // many times over and starts amid them, so a swipe past the last shows the first; a page is row `page % rows.size`
+        val laps = if (state.canPage) minOf(PAGER_LAPS, Int.MAX_VALUE / rows.size) else 1
+        val pager = rememberPagerState((laps / 2) * rows.size + state.index.coerceAtLeast(0)) { rows.size * laps }
         // the person's paging pages the model (and pauses its slideshow); the model's own step — the slideshow's, a
         // re-read that moved the medium — moves the pager, which then asks nothing back
-        LaunchedEffect(pager.currentPage) { if (pager.currentPage != box.current.index) box.go(pager.currentPage) }
-        LaunchedEffect(state.index) {
-            if (state.index >= 0 && pager.currentPage != state.index) {
-                if (state.slideshow == me.raddatz.veyq.mobile.memories.Lightbox.Slideshow.PLAYING) pager.animateScrollToPage(state.index) else pager.scrollToPage(state.index)
+        // the page it SETTLED on: a scroll the model asked for passes other pages on its way, which are no paging of the person's
+        LaunchedEffect(pager.settledPage) {
+            val at = pager.settledPage % rows.size
+            if (at != box.current.index) box.go(at)
+        }
+        LaunchedEffect(state.index, rows.size) {
+            val at = pager.currentPage % rows.size
+            if (state.index >= 0 && at != state.index) {
+                // the nearer way round: the slideshow's step past the last moves one page on, not back across them all
+                var delta = ((state.index - at) % rows.size + rows.size) % rows.size
+                if (delta > rows.size / 2) delta -= rows.size
+                val to = (pager.currentPage + delta).coerceIn(0, pager.pageCount - 1)
+                // the slideshow's step to a neighbour slides; a shuffled one's jump and any other move are drawn at once
+                if (state.slideshow == me.raddatz.veyq.mobile.memories.Lightbox.Slideshow.PLAYING && (delta == 1 || delta == -1)) pager.animateScrollToPage(to) else pager.scrollToPage(to)
             }
         }
         // a picture zoomed in takes the swipe for its own pan (the platform's zoom, ADR 0161's Consequences): paging waits until it is back
@@ -580,18 +595,28 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
                 Column {
                 TopAppBar(
                     windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Top),
-                    title = { Text(stringResource(R.string.memory_item_position, pager.currentPage + 1, rows.size)) },
+                    title = { Text(stringResource(R.string.memory_item_position, pager.currentPage % rows.size + 1, rows.size)) },
                     navigationIcon = {
                         IconButton(onClick = onClose) { Icon(Icons.Filled.Close, stringResource(R.string.memory_close)) }
                     },
                     actions = {
-                        // the slideshow is core's (its clock, its end on the last medium); here only its switch
+                        // the slideshow is core's (its clock, round past the last medium); here only its switch
                         val playing = state.slideshow == me.raddatz.veyq.mobile.memories.Lightbox.Slideshow.PLAYING
-                        if (rows.size > 1) {
-                            IconButton(onClick = { box.slideshow(!playing) }, enabled = playing || state.index < rows.size - 1) {
+                        if (state.canPage) {
+                            IconButton(onClick = { box.slideshow(!playing) }) {
                                 if (playing) Icon(Icons.Filled.Pause, stringResource(R.string.memory_slideshow_pause))
                                 else Icon(Icons.Outlined.SlideshowIcon, stringResource(R.string.memory_slideshow_start))
                             }
+                        }
+                        // its shuffle beside it (the web's, from three media on): Material's toggle icon button, checked while on;
+                        // pressing it keeps a running slideshow running
+                        if (state.canShuffle) {
+                            androidx.compose.material3.IconToggleButton(
+                                checked = state.shuffled, onCheckedChange = { box.shuffle(it) },
+                                colors = androidx.compose.material3.IconButtonDefaults.iconToggleButtonColors(
+                                    contentColor = Color.White, checkedContentColor = Color.Black, checkedContainerColor = Color.White,
+                                ),
+                            ) { Icon(Icons.Outlined.Shuffle, stringResource(R.string.memory_slideshow_shuffle)) }
                         }
                         // the heart (ADR 0149 decision 4): the caller's mark, with how many marked it where a count is kept
                         if (canMark || mark != null) MarkButton(mark, enabled = canMark) { model.memories.galleryAct { box.toggleMark() } }
@@ -641,8 +666,8 @@ private fun Lightbox(box: MemoryLightbox, gallery: GalleryModel, model: AppModel
             Column(Modifier.padding(padding).fillMaxSize()) {
                 // a zoomed picture stays inside its page: the caption below is never drawn over
                 // a trash shrinks the rows under the pager, which may ask for a page of its last count once more
-                HorizontalPager(pager, Modifier.weight(1f).fillMaxWidth().clipToBounds(), key = { rows.getOrNull(it)?.mediaId ?: "gone:$it" }, userScrollEnabled = !zoomed) { page ->
-                    val shown = rows.getOrNull(page) ?: return@HorizontalPager
+                HorizontalPager(pager, Modifier.weight(1f).fillMaxWidth().clipToBounds(), key = { page -> rows.getOrNull(page % rows.size)?.mediaId?.let { "$it:${page / rows.size}" } ?: "gone:$page" }, userScrollEnabled = !zoomed) { page ->
+                    val shown = rows.getOrNull(page % rows.size) ?: return@HorizontalPager
                     val here = state.row?.mediaId == shown.mediaId
                     LightboxPage(shown, box, model, reader = state.reader.takeIf { here }, current = here, onZoom = { if (here) zoomed = it })
                 }
@@ -834,3 +859,6 @@ private fun detailValue(row: MediaDetails.Row): String {
         is MediaDetails.Shown.Plain -> v.text
     }
 }
+
+/** How many times over the lightbox's pager holds the rows, so a swipe goes round the ends (its start amid them). */
+private const val PAGER_LAPS = 1_000

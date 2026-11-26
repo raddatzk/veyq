@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
@@ -49,6 +51,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import me.raddatz.veyq.mobile.android.core.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import me.raddatz.veyq.mobile.android.R
 import me.raddatz.veyq.mobile.android.core.LocalPalette
@@ -151,7 +154,9 @@ internal fun filterEmptyText(filter: GalleryFilter.State): String {
  * A gallery's filter (`uc.memory.gallery` step 8, ADR 0149 decision 5), the Photos view's own toolbar under the switch:
  * the search field over the day, place, kind, who added it and name — the core's chips suggested under it as the text names one, the
  * chosen ones as input chips — and the marks' mode beside it as a filter chip's menu (all, everyone's, only mine; a
- * member's, never in a personal space). Stored nowhere: the page's, gone with it.
+ * member's, never in a personal space). Stored nowhere: the page's, gone with it. Beside them the grid's direction (the
+ * web's sort toggle, inbox #1344): an assist chip naming the order shown, a press turns it (`GalleryModel.sort`); it is
+ * drawn wherever the grid holds media, the filter only where the facts may be filtered.
  */
 @Composable
 internal fun GalleryFilterBar(gallery: GalleryModel, state: GalleryModel.State) {
@@ -168,7 +173,7 @@ internal fun GalleryFilterBar(gallery: GalleryModel, state: GalleryModel.State) 
     val label = stringResource(R.string.media_filter_label)
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(top = 8.dp, bottom = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
+            if (state.rights.filterFacts) OutlinedTextField(
                 text,
                 {
                     text = it
@@ -185,8 +190,9 @@ internal fun GalleryFilterBar(gallery: GalleryModel, state: GalleryModel.State) 
                     }
                 } },
                 shape = RoundedCornerShape(28.dp),
-            )
-            if (gallery.marksModeOffered) MarksModeMenu(filter.mode) { mode -> gallery.filter(gallery.current.filter.copy(mode = mode)) }
+            ) else androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+            if (!state.rows.isNullOrEmpty()) SortChip(state.oldestFirst) { gallery.sort(oldestFirst = !state.oldestFirst) }
+            if (state.rights.filterFacts && gallery.marksModeOffered) MarksModeMenu(filter.mode) { mode -> gallery.filter(gallery.current.filter.copy(mode = mode)) }
         }
         if (filter.chips.isNotEmpty() || suggestions.isNotEmpty()) {
             Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -211,6 +217,19 @@ internal fun GalleryFilterBar(gallery: GalleryModel, state: GalleryModel.State) 
             }
         }
     }
+}
+
+/** The grid's direction as an assist chip: its words the order shown (the web's toggle), a press turns it. */
+@Composable
+private fun SortChip(oldestFirst: Boolean, onTurn: () -> Unit) {
+    androidx.compose.material3.AssistChip(
+        onClick = onTurn,
+        label = { Text(stringResource(if (oldestFirst) R.string.memory_sort_oldest else R.string.memory_sort_newest)) },
+        leadingIcon = {
+            Icon(if (oldestFirst) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward, null, Modifier.size(18.dp))
+        },
+        modifier = Modifier.padding(start = 8.dp).testTag("gallery-sort"),
+    )
 }
 
 /** The marks' mode as the platform's filter menu: a filter chip naming the mode, its menu the three. */

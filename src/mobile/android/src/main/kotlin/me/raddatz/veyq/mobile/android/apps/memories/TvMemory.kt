@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.PlayCircle
+import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.Slideshow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
@@ -50,6 +51,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -203,11 +205,23 @@ private fun TvLightbox(box: Lightbox, gallery: GalleryModel, model: AppModel, on
         Column(Modifier.fillMaxSize().background(Color.Black).padding(24.dp).testTag("tv-lightbox")) {
             Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Button(onClick = onClose, modifier = Modifier.testTag("tv-lightbox-close")) { Icon(Icons.Outlined.Close, stringResource(R.string.memory_close)) }
-                if (rows.size > 1) {
-                    Button(onClick = ::toggleSlideshow, enabled = playing || state.index < rows.size - 1, modifier = Modifier.testTag("tv-lightbox-slideshow")) {
+                if (state.canPage) {
+                    Button(onClick = ::toggleSlideshow, modifier = Modifier.testTag("tv-lightbox-slideshow")) {
                         if (playing) Icon(Icons.Filled.Pause, stringResource(R.string.memory_slideshow_pause))
                         else Icon(Icons.Outlined.Slideshow, stringResource(R.string.memory_slideshow_start))
                     }
+                }
+                // the shuffle beside it (the web's, from three media on): a TV's selectable button, selected while on
+                if (state.canShuffle) {
+                    val words = stringResource(R.string.memory_slideshow_shuffle)
+                    androidx.tv.material3.IconButton(
+                        onClick = { box.shuffle(!state.shuffled) },
+                        colors = if (state.shuffled) androidx.tv.material3.IconButtonDefaults.colors(containerColor = Color.White, contentColor = Color.Black)
+                        else androidx.tv.material3.IconButtonDefaults.colors(),
+                        modifier = Modifier.testTag("tv-lightbox-shuffle").semantics {
+                            toggleableState = androidx.compose.ui.state.ToggleableState(state.shuffled)
+                        },
+                    ) { Icon(Icons.Outlined.Shuffle, words) }
                 }
                 Text(stringResource(R.string.memory_item_position, state.index + 1, rows.size), color = Color.White, modifier = Modifier.testTag("tv-lightbox-position"))
             }
@@ -231,8 +245,9 @@ private fun TvLightbox(box: Lightbox, gallery: GalleryModel, model: AppModel, on
                                 // the model's state now, not the one this frame was drawn with: presses come faster than frames
                                 val now = box.current
                                 when (e.key) {
-                                    Key.DirectionLeft -> { if (now.index > 0) box.go(now.index - 1); true }
-                                    Key.DirectionRight -> { if (now.index < now.count - 1) box.go(now.index + 1); true }
+                                    // round the ends (core's `next` / `previous`)
+                                    Key.DirectionLeft -> { box.previous(); true }
+                                    Key.DirectionRight -> { box.next(); true }
                                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
                                         val shown = now.row
                                         if (shown != null && shown.isVideo && shown.said == null) box.play() else toggleSlideshow()
