@@ -14,7 +14,8 @@
 // place where `../lightboxZoom.ts` allows - fetched as ciphertext through the source's `originalLoader`, decrypted here, its
 // object URL revoked on navigation / close like the preview's. A video does not zoom.
 // **Paging goes round** (owner 2026-11-26): past the last item comes the first and before the first the last - the
-// buttons, the arrow keys and the slideshow alike; only a single item has nowhere to go. The position ("3 of 42") says
+// buttons, the arrow keys, a swipe on a touch screen (`shared/ui/useSwipe.ts`, inbox #863; not while a photo is zoomed,
+// where a drag pans) and the slideshow alike; only a single item has nowhere to go. The position ("3 of 42") says
 // where the viewer is, so a step round the end needs no notice of its own.
 // **Slideshow** (same CR): the toolbar's play control advances every 5 s through the items in their grid order - or, with
 // the shuffle toggle beside it pressed (inbox #862), in shuffled rounds -
@@ -64,6 +65,7 @@ import type { MediaMetaDoor } from '../source'
 import type { UploaderLabel } from '../useUploaderNames'
 import { profileHash } from '../../../core/people/directory'
 import { usePanZoom } from '../../../shared/ui/usePanZoom'
+import { useSwipe } from '../../../shared/ui/useSwipe'
 import { createVisibilityPoller } from '../../../shared/state/visibilityPoller'
 import { createPreviewCache, previewKeyOf } from '../previewCache'
 import { exceedsPreview, originalZoomable, previewDownscaled } from '../lightboxZoom'
@@ -735,6 +737,19 @@ function next() {
   if (canPage.value) current.value = around(current.value, 1)
 }
 
+// A swipe pages (inbox #863), as the buttons do - round the ends too. Not while a photo is zoomed: there a drag pans.
+// It reads the stage's pointers beside the zoom, on every stage (a video's poster and the download fallback too), so the
+// stage's pointer handlers below feed both. A swipe's touch also pauses a running slideshow, like any pointer.
+const swipe = useSwipe((direction) => (direction === 'next' ? next() : prev()), { enabled: () => !zoom.zoomed.value })
+function onStagePointerDown(e: PointerEvent) {
+  swipe.onPointerDown(e)
+  if (zoomable.value) zoom.onPointerDown(e)
+}
+function onStagePointerUp(e: PointerEvent) {
+  if (zoomable.value) zoom.onPointerUp(e)
+  swipe.onPointerUp(e)
+}
+
 // After a delete (cr-0110) the parent removes the item from `items`, shrinking the array: the item that shifted
 // into this slot shows (a natural advance), the first when the deleted one WAS last (the advance goes round, as paging
 // does), and the lightbox closes when the grid empties — so it stays consistent with the optimistic removal.
@@ -963,10 +978,10 @@ onBeforeUnmount(() => {
             'media-lightbox-stage-zoomed': zoomable && zoom.zoomed.value,
             'media-lightbox-stage-gesturing': zoom.gesturing.value,
           }"
-          @pointerdown="zoomable && zoom.onPointerDown($event)"
+          @pointerdown="onStagePointerDown"
           @pointermove="zoomable && zoom.onPointerMove($event)"
-          @pointerup="zoomable && zoom.onPointerUp($event)"
-          @pointercancel="zoomable && zoom.onPointerUp($event)"
+          @pointerup="onStagePointerUp"
+          @pointercancel="onStagePointerUp"
           @wheel="zoomable && zoom.onWheel($event)"
         >
           <template v-if="item?.blocked">
@@ -1171,6 +1186,11 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+/* A swipe pages (inbox #863): the stage keeps the horizontal touch for itself on any item - a video's poster and the
+   download fallback included - so the browser does not take it over (and cancel the pointer) as a pan of its own. */
+.media-lightbox-stage {
+  touch-action: pan-y pinch-zoom;
+}
 /* The zoom (cr-lightbox-zoom-slideshow): a shown photo takes the gestures itself (no browser pan / pinch-zoom of the page),
    a zoomed one is clipped to the stage so it never covers the paging buttons or the details, and the transform eases
    except while a finger or the mouse drives it. */
