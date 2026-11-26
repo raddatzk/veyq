@@ -115,6 +115,10 @@ def build(major: int, tag: str, cache: pathlib.Path) -> bool:
 
 def sync(cache: pathlib.Path, current: int) -> int:
     cache.mkdir(parents=True, exist_ok=True)
+    # An empty index on the first run, so the first deploy after this was built already writes the branch: the write
+    # path (the token's rights, a ruleset on new branches) is proved then, not at the first train that needs it.
+    if not (cache / INDEX).is_file():
+        (cache / INDEX).write_text("{}\n")
     todo = plan(current, release_tags(), read_index(cache))
     if not todo:
         print(f"site_versions: the cache holds every older major's newest release ({read_index(cache) or 'none yet'})")
