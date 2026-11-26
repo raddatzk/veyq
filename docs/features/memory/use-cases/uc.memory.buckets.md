@@ -52,6 +52,10 @@ One's own bucket reads **"Deine Beiträge"**.
 
 - **Only your own contributions** → the picker shows just **"Deine Beiträge"**; a Memory nobody else touched can
   keep the tab quiet.
+- **Every medium of an uploader is trashed** (or purged) → that uploader is no contributor any more and leaves the
+  picker, a guest as much as a fellow member; a sub-bucket a member curates under their root keeps it listed. The
+  bucket row stays, so restoring a medium (or a new upload) lists the uploader again under the same name. One's own
+  **"Deine Beiträge"** stays, empty.
 - **A sealed name won't unseal** (missing/rotated `K_node`) → fall back to a neutral placeholder ("Beitrag"),
   **never block the grid**.
 - **Group / tenant scope** → **member buckets only** (each named by the display rule). Anonymous contributor shares are
