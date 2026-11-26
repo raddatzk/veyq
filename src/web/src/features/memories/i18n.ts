@@ -303,7 +303,7 @@ const en = {
       // A selection's capture-time shift (uc.memory.buckets): the bar's way into the lightbox's editor, the Undo bar's
       // summary, and what the server refused, one line per reason, as a selection's trash names its refusals.
       shiftCapturedAt: 'Shift capture time',
-      shiftTitle: 'Correct the capture time of the selection through one of its items',
+      selectionMore: 'More actions for the selection',
       shifted: 'Capture time shifted for {count} item | Capture time shifted for {count} items',
       shiftRefused: 'Not shifted: {names}. {reason}',
       dropTitle: 'Upload into “{bucket}”',
@@ -702,7 +702,7 @@ const de: typeof en = {
       },
       unnamedMedia: 'Medium {n}',
       shiftCapturedAt: 'Aufnahmezeit verschieben',
-      shiftTitle: 'Aufnahmezeit der Auswahl über eines ihrer Medien korrigieren',
+      selectionMore: 'Weitere Aktionen für die Auswahl',
       shifted: 'Aufnahmezeit bei {count} Medium verschoben | Aufnahmezeit bei {count} Medien verschoben',
       shiftRefused: 'Nicht verschoben: {names}. {reason}',
       dropTitle: 'In „{bucket}“ hochladen',

@@ -98,6 +98,8 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   // whether it opens with the capture-time editor open. None from the gallery or a search result.
   const lightboxSelection = ref<ReadonlySet<string> | null>(null)
   const lightboxEditing = ref(false)
+  // Each medium's number in the grid it was opened from, where the list handed up is not that grid (the organizer's shift).
+  const lightboxNumbers = ref<Readonly<Record<string, number>> | null>(null)
   // trash undo (cr-0110): a lightbox-only delete soft-deletes into a per-Memory trash; an undo-toast offers restore
   // (cr-0157/ADR 0039). The soft-delete is eager, so the window elapsing commits nothing — it just lets the trash
   // stand; only `onUndoDelete` (restore) is a real action, hence no `onExpire`.
@@ -224,6 +226,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     lightboxItems.value = sortedItems.value.slice()
     lightboxSelection.value = null
     lightboxEditing.value = false
+    lightboxNumbers.value = null
     lightboxIndex.value = index
   }
   /** Open the lightbox on the medium `mediaId` (a search result, ADR 0125): in the gallery's order, or - where a filter
@@ -241,10 +244,11 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   }
   /** Open the lightbox on a bucket-scoped list the organizer hands up (so prev/next stays within the picked bucket), with
    *  the organizer's selection where it has one and, from its "Shift capture time", the capture-time editor open. */
-  function openBucketLightbox(payload: { items: MediaItem[]; index: number; selected?: readonly string[]; editCapturedAt?: boolean }) {
+  function openBucketLightbox(payload: { items: MediaItem[]; index: number; selected?: readonly string[]; editCapturedAt?: boolean; numbers?: Readonly<Record<string, number>> }) {
     lightboxItems.value = payload.items.slice()
     lightboxSelection.value = payload.selected?.length ? new Set(payload.selected) : null
     lightboxEditing.value = !!payload.editCapturedAt
+    lightboxNumbers.value = payload.numbers ?? null
     lightboxIndex.value = payload.index
   }
   /** A date correction from the lightbox → patch the item's sealed tier so the grid re-sorts (no refetch). The item
@@ -450,6 +454,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     lightboxIndex,
     lightboxSelection,
     lightboxEditing,
+    lightboxNumbers,
     openLightboxAt,
     openLightboxOn,
     openBucketLightbox,

@@ -285,6 +285,7 @@ const {
   lightboxIndex,
   lightboxSelection,
   lightboxEditing,
+  lightboxNumbers,
   openLightboxAt,
   openLightboxOn,
   openBucketLightbox,
@@ -853,7 +854,9 @@ const shift = useCaptureTimeShift({
 })
 /** What the lightbox is handed for a shift: the organizer's selection it opened from, where the door is offered. */
 const lightboxShift = computed<CaptureTimeShift | undefined>(() =>
-  lightboxSelection.value && mediaMetaDoor.value ? { selected: lightboxSelection.value, run: shift.run } : undefined,
+  lightboxSelection.value && mediaMetaDoor.value
+    ? { selected: lightboxSelection.value, run: shift.run, numbers: lightboxNumbers.value ?? undefined }
+    : undefined,
 )
 
 // The grids a lightbox opens from: closing it scrolls the shown item's tile into view and focuses it (ADR 0105

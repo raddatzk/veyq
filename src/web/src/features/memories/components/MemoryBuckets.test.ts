@@ -75,7 +75,13 @@ const SelectStub = {
   template:
     '<div class="select-stub"><slot name="value" /><button v-for="o in options" :key="o.value" class="bucket-opt" :data-val="o.value" type="button" @click="$emit(\'update:modelValue\', o.value)" /></div>',
 }
-const MenuStub = { template: '<div class="menu-stub" />' }
+// A menu's entries drawn as buttons, so a test reads and picks them without the layer's popup.
+const MenuStub = {
+  props: ['items'],
+  methods: { toggle() {} },
+  template:
+    '<div class="menu-stub"><button v-for="i in items" :key="i.label" type="button" class="menu-entry" :disabled="i.disabled" @click="i.command && i.command()">{{ i.label }}</button></div>',
+}
 const MediaGridStub = {
   props: ['items'],
   template:
@@ -351,11 +357,13 @@ describe('MemoryBuckets — selection + delete-to-trash + undo (cr-0122)', () =>
   })
 })
 
-// uc.memory.buckets § Correct a selection's capture time: the selection reaches the lightbox, and "Shift capture time" opens
-// it on the first selected medium in grid order with the editor open — offered from two selected on, and only where a
-// capture time may be edited (editMeta and the source's media-meta door).
+// uc.memory.buckets § Correct a selection's capture time: the selection reaches the lightbox, and "Shift capture time" — an
+// entry of the selection bar's ⋯ — opens it over the selected media alone, in grid order, with the editor open; offered
+// from two selected on, and only where a capture time may be edited (editMeta and the source's media-meta door).
 describe('MemoryBuckets — a selection\'s capture-time shift', () => {
-  const shiftButton = (w: ReturnType<typeof mountBuckets>) => w.find('.bucket-selection-bar .bucket-shift-button')
+  const moreButton = (w: ReturnType<typeof mountBuckets>) => w.find('.bucket-selection-bar .bucket-more-button')
+  const shiftEntry = (w: ReturnType<typeof mountBuckets>) =>
+    w.findAll('.bucket-selection-bar .menu-entry').find((b) => b.text() === t('memory.buckets.shiftCapturedAt'))!
   const ORDER = ['m1', 'm2', 'm3'] // the grid's order: the tiles carry no id of their own here
   const check = (w: ReturnType<typeof mountBuckets>, id: string) => w.findAll('.media-tile-check input')[ORDER.indexOf(id)]
 
@@ -366,19 +374,24 @@ describe('MemoryBuckets — a selection\'s capture-time shift', () => {
     return w
   }
 
-  it('opens the lightbox on the first selected medium in grid order, the selection and the editor with it', async () => {
+  it('opens the lightbox over the selected media alone, in grid order, with their grid numbers and the editor open', async () => {
     const w = await threeOwn()
-    expect(shiftButton(w).text()).toBe(t('memory.buckets.shiftCapturedAt'))
-    expect(shiftButton(w).attributes('disabled'), 'nothing selected').toBeDefined()
+    expect(w.find('.bucket-selection-bar .bucket-shift-button').exists(), 'no button of its own: an entry of the ⋯').toBe(false)
+    expect(moreButton(w).attributes('aria-label')).toBe(t('memory.buckets.selectionMore'))
+    expect(moreButton(w).attributes('disabled'), 'nothing selected').toBeDefined()
     await check(w, 'm3').trigger('change')
-    expect(shiftButton(w).attributes('disabled'), 'one selected: there is nothing to shift with it').toBeDefined()
+    expect(moreButton(w).attributes('disabled'), 'control: something selected').toBeUndefined()
+    expect(shiftEntry(w).attributes('disabled'), 'one selected: there is nothing to shift with it').toBeDefined()
     await check(w, 'm2').trigger('change')
-    expect(shiftButton(w).attributes('disabled'), 'control: two selected').toBeUndefined()
-    await shiftButton(w).trigger('click')
-    const [payload] = w.emitted('openLightbox')!.at(-1) as [{ items: MediaItem[]; index: number; selected: string[]; editCapturedAt?: boolean }]
-    expect(payload.items.map((m) => m.mediaId)).toEqual(['m1', 'm2', 'm3'])
-    expect(payload.index, 'm2: the first selected in grid order, not the first clicked').toBe(1)
+    expect(shiftEntry(w).attributes('disabled'), 'control: two selected').toBeUndefined()
+    await shiftEntry(w).trigger('click')
+    const [payload] = w.emitted('openLightbox')!.at(-1) as [
+      { items: MediaItem[]; index: number; selected: string[]; editCapturedAt?: boolean; numbers?: Record<string, number> },
+    ]
+    expect(payload.items.map((m) => m.mediaId), 'the selection alone, in grid order, not in the order clicked').toEqual(['m2', 'm3'])
+    expect(payload.index).toBe(0)
     expect([...payload.selected].sort()).toEqual(['m2', 'm3'])
+    expect(payload.numbers, 'each keeps its number in the grid').toEqual({ m2: 2, m3: 3 })
     expect(payload.editCapturedAt).toBe(true)
   })
 
@@ -402,14 +415,14 @@ describe('MemoryBuckets — a selection\'s capture-time shift', () => {
     for (const [why, view] of Object.entries(views)) {
       const w = await threeOwn({ [MEMORY_VIEW as symbol]: view })
       await w.find('.bucket-selection-bar .veyq-text-button').trigger('click') // "Select all"
-      expect(shiftButton(w).attributes('disabled'), why).toBeDefined()
-      await shiftButton(w).trigger('click')
-      expect(w.emitted('openLightbox'), why).toBeUndefined()
+      expect(moreButton(w).exists(), why).toBe(false)
+      expect(w.findAll('.bucket-selection-bar .menu-entry').some((b) => b.text() === t('memory.buckets.shiftCapturedAt') && b.attributes('disabled') === undefined), why).toBe(false)
       w.unmount()
     }
     const control = await threeOwn()
     await control.find('.bucket-selection-bar .veyq-text-button').trigger('click')
-    expect(shiftButton(control).attributes('disabled'), 'control: a member').toBeUndefined()
+    expect(moreButton(control).exists(), 'control: a member').toBe(true)
+    expect(shiftEntry(control).attributes('disabled'), 'control: a member').toBeUndefined()
   })
 })
 

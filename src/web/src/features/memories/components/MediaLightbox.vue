@@ -415,8 +415,10 @@ function startCapturedAtEdit() {
   shiftOffer.value = null
   isEditingCapturedAt.value = true
 }
-// The organizer's "Shift capture time" opens on a selected medium with the editor already open.
+// The organizer's "Shift capture time" opens over its selection with the editor open, and keeps it open on every medium
+// paged to (`loadDetails` above closes it first): the member pages to the medium whose right time they know.
 if (props.startEditing && canEditCapturedAt.value) startCapturedAtEdit()
+watch(() => item.value?.mediaId, () => { if (props.startEditing && canEditCapturedAt.value) startCapturedAtEdit() })
 
 /** A write landed (or a conflict handed back the current tier): show it, and let the grid patch its item — the
  *  item's `wrappedMeta` + `metaRevision` are the base of the next write from here. */
@@ -473,7 +475,7 @@ function saveCapturedAt() {
   const selection = shiftSelection.value
   // Read once, here: the plan's times and each write's base are the same reading of every medium (a live poll patches the
   // listed items in place, so the run must not read them again).
-  const read = selection?.map((m) => ({ item: { ...m }, position: props.items.indexOf(m) + 1 })) ?? []
+  const read = selection?.map((m) => ({ item: { ...m }, position: props.captureTimeShift?.numbers?.[m.mediaId] ?? props.items.indexOf(m) + 1 })) ?? []
   const plan = selection
     ? planCaptureTimeShift({ before: captured.value, afterMs }, read.map(({ item }) => ({ mediaId: item.mediaId, meta: metaOf(item) })))
     : null

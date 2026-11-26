@@ -1986,4 +1986,62 @@ describe('MediaLightbox — a selection\'s capture-time shift', () => {
     expect(w.find('[data-testid="capture-time-shift-offer"]').exists()).toBe(false)
     expect(store.api.updateMediaMeta.mock.calls.map(([a]) => a.mediaId)).toEqual([items[2].mediaId])
   })
+  /**
+   * Opened from the organizer's ⋯ over the selection alone: the editor stays open on every photo paged to, so the member
+   * shifts through the one whose right time they know; a refused photo is named by its number in the organizer's grid,
+   * not its place in the lightbox. Levers: close the editor on paging again, or name by the lightbox's list.
+   */
+  it('over the selection alone the editor stays open while paging, and a refusal names the grid\'s number', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { store, items } = await seedThree(memoryKey, [T1, T2, T3])
+    const [, m2, m3] = items
+    const PEER = Date.UTC(2023, 0, 1, 9, 0, 0)
+    const peers = b64std(v1.sealField(
+      { purpose: 'media-meta', scopeId: SCOPE_ID, mediaId: m2.mediaId }, memoryKey,
+      new TextEncoder().encode(JSON.stringify({ v: 1, capturedAt: T2, capturedAtOverride: PEER })),
+    ))
+    const write = store.api.updateMediaMeta.getMockImplementation()!
+    let peerFirst = true
+    store.api.updateMediaMeta.mockImplementation(async (args) => {
+      if (args.mediaId === m2.mediaId && peerFirst) {
+        peerFirst = false
+        throw { response: new Response(JSON.stringify({ code: 'stale_revision', wrappedMeta: peers, metaRevision: 1 }), { status: 409 }) }
+      }
+      return write(args)
+    })
+    const selection = [m2, m3]
+    // As `mountShift`, with the organizer's grid numbers on the shift.
+    const Host = defineComponent({
+      setup() {
+        const props = memberProps(memoryKey)
+        const { run } = useCaptureTimeShift({
+          door: () => props.mediaMeta, scopeId: () => SCOPE_ID, memoryKey: () => memoryKey, node: () => props.memoryNode,
+          metaOf: props.metaResolver, onUpdated: () => {},
+        })
+        return () => h(MediaLightbox, {
+          memoryKey, items: selection, startIndex: 0, memoryName: 'Rom 2026', ...props, startEditing: true,
+          captureTimeShift: { selected: new Set(selection.map((m) => m.mediaId)), run, numbers: { [m2.mediaId]: 5, [m3.mediaId]: 7 } },
+        })
+      },
+    })
+    const box = mount(Host, { global: { plugins: [realI18n()] } })
+    await flushPromises()
+    expect(box.find('#captured-at-input').exists(), 'open on the first').toBe(true)
+    await box.find('.lightbox-nav-next').trigger('click')
+    await flushPromises()
+    expect(box.find('#captured-at-input').exists(), 'still open on the photo paged to').toBe(true)
+    expect(new Date(box.findComponent(VeyqDateField).props('modelValue') as string).getTime(), 'with that photo\'s time')
+      .toBe(Math.floor(T3 / MIN) * MIN)
+    box.findComponent(VeyqDateField).vm.$emit('update:modelValue', local(Math.floor(T3 / MIN) * MIN + 30 * MIN))
+    await flushPromises()
+    await box.find('.media-lightbox-date-form').trigger('submit')
+    await flushPromises()
+    await box.find('[data-testid="capture-time-shift-all"]').trigger('click')
+    await flushPromises()
+    expect(storedOverride(store, memoryKey, m3), 'the photo shifted through').toBe(T3 + 30 * MIN)
+    expect(toastError.mock.calls.map(([line]) => line)).toEqual([
+      t('memory.buckets.shiftRefused', { names: t('memory.buckets.unnamedMedia', { n: 5 }), reason: t('memory.buckets.deleteRefusedReason.changed') }),
+    ])
+    box.unmount()
+  })
 })

@@ -45,7 +45,7 @@ const emit = defineEmits<{
   changed: [] // a bucket/media mutation landed — the parent should reload media (ownerKey/bucketId change)
   /** Open the lightbox on `items` at `index`, with the selection (a capture-time shift reaches it) and, from "Shift
    *  capture time", the capture-time editor open. */
-  openLightbox: [{ items: MediaItem[]; index: number; selected: string[]; editCapturedAt?: boolean }]
+  openLightbox: [{ items: MediaItem[]; index: number; selected: string[]; editCapturedAt?: boolean; numbers?: Record<string, number> }]
   uploadBucket: [string | null] // open the upload scoped to this bucket (null = your primary)
   /** The tiles its grid mounts, nearest first: the parent gallery reads their thumbnails (ADR 0105 decision 2). */
   window: [ids: string[]]
@@ -87,6 +87,7 @@ const selected = ref<Set<string>>(new Set())
 
 // The per-tile 3-dot is the only ellipsis menu left — the bucket + selection menus are now explicit buttons (cr-0122).
 const mediaMenu = ref<InstanceType<typeof VeyqMenu> | null>(null)
+const selectionMenu = ref<InstanceType<typeof VeyqMenu> | null>(null)
 const menuMediaId = ref<string | null>(null)
 
 const bucketDialog = ref<{ open: boolean; mode: 'create' | 'rename'; name: string; saving: boolean; error: string }>(
@@ -337,6 +338,11 @@ const mediaMenuItems = computed<VeyqMenuItem[]>(() => [
   { label: t('memory.buckets.deleteMediaAction'), icon: 'trash', command: () => { if (menuMediaId.value) { selected.value = new Set([menuMediaId.value]); void deleteSelected() } } },
 ])
 
+/** The selection bar's ⋯: what a selection may do beyond moving and deleting it. */
+const selectionMenuItems = computed<VeyqMenuItem[]>(() => [
+  { label: t('memory.buckets.shiftCapturedAt'), icon: 'clock', disabled: selected.value.size < 2 || !canEditCapturedAt.value, command: shiftSelected },
+])
+
 function openMove() {
   if (!selected.value.size || !moveTargets.value.length) return
   moveDialog.value = { open: true, target: moveTargets.value[0].id, saving: false, error: '' }
@@ -420,11 +426,19 @@ function onDrop(event: DragEvent) {
 }
 
 function openTile(index: number) { emit('openLightbox', { items: filteredMedia.value, index, selected: [...selected.value] }) }
-/** "Shift capture time": the lightbox on the first selected medium in grid order, its capture-time editor open. */
+/** "Shift capture time": the lightbox over the selected media alone, in grid order, its capture-time editor open on each
+ *  one paged to — the member pages to the medium whose right time they know. Each keeps its grid number, the name of a
+ *  medium with no sealed file name. */
 function shiftSelected() {
-  const index = filteredMedia.value.findIndex((m) => selected.value.has(m.mediaId))
-  if (index < 0 || selected.value.size < 2 || !canEditCapturedAt.value) return
-  emit('openLightbox', { items: filteredMedia.value, index, selected: [...selected.value], editCapturedAt: true })
+  const chosen = filteredMedia.value.flatMap((m, i) => (selected.value.has(m.mediaId) ? [{ m, n: i + 1 }] : []))
+  if (chosen.length < 2 || !canEditCapturedAt.value) return
+  emit('openLightbox', {
+    items: chosen.map((c) => c.m),
+    index: 0,
+    selected: chosen.map((c) => c.m.mediaId),
+    editCapturedAt: true,
+    numbers: Object.fromEntries(chosen.map((c) => [c.m.mediaId, c.n])),
+  })
 }
 </script>
 
@@ -494,18 +508,22 @@ function shiftSelected() {
           <button type="button" class="bucket-action-button" :disabled="!selected.size || !moveTargets.length" :title="t('memory.buckets.moveTitle')" @click="openMove">
             <VeyqIcon name="arrow-right-arrow-left" /><span class="bucket-action-label">{{ t('memory.buckets.move') }}</span>
           </button>
-          <button
-            type="button"
-            class="bucket-action-button bucket-shift-button"
-            :disabled="selected.size < 2 || !canEditCapturedAt"
-            :title="t('memory.buckets.shiftTitle')"
-            @click="shiftSelected"
-          >
-            <VeyqIcon name="clock" /><span class="bucket-action-label">{{ t('memory.buckets.shiftCapturedAt') }}</span>
-          </button>
           <button type="button" class="bucket-action-button bucket-action-danger" :disabled="!selected.size" :title="t('memory.buckets.deleteMediaAction')" @click="deleteSelected">
             <VeyqIcon name="trash" /><span class="bucket-action-label">{{ t('memory.buckets.delete') }}</span>
           </button>
+          <!-- The selection's further actions; move and delete stay buttons, as the level's selection bar has them. -->
+          <button
+            v-if="canEditCapturedAt"
+            type="button"
+            class="bucket-action-button bucket-more-button"
+            :disabled="!selected.size"
+            :aria-label="t('memory.buckets.selectionMore')"
+            :title="t('memory.buckets.selectionMore')"
+            @click="selectionMenu?.toggle($event)"
+          >
+            <VeyqIcon name="ellipsis-h" />
+          </button>
+          <VeyqMenu ref="selectionMenu" :items="selectionMenuItems" />
         </div>
       </div>
 

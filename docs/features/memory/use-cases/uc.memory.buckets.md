@@ -55,8 +55,9 @@ photo it took. So a selection is corrected through **one** of its media, and the
 (owner 2026-11-25):
 
 1. In the Beiträge tab the member selects the media, then opens **any one of them** in the lightbox and corrects its
-   capture time in the existing editor (or uses **"Shift capture time"** in the selection bar — from two selected on —
-   which opens the lightbox on the first selected medium in the grid's order with the editor already open).
+   capture time in the existing editor (or uses **"Shift capture time"** in the selection bar's ⋯ — from two selected
+   on — which opens the lightbox over the selected media alone, in the grid's order, the editor open on each one paged
+   to, so the member pages to the medium whose right time they know; owner 2026-11-26).
 2. While that medium is part of a selection of two or more, the save offers two choices: **only this one**, or **all
    N selected, shifted by the same offset** — the offset written out (*"+1 h 12 min"*), and how many of them have no
    capture time and stay as they are.

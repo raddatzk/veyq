@@ -50,6 +50,8 @@ export interface ShiftRead {
 /** What a lightbox opened from a selection is handed: the selection's media ids, and the run of a shift it planned. */
 export interface CaptureTimeShift {
   selected: ReadonlySet<string>
+  /** Each medium's number in the grid the selection was made in, where the lightbox lists only the selection. */
+  numbers?: Readonly<Record<string, number>>
   run(plan: ShiftPlan, read: readonly ShiftRead[], onProgress?: (done: number, total: number) => void): Promise<void>
 }
 
