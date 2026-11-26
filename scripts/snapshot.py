@@ -320,7 +320,7 @@ SNAPSHOT_TAG = re.compile(r"^snapshot-([0-9]+\.[0-9]+)$")
 def unreleased_snapshot(published: str) -> str:
     """The version of the one `snapshot-` tag among a published commit's tags, while no `v` tag says it was released —
     the snapshot whose release draft a run that publishes nothing still refreshes (a note corrected in its pull request
-    after the snapshot; cr-release-draft-from-publish phase 5). Empty for a released commit, and for anything not exactly one tag."""
+    after the snapshot; ADR 0091 decision 5, refined 2026-11-23). Empty for a released commit, and for anything not exactly one tag."""
     tags = published.split()
     if any(RELEASE_TAG.match(t) for t in tags):
         return ""

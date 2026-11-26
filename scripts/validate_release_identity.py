@@ -444,7 +444,7 @@ DRAFT_WRITE = re.compile(r'^\s*gh api --method (?:POST "repos/\$\{GITHUB_REPOSIT
 DRAFT_GUARD = re.compile(r'if \[\[ "\$\(jq -r \.draft "\$payload"\)" != "true" \]\]; then\s*\n[^\n]*\n\s*exit 1')
 # The draft job's whole gate, pinned: on `main`, for a version `checks-run` named, and only once the snapshot's tag
 # exists — after a green `snapshot-tag`, or because the commit already carried its snapshot (`kind == 'none'`, the one
-# case `snapshot-tag` is skipped with the tag there; a dispatch refreshes the draft then, cr-release-draft-from-publish phase 5).
+# case `snapshot-tag` is skipped with the tag there; a dispatch refreshes the draft then, ADR 0091 decision 5, refined 2026-11-23).
 # Assertion 16 accepts this disjunction for `snapshot-tag` here and nowhere else; release_notes.py refuses unless
 # `snapshot-<version>` names the commit.
 DRAFT_IF = ("!cancelled() && github.ref_name == 'main' && needs.checks-run.outputs.draft_version != '' && "

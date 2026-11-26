@@ -387,7 +387,7 @@ jobs:
   # and it never publishes (`draft: true` is the payload's, checked before the write). It runs no third-party code:
   # the script is the standard library and `gh`.
   # Also on a run that publishes nothing because the commit already carries its unreleased snapshot: a dispatch then
-  # refreshes the draft after a note was corrected in its pull request (cr-release-draft-from-publish phase 5). Either way the tag
+  # refreshes the draft after a note was corrected in its pull request (ADR 0091 decision 5, refined 2026-11-23). Either way the tag
   # must exist first — after a green `snapshot-tag`, or because `kind` is `none` — and the script refuses unless
   # `snapshot-<version>` names the commit.
   release-draft:
