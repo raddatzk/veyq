@@ -72,7 +72,7 @@ watch(place, () => (error.value = ''))
 const size = computed(() => formatBytes(prepared.value?.bytes ?? 0, locale.value))
 const canCopy = computed(() => (prepared.value?.nodes ?? 0) > 0)
 const running = computed(() => step.value === 'running')
-/** Why a node stays behind: the apps' notices' words (ADR 0136 § The web's words). */
+/** Why a node stays behind: the apps' notices' words (ADR 0161 § The web's words). */
 const LEFT_OUT_TEXT: Record<CopyLeftOut['reason'], string> = {
   unsupported_kind: 'words.left_out_unsupported',
   nothing_to_export: 'words.left_out_nothing',

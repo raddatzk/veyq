@@ -32,7 +32,7 @@ import { coverRights } from './rights'
 import { COVER_ROLE, normalizeCoverCrop, uploadedCover, type CoverCrop, type CoverSaveIntent, type LoadedCover } from './coverModel'
 import { useCovers } from './coverStore'
 import { COVER_UNREADABLE, CoverStaleError, DERIVED_META, uploadCoverImage, writeNodeCover } from './coverWrite'
-import { coverFileProblem } from './pickImage'
+import { coverFileProblem, coverMediaType } from './pickImage'
 
 type Translate = (key: string, params?: Record<string, unknown>) => string
 
@@ -174,7 +174,7 @@ export function useNodeCover(access: () => Access, tree: () => TreeSource, nodes
                 ? null
                 : await uploadCoverImage(
                   scopeId, node.id, at.key,
-                  { blob: file, mediaType: file.type, lastModified: file.lastModified, name: file.name },
+                  { blob: file, mediaType: coverMediaType(file), lastModified: file.lastModified, name: file.name },
                   undefined, { strict: true, onProgress, signal },
                 )
               // The freshest meta and version, read AFTER the upload: it may have taken a while, and a stale base only costs a

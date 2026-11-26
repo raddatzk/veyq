@@ -35,7 +35,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The way in both apps share (ADR 0136): the start, the sign-in, the unlock, the switcher and the sign-out, over a door the test plays. */
+/** The way in both apps share (ADR 0161): the start, the sign-in, the unlock, the switcher and the sign-out, over a door the test plays. */
 class SessionModelTest {
     private data class Acc(override val key: String, override val tenants: List<TenantRef>) : Connection {
         override val label: String get() = key.substringBefore('#')
@@ -809,7 +809,7 @@ class SessionModelTest {
         assertEquals(Gate.Signed(a.key, "ta"), m.current)
     }
 
-    /** ADR 0136's Consequences: the screen closed while the grant is spent (Back, the sheet's close) — the account still opens. */
+    /** ADR 0161's Consequences: the screen closed while the grant is spent (Back, the sheet's close) — the account still opens. */
     @Test
     fun a_link_closed_while_it_finishes_still_says_the_account_it_signed_in() = runTest {
         val d = door().apply { linkHeld = kotlinx.coroutines.CompletableDeferred() }

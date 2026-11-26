@@ -2,7 +2,7 @@ package me.raddatz.veyq.mobile.expenses
 
 /**
  * The currencies a Pot or an entry may be kept in and their minor-unit digits (the euro 2, the yen 0, the dinar 3) — one
- * table for every client (ADR 0136; the web's too, through `@veyq/core-js/expenses`, ADR 0155): a platform's own table
+ * table for every client (ADR 0161; the web's too, through `@veyq/core-js/expenses`, ADR 0155): a platform's own table
  * differs where ISO 4217 and CLDR do (Android's `java.util.Currency` gives the Iraqi dinar 3 digits, `Intl` 0), and a
  * browser's moves with its ICU, so no client asks its own. The digits a Pot or an entry was written with are sealed in it:
  * a later table never moves a stored amount.

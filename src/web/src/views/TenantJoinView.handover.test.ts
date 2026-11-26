@@ -43,6 +43,7 @@ import { InviteRole } from '../api/generated/tenants'
 import { realI18n, t } from '../test/i18n'
 import { invitePreview } from '../test/models'
 import * as v1 from '@veyq/crypto/v1'
+import { TYPED_SECRET_KEY } from '../test/secretKey'
 
 const EMAIL = 'member@acme.example'
 const stubs = {
@@ -98,7 +99,7 @@ describe('TenantJoinView — handover (ADR 0101 decision 9)', () => {
     vaultState.unlocked = false
     const w = await mountView(true)
     await w.find('input[type="password"]').setValue('the password')
-    await w.find('input.secret-key').setValue('A3-SECRET')
+    await w.find('input.secret-key').setValue(TYPED_SECRET_KEY)
     await w.find('form').trigger('submit')
     await flushPromises()
     expect(login).toHaveBeenCalledWith(EMAIL, 'the password')

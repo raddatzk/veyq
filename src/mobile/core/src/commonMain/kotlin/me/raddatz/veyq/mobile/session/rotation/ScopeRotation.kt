@@ -20,6 +20,7 @@ import me.raddatz.veyq.mobile.api.models.ScopeRekeyRootEntry
 import me.raddatz.veyq.mobile.api.models.ScopeRekeyRootNode
 import me.raddatz.veyq.mobile.api.models.ScopeRekeyShareWrap
 import me.raddatz.veyq.mobile.api.models.ScopeRekeyStage
+import me.raddatz.veyq.mobile.api.models.ScopeRekeyInviteLabelWrap
 import me.raddatz.veyq.mobile.api.models.ScopeRekeyVerificationWrap
 import me.raddatz.veyq.mobile.crypto.Context
 import me.raddatz.veyq.mobile.crypto.JoinRecords
@@ -322,13 +323,18 @@ class ScopeRotation(
             )
             ScopeRekeyVerificationWrap(v.verifierUserId, v.subjectUserId, r.wrappedValueKey, r.replacedValueKey)
         }
+        // an open link invite's private label (ADR 0129 decision 7): its value key moved, the sealed label left as it is
+        val inviteLabels = page.inviteLabels.map { l ->
+            val r = rewrap(Context("member-invite-label", "scopeId" to scopeId, "inviteId" to l.inviteId), l.wrappedValueKey)
+            ScopeRekeyInviteLabelWrap(l.inviteId, r.wrappedValueKey, r.replacedValueKey)
+        }
         // the name and the icon ride on the first page only
         val groupName = page.groupName?.takeIf { first }?.let { rewrap(Context("group-name", "scopeId" to scopeId, "nameEpoch" to it.nameEpoch.toLong()), it.wrappedNameValueKey) }
         val icon = page.icon?.takeIf { first }?.let { rewrap(Context("space-icon", "scopeId" to scopeId, "iconEpoch" to it.iconEpoch.toLong()), it.wrappedIconValueKey) }
-        if (groupName == null && icon == null && rootNodes.isEmpty() && shares.isEmpty() && members.isEmpty() && verifications.isEmpty()) return null
+        if (groupName == null && icon == null && rootNodes.isEmpty() && shares.isEmpty() && members.isEmpty() && verifications.isEmpty() && inviteLabels.isEmpty()) return null
         return ScopeRekeyStage(
             fromEpoch = run.oldEpoch.toInt(), groupName = groupName, icon = icon, rootNodes = rootNodes, shares = shares,
-            members = members, verifications = verifications,
+            members = members, verifications = verifications, inviteLabels = inviteLabels,
         )
     }
 

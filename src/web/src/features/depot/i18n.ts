@@ -10,7 +10,7 @@ const en = {
     title: 'Depot',
     upload: 'Upload files',
     // "Upload folder…" (inbox #424): a picked directory uploaded as its tree. What is said when the tree is not sent is the
-    // apps' notices' words (`words.depot_folder_*`, ADR 0136 § The web's words).
+    // apps' notices' words (`words.depot_folder_*`, ADR 0161 § The web's words).
     uploadFolder: 'Upload folder…',
     empty: 'No files yet — choose New to upload the first one.',
     // Where nothing can be uploaded (a pending deletion): no pointer to the "New" menu, which is not there.

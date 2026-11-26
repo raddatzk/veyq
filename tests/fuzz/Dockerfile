@@ -7,7 +7,7 @@
 # TraceCov is ever imported.
 #
 # CPython 3.13: Schemathesis needs 3.11 or newer, which the host scripts (3.9) are not — hence an image at all.
-FROM python:3.13-slim@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f AS runtime-fuzz
+FROM python:3.13-slim@sha256:7249d5587b78209a006dc4a3b5340678f84ea729239193aa559962cd8c1fce50 AS runtime-fuzz
 
 COPY requirements.txt /tmp/requirements.txt
 RUN python -m pip install --no-cache-dir --disable-pip-version-check --require-hashes --only-binary :all: \

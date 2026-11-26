@@ -25,7 +25,7 @@ the code*, changes/README.md):
      an EARLIER step — CI's own check of the same JAR against Gradle's published list, before anything executes
      it. (It was `setup-gradle`'s `validate-wrappers` input until cr-workflow-actions-pinned-by-commit dropped
      that action for `setup-java`'s `cache: gradle`: its live major caches through a proprietary component by
-     default.)
+     default. That cache is `actions/cache` with restore keys since 2026-11-22, `checks.yml`'s `backend` says why.)
   6. **The WebP encoder is the pinned build** (ADR 0127). `src/web/webp-encoder/libwebp.pin` names a stable
      `vX.Y.Z` libwebp tag, its 40-hex commit, and an `image` that is exactly the `FROM` of the `Dockerfile` beside it;
      each of its `sha256` lines hashes the committed file it names; and every tracked file under its `wasm/` but the

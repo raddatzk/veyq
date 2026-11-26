@@ -76,7 +76,9 @@
 - **Upload into a bucket.** The complete call carries no target bucket: an upload lands in its uploader's primary, and
   an upload into a sub-bucket (the Beiträge view's upload or a drop onto it) is filed there by a move once each medium is
   in — only within the caller's own root ([ADR 0034](../../../decisions/0034-media-uploader-buckets.md) point 7).
-- **Not built:** a camera/source filter and a capture-time-shift tool.
+- **A selection's capture-time shift** is a client-only flow over the existing per-medium meta write — no bucket
+  endpoint, no bulk write ([uc.memory.buckets](../use-cases/uc.memory.buckets.md) § Correct a selection's capture time).
+- **Not built:** a camera/source filter.
 
 ## Ownership & operator-blindness
 
@@ -84,7 +86,8 @@
   **move media** are gated to **scope membership** only — **any member** may curate **any owner-root's**
   sub-buckets (its own *or* a contributor's), but **never a primary** (primaries are neither created, renamed,
   nor deleted through these ops) and **never across owners** (a move stays within one owner-root). **Delete
-  media** and **edit capture time** stay **any key-holder** (unchanged from the media data layer). The server
+  media** stays **any key-holder** (unchanged from the media data layer); **edit capture time** is a member's with a
+  write grant (`updateMediaMeta` checks `WRITE`; no guest route writes a medium's metadata). The server
   enforces on membership + the opaque `owner_key`'s structural role, never on content. *(The gate is membership, not
   the owner — so a curator can tidy a contributor's uploads; a reader must not infer the stronger
   `owner_key == caller` guarantee, which the code does not give — [ADR 0034](../../../decisions/0034-media-uploader-buckets.md) point 6.)*

@@ -349,7 +349,7 @@ export function depotRows(ctx: Readonly<Ref<LevelRowsContext>>, host: LevelRowsH
       const other = sibling(name)
       if (other && other.kind !== FILE_KIND) return takenBy(name, other)
     }
-    // a peer's replace is said in the apps' notices' words (ADR 0136 § The web's words)
+    // a peer's replace is said in the apps' notices' words (ADR 0161 § The web's words)
     if (code === FileUploadError.staleFile) return t('words.depot_error_stale_file', [name])
     return t(`depot.errors.${code}`, { name })
   }

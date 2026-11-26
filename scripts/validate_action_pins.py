@@ -21,7 +21,9 @@ the SHA pins at all, and two things were already wrong under them. `setup-gradle
 a major-only comment (`# v4`), which Dependabot rewrites only when the comment ENDS with a tag still sitting on
 the old SHA (dependabot-core `version_commenter.rb` `previous_version_from_comment`): a floating major moves off
 at the next release, so the bump would move the SHA to v7 and leave `# v4` standing — a comment that lies. A
-guard checking only the 40-hex shape was green on that tree.
+guard checking only the 40-hex shape was green on that tree. Renovate, which replaces Dependabot here (ADR 0158),
+reads the comment as the pin's current version and writes `<sha> # <new version>` back (its dry run on 2026-11-23:
+`currentValue` `v7.0.1` from `actions/checkout@3d3c42e… # v7.0.1`), so the full version is what it looks up from.
 
 **Its limits — what a green run does NOT prove.** It reads files and contacts nothing, so it cannot tell a commit
 SHA from a tag-object SHA (the very defect above), nor that the comment names the version the SHA resolves to,
@@ -136,8 +138,9 @@ def main() -> int:
             comment = FULL_VERSION_COMMENT.match(m.group("rest"))
             if not comment:
                 fail(f"{where}: `{value}` carries no `# v<major>.<minor>.<patch>` comment (has `{m.group('rest').strip()}`)"
-                     f" — Dependabot rewrites only a comment that ends with a tag still on the old SHA, so a "
-                     f"major-only one goes stale at the first bump")
+                     f" — the updater reads the comment as the pin's version (Renovate takes it as the current "
+                     f"version and writes the new one back the same way), so a major-only one turns a bump into a "
+                     f"lookup of a floating major, and goes stale at the first move")
                 continue
             pins[remote.group("repo")].add(f"{remote.group('sha')} # {comment.group('version')}")
             sites[remote.group("repo")].append(where)

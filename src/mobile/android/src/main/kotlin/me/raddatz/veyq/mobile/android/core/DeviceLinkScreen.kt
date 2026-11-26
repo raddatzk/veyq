@@ -302,7 +302,7 @@ private fun Confirming(link: DeviceLink, shown: DeviceLink.Shown, onClose: () ->
 }
 
 /**
- * The slide that confirms (ADR 0059 §7, ADR 0136's Consequences): Material's [Slider] that confirms only at its end and springs back
+ * The slide that confirms (ADR 0059 §7, ADR 0161's Consequences): Material's [Slider] that confirms only at its end and springs back
  * otherwise — a deliberate gesture, not a tap. Keyboard: the arrow keys move it, Return at the end confirms (a key that
  * moves it never confirms by itself). A screen reader hears [sentence] and confirms through the custom action of that
  * name. [onConfirm] answers whether the link moved on; one that did not (a blank name) springs back.

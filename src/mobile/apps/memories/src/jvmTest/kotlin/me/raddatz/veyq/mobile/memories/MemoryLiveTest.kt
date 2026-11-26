@@ -33,7 +33,7 @@ class MemoryLiveTest {
     fun takeOffTheDevices() = liveRun.removeAll()
 
     /**
-     * The same Memory through the screen models both phones draw (`GalleryModel`, `Lightbox`; ADR 0136's Consequences):
+     * The same Memory through the screen models both phones draw (`GalleryModel`, `Lightbox`; ADR 0161's Consequences):
      * `VEYQ_LIVE_MEMORY=<memory name>` opens its gallery over a shell, reads every tile and picture the rows name, every
      * medium's details (the uploaders asked once), a video's original through the lightbox's reader across a frame's edge,
      * and one original saved to a temporary file whose SHA-256 is the original's read whole; the reader closes when the

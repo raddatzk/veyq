@@ -50,7 +50,7 @@ import { breadcrumb } from '../../app/breadcrumb'
 import { ScopeKind } from '../../api/generated/scopes'
 import { registry } from '../applications/registry'
 import { FOLDER_KIND } from '../node/kind'
-import { hashForNode, parseHash, TENANT_SCOPE } from '../node/location'
+import { hashForNode, parseHash, PERSONAL_SCOPE, TENANT_SCOPE } from '../node/location'
 import { loadTenantPeople, profileHash, tenantPeopleNow } from '../people/directory'
 import PersonAvatar from '../people/PersonAvatar.vue'
 import { useSettingsSections } from '../../features/settings/sections'
@@ -336,7 +336,7 @@ function choose(option: ResultOption) {
 function tokenOf(scopeId: string): string {
   if (scopeId === activeSpace.scopeId && route.name === 'home') return parseHash(route.hash).scope
   const scope = indexedScope(scopeId)
-  if (scope?.kind === ScopeKind.Personal) return '~me'
+  if (scope?.kind === ScopeKind.Personal) return PERSONAL_SCOPE
   if (scope?.kind === ScopeKind.Group) return `@${scopeId}`
   return TENANT_SCOPE
 }

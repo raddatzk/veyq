@@ -11,6 +11,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import SecretKeyField from '../../../shared/ui/SecretKeyField.vue'
+import { secretKeyReady } from '../../../shared/ui/secretKeyEntry'
 import VeyqPassword from '../../../shared/ui/VeyqPassword.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
 import { changePassword, ChangePasswordRefused } from './changePassword'
@@ -49,7 +50,7 @@ const canSubmit = computed(
   () =>
     currentPassword.value.length > 0 &&
     newPassword.value.length >= MIN_PASSWORD_LENGTH &&
-    secretKey.value.trim().length > 0,
+    secretKeyReady(secretKey.value),
 )
 
 const { run, pending: busy } = useAsyncAction(

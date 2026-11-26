@@ -6,7 +6,10 @@
 // MediaGrid filtered to the active bucket with a per-tile checkbox (top-left) + 3-dot (top-right), and a selection
 // bar with a select-all toggle + visible Move/Delete. Delete is a straight soft-delete to trash with a local undo
 // bar (no confirm modal), and names every medium the server refused to trash (inbox #427) or, on Undo, to restore
-// (#429). The caller's own primary — `user:<self>`, the door's `self()`, never another member's (inbox #1003) — is VIRTUAL
+// (#429). The selection also reaches the lightbox (`openLightbox`'s `selected`): there a correction of one selected
+// medium's capture time may shift every other one by the same offset, and "Shift capture time" opens it on the first
+// selected medium with the editor open (uc.memory.buckets § Correct a selection's capture time); the detail runs it.
+// The caller's own primary — `user:<self>`, the door's `self()`, never another member's (inbox #1003) — is VIRTUAL
 // ("You") until the first sub-bucket or upload materializes it (the server's lazy ensurePrimaryBucket). A member curates
 // every root, their own, another member's or a guest's (ADR 0034 point 6, the server's gate is membership), and is offered
 // only what the server takes: a sub-bucket under a primary, a sub-bucket renamed or deleted, a move within one root. Names are sealed under K_node — the client unseals; the server never sees one.
@@ -18,6 +21,7 @@ import VeyqMenu from '../../../shared/ui/VeyqMenu.vue'
 import type { VeyqMenuItem } from '../../../shared/ui/menu'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
+import VeyqTooltip from '../../../shared/ui/VeyqTooltip.vue'
 import MediaGrid from './MediaGrid.vue'
 import MediaTile from './MediaTile.vue'
 import { galleryDisplayAspectRatio } from '../mediaGridLayout'
@@ -44,7 +48,9 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   changed: [] // a bucket/media mutation landed — the parent should reload media (ownerKey/bucketId change)
-  openLightbox: [{ items: MediaItem[]; index: number }]
+  /** Open the lightbox on `items` at `index`, with the selection (a capture-time shift reaches it) and, from "Shift
+   *  capture time", the capture-time editor open. */
+  openLightbox: [{ items: MediaItem[]; index: number; selected: string[]; editCapturedAt?: boolean; numbers?: Record<string, number> }]
   uploadBucket: [string | null] // open the picker for this bucket of the caller's own root (null = your primary)
   /** Photos and videos dropped onto a bucket of the caller's own root, to upload into it (null = your primary, inbox #1065). */
   dropFiles: [files: File[], bucketId: string | null]
@@ -58,11 +64,15 @@ const toast = useToast()
 // its buckets door — the scope's buckets and its members' display names, the tree's ancestor keys. A member's only; the
 // detail mounts this where the rights AND the source say so, and outside a detail, or on a source without the door, it
 // throws rather than reach for the member's API itself.
+const view = useMemoryView()
 const buckets = (() => {
-  const door = useMemoryView().source.buckets
+  const door = view.source.buckets
   if (!door) throw new Error('MemoryBuckets mounted without a buckets door')
   return door
 })()
+// A capture time is a medium's meta: corrected where the rights allow editing it and the source carries the door, as the
+// lightbox's editor is offered.
+const canEditCapturedAt = computed(() => view.rights.value.editMeta && !!view.source.mediaMeta)
 const SELF_PRIMARY = '__veyq_self_primary__'
 /** The owner key of the caller's own root (core's `Buckets.ownKey`). */
 const mine = computed(() => `user:${buckets.self()}`)
@@ -80,7 +90,7 @@ type BucketVM = {
 }
 type BucketRow = BucketVM & { depth: number }
 
-const rawBuckets = ref<BucketVM[]>([])
+const rawBuckets = ref<Omit<BucketVM, 'mediaCount'>[]>([]) // the count is the live one (`liveCounts` below)
 const status = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
 const activeBucketId = ref('')
 const selected = ref<Set<string>>(new Set())
@@ -124,9 +134,16 @@ function labelFor(b: BucketItem, key: Uint8Array | null, members: Map<string, st
   return members.get(b.ownerKey.slice('user:'.length)) ?? t('memory.buckets.member')
 }
 
-async function loadBuckets() {
+// The buckets a medium named while the list lacked them, each re-read for once (`liveCounts`' watch below).
+const listRequestedFor = new Set<string>()
+// The buckets that held a live medium while this tab was open. Only such a bucket's 0 means its media were deleted here
+// or elsewhere; a 0 before the gallery's pages have arrived means nothing yet.
+const heldMedia = new Set<string>()
+
+/** Read the bucket list. `quiet`: a re-read in the background keeps the grid on screen instead of the spinner. */
+async function loadBuckets(quiet = false) {
   const key = props.memoryKey
-  status.value = 'loading'
+  if (!quiet) status.value = 'loading'
   try {
     const [raw, people] = await Promise.all([
       buckets.list(props.nodeId),
@@ -141,7 +158,6 @@ async function loadBuckets() {
       parentBucketId: b.parentBucketId ?? null,
       isPrimary: b.isPrimary,
       displayName: labelFor(b, key, names, above),
-      mediaCount: b.mediaCount,
       virtual: false,
     }))
     status.value = 'ready'
@@ -150,15 +166,46 @@ async function loadBuckets() {
   }
 }
 
-watch(() => [props.nodeId, props.memoryKey] as const, () => { selected.value = new Set(); void loadBuckets() }, { immediate: true })
+watch(() => [props.nodeId, props.memoryKey] as const, () => { selected.value = new Set(); listRequestedFor.clear(); heldMedia.clear(); void loadBuckets() }, { immediate: true })
 
 // --- the virtual own-primary + the flattened hierarchy ----------------------
 
 // media that are yours and not yet in a materialized bucket → shown under the virtual primary before it exists.
 const virtualPrimaryCount = computed(() => props.media.filter(unbucketedOwn).length)
 
+// A bucket's count is read from the media the grid shows (the gallery's live list, every page), never the server's
+// `mediaCount` as the bucket list was read: that list is read on opening and on the organizer's own writes only, so
+// an upload, a move or a delete elsewhere left the picker at the count it opened with while the grid grew under it.
+const liveCounts = computed(() => {
+  const counts = new Map<string, number>()
+  for (const m of props.media) if (m.bucketId) counts.set(m.bucketId, (counts.get(m.bucketId) ?? 0) + 1)
+  return counts
+})
+
+// A medium in a bucket the list does not hold (the first upload materialized your primary, or someone made a
+// sub-bucket meanwhile): the list is read again, once per such bucket, so the medium has a bucket to show under.
+watch(liveCounts, (counts) => {
+  if (status.value !== 'ready') return
+  const known = new Set(rawBuckets.value.map((b) => b.id))
+  const unknown = [...counts.keys()].filter((id) => !known.has(id) && !listRequestedFor.has(id))
+  if (!unknown.length) return
+  for (const id of unknown) listRequestedFor.add(id)
+  void loadBuckets(true)
+})
+
+watch(liveCounts, (counts) => { for (const [id, n] of counts) if (n > 0) heldMedia.add(id) }, { immediate: true })
+
+/** Another uploader whose every medium was deleted is no contributor any more and leaves the picker, as the server leaves
+ *  them out of the list (`MediaStore.listBuckets`): a primary not your own, emptied while on screen, with no sub-bucket a
+ *  member curates under it. A restore brings the medium back and the uploader with it. */
+function leftTheList(b: BucketVM, parents: ReadonlySet<string | null>): boolean {
+  return b.isPrimary && b.mediaCount === 0 && b.ownerKey !== mine.value && !parents.has(b.id) && heldMedia.has(b.id)
+}
+
 const bucketsWithSelf = computed<BucketVM[]>(() => {
-  const list = rawBuckets.value
+  const counted = rawBuckets.value.map((b) => ({ ...b, mediaCount: liveCounts.value.get(b.id) ?? 0 }))
+  const parents = new Set(counted.map((b) => b.parentBucketId))
+  const list = counted.filter((b) => !leftTheList(b, parents))
   // only the caller's OWN primary stands in for "You" — another member's materialized primary is theirs (inbox #1003)
   if (list.some((b) => b.isPrimary && b.ownerKey === mine.value)) return list
   // no materialized own primary yet → synthesize a virtual one so you can create sub-buckets / upload
@@ -433,7 +480,21 @@ function onDrop(event: DragEvent) {
   if (files.length) emit('dropFiles', files, uploadTarget(b))
 }
 
-function openTile(index: number) { emit('openLightbox', { items: filteredMedia.value, index }) }
+function openTile(index: number) { emit('openLightbox', { items: filteredMedia.value, index, selected: [...selected.value] }) }
+/** "Shift capture time": the lightbox over the selected media alone, in grid order, its capture-time editor open on each
+ *  one paged to — the member pages to the medium whose right time they know. Each keeps its grid number, the name of a
+ *  medium with no sealed file name. */
+function shiftSelected() {
+  const chosen = filteredMedia.value.flatMap((m, i) => (selected.value.has(m.mediaId) ? [{ m, n: i + 1 }] : []))
+  if (chosen.length < 2 || !canEditCapturedAt.value) return
+  emit('openLightbox', {
+    items: chosen.map((c) => c.m),
+    index: 0,
+    selected: chosen.map((c) => c.m.mediaId),
+    editCapturedAt: true,
+    numbers: Object.fromEntries(chosen.map((c) => [c.m.mediaId, c.n])),
+  })
+}
 </script>
 
 <template>
@@ -479,18 +540,26 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
             </template>
           </VeyqSelect>
           <!-- Bucket actions — shown only where they apply (was the 3-dot menu). -->
-          <button v-if="takesUpload" type="button" class="bucket-action-button" :title="t('memory.buckets.upload')" :aria-label="t('memory.buckets.upload')" @click="uploadToActive">
-            <VeyqIcon name="upload" />
-          </button>
-          <button v-if="canCreateSub" type="button" class="bucket-action-button" :title="t('memory.buckets.createBucket')" :aria-label="t('memory.buckets.createBucket')" @click="openCreate">
-            <VeyqIcon name="folder-plus" />
-          </button>
-          <button v-if="canRenameBucket" type="button" class="bucket-action-button" :title="t('memory.buckets.rename')" :aria-label="t('memory.buckets.rename')" @click="openRename">
-            <VeyqIcon name="pencil" />
-          </button>
-          <button v-if="canDeleteBucket" type="button" class="bucket-action-button bucket-action-danger" :title="t('memory.buckets.delete')" :aria-label="t('memory.buckets.delete')" @click="openDeleteBucket">
-            <VeyqIcon name="trash" />
-          </button>
+          <VeyqTooltip v-if="takesUpload" :text="t('memory.buckets.upload')">
+            <button type="button" class="bucket-action-button" :aria-label="t('memory.buckets.upload')" @click="uploadToActive">
+              <VeyqIcon name="upload" />
+            </button>
+          </VeyqTooltip>
+          <VeyqTooltip v-if="canCreateSub" :text="t('memory.buckets.createBucket')">
+            <button type="button" class="bucket-action-button" :aria-label="t('memory.buckets.createBucket')" @click="openCreate">
+              <VeyqIcon name="folder-plus" />
+            </button>
+          </VeyqTooltip>
+          <VeyqTooltip v-if="canRenameBucket" :text="t('memory.buckets.rename')">
+            <button type="button" class="bucket-action-button" :aria-label="t('memory.buckets.rename')" @click="openRename">
+              <VeyqIcon name="pencil" />
+            </button>
+          </VeyqTooltip>
+          <VeyqTooltip v-if="canDeleteBucket" :text="t('memory.buckets.delete')">
+            <button type="button" class="bucket-action-button bucket-action-danger" :aria-label="t('memory.buckets.delete')" @click="openDeleteBucket">
+              <VeyqIcon name="trash" />
+            </button>
+          </VeyqTooltip>
         </div>
 
         <!-- Media selection bar — visible actions, active only with a selection. Shown for every bucket (cr-0122). -->
@@ -499,12 +568,42 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
           <button type="button" class="veyq-text-button" @click="toggleSelectAll">
             {{ allSelected ? t('memory.buckets.deselectAll') : t('memory.buckets.selectAllVisible') }}
           </button>
-          <button type="button" class="bucket-action-button" :disabled="!selected.size || !moveTargets.length" :title="t('memory.buckets.moveTitle')" @click="openMove">
-            <VeyqIcon name="arrow-right-arrow-left" /><span class="bucket-action-label">{{ t('memory.buckets.move') }}</span>
-          </button>
-          <button type="button" class="bucket-action-button bucket-action-danger" :disabled="!selected.size" :title="t('memory.buckets.deleteMediaAction')" @click="deleteSelected">
-            <VeyqIcon name="trash" /><span class="bucket-action-label">{{ t('memory.buckets.delete') }}</span>
-          </button>
+          <!-- Every action of the selection in sight, as icons like the bucket's own above: their words the name and the
+               tooltip (owner 2026-11-26). Inactive through aria-disabled, not disabled: a disabled button hears no pointer,
+               so with nothing selected its tooltip never said what it does. Each handler refuses on its own. -->
+          <VeyqTooltip :text="t('memory.buckets.moveTitle')">
+            <button
+              type="button"
+              class="bucket-action-button bucket-move-button"
+              :aria-disabled="!selected.size || !moveTargets.length || undefined"
+              :aria-label="t('memory.buckets.moveTitle')"
+              @click="openMove"
+            >
+              <VeyqIcon name="arrow-right-arrow-left" />
+            </button>
+          </VeyqTooltip>
+          <VeyqTooltip v-if="canEditCapturedAt" :text="t('memory.buckets.shiftCapturedAt')">
+            <button
+              type="button"
+              class="bucket-action-button bucket-shift-button"
+              :aria-disabled="selected.size < 2 || undefined"
+              :aria-label="t('memory.buckets.shiftCapturedAt')"
+              @click="shiftSelected"
+            >
+              <VeyqIcon name="clock" />
+            </button>
+          </VeyqTooltip>
+          <VeyqTooltip :text="t('memory.buckets.deleteSelection')">
+            <button
+              type="button"
+              class="bucket-action-button bucket-action-danger bucket-delete-button"
+              :aria-disabled="!selected.size || undefined"
+              :aria-label="t('memory.buckets.deleteSelection')"
+              @click="deleteSelected"
+            >
+              <VeyqIcon name="trash" />
+            </button>
+          </VeyqTooltip>
         </div>
       </div>
 

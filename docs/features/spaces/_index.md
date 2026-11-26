@@ -132,7 +132,7 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   **planned** (split out of the use-case above when its ceremony was built — the worker skips unverified members;
   needs a scope-wide redesign before it is buildable at all, a per-account toggle
   can't protect shared-scope content)
-- Person / profile view — **built (web)** (`#people/<username>`, ADR 0083 — not the `~username` of
+- Person / profile view — **built (web)** (`#people/<username>`, ADR 0083 — never a `~` token of
   [ADR 0015](../../decisions/0015-operator-blind-readable-urls.md)): open a member and see the Memories **you can
   see** that tag them; client-side (never a server query), over the per-Memory **participants** tag
   ([uc.memory.participants](../memory/use-cases/uc.memory.participants.md))

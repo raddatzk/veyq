@@ -12,21 +12,23 @@
     "shots": "python3 ../scripts/site_shots.py",
     "capture": "cd .. && python3 scripts/site_capture.py"
   },
-  "//engines": "The Node the site's tree supports: astro >=22.12.0 and postcss-nested 8 (the override in pnpm-workspace.yaml) ^22.0.0 || ^24.0.0 || >=26.0.0, so an odd, non-LTS release such as 23 is outside it. CI runs Node 22, as for the root workspace.",
+  "//engines": "The Node the site's tree supports: astro >=22.12.0 and postcss-nested 8 (the override in pnpm-workspace.yaml) ^22.0.0 || ^24.0.0 || >=26.0.0, so an odd, non-LTS release such as 23 is outside it. CI runs Node 26, as for the root workspace.",
   "engines": {
     "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
   },
   "//dependencies": "sharp is declared although nothing here imports it: Astro's image service loads it at build time from the built chunks, and Astro asks for it only as an optional dependency. npm hoisted it to node_modules/sharp; pnpm links only what this package declares, and without it `astro build` fails with MissingSharp (measured 2026-11-03).",
   "dependencies": {
-    "@astrojs/starlight": "^0.42.10",
-    "astro": "^7.4.8",
+    "@astrojs/starlight": "^0.43.1",
+    "astro": "^7.4.13",
     "mermaid": "^12.3.0",
     "sharp": "^0.35.5"
   },
+  "//devDependencies": "@emnapi/runtime is declared although nothing here imports it. @astrojs/check reaches it as a peer (through @astrojs/language-server, @astrojs/astro2tsx and @napi-rs/wasm-runtime 1.2.4, whose range admits ^1 and 2.0.0 prereleases), and pnpm fills an undeclared peer with the highest version in the tree. Since astro 7.4.13 that is 2.0.0-beta.2, which a rolldown wasm binding pins, and astro2tsx's own @emnapi/core 1.11.3 cannot run against it: `astro check` fails with `this.bridge.setLastError is not a function` (measured 2026-11-23 on PR #47). Declared here, the peer resolves to 1.x. Drop it once astro2tsx moves to @emnapi/core 2.",
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
+    "@emnapi/runtime": "^1.11.3",
     "starlight-links-validator": "^0.27.0",
     "typescript": "^6.0.3"
   },
-  "packageManager": "pnpm@12.16.1"
+  "packageManager": "pnpm@12.22.0"
 }

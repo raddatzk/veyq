@@ -53,7 +53,7 @@ object FileRights {
 }
 
 /**
- * A file's page (Depot's `FileDetail` and `FileViewer`, ADR 0136 decision 2; `docs/apps/depot.md` § The viewer): what it
+ * A file's page (Depot's `FileDetail` and `FileViewer`, ADR 0161 decision 2; `docs/apps/depot.md` § The viewer): what it
  * shows — decided by its first frame's bytes ([FileView]) — and its facts, its uploader, and what its header offers.
  *
  * Nothing decrypted is written to show it (ADR 0047 and its Consequences): an image, a text and a PDF are held in memory, each

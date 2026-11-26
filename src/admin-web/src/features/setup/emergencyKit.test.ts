@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { parseKit } from '@veyq/crypto/emergencyKit'
 import { formatSecretKey } from '@veyq/crypto/secretKey'
-import { kitServerOf, renderKitPdf, type KitLanguage } from './emergencyKit'
+import { KIT_LAYOUT, kitServerOf, renderKitPdf, type KitLanguage } from './emergencyKit'
 import { i18n, SUPPORTED_LOCALES } from '../../i18n'
 
 // A real-shaped kit: a Secret Key in its printed form, and an email the UTF-8 path has to carry.
@@ -22,6 +22,14 @@ function fieldValues(text: string): Record<string, string> {
   }
   return out
 }
+
+// ADR 0157 decision 1: this writer's layout, kept equal to src/web/'s (`features/account/emergencyKit/kitRecord.test.ts`
+// pins the same number there): the two layout codes are line for line alike, so a raise touches both.
+describe('KIT_LAYOUT', () => {
+  it('is layout 2: the sheet whose key is labelled "9 blocks in 3 lines", as src/web/ prints it', () => {
+    expect(KIT_LAYOUT).toBe(2)
+  })
+})
 
 describe('kitServerOf', () => {
   it('reads nothing typed as no server', () => {
@@ -64,6 +72,8 @@ describe.each(SUPPORTED_LOCALES)('the kit PDF (%s)', (locale) => {
     const text = latin1(bytes)
     const groups = data.secretKey.split('-')
     for (const line of [0, 1, 2]) expect(text).toContain(`(${groups.slice(line * 3, line * 3 + 3).join('-')})`)
+    // …under a label that says they are one key: a kit's first line alone was once typed as the whole key.
+    expect(text).toContain(`(${i18n.global.t('kit.pdfSecretKey', {}, { locale }).toUpperCase()})`)
     // No address typed: no server in the token, and every address field empty (this page's localhost means nothing).
     expect(fieldValues(text)).toEqual({ address1: '', address2: '', address3: '' })
     expect(text).not.toContain('localhost')

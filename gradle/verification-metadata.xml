@@ -8,7 +8,7 @@
      the embedded Groovy owes the next version's two hashes here and in src/backend/'s file, checked against Maven
      Central's .sha1 (2026-11-01). The backend's components are verified by src/backend/gradle/verification-metadata.xml, in its own
      build; the root never includes it (an included build's metadata would be ignored in favour of this file). -->
-<verification-metadata xmlns="https://schema.gradle.org/dependency-verification" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://schema.gradle.org/dependency-verification https://schema.gradle.org/dependency-verification/dependency-verification-1.3.xsd">
+<verification-metadata xmlns="https://schema.gradle.org/dependency-verification" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="https://schema.gradle.org/dependency-verification https://schema.gradle.org/dependency-verification/dependency-verification-1.4.xsd">
    <configuration>
       <verify-metadata>true</verify-metadata>
       <verify-signatures>false</verify-signatures>

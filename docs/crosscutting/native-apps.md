@@ -10,14 +10,14 @@ share target). This page is kept current as slices land; a row moves from open t
 ## The split
 
 Everything that is not drawing a screen or talking to the device belongs in the Kotlin core (owner 2026-11-09,
-[ADR 0136](../decisions/0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)), and it is there
+[ADR 0161](../decisions/0161-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)), and it is there
 (2026-11-10): the suite, the API, every application's domain and its flows, the upload queue, and each screen's state and
 rules as a core model both apps draw — the way in (`session/SessionModel`), the shell and its lists (`navigation/ShellModel`,
 `RowDetails`), the trash sheet (`navigation/TrashSheet`), the open Pot (`expenses/PotModel`) with its entry editor, settings
 and New pot (`EntryEditor`, `PotSettings`, `PotCreateSheet`), shared files
 (`navigation/ShareInbox`, each kind's `ShareAnswer`), the link form and a link's row (`session/LinkForm`, `LinkRow`), a header's plan and words
 (`navigation/NodeHeader`), an open node's header with pin, trash, rename and cover (`navigation/NodeHeaderModel`) and the
-sheets behind it (`MoveSheet`, `ShareSheet`, `ReportSheet`; ADR 0136's Consequences), a file's page and its Save a copy
+sheets behind it (`MoveSheet`, `ShareSheet`, `ReportSheet`; ADR 0161's Consequences), a file's page and its Save a copy
 (`depot/FileModel`, `FileSave`), Depot's uploads (`depot/DepotUploads`, the walk's rule `FolderUpload.keeps`) and a drop
 box's page (`depot/DropBoxPage`), a Memory's page and its lightbox (`memories/GalleryModel`, `Lightbox`, the grid's layout
 `MediaGridLayout`, the rights `MemoryRights`, `MemoryCreate`) and Memories' uploads' settle (`memories/MediaUploads`); which words an outcome raises (`words/Notices`) and what a row or a page says, piece by piece
@@ -84,7 +84,7 @@ English/light and German/dark — 2026-11-13; Memories (as Windows', a drop from
 | Web (JavaScript) | the core's common code, as `@veyq/core-js` (`js()`: IR, ES modules, es2015, `.d.mts`; primitives the web's own `@noble/*`), [ADR 0155](../decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md) decision 3 | none: the web draws in Vue; it ships the core's search (`@veyq/core-js/search`, the pilot's go, 2026-11-21), each next slice or application a CR of its own (decision 7) | — | its conformance over `contracts/crypto/vectors/v1.json` and the search's vectors through the shipped module under Node, in `frontend` |
 
 Windows and Linux are wanted (owner 2026-11-09), each with its own native UI over the same core
-([ADR 0136](../decisions/0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)): Linux GTK 4 and
+([ADR 0161](../decisions/0161-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)): Linux GTK 4 and
 libadwaita in Rust, Windows WinUI 3 in C#, both over the core as a Kotlin/Native library through one bridge (owner
 2026-11-10). Each has its first slice built (ADR 0123's Consequences: the core on Linux and on Windows, the bridge, the
 Linux app and the Windows app), and the bridge's channels for shown bytes, a blob's ranges and files by path ([ADR 0137](../decisions/0137-the-bridge-carries-shown-bytes-beside-the-json-ranges-through-a-reader-and-files-by-path.md)),
@@ -106,7 +106,7 @@ Depot whole as its paragraph's but Send a copy (measured 2026-11-12), and Memori
 **Account and session.** Sign-in with password and Secret Key behind the `/api/setup` major gate, each grant judged as
 the web judges it (measured, `LiveSignInTest`, `GrantTrustTest`); several servers and tenants with their switcher,
 hiding tenants and spaces. **The Emergency Kit at sign-in, on all four apps** (`en.account.key-model` § The
-Emergency Kit; [ADR 0136](../decisions/0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s
+Emergency Kit; [ADR 0161](../decisions/0161-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s
 Consequences): "Open Emergency Kit" takes the kit's PDF (saved, printed, photographed) or a picture of its QR from the
 system's picker, "Scan Emergency Kit" its QR wherever the app has a camera (first on a phone or tablet, after Open on a
 computer; hidden where the scan says `NoCamera`); email and server are filled, the Secret Key held by the core's
@@ -157,7 +157,7 @@ never drawn live (ADR 0151's Consequences). The Use pages: [Your profile](../../
 [Your email address](../../site/src/content/docs/account/change-email.mdx),
 [Secure your account](../../site/src/content/docs/account/replace-your-keys.mdx),
 [Erase your account](../../site/src/content/docs/account/erase-your-account.mdx).
-**Device linking, on all four apps** ([ADR 0059](../decisions/0059-device-linking.md); the core's model, ADR 0136's
+**Device linking, on all four apps** ([ADR 0059](../decisions/0059-device-linking.md); the core's model, ADR 0161's
 Consequences; `uc.account.onboard-device` § In the apps): both directions in both roles — Settings' "Add a device" shows
 a code and, where the device has a camera, scans one; the sign-in's "Scan a code from another device" (camera only) and
 "Sign in with a QR code" use the form's server, and say "This server does not link devices." where it has
@@ -234,7 +234,7 @@ system's share-in (GNOME has no share target, Windows' needs a packaged app) nor
 
 **Depot.** Upload, replace, download a file; upload a folder; view a file (image, PDF, text, media) and send a copy;
 drop boxes (read, create, move a guest's folder out); uploader names of members — measured 2026-11-09. Since 2026-11-12
-the file page, the uploads and the drop box page are the core's (ADR 0136's Consequences), and Android and Apple were
+the file page, the uploads and the drop box page are the core's (ADR 0161's Consequences), and Android and Apple were
 passed on them again. On Linux and Windows too (2026-11-12): a file's page (an image, a text, a PDF, the rest said), a
 medium **played** through the platform's own player over the core's reader (GTK's `MediaFile`, `MediaPlayerElement`),
 never decrypted whole or to disk; Save a copy with its progress and Cancel; Replace; uploads of files and a folder from
@@ -253,7 +253,7 @@ pull) reads the members anew, and a picture replaced under its id reaches the de
 **Memories.** The gallery with chapters, the lightbox with details, video and saving the original; adding photos and
 videos, their metadata read on the device as the web reads it (EXIF, the container's time, position), Android asking
 once for full media access so a photo keeps its place and name — measured 2026-11-09. Since 2026-11-13 the page, the
-lightbox and the uploads' settle are the core's (ADR 0136's Consequences), and every app draws New Memory and Add
+lightbox and the uploads' settle are the core's (ADR 0161's Consequences), and every app draws New Memory and Add
 chapter, the chapters with their covers, the web's justified grid, the live poll, zoom, the slideshow, a medium trashed
 with Undo (a guest's own purged after asking, held by the core's tests: the apps open a gallery as a member only), a
 Memory's links, and the hero once a cover exists; GPX tracks and music are left out of the gallery, as the web's photo
@@ -579,7 +579,7 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
     a core change with its probe cases in `run.py test`, not taken here. **A desktop whose system language is not the
     person's** has no runtime locale for it until `flatpak config --set extra-languages <lang>` (the VM's case; a German
     desktop has its own).
-  - **Other desktops** (ADR 0136 decision 4: one libadwaita app for all). Not measured yet, remembered only: KWallet
+  - **Other desktops** (ADR 0161 decision 4: one libadwaita app for all). Not measured yet, remembered only: KWallet
     answers the Secret Service, KDE's portal the file chooser and the colour scheme. The desktop-session slice checks
     them under Fedora's KDE Plasma edition beside GNOME — staying signed in through KWallet (and through KeePassXC's
     Secret Service, also untried), a file picked and saved through KDE's dialogs, dark mode following Plasma's. That
@@ -660,7 +660,7 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
     person (the owner's, #928).
   - No Apple app has linked with another app (the other pairs passed 2026-11-18, § Built, by area); Windows' link scan
     ran only through its test camera — a real camera's link scan on every app is the owner's (inbox #912).
-  - On GTK and WinUI a screen reader confirms the slide by the keys, with no named action of its own (ADR 0136's
+  - On GTK and WinUI a screen reader confirms the slide by the keys, with no named action of its own (ADR 0161's
     Consequences); no screen reader has driven the slide on any platform.
   - Every pass leaves a device-register entry per device it linked (no screen removes one): an orphan once a reconcile drops its rows, and orphans are what eviction takes first ([en.account.device-register](../features/account/enablers/en.account.device-register.md) § Growth).
 - The account's flows ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md), built): the agent's macOS click-through and kit no-copy check (inbox #976, with #917),

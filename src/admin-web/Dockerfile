@@ -10,7 +10,7 @@
 # Mirrors the app image Dockerfile's frontend-build stage, including its two hard-won details: the OpenAPI client is
 # GENERATED and never tracked (so the stage needs a JRE for openapi-generator), and the specs must land BEFORE
 # the install because `prepare` runs generate:api during it.
-FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS build
+FROM node:26-bookworm-slim@sha256:0042e17d232a87a2cd485be1da7900fca4d10a4ad11b29e9285da1d2e54798c9 AS build
 WORKDIR /repo/src/admin-web
 RUN apt-get update \
     && apt-get install -y --no-install-recommends default-jre-headless \
@@ -18,7 +18,7 @@ RUN apt-get update \
 # pnpm itself, at exactly the version the root package.json pins in `packageManager` — the one npm install this image
 # runs (scripts/validate_pnpm_installs_gated.py holds the two equal). A layer of its own, above every COPY, so only a
 # pnpm bump rebuilds it.
-RUN npm install -g pnpm@12.16.1
+RUN npm install -g pnpm@12.22.0
 COPY contracts/api /repo/contracts/api
 # The generator JAR's verifier and its pin, before the install for the same reason as the specs: `prepare` runs
 # generate:api, which runs ../../scripts/verify_openapi_generator_jar.mjs first (ADR 0057 §6).

@@ -422,7 +422,7 @@ struct Bar: View {
         }) { ImportSheet(model: model, dialog: $0.dialog) }
         #endif
         // what the model says once (an upload's refusal, its "Replace anyway")
-        // its dismissal may run before its button's action (ADR 0136's trap): the action is the presented notice's own
+        // its dismissal may run before its button's action (ADR 0161's trap): the action is the presented notice's own
         .alert(model.notice?.text ?? "", isPresented: Binding(get: { model.notice != nil }, set: { if !$0 { model.notice = nil } }), presenting: model.notice) { n in
             if let action = n.action, let run = n.run {
                 Button(action, role: .destructive) { Task { await run() } }

@@ -32,7 +32,7 @@ import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.MsgKey
 
 /**
- * The app's way in, for every platform (ADR 0123 decision 8, ADR 0136): where it opens — every account the person stays
+ * The app's way in, for every platform (ADR 0123 decision 8, ADR 0161): where it opens — every account the person stays
  * signed in to resumes after one authentication; with none, the most recent password-trusted account asks for its
  * password; with no trusted account, the sign-in —, the full sign-in with this device's password trust after it, the
  * offer to stay signed in that follows a sign-in ([Offer]), the unlock, the switcher, a server added, a sign-out and
@@ -550,7 +550,7 @@ class SessionModel<A : Connection, T : Any>(
     /**
      * The account [link] (a new device's, from [scanFromTrusted] or [showForSignIn]) signed in, once its tail did — also
      * when its screen closed meanwhile ([DeviceLink.signedIn]) —, or null where it ended without. The shell opens on this,
-     * never on the link's [DeviceLink.Step.DONE] (ADR 0136's Consequences).
+     * never on the link's [DeviceLink.Step.DONE] (ADR 0161's Consequences).
      */
     suspend fun signedInBy(link: DeviceLink): Opened<A, T>? = if (link.signedIn()) signedTo else null
 

@@ -66,7 +66,7 @@ services:
   # the settings take only one (`instance.openapi.yaml`'s host pattern refuses a bare `mailpit`). The image has no
   # USER and would run as root; measured to run with the triple, a non-root uid and only /tmp writable.
   mailpit:
-    image: axllent/mailpit:v1.33.1@sha256:aef2aacc11f075ec0fb6874275ee4a421e688e11a96ebb296134d1735c7761ce
+    image: axllent/mailpit:v1.34.0@sha256:23a2ef85bc50853ab3093645d1d64679afd8887e89da5e48a88940c172591a4e
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     read_only: true
@@ -142,11 +142,10 @@ services:
   # networks, so a laptop runs exactly what CI runs — the browser never runs on the host (macOS has no certutil, and its
   # Chromium reads no NSS db). The orchestrator starts it with `compose run --rm browser` after `up`; the profile keeps
   # `up` from starting it. The image's Playwright version is tests/e2e/package.json's exact pin (the orchestrator refuses a
-  # mismatch at preflight, scripts/validate_image_pins.py in the trust chain); bump both together. Dependabot proposes
-  # the library (its own npm group) and holds the image's version (.github/dependabot.yml), so the bump is one pull
-  # request that is red until this tag and its index digest follow. The pin is written out at each service, never as a
-  # YAML anchor: Dependabot's compose updater matches `image:` followed by the reference, and a `&name` between the two
-  # makes its update fail ("Expected content to change!", dependabot-core docker_compose/file_updater.rb, 2026-11-12).
+  # mismatch at preflight, scripts/validate_image_pins.py in the trust chain); bump both together: Renovate's `playwright`
+  # group moves the library and this image in one pull request (renovate.json5). The pin is written out at each service,
+  # never as a YAML anchor: an updater that matches `image:` followed by the reference cannot rewrite a `&name` between
+  # the two (Dependabot's compose updater failed on one, "Expected content to change!", 2026-11-12).
   #
   # How it reaches the instance, decided in phase 2 — the way an operator does, without publishing anything:
   #   - the domain through Traefik: on `edge`, Chromium resolves `veyq.test` and every `*.veyq.test` to the `traefik`
@@ -158,7 +157,7 @@ services:
   #     published loopback port — a container reaches the host's 127.0.0.1 on Docker Desktop and not on a Linux
   #     runner, so the run would differ between a laptop and CI.
   browser:
-    image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
+    image: mcr.microsoft.com/playwright:v1.65.1-noble@sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579
     profiles: [browser]
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -203,7 +202,7 @@ services:
   # static file server from the Playwright image this file already pins (`python3 -m http.server`), with the recipe's
   # x-hardened triple and a non-root uid; it writes nothing.
   release-mirror:
-    image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:7852dc5a7d72f5fe458a597d690f6c42fbc8e9e26ddfa95f8e6ef552558d9bbf
+    image: mcr.microsoft.com/playwright:v1.65.1-noble@sha256:1507cbfc550a63a6b7396791ca4f00df17beb56342d2447b3f106c306f525579
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     read_only: true

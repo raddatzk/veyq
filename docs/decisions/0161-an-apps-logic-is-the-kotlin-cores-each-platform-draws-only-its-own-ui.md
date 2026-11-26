@@ -1,4 +1,4 @@
-# ADR 0136 — An app's logic is the Kotlin core's; each platform draws only its own UI, Windows and Linux among them
+# ADR 0161 — An app's logic is the Kotlin core's; each platform draws only its own UI, Windows and Linux among them
 - Status: Accepted
 - Built: partly — decisions 1 to 3 for Android and Apple (the screens' logic is the core's, the words one catalog);
   decision 4 for Linux's first slice (sign-in, the shell, Home, a Pot read only, Search), run in a Fedora 44 container

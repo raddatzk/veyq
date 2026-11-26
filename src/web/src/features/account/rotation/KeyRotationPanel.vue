@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // "Secure your account" — the settings hub's security rubric (uc.account.rotate-keys, ADR 0060, cr-secure-the-account
 // decisions 7, 11, 13). Its first section is the account's email address (`EmailAddressSection`,
-// uc.account.confirm-email-address); everything below it is the ceremony that ends a compromise: the identity, the
+// uc.account.confirm-email-address), its second the account's Emergency Kit (`EmergencyKitStatus`,
+// uc.account.renew-emergency-kit); everything below them is the ceremony that ends a compromise: the identity, the
 // Master Key and the Secret Key are replaced together, a new Emergency Kit is issued, and the person stays inside every
 // space they were in. The mechanism is `rotateKeys` / `finishRotation`; this file is the ceremony around it.
 //
@@ -32,6 +33,7 @@ import VeyqButton from '../../../shared/ui/VeyqButton.vue'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
 import VeyqCheckbox from '../../../shared/ui/VeyqCheckbox.vue'
 import SecretKeyField from '../../../shared/ui/SecretKeyField.vue'
+import { secretKeyReady } from '../../../shared/ui/secretKeyEntry'
 import { account } from '../../../app/account'
 import VeyqPassword from '../../../shared/ui/VeyqPassword.vue'
 import VeyqMessage from '../../../shared/ui/VeyqMessage.vue'
@@ -51,6 +53,7 @@ import PasswordBreachNotice from '../PasswordBreachNotice.vue'
 import EmailAddressSection from '../email/EmailAddressSection.vue'
 import TrustResetLink from '../trustReset/TrustResetLink.vue'
 import EmergencyKitSave from '../emergencyKit/EmergencyKitSave.vue'
+import EmergencyKitStatus from '../emergencyKit/EmergencyKitStatus.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
 import { resealingScopes } from '../../spaces/scopeRekey'
 
@@ -133,7 +136,7 @@ const coldUnlock = computed(() => unlockOrigin() === 'cold')
 const passwordChosen = computed(
   () => !choosePassword.value || (newPassword.value.length >= MIN_PASSWORD_LENGTH && confirmPassword.value.length > 0),
 )
-const gateFilled = computed(() => password.value.length > 0 && secretKey.value.trim().length > 0 && passwordChosen.value)
+const gateFilled = computed(() => password.value.length > 0 && secretKeyReady(secretKey.value) && passwordChosen.value)
 /** The publish waits for the new kit: downloaded AND confirmed (decision 7, `EmergencyKitSave`'s ready). */
 const canPublish = computed(() => step.value === 'kit' && kitReady.value && !!newSecretKey.value)
 
@@ -258,6 +261,8 @@ async function renewClosed() {
     <!-- The address a reset would mail, and whether it is confirmed (uc.account.confirm-email-address) — the
          rubric's first section, above the ceremony that ends a compromise. -->
     <EmailAddressSection />
+    <!-- Which Emergency Kit the account has, and a clearer one where it exists (uc.account.renew-emergency-kit). -->
+    <EmergencyKitStatus />
     <section class="settings-form">
       <div class="settings-section-header">
         <div>

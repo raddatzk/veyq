@@ -1,6 +1,7 @@
 package me.raddatz.veyq.core.platform.capabilities
 
-import me.raddatz.veyq.core.admin.tenant.TenantStore
+import me.raddatz.veyq.core.testing.TestFixtures.CONTENT_KEY
+import me.raddatz.veyq.core.testing.TestFixtures.seedNode
 import me.raddatz.veyq.core.testing.TestFixtures.seedTenant
 import me.raddatz.veyq.core.testing.TestFixtures.seedUser
 import me.raddatz.veyq.core.testing.raceRounds
@@ -12,13 +13,12 @@ import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Test
-import java.time.Duration
 import java.time.Instant
-import java.util.UUID
 
 /**
- * Two levels switching one application at once (uc.platform.erase-switched-off-application A3 and A4, the race half of
- * ApplicationErasureSliceTest's (f)):
+ * Two levels switching one application at once (uc.platform.erase-switched-off-application A3, the race half of
+ * ApplicationErasureSliceTest's (f)), in a tenant that holds a node of it (a row exists only there, ADR 0088 decision 5;
+ * a tenant's creation makes none, so it races nothing):
  * the erasure row is what the final state implies, in every order the hold forces. Each writer reads the OTHER level's
  * switch; without [ApplicationErasureStore]'s lock order (the instance row, then the tenant row) each reads the other's
  * switch as it was before the other committed, and the race ends with an application switched on in both levels and a
@@ -30,7 +30,6 @@ class ApplicationErasureRaceSliceTest {
 
     @Inject lateinit var switches: CapabilitySwitchStore
     @Inject lateinit var tenantSwitches: TenantCapabilitySwitchStore
-    @Inject lateinit var tenantStore: TenantStore
 
     private val now: Instant = Instant.now()
 
@@ -63,25 +62,11 @@ class ApplicationErasureRaceSliceTest {
         assertEquals(null, row(tenant), "round $round: on at both levels, and a row still erases the tenant's Depot")
     }
 
-    /** A tenant is created while the instance switch-off is held uncommitted: the new tenant must get its row. */
-    @Test
-    fun aTenantCreatedOverlappingAnInstanceSwitchOffGetsItsRow() = raceRounds { round ->
-        val tenant = whileUncommitted(
-            change = { switches.set(DEPOT, true, now) },
-            overlapping = {
-                tenantStore.createPendingTenant(
-                    "Race", "race-${UUID.randomUUID()}.example.com", "o-${UUID.randomUUID()}@example.com",
-                    "h-${UUID.randomUUID()}", Instant.now().plus(Duration.ofDays(1)),
-                ).first
-            },
-        )
-        assertNotNull(row(tenant), "round $round: Depot is off for the instance, and the new tenant has no day")
-        QuarkusTransaction.requiringNew().run { switches.set(DEPOT, false, now) }
-    }
-
     private fun offAtBothLevels(): String {
         CapabilitySwitchFixtures.clear()
         val tenant = seedTenant(owner = seedUser())
+        // A row exists only where the tenant holds a node of the application (ADR 0088 decision 5).
+        seedNode(tenant, CoreTestApplicationKinds.of(DEPOT), wrappedContentKey = CONTENT_KEY)
         QuarkusTransaction.requiringNew().run { tenantSwitches.set(tenant, DEPOT, true, now) }
         QuarkusTransaction.requiringNew().run { switches.set(DEPOT, true, now) }
         assertNotNull(row(tenant))

@@ -81,3 +81,26 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/features/account/sessions/SessionsPanel.test.ts]
+  - id: a-hung-start-is-never-blank
+    # ADR 0136, E5. The tiers are untouched by a hang: the watchdog reloads, and boot() keeps or drops nothing more than
+    # before (`remember-off-enrols-device-wrap`'s refs).
+    text: >-
+      A start that hangs is never a blank page. index.html's start screen shows from the first paint; without a mounted
+      app after 15 s, or at once when the start fails or a chunk no longer loads, the start watchdog reloads the page once
+      per five minutes per tab (a sessionStorage timestamp, the only thing it writes; none where storage throws), and
+      otherwise shows "Taking longer than usual" with a Reload button and the boot step it waits for. The watchdog
+      imports nothing, so it runs when the app's chunks do not. "This server can't be reached right now" offers Reload.
+    coverage:
+      web:
+        unit:
+          - src/boot/watchdog.test.ts
+          - src/boot/startScreen.test.ts
+          - src/app/startSignals.test.ts
+          - src/components/app/AppShell.unreachable.test.ts
+gaps:
+  stack: >-
+    Lane L1's browser suite (`tests/e2e/tests/features/account/start-never-blank.spec.ts`) drives
+    `a-hung-start-is-never-blank` in the built shell under its served policy: a held setup-status request, the one
+    reload, the German slow panel naming `status`, its Reload to sign-in, and a normal start with no panel. Written,
+    not yet run (the V1 heavy stage), and ADR 0040 admits `stack` refs only once a CI run's log shows the suite executed.
+    That the watchdog's built file imports nothing is `pnpm run verify:boot-watchdog`, a build check, not a test ref.

@@ -1,6 +1,6 @@
-//! A Memory's or a chapter's page (ADR 0136 decision 2; ADR 0123's Consequences, the Linux app), GNOME's way: the
+//! A Memory's or a chapter's page (ADR 0161 decision 2; ADR 0123's Consequences, the Linux app), GNOME's way: the
 //! node's head (its cover, [crate::core_ui::header]), a Memory's chapters as a boxed list of rows with their covers, and the media
-//! as the web's justified grid (ADR 0136's Consequences) — every tile's frame the core's (`Gallery.Layout`: `GalleryModel.layout`), only the
+//! as the web's justified grid (ADR 0161's Consequences) — every tile's frame the core's (`Gallery.Layout`: `GalleryModel.layout`), only the
 //! rows near the view mounted (the core's `Layout.window`, ADR 0105), each tile the grid tier's thumbnail decoded by GTK
 //! (`Gallery.Tile`, held small and dropped least recently used first), a video's with a play badge. A tile opens the
 //! lightbox ([crate::apps::memories::lightbox]); the page's "Add photos" (the header's own `upload`) opens GTK's file dialog for photos and

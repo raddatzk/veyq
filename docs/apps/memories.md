@@ -271,7 +271,7 @@ from the link drops, without a reload.
 
 The native apps read the same matrix: the Kotlin core's `memories/MemoryRights` ports `rights.ts` once, fail-closed,
 for a member and each link role on a Memory, a chapter, a folder and a space's top (`MemoryRightsTest`), and one
-gallery model offers an action only where it says yes ([ADR 0136](../decisions/0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s
+gallery model offers an action only where it says yes ([ADR 0161](../decisions/0161-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s
 Consequences); a change to this table changes that port too.
 
 **A guest sees the member's views (inbox #401).** At a folder level `memoryRows` (`src/web/src/features/memories/levelRows.ts`), handed a guest's access and tree,

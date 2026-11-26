@@ -1,5 +1,5 @@
 import { createI18n } from 'vue-i18n'
-// The words the web says as the apps do (ADR 0136 § The web's words): `generate_words.py --web` writes them from
+// The words the web says as the apps do (ADR 0161 § The web's words): `generate_words.py --web` writes them from
 // `src/mobile/words/words.json`, the keys `web.json`'s `read` names, held fresh by `scripts/validate_web_words.py`.
 import words from './words.generated.json'
 
@@ -19,7 +19,7 @@ const en = {
     progress: 'Position in {title}',
     nothingPlays: 'None of these tracks can be played in this browser.',
   },
-  common: { email: 'Email', password: 'Password', cancel: 'Cancel', save: 'Save', create: 'Create', close: 'Close', done: 'Done', show: 'Show', hide: 'Hide', undo: 'Undo', more: 'More', zoom: 'Zoom', unreachable: 'This server can’t be reached right now. Please try again.' },
+  common: { email: 'Email', password: 'Password', cancel: 'Cancel', save: 'Save', create: 'Create', close: 'Close', done: 'Done', show: 'Show', hide: 'Hide', undo: 'Undo', more: 'More', zoom: 'Zoom', unreachable: 'This server can’t be reached right now. Please try again.', reload: 'Reload' },
   export: {
     action: 'Download',
     title: 'Download “{name}”',
@@ -185,6 +185,12 @@ const en = {
     linkResultTitle: 'Invitation link',
     linkReissued: 'New link created. The old one no longer works.',
     pendingLink: 'Link invitation',
+    // ADR 0129 decision 7: a link invitation's private label, for the owners' pending list
+    linkLabel: 'Label (optional)',
+    linkLabelHint: 'Only the owners of this space see it.',
+    labelEdit: 'Rename',
+    labelTitle: 'Label of this invitation',
+    labelFailed: 'The label could not be saved. Please try again.',
     pendingExpires: 'Valid until {date}',
     reissueLink: 'New link',
     remove: 'Remove member',
@@ -766,7 +772,9 @@ const en = {
     pdfConfidentialBody: 'This sheet holds your Secret Key. Don’t give it to anyone, and don’t upload it anywhere.',
     pdfAccount: 'Your account',
     pdfEmail: 'Email',
-    pdfSecretKey: 'Secret Key',
+    // The label over the key's three printed lines: the first person to use a kit typed its first line alone (owner
+    // 2026-11-22), which looks like a whole key. admin-web's kit says the same.
+    pdfSecretKey: 'Secret Key · 9 blocks in 3 lines',
     pdfWhere: 'Where you sign in',
     pdfAddresses: 'Addresses where you sign in – type them here, or write them in after printing:',
     pdfRestore: 'Quick restore',
@@ -779,6 +787,38 @@ const en = {
     pdfKeep3: 'Could someone else have it? Secure your account in veyq – you get a new kit.',
     pdfHelp: 'Help: {url}',
     pdfHelpUrl: 'https://veyq.app/account/forgot-password/',
+    // What each kit layout (`KIT_LAYOUT`, ADR 0157 decision 2) does better than the one before: one sentence per layout
+    // from 2, shown wherever a clearer kit is suggested. Raising KIT_LAYOUT adds its sentence here, in both languages.
+    layoutNews: {
+      '2': 'The new kit labels your Secret Key “9 blocks in 3 lines”, so nobody types the first line alone.',
+    },
+    // Settings → Security: which kit the account last made (uc.account.renew-emergency-kit).
+    status: {
+      title: 'Emergency Kit',
+      sub: 'Together with your password, it gets you back into your account.',
+      current: 'Your Emergency Kit is current.',
+      older: 'A clearer Emergency Kit exists.',
+      keepsWorking: 'The kit you have keeps working: your Secret Key stays the same.',
+      make: 'Make a new kit',
+      unreadable: 'Which kit you have could not be read just now. Try again later.',
+    },
+    renew: {
+      title: 'Make a new Emergency Kit',
+      sub: 'Enter your password and your Secret Key – type it, or upload or scan your kit. The new kit carries the same Secret Key.',
+      passwordLabel: 'Password',
+      secretKeyLabel: 'Secret Key',
+      check: 'Check and make the kit',
+      refused: 'That password or Secret Key didn’t match, so no kit was made.',
+      failed: 'The check didn’t go through, so no kit was made. Check your connection and try again.',
+      done: 'Done. Once the new kit is kept safe, you can destroy the old sheet.',
+      notNoted: 'Your new kit is saved and works. veyq could not note that you made it, so it may suggest a new kit again – making one again only updates that.',
+    },
+    // The shell's one-time notice (ADR 0157 decision 5); its body is the layout's sentence and `status.keepsWorking`.
+    notice: {
+      title: 'A clearer Emergency Kit exists',
+      open: 'Go to your kit',
+      dismiss: 'Not now',
+    },
   },
   password: {
     minLength: 'Use at least 10 characters.',
@@ -1428,7 +1468,12 @@ const en = {
     scanError: 'Camera unavailable — upload your kit or paste your Secret Key.',
     // Said in the scanner while it keeps looking: a readable code that is not a kit (owner 2026-11-12).
     notAKit: 'That is not an Emergency Kit.',
-    secretKeyTypo: 'This Secret Key has a typo. Compare it with your Emergency Kit, group by group.',
+    // Under the field while a key is shorter than a whole one: the kit prints it in three lines, and the first line alone
+    // looks like a key. The submit stays grey until the key is whole, so this count is the reason it is.
+    secretKeyProgress: 'Block {block} of {total}',
+    secretKeyForeign: 'This Secret Key holds a character no Secret Key has. Compare it with your Emergency Kit.',
+    secretKeyTooLong: 'This is longer than a Secret Key: it has {total} blocks of 6 characters.',
+    secretKeyTypo: 'This Secret Key has a typo. Compare it with your Emergency Kit, block by block.',
     kitUnreadable: 'Couldn’t read that kit. Try another file or paste your Secret Key.',
     kitEmailMismatch:
       'That kit belongs to {kitEmail}, but this is for {expected}. Carry on if you know it’s the right key — we can’t tell until it opens your account.',
@@ -1648,7 +1693,6 @@ const en = {
   },
   applications: {
     // uc.platform.switch-application-off: the banner above every page of a space while an application is switched off.
-    switchedOff: '{application} is switched off here. You can still open and download what’s here, so save what you want to keep.',
     // uc.platform.erase-switched-off-application: the same banner once the server names the day the content is erased.
     switchedOffUntil: '{application} is switched off here. You can open and download what’s here until {day}; then it is erased. Save what you want to keep.',
   },
@@ -1808,9 +1852,11 @@ const en = {
       remove: 'Remove cover',
       save: 'Save cover',
       batchLabel: 'Cover for “{name}”',
-      notImage: 'Choose an image file (JPEG, PNG, WebP or similar) as the cover.',
+      notImage: 'Choose an image file (JPEG, PNG, WebP, SVG or similar) as the cover.',
       tooLarge: 'This image is too large for a cover (up to {max}).',
       unreadable: 'This image could not be read. Try a JPEG or PNG.',
+      // The dialog's cropper could not draw the picked file - typically an HEIC photo, which only Safari opens.
+      cannotShow: 'This browser can’t open this image. HEIC photos open in Safari; otherwise save it as a JPEG or PNG first.',
       metaUnreadable: 'The details of this item can’t be opened, so its cover can’t be changed.',
       locked: 'Unlock this space first, then set the cover.',
       noSpace: 'There is no room left for the cover.',
@@ -2276,7 +2322,7 @@ const de: typeof en = {
     progress: 'Position in {title}',
     nothingPlays: 'Keiner dieser Titel kann in diesem Browser abgespielt werden.',
   },
-  common: { email: 'E-Mail', password: 'Passwort', cancel: 'Abbrechen', save: 'Speichern', create: 'Erstellen', close: 'Schließen', done: 'Fertig', show: 'Anzeigen', hide: 'Verbergen', undo: 'Rückgängig', more: 'Mehr', zoom: 'Zoom', unreachable: 'Dieser Server ist gerade nicht erreichbar. Bitte erneut versuchen.' },
+  common: { email: 'E-Mail', password: 'Passwort', cancel: 'Abbrechen', save: 'Speichern', create: 'Erstellen', close: 'Schließen', done: 'Fertig', show: 'Anzeigen', hide: 'Verbergen', undo: 'Rückgängig', more: 'Mehr', zoom: 'Zoom', unreachable: 'Dieser Server ist gerade nicht erreichbar. Bitte erneut versuchen.', reload: 'Neu laden' },
   export: {
     action: 'Herunterladen',
     title: '„{name}“ herunterladen',
@@ -2436,6 +2482,11 @@ const de: typeof en = {
     linkResultTitle: 'Einladungslink',
     linkReissued: 'Neuer Link erstellt. Der alte funktioniert nicht mehr.',
     pendingLink: 'Einladung per Link',
+    linkLabel: 'Bezeichnung (optional)',
+    linkLabelHint: 'Nur die Inhaber dieses Bereichs sehen sie.',
+    labelEdit: 'Umbenennen',
+    labelTitle: 'Bezeichnung dieser Einladung',
+    labelFailed: 'Die Bezeichnung konnte nicht gespeichert werden. Bitte erneut versuchen.',
     pendingExpires: 'Gültig bis {date}',
     reissueLink: 'Neuer Link',
     remove: 'Mitglied entfernen',
@@ -2980,7 +3031,7 @@ const de: typeof en = {
     pdfConfidentialBody: 'Dieses Blatt enthält deinen Secret Key. Gib es niemandem und lade es nirgends hoch.',
     pdfAccount: 'Dein Konto',
     pdfEmail: 'E-Mail',
-    pdfSecretKey: 'Secret Key',
+    pdfSecretKey: 'Secret Key · 9 Blöcke in 3 Zeilen',
     pdfWhere: 'Wo du dich anmeldest',
     pdfAddresses: 'Adressen, unter denen du dich anmeldest – hier eintippen oder nach dem Ausdrucken eintragen:',
     pdfRestore: 'Schnell wiederherstellen',
@@ -2993,6 +3044,34 @@ const de: typeof en = {
     pdfKeep3: 'Könnte es jemand anderes haben? Sichere dein Konto in veyq ab – dann bekommst du ein neues Kit.',
     pdfHelp: 'Hilfe: {url}',
     pdfHelpUrl: 'https://veyq.app/de/account/forgot-password/',
+    layoutNews: {
+      '2': 'Im neuen Kit steht bei deinem Secret Key „9 Blöcke in 3 Zeilen“, damit niemand nur die erste Zeile eintippt.',
+    },
+    status: {
+      title: 'Notfall-Kit',
+      sub: 'Zusammen mit deinem Passwort bringt es dich zurück in dein Konto.',
+      current: 'Dein Notfall-Kit ist aktuell.',
+      older: 'Es gibt ein übersichtlicheres Notfall-Kit.',
+      keepsWorking: 'Dein bisheriges Kit funktioniert weiter: Dein Secret Key bleibt derselbe.',
+      make: 'Neues Kit erstellen',
+      unreadable: 'Welches Kit du hast, ließ sich gerade nicht lesen. Versuch es später nochmal.',
+    },
+    renew: {
+      title: 'Neues Notfall-Kit erstellen',
+      sub: 'Gib dein Passwort und deinen Secret Key ein – tippe ihn ein, lade dein Kit hoch oder scanne es. Das neue Kit trägt denselben Secret Key.',
+      passwordLabel: 'Passwort',
+      secretKeyLabel: 'Secret Key',
+      check: 'Prüfen und Kit erstellen',
+      refused: 'Passwort oder Secret Key passen nicht, deshalb wurde kein Kit erstellt.',
+      failed: 'Die Prüfung hat nicht geklappt, deshalb wurde kein Kit erstellt. Prüfe deine Verbindung und versuche es erneut.',
+      done: 'Fertig. Sobald das neue Kit sicher verwahrt ist, kannst du das alte Blatt vernichten.',
+      notNoted: 'Dein neues Kit ist gespeichert und funktioniert. veyq konnte sich nicht merken, dass du es erstellt hast, und schlägt vielleicht wieder ein neues vor – ein erneutes Erstellen holt nur das nach.',
+    },
+    notice: {
+      title: 'Es gibt ein übersichtlicheres Notfall-Kit',
+      open: 'Zum Notfall-Kit',
+      dismiss: 'Jetzt nicht',
+    },
   },
   password: {
     minLength: 'Mindestens 10 Zeichen verwenden.',
@@ -3629,7 +3708,10 @@ const de: typeof en = {
     scanHint: 'Richte deine Kamera auf den QR-Code in deinem Notfall-Kit.',
     scanError: 'Kamera nicht verfügbar — lade dein Kit hoch oder füge deinen Secret Key ein.',
     notAKit: 'Das ist kein Notfall-Kit.',
-    secretKeyTypo: 'In diesem Secret Key steckt ein Tippfehler. Vergleiche ihn Gruppe für Gruppe mit deinem Notfall-Kit.',
+    secretKeyProgress: 'Block {block} von {total}',
+    secretKeyForeign: 'In diesem Secret Key steht ein Zeichen, das in keinem Secret Key vorkommt. Vergleiche ihn mit deinem Notfall-Kit.',
+    secretKeyTooLong: 'Das ist länger als ein Secret Key: Er hat {total} Blöcke mit je 6 Zeichen.',
+    secretKeyTypo: 'In diesem Secret Key steckt ein Tippfehler. Vergleiche ihn Block für Block mit deinem Notfall-Kit.',
     kitUnreadable: 'Konnte das Kit nicht lesen. Versuche eine andere Datei oder füge deinen Secret Key ein.',
     kitEmailMismatch:
       'Dieses Kit gehört zu {kitEmail}, hier geht es aber um {expected}. Mach weiter, wenn du weißt, dass es der richtige Schlüssel ist — sicher ist das erst, wenn er dein Konto öffnet.',
@@ -3836,7 +3918,6 @@ const de: typeof en = {
     },
   },
   applications: {
-    switchedOff: '{application} ist hier abgeschaltet. Was da ist, kannst du weiter öffnen und herunterladen – sichere, was du behalten willst.',
     switchedOffUntil: '{application} ist hier abgeschaltet. Was da ist, kannst du bis zum {day} öffnen und herunterladen; dann wird es gelöscht. Sichere, was du behalten willst.',
   },
   groups: {
@@ -3978,9 +4059,10 @@ const de: typeof en = {
       remove: 'Cover entfernen',
       save: 'Cover speichern',
       batchLabel: 'Cover für „{name}“',
-      notImage: 'Wähle eine Bilddatei (JPEG, PNG, WebP o. Ä.) als Cover.',
+      notImage: 'Wähle eine Bilddatei (JPEG, PNG, WebP, SVG o. Ä.) als Cover.',
       tooLarge: 'Dieses Bild ist als Cover zu groß (bis {max}).',
       unreadable: 'Dieses Bild konnte nicht gelesen werden. Versuche ein JPEG oder PNG.',
+      cannotShow: 'Dieser Browser kann dieses Bild nicht öffnen. HEIC-Fotos öffnet Safari; sonst speichere es vorher als JPEG oder PNG.',
       metaUnreadable: 'Die Details dieses Eintrags lassen sich nicht öffnen, daher kann sein Cover nicht geändert werden.',
       locked: 'Entsperre zuerst diesen Bereich, dann lege das Cover fest.',
       noSpace: 'Für das Cover ist kein Platz mehr.',
@@ -4380,7 +4462,7 @@ export const LOCALE_LABELS: Record<SupportedLocale, string> = { en: 'English', d
 export type LocalePreference = 'system' | SupportedLocale
 export const LOCALE_PREFERENCES: LocalePreference[] = ['system', 'en', 'de']
 
-const LOCALE_STORAGE_KEY = 'veyq:locale'
+export const LOCALE_STORAGE_KEY = 'veyq:locale'
 
 function storage(): Storage | null {
   try {

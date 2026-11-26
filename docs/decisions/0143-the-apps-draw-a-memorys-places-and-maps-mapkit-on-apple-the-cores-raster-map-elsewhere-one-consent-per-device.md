@@ -41,7 +41,7 @@ What the apps have to build on (read 2026-11-16):
 - **No new permission is needed:** Android declares `INTERNET`, the MSIX `internetClient`, the Flatpak shares the
   network, and MapKit asks for none where the app never asks where the device is.
 
-[ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) makes an app's logic the
+[ADR 0161](0161-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) makes an app's logic the
 Kotlin core's; this ADR applies it to the map services, the date, the place and the tracks. The owner chose Apple's own
 map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions 2, 3 and 13).
 
@@ -372,7 +372,7 @@ map on iOS and macOS (2026-11-15) and answered the rest on 2026-11-16 (decisions
 - **Spiderfying a cluster** — a Leaflet gesture no platform's map has.
 - **A name per open of a photo** — ADR 0016's discipline: once per place, sealed.
 - **An XML library** (`xmlutil` or a platform's parser) — a dependency on five targets, or a platform deciding a rule
-  (ADR 0136), for three elements; the core already reads XMP itself.
+  (ADR 0161), for three elements; the core already reads XMP itself.
 - **Drawing the tracks over a blank plane offline** — a map without its map, a second look to design on five platforms
   for a state a connection ends.
 

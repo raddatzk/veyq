@@ -51,7 +51,13 @@
    replaces the preview in place; anything else, or a failure, stays on the preview without a message. Navigating
    resets the zoom and drops the original; while zoomed the arrow keys pan instead of navigating, and Escape un-zooms
    before it closes. **Slideshow:** a play / pause control in the lightbox's toolbar advances every 5 s through the grid order, a
-   video showing its poster for one interval (no autoplay), and stops on the last item; any key, pointer or wheel in the
+   video showing its poster for one interval (no autoplay), and goes round past the last item to the first until it is
+   paused (owner 2026-11-26). **Shuffle** (inbox #862, offered from three items on): a pressed toggle beside play / pause
+   makes the slideshow run in shuffled ROUNDS - every item once per round, a fresh shuffle for the next, which never opens
+   with the item the last round ended on; turned on, the round starts after the shown item. It orders the slideshow only:
+   paging by hand stays in the grid order, the position keeps saying the grid's, and the round's next item is read ahead
+   like a neighbour; an item removed meanwhile is skipped. It lasts while the lightbox is open and is stored nowhere;
+   pressing it is no interaction that pauses. Any other key, pointer or wheel in the
    lightbox (so any zoom or details interaction) pauses it, a hidden tab and a dialog over the lightbox too; the state is
    announced to a screen reader. A slow preview is waited for, never skipped. The next preview is read ahead like any
    neighbour (item 3) and stays held while the lightbox is open; while it runs, no EXIF read and no place-name backfill happen - they start when the
@@ -59,13 +65,22 @@
    source's). Seen in a real browser on 2026-10-14 (a Memory of three 3000 x 2000 JPEGs, 2048 px previews): a
    double-click zoomed to 2x and fetched the original once (two chunks; the image became 3000 x 2000), ArrowRight panned
    while zoomed and did not page, Escape un-zoomed without closing, paging reset the zoom; the slideshow advanced every
-   5 s, stopped on the last item announcing it, and fetched EXIF only on arriving there. Not yet seen in a browser: a
+   5 s, stopped on the last item announcing it (since replaced by going round), and fetched EXIF only on pausing there. Not yet seen in a browser: a
    video's poster in a slideshow, a pinch, ctrl+wheel, the 50 MB cap, a share guest's zoom.
 3. **Lightbox:** clicking an item opens it full-view; the client fetches that item's **preview**, decrypts, and
-   displays it; **prev/next** page through the grid order. (The preview — not the multi-MB original — keeps the
+   displays it; **prev/next** page through the grid order and **go round** at its ends - past the last item comes the
+   first, before the first the last (owner 2026-11-26), on the buttons and the arrow keys alike; only a single item has
+   nowhere to page. On a touch screen a **swipe** pages the same way (inbox #863, `shared/ui/useSwipe.ts`): one finger or
+   pen travelling at least 50 px sideways, and at least 1.5 times as far sideways as up or down - left brings the next,
+   right the previous - on the stage of any item; never a mouse (it has the buttons and keys), never a second finger
+   (a pinch), never while a photo is zoomed (a drag pans there) and never on a playing video (its controls scrub on a
+   sideways drag). The stage does not follow the finger: the item changes when it lifts. Not yet seen on a real touch
+   screen. The position ("3 of 42") says where the viewer is. Removing the shown last item shows the first.
+   (The preview — not the multi-MB original — keeps the
    lightbox fast.) The decrypted previews stay **in memory while the lightbox is open** (owner 2026-11-12,
    `previewCache.ts`): a step back shows the item at once, and once an item's preview is shown its two neighbours are
-   read ahead, after it, so a step forward usually does too. At most 24 MiB, the least recently shown dropped first; a
+   read ahead, after it - round the ends too, so on the last item the first is read ahead - so a step forward usually
+   does too. At most 24 MiB, the least recently shown dropped first; a
    block or a removal drops the item's bytes, a new key or closing drops all. Never on the device's storage: a cache that
    outlives the session would, on our reading of § 25 TDDDG, need the member's own choice first. Seen in headless Chrome
    on 2026-11-12 (the dev instance's Memory of 20 photos): open, two steps forward, two back - the old lightbox showed

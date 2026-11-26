@@ -378,6 +378,32 @@ function mediaSwDevPlugin(): Plugin {
   }
 }
 
+// ADR 0136: the start watchdog is its own build entry at a stable, unhashed `/boot-watchdog.js` (below), which index.html
+// names with `vite-ignore` so Vite does not fold it into the app's entry (it bundles every module script of a page into
+// one). The dev server serves the same path from the module, so dev == prod. Unhashed and outside `/assets/`, the
+// backend serves it `no-cache` like `sw.js` (AppShellRoutes), so a release's watchdog reaches every start.
+const BOOT_WATCHDOG_PATH = '/boot-watchdog.js'
+function bootWatchdogDevPlugin(): Plugin {
+  return {
+    name: 'veyq-boot-watchdog-dev',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if ((req.url ?? '').split('?')[0] !== BOOT_WATCHDOG_PATH) return next()
+        server
+          .transformRequest('/src/boot/watchdog.ts')
+          .then((result) => {
+            if (!result) return next()
+            res.setHeader('Content-Type', 'application/javascript')
+            res.setHeader('Cache-Control', 'no-cache')
+            res.end(result.code)
+          })
+          .catch(next)
+      })
+    },
+  }
+}
+
 // cr-dev-auto-unlock — a DEV-SERVER-ONLY endpoint serving the local dev-seed credentials to the browser, so an
 // operator who cannot type the password (a phone, or an agent barred from entering credentials into a field) can
 // reach the unlocked dev app hands-off (consumed by src/app/devAutoUnlock.ts behind an `import.meta.env.DEV` gate).
@@ -467,7 +493,7 @@ function platformMajor(): number {
 
 export default defineConfig(({ command }) => {
   return {
-    plugins: [vue(), vueWithoutPassThroughPolicyPlugin(), cspPlugin(command === 'serve'), smartAppBannerPlugin(), pdfjsAssetsPlugin(), mediaSwDevPlugin(), devSeedCredentialsPlugin(), licenseSourcesPlugin(), memberCodeOutOfTheEntryPlugin(), serviceWorkerAlonePlugin(), coreJsWatchPlugin()],
+    plugins: [vue(), vueWithoutPassThroughPolicyPlugin(), cspPlugin(command === 'serve'), smartAppBannerPlugin(), pdfjsAssetsPlugin(), mediaSwDevPlugin(), bootWatchdogDevPlugin(), devSeedCredentialsPlugin(), licenseSourcesPlugin(), memberCodeOutOfTheEntryPlugin(), serviceWorkerAlonePlugin(), coreJsWatchPlugin()],
     define: {
       __PDFJS_VERSION__: JSON.stringify(pdfjsPackage().version),
       // The platform's one major (ADR 0085 decision 1), read from the repository's VERSION as the backend's build reads
@@ -493,16 +519,19 @@ export default defineConfig(({ command }) => {
       // reach the browser that receives their code. Vite writes them out instead, at a stable, unhashed path.
       license: { fileName: LICENSE_FILE },
       rollupOptions: {
-        // Two entries: the app (from index.html) and the media Service Worker (ADR 0047).
-        // The SW must land at a stable, UNHASHED `/sw.js` so a redeploy is detectable (`updateViaCache:'none'`);
-        // the app keeps its hashed assets. `chunk.name === 'media-sw'` → `sw.js` at the dist root; all else keeps
-        // the default hashed `assets/` layout.
+        // Three entries: the app (from index.html), the media Service Worker (ADR 0047) and the start watchdog (ADR 0136).
+        // The SW must land at a stable, UNHASHED `/sw.js` so a redeploy is detectable (`updateViaCache:'none'`), and the
+        // watchdog at the unhashed path index.html names (`vite-ignore`d there, so no rewrite would follow a hash);
+        // the app keeps its hashed assets. `chunk.name === 'media-sw'` → `sw.js` at the dist root, `boot-watchdog` →
+        // `boot-watchdog.js` beside it; all else keeps the default hashed `assets/` layout.
         input: {
           main: fileURLToPath(new URL('./index.html', import.meta.url)),
           'media-sw': fileURLToPath(new URL('./src/sw/mediaSw.ts', import.meta.url)),
+          'boot-watchdog': fileURLToPath(new URL('./src/boot/watchdog.ts', import.meta.url)),
         },
         output: {
-          entryFileNames: (chunk) => (chunk.name === 'media-sw' ? 'sw.js' : 'assets/[name]-[hash].js'),
+          entryFileNames: (chunk) =>
+            chunk.name === 'media-sw' ? 'sw.js' : chunk.name === 'boot-watchdog' ? BOOT_WATCHDOG_PATH.slice(1) : 'assets/[name]-[hash].js',
           // pdf.js' worker is an ASSET (`?url`, started by pdf.js itself as a module worker), emitted with a `.js` name so the
           // backend's static handler serves it with a script MIME type under `nosniff` - an `.mjs` is not in every MIME table.
           assetFileNames: (asset) =>
@@ -515,12 +544,14 @@ export default defineConfig(({ command }) => {
           // update rather than with every release, so a member's cache keeps them across most releases. The Service
           // Worker's modules stay out of both: `sw.js` must never import the app (it would run it in the worker), so the
           // two it shares with the app are a chunk of their own (`sw-shared`), and the rest of `src/sw/` is the worker's
-          // entry alone; `serviceWorkerAlonePlugin` checks what `sw.js` loads.
+          // entry alone; `serviceWorkerAlonePlugin` checks what `sw.js` loads. The start watchdog (ADR 0136) stays out too:
+          // it is an entry of its own that must import nothing, so grouped into `entry` its file would only import that
+          // chunk and hang with it (`verify:boot-watchdog`).
           codeSplitting: {
             groups: [
               { name: 'sw-shared', test: /[\\/]src[\\/]sw[\\/](protocol|range)\.ts$/, priority: 3 },
               { name: 'vendor', tags: ['$initial'], test: /[\\/]node_modules[\\/]/, priority: 2 },
-              { name: 'entry', tags: ['$initial'], test: /^(?!.*[\\/]src[\\/]sw[\\/])/, priority: 1 },
+              { name: 'entry', tags: ['$initial'], test: /^(?!.*[\\/]src[\\/](?:sw[\\/]|boot[\\/]watchdog\.ts$))/, priority: 1 },
             ],
           },
         },

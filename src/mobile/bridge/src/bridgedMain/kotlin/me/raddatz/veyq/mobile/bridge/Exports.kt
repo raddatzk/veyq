@@ -44,7 +44,7 @@ internal expect fun platformHttpClient(block: HttpClientConfig<*>.() -> Unit): H
 
 /**
  * The platform's device keys over the host's device [store], reached by the core itself so no key, seal or token crosses
- * the bridge (ADR 0136's Consequences): the Secret Service (`linuxMain`), DPAPI and Windows Hello owned by
+ * the bridge (ADR 0161's Consequences): the Secret Service (`linuxMain`), DPAPI and Windows Hello owned by
  * [Config.window] (`mingwMain`).
  */
 internal expect fun platformDeviceKeys(config: Config, store: DeviceStore): DeviceKeys

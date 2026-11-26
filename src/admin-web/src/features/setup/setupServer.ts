@@ -2,14 +2,17 @@
 // (Model B) data layer. ALL key material is born here; the server only ever receives ciphertext + public
 // keys + low-sensitivity metadata. Unlike the legacy Model-A flow, the raw password is NEVER sent: the
 // client derives an Ed25519 auth keypair (ADR 0003) and registers only `authPublicKey`.
-import { fromB64std } from '@veyq/crypto/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { setupApi } from '../../api/client'
 import { buildAccount } from '@veyq/crypto/accountBirth'
 import { epochOneFor } from '../instance/moderation'
+import { KIT_LAYOUT } from './emergencyKit'
 import {
   type CreateServerOwnerRequest,
   CreateServerOwnerRequestSuiteIdEnum,
   type MasterKeyWrapMethodEnum,
+  type SetupApplication,
 } from '../../api/generated'
 
 export type EmergencyKit = { secretKey: string }
@@ -26,8 +29,14 @@ export async function buildCreateServerOwnerRequest(
   instanceSalt: Uint8Array,
 ): Promise<{ request: PreparedServerOwner; emergencyKit: EmergencyKit }> {
   const { material, emergencyKit, masterKey } = await buildAccount(email, password, instanceSalt)
-  // The setup accepts no tenant, so it keys no trust mark (ADR 0111 decision 23): the Master Key is not needed here.
-  masterKey.fill(0)
+  // The Master Key seals one thing here, the kit record of the kit setup shows next (ADR 0157 decision 4) — the request
+  // is posted only once that kit is confirmed. The setup accepts no tenant, so it keys no trust mark (ADR 0111 decision 23).
+  let kitRecord: string
+  try {
+    kitRecord = sealKitRecord(masterKey)
+  } finally {
+    masterKey.fill(0)
+  }
   // The Server-Owner account carries no display name — identity is a per-tenant username (ADR 0023), and a
   // Server Owner who is not (yet) a tenant member is identified by email alone.
   const request: PreparedServerOwner = {
@@ -44,8 +53,20 @@ export async function buildCreateServerOwnerRequest(
     secretKeyProofPublicKey: material.secretKeyProofPublicKey,
     // Epoch 1 of the moderation key, sealed to the identity born just above (ADR 0099 § 3): reporting is on from day 1.
     moderationEpoch: epochOneFor(material.identityPublicKey),
+    kitRecord,
   }
   return { request, emergencyKit }
+}
+
+/**
+ * The account's kit record (ADR 0157 decision 3): the layout of the kit this writer prints, the compact JSON
+ * `{"layout":n}` sealed under the new Master Key, purpose `kit-record` with no binding field — the shape `src/web/`'s
+ * `features/account/emergencyKit/kitRecord.ts` writes and reads, pinned by both packages' tests and the vector
+ * `seal.sym.kit-record`. A birth carries it in its request: the Server Owner's account has no session to write it after,
+ * and `src/web/` runs on another origin.
+ */
+export function sealKitRecord(masterKey: Uint8Array): string {
+  return b64std(v1.seal({ purpose: 'kit-record' }, masterKey, new TextEncoder().encode(JSON.stringify({ layout: KIT_LAYOUT }))))
 }
 
 /**
@@ -65,10 +86,25 @@ export async function prepareServerOwner(
 }
 
 /**
- * Create the Server Owner from a [prepareServerOwner] request — after its kit was confirmed. This closes setup
- * (single-owner lock); 409 `setup_already_complete` when someone else finished it first.
+ * The applications setup asks about (uc.admin.setup-server step 5): the register's, with their words as the server
+ * serves them (ADR 0088 decision 13) — before sign-in, on the admin channel, only while setup is open (409
+ * `setup_already_complete` after).
  */
-export async function createServerOwner(request: PreparedServerOwner): Promise<{ userId: string }> {
-  const result = await setupApi().createServerOwner({ createServerOwnerRequest: request })
+export async function listSetupApplications(): Promise<SetupApplication[]> {
+  return setupApi().listSetupApplications()
+}
+
+/**
+ * Create the Server Owner from a [prepareServerOwner] request — after its kit was confirmed. This closes setup
+ * (single-owner lock); 409 `setup_already_complete` when someone else finished it first. [applicationsOff] are the
+ * applications the owner left out, switched off for the instance with the owner (ADR 0088 decision 12); none left out
+ * sends no field, which leaves every application on.
+ */
+export async function createServerOwner(
+  request: PreparedServerOwner,
+  applicationsOff: string[] = [],
+): Promise<{ userId: string }> {
+  const body = applicationsOff.length > 0 ? { ...request, applicationsOff } : request
+  const result = await setupApi().createServerOwner({ createServerOwnerRequest: body })
   return { userId: result.userId }
 }

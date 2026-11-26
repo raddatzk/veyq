@@ -8,7 +8,7 @@
 //! screen). A new device's link that is done needs nothing here: the bridge opens the account it signed in, and the
 //! session's gate moves on under the dialog, which then closes.
 //!
-//! The slide (ADR 0059 §7, ADR 0136's Consequences) is a `GtkScale` that confirms only when a pointer gesture that began at its start
+//! The slide (ADR 0059 §7, ADR 0161's Consequences) is a `GtkScale` that confirms only when a pointer gesture that began at its start
 //! (≤ 15 %) ends at its end (≥ 98 %), and springs back otherwise — a click on the track's end warps there in one move and
 //! does not confirm. Keyboard: the arrow keys move it in ten steps, Return at the end confirms; Home, End, the Page keys
 //! and the scroll wheel are taken and move nothing. GTK offers an accessible no named action of its own (Android's custom

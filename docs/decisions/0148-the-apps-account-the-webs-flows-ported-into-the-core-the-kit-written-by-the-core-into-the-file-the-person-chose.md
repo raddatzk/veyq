@@ -22,7 +22,7 @@ for the picture, [ADR 0028](0028-identity-authenticity-tofu-verification.md) dec
 [0104](0104-the-identity-pin-store-is-one-sealed-entry-per-pin-under-a-sealed-head.md) for the safety numbers).
 
 An app's logic is the Kotlin core's and each platform draws only its own UI
-([ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)); every byte the core signs,
+([ADR 0161](0161-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)); every byte the core signs,
 seals or derives answers to `contracts/crypto/vectors/v1.json`. When this was decided the core read neither
 `secret_key_proof`, `auth_attestation`, `rotation_stage`, `verification` nor `fingerprint`'s digits and chain code; it
 wrote no Emergency Kit, encoded no WebP and called none of the operations these flows use.

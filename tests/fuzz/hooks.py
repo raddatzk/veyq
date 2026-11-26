@@ -59,7 +59,7 @@ import sys
 
 import schemathesis
 from schemathesis.core.parameters import ParameterLocation
-from schemathesis.specs.openapi._auth_retry import clone_case, send_probe
+from schemathesis.specs.openapi._auth_retry import send_probe
 from schemathesis.specs.openapi.checks import negative_data_rejection
 
 # TraceCov — the proprietary coverage plugin the official Schemathesis image loads on every run — is not in our image
@@ -235,7 +235,10 @@ def _code(response: object) -> object:
 
 def _as_peer(ctx: object, case: object, **path: str) -> object:
     """`case` sent again with the peer's token, and with the given path parameters replaced."""
-    probe = clone_case(case)
+    # `Case.derive` copies the request under a fresh id (4.33 dropped the private `clone_case` this used to import,
+    # renovate/schemathesis-4.x: every run then failed to load this file); the token is set below, so the owner's
+    # never rides along.
+    probe = case.derive()  # type: ignore[attr-defined]
     probe.headers["Authorization"] = f"Bearer {os.environ['VEYQ_FUZZ_PEER_TOKEN']}"  # type: ignore[attr-defined]
     probe.path_parameters.update(path)  # type: ignore[attr-defined]
     return send_probe(ctx, case, probe)  # type: ignore[arg-type]

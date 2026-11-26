@@ -7,7 +7,7 @@ vi.mock('../../../api/client', () => ({ contentApi: vi.fn(), blobApi: vi.fn(), l
 // back the session id and records the plans it was given, so what is under test is what the cover adds to it.
 vi.mock('../../blob/transport', async (orig) => ({ ...(await orig<object>()), reserveAndPump: vi.fn(async () => ['up-1']) }))
 
-import { COVER_SPEC, COVER_UNREADABLE, CoverStaleError, MAX_COVER_SOURCE_BYTES, uploadCoverImage, writeNodeCover } from './coverWrite'
+import { COVER_SPEC, COVER_UNREADABLE, CoverStaleError, VECTOR_DERIVED_META, MAX_COVER_SOURCE_BYTES, uploadCoverImage, writeNodeCover } from './coverWrite'
 import { FULL_FRAME, uploadedCover } from './coverModel'
 import { unsealNodeMeta } from '../nodeMeta'
 import { MetaConflictError } from '../sealedMetaWrite'
@@ -29,6 +29,16 @@ const stubDeriver = (opts: { fails?: boolean } = {}) => {
     return { bytes: new Uint8Array([0xff, 0xd8, spec.maxEdge & 0xff, spec.maxEdge >> 8]), source: { w: 4000, h: 3000 } }
   })
   return { deriveImage, deriveVideoPoster: vi.fn() } as unknown as MediaDeriver & { deriveImage: typeof deriveImage }
+}
+/** A deriver that also draws an SVG (the browser's does, on the page): its raster is a PNG the test can recognise. */
+const RASTER = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' })
+const svgDeriver = (opts: { fails?: boolean } = {}) => {
+  const d = stubDeriver()
+  const rasterizeSvg = vi.fn(async () => {
+    if (opts.fails) throw new Error('svg_unreadable')
+    return RASTER
+  })
+  return Object.assign(d, { rasterizeSvg })
 }
 const source = (type: string, bytes = [1, 2, 3]) => ({ blob: new Blob([new Uint8Array(bytes)], { type }), mediaType: type, name: 'IMG_0001.JPG' })
 const planOfLastUpload = () => vi.mocked(reserveAndPump).mock.calls.at(-1)![0][0] as BlobPlan
@@ -69,6 +79,30 @@ describe('uploadCoverImage - the node\'s own COVER blob', () => {
     const deriver = stubDeriver()
     await uploadCoverImage(SCOPE, NODE, key, source('application/octet-stream'), deriver)
     expect(deriver.deriveImage).not.toHaveBeenCalled()
+  })
+
+  it('draws an SVG at the cover\'s edge and stores that drawing as a WebP (alpha kept) - never the SVG itself', async () => {
+    const deriver = svgDeriver()
+    const svg = source('image/svg+xml', [...new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>')])
+    await uploadCoverImage(SCOPE, NODE, key, svg, deriver, { strict: true })
+    expect(deriver.rasterizeSvg).toHaveBeenCalledWith(svg.blob, COVER_SPEC.maxEdge)
+    expect(deriver.deriveImage, 'the raster is what is encoded, not the markup').toHaveBeenCalledWith(RASTER, { ...COVER_SPEC, mimeType: 'image/webp' })
+    expect(readBlobMeta(SCOPE, key, planOfLastUpload())).toEqual({ v: 1, ...VECTOR_DERIVED_META })
+    expect(VECTOR_DERIVED_META).toEqual({ type: 'image/webp' })
+  })
+
+  it('an SVG the browser cannot draw is refused when strict, and nothing is uploaded', async () => {
+    const deriver = svgDeriver({ fails: true })
+    await expect(uploadCoverImage(SCOPE, NODE, key, source('image/svg+xml'), deriver, { strict: true })).rejects.toThrow(COVER_UNREADABLE)
+    expect(deriver.deriveImage, 'no raster decode of the markup either').not.toHaveBeenCalled()
+    expect(reserveAndPump).not.toHaveBeenCalled()
+  })
+
+  it('a raster image never goes through the SVG drawing', async () => {
+    const deriver = svgDeriver()
+    await uploadCoverImage(SCOPE, NODE, key, source('image/png'), deriver, { strict: true })
+    expect(deriver.rasterizeSvg).not.toHaveBeenCalled()
+    expect(readBlobMeta(SCOPE, key, planOfLastUpload())).toEqual({ v: 1, type: 'image/jpeg' })
   })
 
   it('states its limit: a source over 40 MB is the picker\'s to refuse', () => {

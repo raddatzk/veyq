@@ -37,7 +37,9 @@ import { sealName, sealAvatar, myUserId, type SealedMemberName, type SealedMembe
 import type { ScopeKey } from '../features/spaces/epochs'
 import JoinPicturePicker from '../features/account/profile/JoinPicturePicker.vue'
 import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.vue'
+import { sealKitRecord } from '../features/account/emergencyKit/kitRecord'
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
+import { secretKeyReady } from '../shared/ui/secretKeyEntry'
 import { InviteRole } from '../api/generated/tenants'
 import { buildAccount, type BuiltAccount } from '@veyq/crypto/accountBirth'
 import { login } from '../features/account/login/login'
@@ -312,6 +314,9 @@ async function finishRegistration() {
     const userId = crypto.randomUUID()
     const acct = built
     const handle = username.value.trim().toLowerCase()
+    // The kit this account was just shown is saved and kept (`kitReady`): its record rides in the register request, sealed
+    // under the new Master Key before that key is zeroed (ADR 0157 decision 4) — a birth has no session to write it after.
+    const kitRecord = sealKitRecord(acct.masterKey)
     if (isMember.value) {
       // Everything sealed under the tenant key is built from the invite it is handed: a re-check after `409
       // invite_changed` may carry the tenant key at another epoch.
@@ -321,13 +326,15 @@ async function finishRegistration() {
         const key = { epoch: opened.grantedEpoch, key: opened.epochKey }
         return registerAndAccept(
           secret, userId, handle, acct.material, undefined, sealedNameFor(key, userId), sealedAvatarFor(key, userId), join,
-          linkInvite.value ? inviteeEmail.value : undefined,
+          linkInvite.value ? inviteeEmail.value : undefined, kitRecord,
         )
       }, rereadInvite, undefined, acct.masterKey)
     } else {
       const born = bornTenantScope({ userId, identity: acct.identity }, tenantId.value)
       const key = { epoch: 0, key: born.scopeRootKey }
-      await registerAndAccept(secret, userId, handle, acct.material, born.birth, sealedNameFor(key, userId), sealedAvatarFor(key, userId))
+      await registerAndAccept(
+        secret, userId, handle, acct.material, born.birth, sealedNameFor(key, userId), sealedAvatarFor(key, userId), undefined, undefined, kitRecord,
+      )
       await holdBorn(born.scopeRootKey, acct.masterKey)
     }
     acct.masterKey.fill(0)
@@ -357,7 +364,7 @@ async function askForConfirmation() {
 
 /** Existing owner: sign in, unlock (identity key), then seal the grant to it and accept. */
 async function signInAndAccept() {
-  if (password.value.length === 0 || secretKey.value.trim().length === 0) return
+  if (password.value.length === 0 || !secretKeyReady(secretKey.value)) return
   if (!emailReady.value) {
     error.value = t('tenant.join.emailInvalid')
     return
@@ -623,7 +630,7 @@ async function mapError(e: unknown): Promise<string> {
             </label>
             <VeyqMessage v-if="error" tone="error">{{ error }}</VeyqMessage>
             <VeyqButton type="submit" :label="jcopy('join')" icon="check" :loading="busy"
-                    :disabled="!usernameReady || password.length === 0 || secretKey.trim().length === 0 || !inviteeEmail" />
+                    :disabled="!usernameReady || password.length === 0 || !secretKeyReady(secretKey) || !inviteeEmail" />
           </form>
           <VeyqButton v-if="linkInvite" :label="t('tenant.join.newAccount')" variant="secondary" appearance="text" size="small"
                       data-testid="join-new-account" :disabled="busy" @click="chooseAccount('register')" />

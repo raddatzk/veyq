@@ -80,6 +80,14 @@ export interface MediaDeriver {
    * would read the file once more for nothing.
    */
   probeDimensions?(source: Blob, mediaType: string): Promise<Dimensions | null>
+  /**
+   * Draw an SVG with its longer edge at `maxEdge` and hand back the pixels as a lossless PNG, alpha kept, for
+   * [deriveImage] to encode. `createImageBitmap` decodes no SVG and a Worker has no `<img>`, so this runs on the page
+   * thread through an `<img>`: the one way a browser draws an SVG with no script run and nothing fetched from
+   * elsewhere. A vector is drawn at the target size, never downscaled from its own: a 24 px icon comes out sharp at 2048 px.
+   * Rejects when the browser cannot draw it (not an SVG, no size of its own, a canvas the drawing tainted).
+   */
+  rasterizeSvg?(source: Blob, maxEdge: number): Promise<Blob>
 }
 
 export { scaleToMaxEdge } from './mediaPixels'
@@ -190,6 +198,42 @@ export function createBrowserDeriver(): MediaDeriver {
       if (mediaType.startsWith('video/')) return (await videoSizeFromHeader(source)) ?? videoSizeFromElement(source)
       return null
     },
+    rasterizeSvg: rasterizeSvgOnPage,
+  }
+}
+
+/** The SVG media type: an `<img>` draws a blob as SVG only when the blob is typed so (a browser never sniffs SVG). */
+export const SVG_TYPE = 'image/svg+xml'
+
+/** [MediaDeriver.rasterizeSvg] in the browser: an `<img>` on a blob URL typed [SVG_TYPE], drawn onto a page canvas. */
+async function rasterizeSvgOnPage(source: Blob, maxEdge: number): Promise<Blob> {
+  const url = URL.createObjectURL(source.type === SVG_TYPE ? source : source.slice(0, source.size, SVG_TYPE))
+  const img = new Image()
+  try {
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve()
+      img.onerror = () => reject(new Error('svg_unreadable'))
+      img.src = url
+    })
+    // The size the cover dialog's cropper measured the crop against: the same `<img>` reading of the same file, so the
+    // normalized crop frames the raster exactly as it framed the drawing. An SVG with no size of its own has none here.
+    const { naturalWidth: w, naturalHeight: h } = img
+    if (!(w > 0 && h > 0)) throw new Error('svg_unsized')
+    const scale = maxEdge / Math.max(w, h)
+    const width = Math.max(1, Math.round(w * scale))
+    const height = Math.max(1, Math.round(h * scale))
+    const canvas = PAGE_PORT.create(width, height)
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('canvas_unavailable')
+    ctx.drawImage(img, 0, 0, width, height)
+    const png = await PAGE_PORT.encode(canvas, 'image/png', 1) // a tainted canvas throws here: that SVG is refused
+    if (!png) throw new Error('encode_failed')
+    return png
+  } finally {
+    img.onload = null
+    img.onerror = null
+    img.removeAttribute('src')
+    URL.revokeObjectURL(url)
   }
 }
 

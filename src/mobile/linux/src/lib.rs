@@ -1,4 +1,4 @@
-//! The veyq app on Linux (ADR 0136 decision 4; ADR 0123's Consequences, the Linux app): every rule is the core's, reached
+//! The veyq app on Linux (ADR 0161 decision 4; ADR 0123's Consequences, the Linux app): every rule is the core's, reached
 //! through libveyq.so ([bridge]); this crate draws and holds the device. Its UI is split as the web's (ADR 0154 decision 3,
 //! ADR 0079): the core UI ([core_ui]) — the shell, the frame, the header, the level, the shared sheets and dialogs, the
 //! notices, New, the uploads and the drop, the received link's screen — and one module per application under [apps], each

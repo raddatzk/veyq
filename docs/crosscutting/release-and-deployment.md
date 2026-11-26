@@ -95,7 +95,8 @@ sees the earlier one's tag.
    is a branch tip (`scripts/staging_retention.py`, selftested; on from its first run, owner 2026-11-07). A staging
    index is the image and its attestation manifest; a snapshot's own index names those two, so for a commit with a
    snapshot the staging index goes alone, and for one without it goes with its children. The deletion is GitHub's
-   package API under the workflow's token — a public preview, proven by its first run.
+   package API under the workflow's token — a public preview, which has no untag call (so whole versions go); its first
+   run deleted green (Publish run 45179033821, 2026-11-23).
 6. **The image carries `<major>.<minor>`, never `-SNAPSHOT`**: a release is the snapshot's bytes, so the two carry
    one name, and a snapshot reports the release it may become. Whether a digest *is* a release is the release
    signature's fact. Images published before this carry `<major>.<minor>-SNAPSHOT`.
@@ -113,13 +114,17 @@ which no guard reads.
 
 ## Releasing: a snapshot promoted
 
-A release is a snapshot promoted (ADR 0091 decision 5); nothing is built again. The owner saves a **draft** GitHub
-Release on a `snapshot-<major>.<minor>` tag, with the notes, and starts `release.yml` (*Run workflow*) on the branch
+A release is a snapshot promoted (ADR 0091 decision 5); nothing is built again. Publish writes the **draft** GitHub
+Release on the `snapshot-<major>.<minor>` tag of each snapshot it makes on `main`, its notes gathered from the `## Release
+note` section of every pull request since the last release (`publish.yml` › `release-draft`, `scripts/release_notes.py`;
+it keeps the one draft the promotion needs and never overwrites one a person edited; a dispatch on `main` over a
+snapshot already made refreshes its untouched draft, after a note was corrected in its pull request); the owner reads it, edits it, and starts `release.yml` (*Run workflow*) on the branch
 the snapshot came from; the click path is [`infra/README.md`](../../infra/README.md) § Cutting a release. GitHub starts
 no workflow for a draft, which is why the dispatch starts it. Its jobs, each holding only what it writes, in group
 `veyq-release`:
 
-1. `check` (`scripts/promote.py`) refuses unless exactly one draft exists, on a snapshot tag; the run's branch may
+1. `check` (`scripts/promote.py`) refuses unless exactly one draft exists, on a snapshot tag, listing nothing under
+   **Needs a note**; the run's branch may
    release that major (`main` its `VERSION`, `release/<major>.x` its own); the tag's commit counts that version and is on
    the branch; it is newer than every release of its major (so `<major>` and `latest` never move backwards); the
    snapshot's `sha-<commit>` and `-SNAPSHOT` name one index per image, signed under the snapshot identity; no release
@@ -154,9 +159,14 @@ writes the mirror layout `veyqctl` reads (`releases.json`, `<tag>/…`), which l
 **A release pins what it runs and what it is built from** (ADR 0057 § 6): third-party images by digest, written
 `repo:tag@sha256:…` (`validate_image_pins.py`); Dockerfile bases by their index digest; the OpenAPI generator JAR, the
 Gradle wrapper and distribution by SHA-256, the backend's dependencies by Gradle verification; the actions by commit
-SHA (`validate_action_pins.py`); Helm by its tarball's SHA-256. Dependabot's `docker`, `docker-compose` and `helm`
-ecosystems propose bumps ([`.github/dependabot.yml`](../../.github/dependabot.yml)); bumping a pin is part of cutting a
-release.
+SHA (`validate_action_pins.py`); Helm by its tarball's SHA-256. **Every pin has an updater**
+([ADR 0158](../decisions/0158-every-pin-has-an-updater-a-self-hosted-renovate-proposes-each-bump-with-what-moves-with-it.md)):
+a self-hosted Renovate, acting as a GitHub App of this repository (`.github/workflows/renovate.yml`,
+[`renovate.json5`](../../renovate.json5)), proposes every pin's bump weekly in a pull request that carries what moves with
+it — a SHA-256 or hashes from published bytes (`scripts/pin_follow.py`), a lockfile, and, where the bumped tree must be
+executed, the verification metadata, the rebuilt WebP encoder or the fuzzer's lock, pushed by the Renovate follow
+(`renovate-follow*.yml`, `scripts/renovate_follow.py`). `Checks`' `pins` job is red on a pin Renovate does not extract.
+Bumping a pin is no part of cutting a release.
 
 ## The two deployment targets
 
@@ -328,9 +338,10 @@ check is logged and retried with a back-off, and blocks nothing.
   are a procedure, written in [`infra/README.md`](../../infra/README.md) § Cutting a release, and no train has left.
 - **`veyq-server`** ([ADR 0126](../decisions/0126-veyqctl-writes-a-gitops-repository-and-veyq-server-sets-up-its-cluster.md)
   decision 6): a repository of its own that sets up the server and cluster beneath a GitOps instance, rendered by
-  Copier from a verified release, which `init` offers in an empty repository. Built: the template and its checks in
-  `github.com/raddatzk/veyq-server` (cr-veyq-server-template), and `init`'s server path, self-tested against
-  stand-ins (cr-veyqctl-server-path phase 3). Not yet: veyq-server's first release, and a run on a real server.
+  Copier from a verified release, which `init` offers in an empty repository. Built and in use: the template, its
+  checks and its signed releases in `github.com/raddatzk/veyq-server` (v0.5, v0.8), and `init`'s server path, which
+  set up the maintainer's instance from an empty repository on a fresh server (2026-11-11 and 2026-11-12; the Run
+  page's *How far this is proven*).
 - **The desktop apps' packages** ([ADR 0139](../decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md)):
   a Flatpak bundle per Linux architecture and an x64 MSIX, built and smoke-run in every Checks run, staged by ORAS as
   `veyq-apps:build-<sha>-<platform>`, named and signed at snapshot with the images, and at promotion re-signed, the MSIX

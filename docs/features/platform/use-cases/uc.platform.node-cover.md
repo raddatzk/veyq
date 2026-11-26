@@ -21,15 +21,18 @@
    beside the favorite heart) gated by `coverRights` (fail closed); there is **no separate Remove entry** — removal lives
    in the dialog.
 2. Core's **cover dialog** (`core/node/cover/components/CoverDialog.vue`) opens — the same one for a folder, a drop box, a
-   Memory and a Pot. It offers **Choose an image** (a hidden `image/*` input: an image, not empty, up to **40 MB**, otherwise a clear
-   message inside the dialog and nothing is read), the shared **16:9 crop** (drag to pan, zoom 1–3×), **Remove cover** (only where
+   Memory and a Pot. It offers **Choose an image** (a hidden `image/*,.heic,.heif` input: an image, not empty, up to **40 MB**, otherwise a
+   clear message inside the dialog and nothing is read; a file the system hands over untyped is an image by its extension -
+   `.heic`, `.heif`, `.svg`), the shared **16:9 crop** (drag to pan, zoom 1–3×), **Remove cover** (only where
    the node has one — a cover that could not be opened can still be removed), **Cancel** and **Save cover**. Opened on a node
    that has a cover, it shows that image with its **stored crop restored**, so the member can re-frame it without uploading
    again.
 3. **Save** emits what was decided and core writes it (`useNodeCover.save`): a **new image** is derived with the existing
-   pipeline — one JPEG, long edge 2048, quality 0.85, exactly what Memories' covers always used — and sealed as the node's own
+   pipeline — one JPEG, long edge 2048, quality 0.85, exactly what Memories' covers always used; an **SVG** is first drawn at
+   that edge through an `<img>` (no script runs, nothing is fetched) and stored as one **WebP** of that drawing, so a logo's
+   transparency stays, never the SVG itself — and sealed as the node's own
    blob: a fresh `K_blob` wrapped under the **node's content key**, bound to blob, node and role `COVER`
-   ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), the blob meta `{type: image/jpeg}` under `K_blob`. The upload
+   ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), the blob meta `{type: image/jpeg}` (an SVG's: `image/webp`) under `K_blob`. The upload
    runs as a job of the core upload queue (progress and failure show in the tray; a quota refusal says so).
 4. One request hands the open upload **and** the node's re-sealed `wrappedMeta` (the `cover` field `{ source, crop }`, revision-
    checked, [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)): `setNodeCover` attaches the upload,
@@ -60,7 +63,10 @@
 - **E2 — the upload or the write fails, or is cancelled:** the **old cover stays, exactly as it was** (the blob step and the
   meta are one transaction); an upload no write ever attached is an unfinished upload like any other, which the server's
   stale-session purge reclaims. Nothing is half-done.
-- **E3 — an image the browser cannot decode:** refused (`cover_unreadable`), never sealed as a cover nothing could draw.
+- **E3 — an image the browser cannot decode:** refused (`cover_unreadable`), never sealed as a cover nothing could draw. Where the
+  dialog's cropper already cannot draw the picked file (an HEIC outside Safari, a damaged file) the dialog says so
+  (`node.cover.cannotShow`: open it in Safari or save it as a JPEG or PNG) and goes back to the current cover, or to nothing;
+  Save never stays silently disabled on an empty frame.
 - **E4 — a cover that fails to load, or any source but the upload** (an older Memory client's photo reference): the node shows
   its kind's **icon**, silently; every other writer keeps the stored value.
 - **E5 — a share guest:** sees the covers of the nodes in its shared subtree (the node's `wrappedMeta` it already gets, the

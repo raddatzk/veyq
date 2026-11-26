@@ -4,7 +4,7 @@
 //! from Settings' *Your profile* and from the header's *Edit profile* on one's own person page; both open the same core
 //! model (`Profile.Open`, `Watched.Profile`).
 //!
-//! The picture is the platform's to decode and draw, the core's to encode, pad and seal (ADR 0136 decision 1): GTK decodes
+//! The picture is the platform's to decode and draw, the core's to encode, pad and seal (ADR 0161 decision 1): GTK decodes
 //! the picked file (`gdk::Texture`), the cropper's pose is the core's math (`Cover.Pose` with a square frame of
 //! [EDGE] × [EDGE]), and the core asks this host to draw that pose as RGBA (`Picture.Square`, [answer]) before it encodes.
 use std::cell::{Cell, RefCell};

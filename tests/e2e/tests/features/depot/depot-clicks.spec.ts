@@ -668,10 +668,18 @@ test(
         ...(await tokens({ color: 'color: var(--app-muted)' })),
         'text-transform': 'uppercase',
       })
-      // The tools: one right-aligned group at the end of the tools row, which carries the one hairline under the tabs.
-      expect(await styleOf(page.locator('.veyq-level-toolbar'), ['display', 'justify-content'])).toEqual({
-        display: 'flex', 'justify-content': 'flex-end',
-      })
+      // The tools: one right-aligned group at the end of the tools row, which carries the one hairline under the tabs. Read
+      // where the group and its last control END, never `justify-content`'s keyword: Playwright 1.65's Chromium answers the
+      // stylesheet's `flex-end` as `flow-end`, a spelling, while the layout is what this rule is about.
+      expect(await styleOf(page.locator('.veyq-level-toolbar'), ['display'])).toEqual({ display: 'flex' })
+      expect(await page.locator('.veyq-level-tools').first().evaluate((row) => {
+        const toolbar = row.querySelector(':scope > .veyq-level-toolbar')!
+        const s = getComputedStyle(row)
+        const rowEnd = row.getBoundingClientRect().right - parseFloat(s.borderRightWidth) - parseFloat(s.paddingRight)
+        const toolbarEnd = toolbar.getBoundingClientRect().right
+        const lastEnd = Math.max(...[...toolbar.children].map((c) => c.getBoundingClientRect().right))
+        return { toolbarToRowEnd: Math.round(rowEnd - toolbarEnd), lastControlToToolbarEnd: Math.round(toolbarEnd - lastEnd) }
+      }), 'the group ends at the row\'s end, its last control at the group\'s').toEqual({ toolbarToRowEnd: 0, lastControlToToolbarEnd: 0 })
       expect(await styleOf(page.locator('.veyq-level-tools'), ['display', 'border-bottom-style'])).toEqual({
         display: 'flex', 'border-bottom-style': 'solid',
       })

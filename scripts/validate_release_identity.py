@@ -48,11 +48,14 @@ manifests, the image signatures, the predicates and the tag each name it.
      `snapshot-…`.** Every write in the files — found by what a step does (a login or build-push action, or a `run:`
      that pushes, logs in, signs or attests), never listed — is gated by its step, its job or its push input on its
      file's gate (`needs.version.outputs.kind == 'stage'` in checks.yml, `needs.checks-run.outputs.kind == 'snapshot'`
-     in publish.yml), so a pull request (Dependabot's included) and a local run write nothing.
+     in publish.yml), so a pull request (an updater's included) and a local run write nothing.
      `workflow_dispatch` takes no input: a dispatch is a snapshot now, by hand, and a release is a promotion in a
      workflow of its own. The `snapshot` job holds `packages: write` and `id-token: write` and never `contents: write`; the
      `snapshot-tag` job needs it, is gated the same way and holds exactly `contents: write`; a ref write (`git push`, or
-     `gh api … git/refs`, the way the tag is created) runs in that job alone, as `snapshot-${VERSION}` and never a `v…` name, and no step writes a GitHub Release. The `snapshot` job's
+     `gh api … git/refs`, the way the tag is created) runs in that job alone, as `snapshot-${VERSION}` and never a `v…` name, and no step writes a GitHub Release — but the `release-draft`
+     job's one draft (cr-release-draft-from-publish): exactly `contents: write` and `pull-requests: read`, after a green
+     `snapshot-tag` and on `main` only, its one create-or-edit line behind its `draft == true` check, and no publishing,
+     upload or `gh release` beside it. The `snapshot` job's
      refusal (`scripts/snapshot.py check-unpublished`) and the tag step are keyed on the *tree-derived* version, force
      nothing, and the refusal comes before the job's first write. The `build` job stamps the same value
      into the image as `VEYQ_VERSION`, which is what the running instance later reports — and every build-arg it
@@ -116,7 +119,8 @@ manifests, the image signatures, the predicates and the tag each name it.
      own `<name>.bundle` in one loop over that list; it packages the chart from the snapshot's commit as
      `$VERSION` and signs it. Every job that runs cosign installs publish.yml's cosign first, the Helm pin is the
      pipeline's and publish.yml's (each states it: a caller's env does not reach a called workflow),
-     the file states no certificate identity of its own, and no other workflow writes a GitHub Release. What
+     the file states no certificate identity of its own, and no other workflow writes a GitHub Release (a `gh api`
+     write by `-X` or `--method`) but publish.yml's draft line, held by assertion 3. What
      `scripts/promote.py` decides — every refusal — is `scripts/promote_selftest.py`'s, which `check` and the
      pipeline's `guards` run.
  15. **A job that can write installs only hashed wheels.** Every `pip install` (also `python -m pip install`) of every
@@ -457,6 +461,21 @@ VERSION_JOB, VERSION_STEP = "version", "veyq-version"
 # The job that publishes a snapshot, and the one job that writes to the repository: its git tag (ADR 0091 decision 5).
 PUBLISH_JOB = "snapshot"
 SNAPSHOT_TAG_JOB = "snapshot-tag"
+# The one job beside release.yml that writes a GitHub Release: the release DRAFT, never a published release, and only
+# through its one create-or-edit line (cr-release-draft-from-publish). Publishing stays release.yml's alone.
+DRAFT_JOB = "release-draft"
+DRAFT_PERMISSIONS = {"contents": "write", "pull-requests": "read"}
+DRAFT_UPLOAD = re.compile(r"\buploads\.github\.com\b")  # the release-asset host: a draft job uploads nothing
+DRAFT_WRITE = re.compile(r'^\s*gh api --method (?:POST "repos/\$\{GITHUB_REPOSITORY\}/releases"|'
+                         r'PATCH "repos/\$\{GITHUB_REPOSITORY\}/releases/\$\{DRAFT_ID\}") --input "\$payload" --jq \.html_url\s*$')
+DRAFT_GUARD = re.compile(r'if \[\[ "\$\(jq -r \.draft "\$payload"\)" != "true" \]\]; then\s*\n[^\n]*\n\s*exit 1')
+# The draft job's whole gate, pinned: on `main`, for a version `checks-run` named, and only once the snapshot's tag
+# exists — after a green `snapshot-tag`, or because the commit already carried its snapshot (`kind == 'none'`, the one
+# case `snapshot-tag` is skipped with the tag there; a dispatch refreshes the draft then, ADR 0091 decision 5, refined 2026-11-23).
+# Assertion 16 accepts this disjunction for `snapshot-tag` here and nowhere else; release_notes.py refuses unless
+# `snapshot-<version>` names the commit.
+DRAFT_IF = ("!cancelled() && github.ref_name == 'main' && needs.checks-run.outputs.draft_version != '' && "
+            "(needs.snapshot-tag.result == 'success' || needs.checks-run.outputs.kind == 'none')")
 REFUSE_STEP, TAG_STEP = "assert-snapshot-unpublished", "snapshot-tag"
 STAGED_STEP = "assert-staged"  # publish.yml's check that the bytes are the Checks run's (scripts/snapshot.py staged)
 BUILD_JOB, LOCAL_BUILD_JOB = "build", "build-local"
@@ -755,6 +774,20 @@ def gate_of(job_name: str) -> str:
     return STAGES if job_name in CHECKS_JOBS else PUBLISHES
 
 
+def draft_write_ok(step: dict) -> bool:
+    """Whether a `release-draft` step's release writes are exactly the draft's create-or-edit lines, behind the check
+    that the payload is a draft — and nothing else that touches a release (no `gh release`, no upload, no publishing)."""
+    body = str(step.get("run") or "")
+    if step.get("uses") or "gh release" in body or DRAFT_UPLOAD.search(body) \
+            or "draft=false" in body or '"draft": false' in body:
+        return False
+    writes = [line for line in body.splitlines() if RELEASE_ASSET_WRITE.search(line)]
+    if not writes or not all(DRAFT_WRITE.match(line) for line in writes):
+        return False
+    guard = DRAFT_GUARD.search(body)
+    return bool(guard) and guard.start() < body.find(writes[0])
+
+
 compute = step_by_id(workflow_doc, VERSION_JOB, VERSION_STEP) if workflow_doc else None
 if workflow_doc and compute is None:
     fail(
@@ -812,7 +845,7 @@ elif compute is not None and version_match:
                 "tagged", event("push", "main"), 0, {"kind": "stage", **stamp},
             ),
             (
-                # Dependabot's included: a pull request builds and tests, and writes nothing.
+                # An updater's included: a pull request builds and tests, and writes nothing.
                 "a pull request",
                 "full", event("pull_request", "12/merge"), 0, {"kind": "none", **stamp},
             ),
@@ -1221,6 +1254,29 @@ if workflow_doc:
         fail(f"the `{PUBLISH_JOB}` job writes (step `{publish_steps[first_write].get('name')}`) before its `{REFUSE_STEP}` "
              f"step — the refusal would come after a published name already moved")
 
+    # The release draft (cr-release-draft-from-publish): the one job beside release.yml that writes a GitHub Release, and
+    # only a draft. It holds exactly what it needs, runs only after the snapshot's tag and only on `main`, and its writes
+    # are the draft's create-or-edit lines (draft_write_ok, checked per step below); it signs nothing and pushes nothing.
+    draft_job = jobs.get(DRAFT_JOB) or {}
+    if DRAFT_JOB in PUBLISH_JOBS:
+        if draft_job.get("permissions") != DRAFT_PERMISSIONS:
+            fail(f"the `{DRAFT_JOB}` job's permissions are {draft_job.get('permissions') or 'the default'}, not exactly "
+                 f"{DRAFT_PERMISSIONS} — it writes a draft and reads pull requests, and signs, stages and tags nothing")
+        draft_if = " ".join(str(draft_job.get("if") or "").split())
+        if draft_if.startswith("${{") and draft_if.endswith("}}"):
+            draft_if = draft_if[3:-2].strip()
+        if not {SNAPSHOT_TAG_JOB, "checks-run"} <= set(draft_job.get("needs") or []) or draft_if != DRAFT_IF:
+            fail(f"the `{DRAFT_JOB}` job's `if:` is `{draft_if}`, not exactly `{DRAFT_IF}`, or it does not need "
+                 f"`checks-run` and `{SNAPSHOT_TAG_JOB}` — a draft names a tagged snapshot (a green `{SNAPSHOT_TAG_JOB}`, "
+                 f"or a commit that already carries it), and a fix release's draft is the owner's")
+        for step in job_steps(workflow_doc, DRAFT_JOB):
+            if RELEASE_ASSET_WRITE.search(str(step.get("run") or "")) and not draft_write_ok(step):
+                fail(f"job `{DRAFT_JOB}`, step `{step.get('name') or step.get('id')}` writes a release other than by "
+                     f"the draft's create-or-edit line behind its `draft == true` check — publishing is "
+                     f"{RELEASE_WORKFLOW}'s alone")
+    elif any(DRAFT_WRITE.match(line) for line in WORKFLOW.read_text().splitlines()):
+        fail(f"{rel_of(WORKFLOW)} carries the draft's write outside a `{DRAFT_JOB}` job")
+
     # The only push to the repository is the tag job's, and it never pushes a release's name: `v…` says "released"
     # (ADR 0057 §2), and every tag watcher reads a `v` tag as a release.
     text = "\n".join(w.read_text() for w in (CHECKS, WORKFLOW))
@@ -1232,6 +1288,8 @@ if workflow_doc:
             if GIT_PUSH.search(str(step.get("run") or "")) and job_name != SNAPSHOT_TAG_JOB:
                 fail(f"job `{job_name}`, step `{step.get('name') or step.get('id')}` writes a git ref — the one write to "
                      f"the repository is the `{SNAPSHOT_TAG_JOB}` job's, which holds `contents: write` and nothing else")
+            if job_name == DRAFT_JOB and job_name in PUBLISH_JOBS and draft_write_ok(step):
+                continue
             if GH_RELEASE_CREATE.search(str(step.get("run") or "")) or RELEASE_ASSET_WRITE.search(str(step.get("run") or "")) \
                     or RELEASE_ACTION.search(str(step.get("uses") or "").split("@", 1)[0]):
                 fail(f"job `{job_name}`, step `{step.get('name') or step.get('id')}` writes a GitHub Release — a "
@@ -1266,7 +1324,7 @@ if workflow_doc:
             if writes and not (job_gated or gated_on(step.get("if"), gate)):
                 fail(
                     f"job `{job_name}`, step `{step.get('name') or step.get('id')}` {' and '.join(writes)} when "
-                    f"`{gate}` is not true — a pull request (Dependabot's included) and a local run write to no "
+                    f"`{gate}` is not true — a pull request (an updater's included) and a local run write to no "
                     f"registry and no remote. Gate the step, its job, or the push input on `{gate}`."
                 )
     if registry_writes == 0:
@@ -1369,6 +1427,20 @@ if workflow_doc:
                           for s in job_steps(publish_doc, CHECKS_RUN_JOB)):
         fail(f"{rel_of(WORKFLOW)}: `{CHECKS_RUN_JOB}` does not run `{SNAPSHOT_SCRIPT} checks-run` on this commit and "
              f"branch — nothing finds the publishable commit's green Checks run before the snapshot signs")
+    # The weekly schedule waits for a Checks run still going; a dispatch never does (`snapshot.await_completion`): the
+    # step passes `--wait-minutes "$WAIT_MINUTES"`, that variable is 120 on a schedule and 0 otherwise, and the job's
+    # budget outlasts the wait. Without it a late schedule a few minutes after a merge refused, and the week had no
+    # snapshot and no draft (2026-11-23, run 45179033821).
+    waiting = [s for s in job_steps(publish_doc, CHECKS_RUN_JOB) if f"{SNAPSHOT_SCRIPT} checks-run" in str(s.get("run") or "")]
+    wait_expr = " ".join(str(((waiting[0].get("env") or {}) if waiting else {}).get("WAIT_MINUTES") or "").split())
+    budget = finder.get("timeout-minutes")
+    if finder and (not waiting or '--wait-minutes "$WAIT_MINUTES"' not in str(waiting[0].get("run") or "")
+                   or wait_expr != "${{ github.event_name == 'schedule' && '120' || '0' }}"
+                   or not isinstance(budget, int) or budget <= 120):
+        fail(f"{rel_of(WORKFLOW)}: `{CHECKS_RUN_JOB}` does not wait for a Checks run still going on the schedule alone "
+             f"(`--wait-minutes \"$WAIT_MINUTES\"`, `WAIT_MINUTES` = `${{{{ github.event_name == 'schedule' && '120' "
+             f"|| '0' }}}}`, a budget above 120 minutes; it is `{wait_expr}`, budget {budget}) — a late schedule refuses a "
+             f"Checks run minutes from done, and the week gets no snapshot and no draft")
     if str((finder.get("outputs") or {}).get("kind") or "").replace(" ", "") != "${{steps.checks-run.outputs.kind}}":
         fail(f"{rel_of(WORKFLOW)}: `{CHECKS_RUN_JOB}`'s `kind` output is not its `checks-run` step's — the gate every "
              f"write of the snapshot answers to would come from somewhere else")
@@ -2202,7 +2274,7 @@ RELEASE_JOBS = {
 }
 BUILD_RUN = re.compile(r"\b(?:docker\s+build|buildx\s+build|gradlew|pnpm\s|npm\s|quarkusBuild)\b")
 PUBLISH_DRAFT = re.compile(r"-F\s+draft=false\b")
-RELEASE_WRITE = re.compile(r"\bgh\s+release\s+(?:create|upload|edit|delete)\b|\bgh\s+api\s+-X\s+(?:PATCH|POST|DELETE)\b[^\n]*releases"
+RELEASE_WRITE = re.compile(r"\bgh\s+release\s+(?:create|upload|edit|delete)\b|\bgh\s+api\s+(?:-X|--method)\s+(?:PATCH|POST|DELETE)\b[^\n]*releases"
                            r"|uploads\.github\.com")
 if not RELEASE_FILE.is_file():
     fail(f"{RELEASE_WORKFLOW} is missing — the release identity (assertion 7) names a workflow that does not exist, so "
@@ -2383,6 +2455,8 @@ for other in sorted(WORKFLOW.parent.glob("*.y*ml")):
     if other.relative_to(ROOT).as_posix() == RELEASE_WORKFLOW:
         continue
     for number, line in enumerate(other.read_text().splitlines(), 1):
+        if other == WORKFLOW and DRAFT_WRITE.match(line):
+            continue  # the draft's one create-or-edit line, held to its job above
         if RELEASE_WRITE.search(line) or GH_RELEASE_CREATE.search(line):
             fail(f"{other.relative_to(ROOT)}:{number} writes a GitHub Release — only {RELEASE_WORKFLOW}, the release "
                  f"identity, does")
@@ -2503,6 +2577,8 @@ for wf_path, wf_doc in ((WORKFLOW, publish_doc), (CHECKS, checks_doc),
             )
             continue
         for need in risky:
+            if wf_path == WORKFLOW and name == DRAFT_JOB and need == SNAPSHOT_TAG_JOB and condition == DRAFT_IF:
+                continue  # its pinned gate: a skipped `snapshot-tag` is accepted only with `kind == 'none'` (DRAFT_IF)
             if (f"needs.{need}.result == 'success'" not in terms
                     and not any(f"needs.{need}.result)" in t and t.startswith("contains(fromJSON(") for t in terms)):
                 fail(
@@ -2818,7 +2894,7 @@ print(
     f"publishing nothing), every write waits for `{PUBLISHES}`, the stamp is declared by the {stamped_targets} published "
     f"target stage(s) and no other, which label their version and revision from it with no build step overriding a "
     f"label, a snapshot refuses to replace one, is signed by the pinned cosign {signing_cosign or '?'} and attested per "
-    f"lane and architecture, gets its `snapshot-` tag from a job holding `contents: write` alone and no GitHub Release, "
+    f"lane and architecture, gets its `snapshot-` tag from a job holding `contents: write` alone and, of GitHub Releases, only a draft from `release-draft`, "
     f"the snapshot waits on every one of the "
     f"{len(stage_jobs) if workflow_doc else 0} stages as green, the producer carries "
     f"the {len(recipe_assets)} recipe file(s) the derivation names ({', '.join(recipe_assets)}), {written_tags} written-down image "

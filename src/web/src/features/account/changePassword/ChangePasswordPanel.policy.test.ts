@@ -37,6 +37,7 @@ import { pwnedCount } from '../../../shared/pwned'
 import { isRememberSupported } from '../rememberMe/deviceKeyWrap'
 import { realI18n, t } from '../../../test/i18n'
 import { CORE_REMEMBER_DEVICE, CORE_REMEMBER_DEVICE_PASSWORDLESS } from '../../platform/capabilities'
+import { TYPED_SECRET_KEY } from '../../../test/secretKey'
 
 const stubs = {
   // The panel's only route link — recovery, where a forgotten password goes now that this screen refuses to
@@ -81,7 +82,7 @@ describe('ChangePasswordPanel — the password floor', () => {
     await pw[0].setValue('the-current-one')
     await pw[1].setValue('short')  // 5 < 10
     await pw[2].setValue('short')
-    await w.find('input[name="secret-key"]').setValue('the-secret-key')
+    await w.find('input[name="secret-key"]').setValue(TYPED_SECRET_KEY)
     await flushPromises()
 
     expect(w.text()).toContain(t('password.minLength'))
@@ -111,13 +112,13 @@ describe('ChangePasswordPanel — the password floor', () => {
     await pw[0].setValue('old')    // 3 < 10, and correctly irrelevant
     await pw[1].setValue('a long enough new password')
     await pw[2].setValue('a long enough new password')
-    await w.find('input[name="secret-key"]').setValue('the-secret-key')
+    await w.find('input[name="secret-key"]').setValue(TYPED_SECRET_KEY)
     await flushPromises()
 
     expect(submitDisabled(w)).toBe(false)
     await w.find('form').trigger('submit')
     await flushPromises()
-    expect(changePassword).toHaveBeenCalledWith('a long enough new password', 'the-secret-key', 'old')
+    expect(changePassword).toHaveBeenCalledWith('a long enough new password', TYPED_SECRET_KEY, 'old')
   })
 
   it('checks the finished new password when its field is left — never while typing, once per password', async () => {
@@ -148,7 +149,7 @@ describe('ChangePasswordPanel — the password floor', () => {
     await pw[1].setValue('a long enough new password')
     await pw[1].trigger('blur')
     await pw[2].setValue('a long enough new password')
-    await w.find('input[name="secret-key"]').setValue('the-secret-key')
+    await w.find('input[name="secret-key"]').setValue(TYPED_SECRET_KEY)
     await flushPromises()
     expect(w.text()).toContain(t('password.pwnedWarning', { count: 3 }))
 
@@ -175,7 +176,7 @@ describe('ChangePasswordPanel — the password floor', () => {
     await pw[1].setValue('a long enough new password')
     await pw[1].trigger('blur')
     await pw[2].setValue('a long enough new password')
-    await w.find('input[name="secret-key"]').setValue('the-secret-key')
+    await w.find('input[name="secret-key"]').setValue(TYPED_SECRET_KEY)
     await flushPromises()
     expect(w.text()).toContain(t('password.pwnedUnavailable'))
 
@@ -196,7 +197,7 @@ describe('ChangePasswordPanel — the re-enrol offer after a change', () => {
     await pw[0].setValue('the-current-one')
     await pw[1].setValue('0123456789')
     await pw[2].setValue('0123456789')
-    await w.find('input[name="secret-key"]').setValue('the-secret-key')
+    await w.find('input[name="secret-key"]').setValue(TYPED_SECRET_KEY)
     await flushPromises()
     await w.find('form').trigger('submit')
     await flushPromises()

@@ -18,7 +18,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * The account's Settings page (`uc.account.sessions`; ADR 0136 decision 2) over a server the test plays: the families, the device
+ * The account's Settings page (`uc.account.sessions`; ADR 0161 decision 2) over a server the test plays: the families, the device
  * wraps, the address, the capability and the device register — the register sealed and opened by the real suite, so
  * the names a row shows are the ones another device sealed.
  */

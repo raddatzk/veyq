@@ -8,4 +8,4 @@
 # knowingly-vulnerable dependency is not something we keep (the root pnpm-workspace.yaml's overrides). postcss-nested
 # 8 depends on postcss-selector-parser ^7.1.4. Drop this once @expressive-code/core asks for postcss-nested >= 7.
 overrides:
-  postcss-nested: ^8.0.1
+  postcss-nested: ^9.0.0

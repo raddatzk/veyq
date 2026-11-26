@@ -8,7 +8,7 @@
 
 ## Context
 
-[ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) decision 5 puts the Linux
+[ADR 0161](0161-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) decision 5 puts the Linux
 and the Windows app over one narrow bridge: six C functions (`bridge.h`), a call with its JSON answer, and a watch
 whose updates are JSON. Its first slice carried navigation and reads and nothing else. Every capability after it needs
 one of three things more:
@@ -107,7 +107,7 @@ handed over (`AppleDepot`, `fopen`). Some 60 calls are still to come, so the dis
   needs; the reader keeps the core's frame cache, so the host never sees a frame boundary.
 - **Decision 3 instead of streaming a file across** (host requests and chunked replies): that would be a protocol
   with backpressure, cancellation and partial-file cleanup on both sides, and the platform's file handling written in
-  Rust and in C# again. It reads ADR 0136 decision 1's "the platform's side of a file" as **the dialog and the grant are
+  Rust and in C# again. It reads ADR 0161 decision 1's "the platform's side of a file" as **the dialog and the grant are
   the platform's, the bytes the core's** — the reading the Apple app already followed, the path still the system's
   choice. Whether a packaged app's path still opens so (a Flatpak's document-portal path, an MSIX app's picked file)
   is not measured yet; packaging (native-apps § Open) checks it.
@@ -116,7 +116,7 @@ handed over (`AppleDepot`, `fopen`). Some 60 calls are still to come, so the dis
   generator would add a build dependency and a second language for the wire to save one line per call. The line is
   where the bridge decides nothing: hand-written, it is read in review as such; generated, a rule hiding in a model's
   signature would cross unread.
-- **When the pictures are read is the core's** (`session/AvatarsModel.kt`, held as `TenantSession.pictures`; ADR 0136
+- **When the pictures are read is the core's** (`session/AvatarsModel.kt`, held as `TenantSession.pictures`; ADR 0161
   decision 1): synced when the tenant opens and again when `peopleRead` gets a different (member, revision) set. Android
   and Apple watch it instead of syncing themselves. **A picture replaced under the same user id sends no signal yet:**
   the id set is unchanged, so no update tells a host to ask again. Nothing reads the people anew today; the first
@@ -142,7 +142,7 @@ handed over (`AppleDepot`, `fopen`). Some 60 calls are still to come, so the dis
     path, opened each (`image/jpeg`, `application/pdf`) and saved it to a path at its file's SHA-256, and under a held
     one-byte quota saved the entry with the receipt named skipped; `SecretFreeSchemaTest` unchanged.
 - **A Depot file is shown as bytes, played through a reader, saved and uploaded by path** (2026-11-12, Depot on the
-  desktops; the models ADR 0136's Consequences, the screens ADR 0123's, the Linux app and the Windows app):
+  desktops; the models ADR 0161's Consequences, the screens ADR 0123's, the Linux app and the Windows app):
   - **The first reader opened:** `File.Reader(file)` → `Answer.Reader(reader, size, mediaType)` over the page's own
     `RangeReader` (one frame cache per page), refused `NO_MEDIUM` where the page shows none. A host holds one frame more as
     its window, so a player's 4 KiB reads (GStreamer's block size) cost one call per 256 KiB; a read blocks only the
@@ -175,7 +175,7 @@ handed over (`AppleDepot`, `fopen`). Some 60 calls are still to come, so the dis
     file and a non-ASCII subfolder, its link said; a 400 MiB upload cancelled with nothing left; 2 GiB + 1 byte uploaded in
     158 s and saved back in 132 s at its SHA-256); `SecretFreeSchemaTest` unchanged.
 - **A Memory's media: the second reader, tiers the host draws, uploads by path** (2026-11-13/15, Memories on the
-  desktops; the models ADR 0136's Consequences, the screens ADR 0123's, the Linux app and the Windows app):
+  desktops; the models ADR 0161's Consequences, the screens ADR 0123's, the Linux app and the Windows app):
   - **The second reader:** `Medium.Reader(lightbox)` → `Answer.Reader` through `Bridge.openReader`, refused `NO_MEDIUM`
     for a picture. A reader a lightbox opened is refused and dropped once the lightbox's model no longer holds it (paged
     away, stopped, closed, its gallery or its tenant closed): the model holds the rule, the bridge follows it.
@@ -204,7 +204,7 @@ handed over (`AppleDepot`, `fopen`). Some 60 calls are still to come, so the dis
     saved original at the file's, a second save cancelled with nothing left, a trash undone, a chapter made; purged).
     A played upload job must hold the core job's own once-only lock: the queue prepares ahead while the run awaits the
     same work, so a job without it asked the host twice.
-- Decoding a picture is the platform's (ADR 0136 decision 1), and WebP is not every platform's own: GTK 4.22 decodes it
+- Decoding a picture is the platform's (ADR 0161 decision 1), and WebP is not every platform's own: GTK 4.22 decodes it
   through glycin's loaders, Windows through the Store's Webp Image Extensions. Packaging must carry both (native-apps
   § Open).
 

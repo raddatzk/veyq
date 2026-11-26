@@ -5,6 +5,7 @@ import me.raddatz.veyq.core.account.email.EmailChangeEntity
 import me.raddatz.veyq.core.account.email.EmailConfirmationEntity
 import me.raddatz.veyq.core.account.identitypins.IdentityPinEntryEntity
 import me.raddatz.veyq.core.account.identitypins.IdentityPinsEntity
+import me.raddatz.veyq.core.account.kitrecord.KitRecordEntity
 import me.raddatz.veyq.core.account.login.AccessTokenEntity
 import me.raddatz.veyq.core.account.login.RefreshTokenEntity
 import me.raddatz.veyq.core.account.login.SessionFamilyEntity
@@ -163,6 +164,7 @@ class AccountPurge(
         IdentityPinEntryEntity.delete("accountId", accountId)
         IdentityPinsEntity.delete("accountId", accountId)
         DeviceRegisterEntity.delete("accountId", accountId)
+        KitRecordEntity.delete("accountId", accountId)
         DevicePairingEntity.delete("userId", accountId)
         AccountRecoveryEntity.delete("userId", accountId)
         EmailConfirmationEntity.delete("userId", accountId)
@@ -245,6 +247,9 @@ class AccountPurge(
             "veyq_share.name_editor_user_id" to kept("content attribution: a link's name"),
             "veyq_share.note_editor_user_id" to kept("content attribution: a link's note"),
             "veyq_share.share_name_editor_user_id" to kept("content attribution: a link's shown name"),
+            // A co-owner's label on another owner's open link invite (ADR 0129 decision 7); an invite this account signed
+            // is superseded by the erasure, whose statement nulls the label and its editor with the key.
+            "veyq_tenant_invite.label_editor_user_id" to kept("content attribution: a link invitation's private label"),
             "veyq_membership.added_by" to kept("another member's membership names who added them"),
             "veyq_membership.granter_user_id" to kept("another member's grant names who wrapped it, for its signature"),
             // A member invite is a placeholder member (ADR 0111): the erasure supersedes the account's live invites —

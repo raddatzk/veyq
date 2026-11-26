@@ -24,6 +24,7 @@ import VeyqMessage from '../shared/ui/VeyqMessage.vue'
 import { completeRecovery, openWithSecretKey, releaseRecoveryMaterial, requestRecovery } from '../features/account/recovery/recovery'
 import type { OpenedRecovery } from '../features/account/recovery/recovery'
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
+import { secretKeyReady } from '../shared/ui/secretKeyEntry'
 import { HttpStatus, isHttpStatus } from '../shared/httpError'
 import { KdfProfileRefused } from '@veyq/crypto/v1'
 import type { RecoveryMaterial } from '../api/generated/auth'
@@ -189,7 +190,7 @@ async function setNewPassword() {
           <SecretKeyField v-model="secretKey" :expected-email="material.email" required />
           <small class="field-hint">{{ t('unlock.secretKeyHint') }}</small>
         </label>
-        <VeyqButton type="submit" :label="t('recovery.continueLabel')" icon="key" :loading="busy" />
+        <VeyqButton type="submit" :label="t('recovery.continueLabel')" icon="key" :loading="busy" :disabled="!secretKeyReady(secretKey)" />
       </form>
 
       <!-- Step 3 — the new password. -->

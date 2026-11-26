@@ -41,7 +41,7 @@
 The owner's goal (2026-11-20, "ja" to the path and to the pilot, and the pilot starting with core logic): **the core holds all functionality, for the web as for the apps;
 every client only draws.** Today the order is the other way: a feature is built in the web's TypeScript, then ported
 into the Kotlin core ([ADR 0123](0123-the-apps-share-a-kotlin-multiplatform-core-under-native-ui.md),
-[ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)) and twinned test for test.
+[ADR 0161](0161-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)) and twinned test for test.
 [ADR 0154](0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md) made
 the four apps draw one core; the web is the fifth client and the only one with logic of its own.
 
@@ -189,7 +189,7 @@ Measured before the decision (2026-11-20):
       Not slices: the **formats** move with the slice or application that owns each (money with Expenses) — alone they
       miss R by a measured factor (ADR 0154 § Consequences: 7.1×); **notices** waited until the web and the apps read one
       word catalog — released 2026-11-23: the web registers the notices' words from `words.json` and says them there
-      (ADR 0136 § The notices' move), so the notices slice (the web's toasts raised by the core's `*Notices.kt` tables)
+      (ADR 0161 § The notices' move), so the notices slice (the web's toasts raised by the core's `*Notices.kt` tables)
       is open, and adds the words it raises to `web.json`'s `read`; the **slug folding** (`shared/naming.ts`) stays beside the Kotlin as decision 9's crypto does, held by
       `v1.json#name_folding`; the **URL fragment rules** are the router's (decision 1). Every platform façade lands in
       `:core`'s one JavaScript file, which a bundler cannot split, so a rule that is lazy in TypeScript turns eager when
@@ -225,7 +225,7 @@ Measured before the decision (2026-11-20):
         `buildLedger` and `checkLedger` over the 10,010-revision Pot.
 
 8. **Screen models with flows cross to the web** (the owner, 2026-11-25, inbox #1323: cross). Moving a model that
-   exposes a flow (ADR 0136 decision 2) brings coroutines into the web once: variant A's floor measured ~75 KB gz above
+   exposes a flow (ADR 0161 decision 2) brings coroutines into the web once: variant A's floor measured ~75 KB gz above
    B's. Until 2026-11-25 that crossing was a gate of its own, decided by a measurement of its own; the owner decided it
    that day — the models cross, and the measurement stays the record and the report each such move repeats (decision 4's
    declaration names the libraries it brings). The web observes a model as Swift and the bridge do, through its
@@ -1414,7 +1414,7 @@ Measured before the decision (2026-11-20):
   (`MemoryDetail` through `useMediaGalleryLive`, share view = member view). No key crosses: the door hands the model the
   opened facts it orders and splits by, and the web reads every byte itself. Deleted: the TypeScript's own listing state,
   its order and split, its tombstone and Undo, `mediaRevisionPolling.ts` and its test. What stays TypeScript, and why: the
-  thumbnail pipeline (decoding and its cache are the platform's, ADR 0136 decision 1), the in-flight upload tiles with
+  thumbnail pipeline (decoding and its cache are the platform's, ADR 0161 decision 1), the in-flight upload tiles with
   their previews (inbox #1342), the lightbox's snapshot, slideshow and details (#1343), the marks (#1340; the model's port
   exists), the filter and the rights matrix (#1321; the filter's *added by* chip, #1356, was built in both the core
   and the TypeScript twin rather than moving the filter, ADR 0149 decision 5), the Trash tab (no Kotlin twin). Its measurements (each against
@@ -1422,7 +1422,7 @@ Measured before the decision (2026-11-20):
 
   | Criterion | Measured |
   |---|---|
-  | size: the platform module, every entry (the package's `slice.test.ts`, `@noble/*` external) | 79,874 → 145,049 B gz (+65,175), every first load: of it the words' enum (`Msg`, 1,574 entries, ~27.8 KB gz alone; since inbox #1341 a class whose unread words the link drops, 115,905 B gz: ADR 0136 § The words' form for JavaScript), coroutines (~15.2 KB gz) and the standard library they reach (+17.2 KB gz); no kotlinx.serialization, no Ktor, no session or API client source in any entry's map |
+  | size: the platform module, every entry (the package's `slice.test.ts`, `@noble/*` external) | 79,874 → 145,049 B gz (+65,175), every first load: of it the words' enum (`Msg`, 1,574 entries, ~27.8 KB gz alone; since inbox #1341 a class whose unread words the link drops, 115,905 B gz: ADR 0161 § The words' form for JavaScript), coroutines (~15.2 KB gz) and the standard library they reach (+17.2 KB gz); no kotlinx.serialization, no Ktor, no session or API client source in any entry's map |
   | size: Memories over every platform entry | +4,249 → +20,578 B gz (the model, its door and its shapes; its module's own 58,632 B minified) |
   | size: the web's eager set (`vite build`, gzip -9 per chunk) | 688,246 → 752,759 (+64,513: `review`, which holds the platform module, +64,512) |
   | size: a link guest's first load (decision 10, Depot's move D8's method) | a Memory's share body 718,798 → 797,882 (+79,084); a Memory's page 814,770 → 894,262 (+79,492); a Depot file 702,776 → 767,341 (+64,565); a drop box 691,948 → 756,449 (+64,501); a Pot's page 718,924 → 783,329 (+64,405) |

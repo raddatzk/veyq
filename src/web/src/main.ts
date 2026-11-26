@@ -6,6 +6,7 @@ import App from './App.vue'
 import router, { preloadRoute } from './router'
 import { i18n } from './i18n'
 import { boot } from './app/boot'
+import { markStartStep, reloadOnChunkFailure, runStart } from './app/startSignals'
 import { registerApplications } from './applications'
 import { registerApplicationMessages } from './applicationMessages'
 import { initializeTheme } from './shared/state/useThemeState'
@@ -26,12 +27,18 @@ async function bootstrap() {
   // Discover the instance state (fresh → setup, set-up → login, unreachable → error banner) before mounting,
   // so the router lands on the right first screen.
   await boot()
+  markStartStep('route')
 
   const app = createApp(App)
     .use(i18n)
     .use(router)
 
-  router.isReady().then(() => app.mount('#app'))
+  await router.isReady()
+  app.mount('#app')
 }
 
-void bootstrap()
+// The start reports itself to the start watchdog (ADR 0136, `app/startSignals.ts`, `boot/watchdog.ts`): `mounted` after
+// the mount, `failed` when bootstrap() or the first route rejects, and a chunk that no longer loads as `failed` too. Until
+// the mount, index.html's start screen is what shows — never a blank page.
+reloadOnChunkFailure(window)
+void runStart(bootstrap)

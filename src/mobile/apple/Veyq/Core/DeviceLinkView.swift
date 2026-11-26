@@ -268,7 +268,7 @@ private struct LinkConfirming: View {
     }
 }
 
-/// The slide that confirms (ADR 0059 §7, ADR 0136's Consequences): the system's `Slider`, which confirms only at its end and springs back
+/// The slide that confirms (ADR 0059 §7, ADR 0161's Consequences): the system's `Slider`, which confirms only at its end and springs back
 /// otherwise — a deliberate gesture, not a tap. Keyboard: the arrow keys move it, Return at the end confirms (a key
 /// never confirms by itself). VoiceOver reads `sentence` and confirms through the action of that name. `onConfirm`
 /// answers whether the link moved on; one that did not springs back.

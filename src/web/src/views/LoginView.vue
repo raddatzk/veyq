@@ -29,6 +29,7 @@ import { CORE_DEVICE_LINKING, CORE_REMEMBER_DEVICE, CORE_REMEMBER_DEVICE_PASSWOR
 import { LoginVerifyRequestSessionScopeEnum } from '../api/generated/auth'
 import type { KitData } from '@veyq/crypto/emergencyKit'
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
+import { secretKeyReady } from '../shared/ui/secretKeyEntry'
 import OperatorIdentification from '../core/operator/OperatorIdentification.vue'
 import { parsePairingPayload } from '../features/account/pairing/pairing'
 import JoinDeviceCard from '../features/account/pairing/JoinDeviceCard.vue'
@@ -524,6 +525,7 @@ onMounted(async () => {
           :label="busy ? t('login.submitting') : t('login.submit')"
           icon="sign-in"
           :loading="busy"
+          :disabled="needsSecretKey && !secretKeyReady(secretKey)"
         />
         <VeyqMessage v-if="error" tone="error" class="form-message">{{ error }}</VeyqMessage>
         <VeyqMessage v-if="notice" tone="success" class="form-message">{{ notice }}</VeyqMessage>

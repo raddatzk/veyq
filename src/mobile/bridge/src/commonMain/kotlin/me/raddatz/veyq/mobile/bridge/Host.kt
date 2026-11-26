@@ -215,7 +215,7 @@ internal class HostStore(private val host: Host) : DeviceStore {
 }
 
 /**
- * An Emergency Kit file's drawings (core's `KitPictures`; ADR 0136 decision 1: the platform draws, the core decides) asked
+ * An Emergency Kit file's drawings (core's `KitPictures`; ADR 0161 decision 1: the platform draws, the core decides) asked
  * of the host for the file at [path], which the host itself picked: a page count, a page or a picture drawn into the
  * reply's payload ([HostReply.Pixels]). The core's `KitImport` decides whether and what to ask, so a kit found in the
  * file's bytes asks nothing. A reply that is no drawing of its size answers null, as a platform that cannot draw does.
@@ -252,7 +252,7 @@ internal class PathSource(val path: String, private val inner: UploadSource) :
 }
 
 /**
- * A Memories upload's tiers asked of the host ([HostRequest.MediaTiers]; ADR 0136 decision 1: the platform decodes and
+ * A Memories upload's tiers asked of the host ([HostRequest.MediaTiers]; ADR 0161 decision 1: the platform decodes and
  * encodes, the core holds the spec and decides): the JPEGs ride in beside the reply ([HostReply.Tiers]). [derive] returns at
  * once — the asks run on [scope], so the queue's thread that called never waits on the host there, and the thread that
  * sent the call never does at all; a video's poster time is the core's from the length the host tells
@@ -297,7 +297,7 @@ internal class HostTiers(
 }
 
 /**
- * A banner's pictures asked of the host (ADR 0144 decision 5; ADR 0136 decision 1: the platform decodes and encodes, the
+ * A banner's pictures asked of the host (ADR 0144 decision 5; ADR 0161 decision 1: the platform decodes and encodes, the
  * core holds the spec and decides): the picked file's [HostRequest.MediaTiers] with the cover's spec as its preview
  * (`NodeCover.LONG_EDGE`, `NodeCover.QUALITY`: upright, never enlarged) — the request every desktop already answers for an
  * upload, so no host decodes a banner in a way of its own —, a video's poster its first frame (at 0 ms). The preview is

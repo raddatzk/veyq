@@ -1,4 +1,4 @@
-// An Emergency Kit file drawn for the core's read (ADR 0136 decision 1: the platform draws, the core decides; ADR 0137
+// An Emergency Kit file drawn for the core's read (ADR 0161 decision 1: the platform draws, the core decides; ADR 0137
 // decision 3, a drawn page's pixels riding in beside the host's reply): the core reads the file the open picker gave by
 // its path, decides what needs drawing (KitImport: a kit found in the file's bytes needs none) and asks for it —
 // Pdf.Pages, Pdf.Page, Picture.Luma — through Core.Drawer. A PDF is drawn by Windows.Data.Pdf (as a receipt's,

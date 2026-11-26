@@ -44,7 +44,9 @@ So the request has one shape and **every field is mandatory**, because an option
 omission (the fields are
 [keys-grants-and-trust § Securing the account](../crosscutting/keys-grants-and-trust.md#securing-the-account)). It
 carries the **identity-pin store and the device register re-sealed under the new Master Key**, empty for an account
-that never wrote either. The two documents are not part of the proof's statement: a session holder without the Secret
+that never wrote either, and the **kit record** of the kit the ceremony prints, sealed under the new Master Key
+([ADR 0157](0157-a-kits-layout-has-a-version-and-a-sealed-record-says-which-one-the-account-last-made.md)): the
+ceremony always prints a kit, so the record is never absent and is no mode. The two documents are not part of the proof's statement: a session holder without the Secret
 Key can already write both through their own endpoints, so binding them would defend no case.
 
 **2. Rotation requires the Secret Key — a cold unlock, never a device wrap or a restored session.** The

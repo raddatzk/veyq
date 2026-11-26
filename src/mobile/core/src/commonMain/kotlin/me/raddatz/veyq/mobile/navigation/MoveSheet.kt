@@ -24,7 +24,7 @@ import me.raddatz.veyq.mobile.words.Piece
 
 /**
  * The move and copy sheet of one node or of a level's selection, for every kind (the web's `MoveNodeDialog`,
- * `MoveNodesDialog` + `MoveBrowser` and `CopyNodesDialog`, ADR 0136 decision 2): the browser over [NodeMove]'s rules — it
+ * `MoveNodesDialog` + `MoveBrowser` and `CopyNodesDialog`, ADR 0161 decision 2): the browser over [NodeMove]'s rules — it
  * opens at the nodes' place, shows one place at a time under a trail up to the space's root, lists the places one may go
  * into or place into (a place takes a selection only where it takes every node of it) and says why the place shown takes
  * nothing, naming the node that blocks it —, the guest folders' confirm before a move ends them, and the write:

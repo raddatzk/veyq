@@ -27,6 +27,7 @@
 | meta | node `wrapped_meta` | a member (meta, cover) |
 | name | share `sealed_name` (the share root's name) and `sealed_share_name` (the private label) | a member |
 | note | share `sealed_note` | a member |
+| label | link member invite `sealed_label` (its private label, ADR 0129 decision 7) | an owner of the tenant |
 | name, icon | group scope `encrypted_name`, `sealed_icon` | a member |
 | name | Memories bucket `sealed_name` | a member; a primary bucket's copies its guest identity's name, so that identity is its editor |
 | meta | Memories medium `wrapped_meta` | the uploader (with the upload), then a member |
@@ -42,8 +43,9 @@ Per field group a column pair on the row it attributes: `<group>_editor_user_id`
 a guest can write the field, `<group>_editor_identity_id` (a guest identity) — on `veyq_node` (`name_editor_*`,
 `meta_editor_*`, the identity a foreign key onto `veyq_share_identity`; the baseline checks exactly one for the name and
 exactly one while there is a meta), `veyq_bucket` (`name_editor_*`) and `veyq_media` (`meta_editor_*`, no foreign key,
-as Memories' `share_identity_id`). A share's (`name_`, `note_`, `share_name_editor_user_id`) and a scope's
-(`name_`, `icon_editor_user_id`) take only the member column: no guest writes them. `NodesStore`'s four writers take the
+as Memories' `share_identity_id`). A share's (`name_`, `note_`, `share_name_editor_user_id`), a scope's
+(`name_`, `icon_editor_user_id`) and a link member invite's (`label_editor_user_id`) take only the member column: no
+guest writes them. `NodesStore`'s four writers take the
 editor as a required parameter, so a new node writer states it or does not compile.
 
 ## Rules

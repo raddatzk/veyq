@@ -72,7 +72,7 @@ and no node at a scope root ever has the profile's path (the routing is
 [uc.memory.participants](../features/memory/use-cases/uc.memory.participants.md)'s).
 Not `~people` (the `~` prefix is the personal-scope token), and not a history-mode path: those reach the server's access
 logs, a fragment does not.
-A foreign `~username` stays a personal-scope token, never a profile
+A `~` token is the personal scope (`~me`), never a profile
 ([ADR 0015](0015-operator-blind-readable-urls.md)).
 
 **5a. The token names the member by username (amended 2026-11-14, owner).** The token after `people/` is the member's

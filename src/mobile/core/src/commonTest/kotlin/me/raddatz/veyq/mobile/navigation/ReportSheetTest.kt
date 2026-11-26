@@ -13,7 +13,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** A node's report sheet (ADR 0093, ADR 0136 decision 2): the form's rules, one send, the receipt, the privacy link. */
+/** A node's report sheet (ADR 0093, ADR 0161 decision 2): the form's rules, one send, the receipt, the privacy link. */
 class ReportSheetTest {
     private val folder = NodeAt("s", "f", "FOLDER", "Trip")
 

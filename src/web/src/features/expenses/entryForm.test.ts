@@ -235,7 +235,7 @@ describe('the form as a person fills it', () => {
     const reasons = ['title', 'date', 'amount', 'rate', 'payers', 'split', 'split-shares', 'split-percents', 'split-amounts', 'items', 'transfer', 'payers-unbalanced',
       'receivers-unbalanced', 'items-above-total', 'rest-unallocated', 'percent-unbalanced', 'amounts-unbalanced', 'named-twice', 'unknown-participant', 'record-twice',
       'erasure-through-append', 'not-a-participant', 'not-settled', 'joined-moved', 'empty', 'receipt-dropped-and-kept']
-    // a form's problem is said in the shared words (ADR 0136 § The web's words), a write path's own under expenses.entry.problem
+    // a form's problem is said in the shared words (ADR 0161 § The web's words), a write path's own under expenses.entry.problem
     const shared = reasons.filter((r) => Object.hasOwn(PROBLEM_WORDS, r))
     const own = reasons.filter((r) => !Object.hasOwn(PROBLEM_WORDS, r))
     expect(shared.sort()).toEqual(Object.keys(PROBLEM_WORDS).sort())

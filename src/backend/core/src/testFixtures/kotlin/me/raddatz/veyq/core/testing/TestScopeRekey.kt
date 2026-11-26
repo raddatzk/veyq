@@ -61,6 +61,7 @@ object TestScopeRekey {
                 page.verifications.forEach { v ->
                     wrap("${v.verifierUserId}|${v.subjectUserId}", ScopeRekeyCommit.VERIFICATION_WRAP, v.wrappedValueKey)
                 }
+                page.inviteLabels.forEach { i -> wrap(i.id, ScopeRekeyCommit.INVITE_LABEL_WRAP, i.wrappedLabelValueKey!!) }
             }
             check(!page.more) { "a test scope with more than $ALL scope-level rows" }
             Arc.container().instance(ScopeRekeyStage::class.java).get().put(rekeyId, scopeId, ScopeRekeyStage.CORE, values)

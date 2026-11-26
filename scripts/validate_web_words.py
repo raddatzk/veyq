@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Guard that the web and the apps say one meaning in one wording: the web's messages (`src/web/src/i18n/index.ts` and
-each application's `src/web/src/features/<owner>/i18n.ts`) and the apps' catalog (`src/mobile/words/words.json`, ADR 0136
-decision 3) are held together by `src/mobile/words/web.json` (inbox #1060, ADR 0136 § The web's words).
+each application's `src/web/src/features/<owner>/i18n.ts`) and the apps' catalog (`src/mobile/words/words.json`, ADR 0161
+decision 3) are held together by `src/mobile/words/web.json` (inbox #1060, ADR 0161 § The web's words).
 
 **What it asserts.** Seven rules:
 - **resolves**: every key `web.json` names is in its catalog — an app key in `words.json`, a web key (dotted, as `t()`
@@ -20,7 +20,7 @@ decision 3) are held together by `src/mobile/words/web.json` (inbox #1060, ADR 0
 - **open-differs**: a pair under `open` still differs; once it is equal it belongs under `twins`.
 - **read-is-notices**: every key of `web.json`'s `read` is one the core's notices tables name — a `Msg.<KEY>` in a
   `*Notices.kt` of the core's or an application's `commonMain` (ADR 0155 decision 7.2). Not every such word is read: the
-  web registers `read` eagerly, so it names only the words the web says (ADR 0136 § The web's words, the notices' move;
+  web registers `read` eagerly, so it names only the words the web says (ADR 0161 § The web's words, the notices' move;
   `src/web/src/i18n/i18n.test.ts` reddens a registered word no source names, and one a source names that is not there).
 - **read-has-no-twin**: a word the web reads from the catalog has no copy of its own on the web — a `read` key stands in
   no pair of `twins` or `open`, and no web message says what a `read` word says (the same in English and German, read as

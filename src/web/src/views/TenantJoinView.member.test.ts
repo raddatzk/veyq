@@ -68,6 +68,8 @@ import * as invite from '@veyq/crypto/invite'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { formatSecretKey } from '@veyq/crypto/secretKey'
 import { openValue } from '../features/spaces/valueKey'
+import { layoutOf } from '../features/account/emergencyKit/kitRecord'
+import { KIT_LAYOUT } from '../features/account/emergencyKit/emergencyKit'
 
 /** A join record as every member opens it (ADR 0115): its value key from the wrap under the tenant key at the epoch the
  *  accept states, then the record under that key. */
@@ -249,6 +251,9 @@ describe('TenantJoinView — the newcomer joins holding the tenant key', () => {
     expect(Array.from(record.secretKeyProofPublicKey)).toEqual(Array.from(PROOF_PUB))
     // The owner key the record names, as the accept states it (ADR 0111 decision 20).
     expect(body.signerIdentityDigest).toBe(recipientIdentityDigest(bundleOf(f.owner)))
+    // The kit just kept is recorded with the account, sealed under the new account's Master Key (ADR 0157 decision 4).
+    expect(layoutOf(BORN_MK, body.kitRecord)).toBe(KIT_LAYOUT)
+    expect(KIT_LAYOUT).toBeGreaterThan(1) // control: the answer above is the record's, not the no-record default
     expect(w.text()).toContain(t('tenant.join.doneNoteMember'))
     // The checked key is held under the new account's Master Key - no vault held one at the accept - so the first open
     // after the sign-in takes no epoch that does not link down to it (inbox #740); the birth's copy is wiped.

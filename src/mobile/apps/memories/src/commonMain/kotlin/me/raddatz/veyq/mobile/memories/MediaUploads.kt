@@ -19,7 +19,7 @@ import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.words.Notice
 
 /**
- * Memories' uploads over the app's one [UploadQueue] (the web's `addMedia` through `uploadQueue.ts`; ADR 0136 decision 2):
+ * Memories' uploads over the app's one [UploadQueue] (the web's `addMedia` through `uploadQueue.ts`; ADR 0161 decision 2):
  * picked photos and videos queued into a Memory or a chapter as [MediaUpload.Job]s, the platform's [Derivation.Deriver]
  * making their tiers, and each one's **settle**, the core's:
  *

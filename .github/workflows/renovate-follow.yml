@@ -1,48 +1,50 @@
-name: Dependabot follow
+name: Renovate follow
 
-# The writing half of the Dependabot follow (scripts/dependabot_follow.py; .github/dependabot.yml's header says what it
-# follows and why without a language model). It starts when a "Dependabot follow (derive)" run completes green, and it
-# is the one job that holds `contents: write` for a Dependabot pull request.
+# The writing half of the Renovate follow (scripts/renovate_follow.py, whose docstring says what it follows and why
+# without a language model; ADR 0158 decision 4). It starts when a "Renovate follow (derive)" run completes green, and
+# it is the one job that writes to a Renovate pull request besides Renovate itself.
 #
 # Why `workflow_run` and not a write permission on the pull request's own run (GitHub's guidance against "pwn
 # requests"): a `workflow_run` workflow runs the file on the DEFAULT branch, never the pull request's, so the code that
 # holds the token — this file, the actions it pins, the script it runs from `tool/` — is what was merged, not what a
-# pull request proposes (a github-actions bump rewrites the very `uses:` lines of the workflows it runs in). The pull
-# request's tree is checked out beside it, into `pr/`, as data: nothing in it is executed here, and the metadata the
-# derive run wrote is an artifact this job checks before it writes it (dependabot_follow.py `accept_gradle`).
+# pull request proposes. The pull request's tree is checked out beside it, into `pr/`, as data: nothing in it is
+# executed here, and what the derive run wrote is an artifact this job checks before it writes it.
+#
+# The token. It is the Renovate App's (the environment `renovate`, which admits `main` alone, holds its key; a
+# `workflow_run` job runs on `main`), minted for `contents: write` and nothing else, so it can push a commit and do
+# nothing more. A push with GITHUB_TOKEN would start the pull request's runs only after a person's approval (GitHub's
+# rule); the App's push starts `Checks` as Renovate's own does. The commit is authored as the App's bot, so the gate's
+# next run still sees a branch only Renovate wrote, and Renovate still treats the branch as its own (it rebases it, and
+# the follow runs again on the rebased head).
 #
 # What it may do, and nothing more:
 #   - read the pull request and its commits' author logins (the gate) — never its title or body;
-#   - commit the follow, and push it to the pull request's own `dependabot/…` branch, fast-forward only (a branch that
+#   - commit the follow, and push it to the pull request's own `renovate/…` branch, fast-forward only (a branch that
 #     moved since the derive run refuses the push; the next run follows it);
 #   - never push to any other branch, never merge, never approve. Merging stays with a person.
-# A branch a person has pushed to is left alone (the gate answers `follow=false`).
-#
-# The checks after the push. A push with GITHUB_TOKEN creates the pull request's `pull_request` runs, but as runs that
-# "require approval" (GitHub's events reference, read 2026-11-12) — so Checks on the followed head waits for the person
-# who reviews the pull request to approve it, and the merge waits for `green` as on every pull request. That approval
-# also re-runs the derive half, which then finds nothing left to follow.
+# A branch someone else pushed to is left alone (the gate answers `follow=false`).
 on:
   workflow_run:
     workflows:
-      - "Dependabot follow (derive)"
+      - "Renovate follow (derive)"
     types:
       - completed
 
 concurrency:
-  group: dependabot-follow-${{ github.event.workflow_run.head_branch }}
+  group: renovate-follow-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: false
 
 permissions: {}
 
 jobs:
   follow:
-    name: Follow the bump on the Dependabot branch
+    name: Follow the bump on the Renovate branch
     if: github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: renovate
     permissions:
-      contents: write # push the follow commit to the Dependabot branch
+      contents: read # check out the tool and the branch; the push uses the App's token below
       actions: read # download the derive run's artifact
       pull-requests: read # the gate reads the pull request and its commits
     steps:
@@ -52,14 +54,7 @@ jobs:
           path: tool
           persist-credentials: false
 
-      # PyYAML reads .github/dependabot.yml (which files Dependabot writes); hashed wheels only, as in every job that
-      # holds a write permission (scripts/requirements-release.txt says why).
-      - name: Install PyYAML from hashed wheels
-        run: |
-          python3 -m venv "$RUNNER_TEMP/venv"
-          "$RUNNER_TEMP/venv/bin/pip" install --quiet --require-hashes --only-binary :all: -r tool/scripts/requirements-release.txt
-
-      - name: Is this Dependabot's pull request, untouched by a person?
+      - name: Is this Renovate's pull request, untouched by anyone else?
         id: gate
         env:
           GH_TOKEN: ${{ github.token }}
@@ -72,22 +67,23 @@ jobs:
             echo "follow=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          "$RUNNER_TEMP/venv/bin/python" tool/scripts/dependabot_follow.py gate \
-            --repo "$REPO" --pr "$PR" --head-sha "$HEAD_SHA" | tee -a "$GITHUB_OUTPUT"
+          python3 tool/scripts/renovate_follow.py gate --repo "$REPO" --pr "$PR" --head-sha "$HEAD_SHA" \
+            | tee -a "$GITHUB_OUTPUT"
 
-      - name: Check out the Dependabot branch (as data)
+      - name: Check out the Renovate branch (as data)
         if: steps.gate.outputs.follow == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: pr
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Download what the read-only run derived
         if: steps.gate.outputs.follow == 'true'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: dependabot-follow
+          name: renovate-follow
           path: ${{ runner.temp }}/derived
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
@@ -98,19 +94,18 @@ jobs:
           BASE_REF: ${{ steps.gate.outputs.base_ref }}
         run: |
           base=$(git -C pr merge-base "origin/$BASE_REF" HEAD)
-          "$RUNNER_TEMP/venv/bin/python" tool/scripts/dependabot_follow.py follow --tree pr \
-            --config tool/.github/dependabot.yml --base "$base" --derived "$RUNNER_TEMP/derived" \
+          python3 tool/scripts/renovate_follow.py follow --tree pr --base "$base" --derived "$RUNNER_TEMP/derived" \
             --message "$RUNNER_TEMP/message.txt"
 
-      - name: Push the follow to the Dependabot branch
+      - name: Anything to push?
+        id: changed
         if: steps.gate.outputs.follow == 'true'
-        env:
-          BRANCH: ${{ steps.gate.outputs.branch }}
         # The checkout is `pr/`, beside `tool/` — no tracked directory, so `cd`, not `working-directory:`.
         run: |
           cd pr
           if [ -z "$(git status --porcelain --untracked-files=all)" ]; then
             echo "nothing to follow"
+            echo "push=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # The tool rewrites tracked files in place and creates none.
@@ -118,12 +113,31 @@ jobs:
             echo "::error::the follow touched the tree in a way it never does (above); nothing is pushed"
             exit 1
           fi
+          echo "push=true" >> "$GITHUB_OUTPUT"
+
+      - name: Mint a token for the push alone
+        id: app
+        if: steps.changed.outputs.push == 'true'
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          client-id: ${{ vars.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Push the follow to the Renovate branch
+        if: steps.changed.outputs.push == 'true'
+        env:
+          BRANCH: ${{ steps.gate.outputs.branch }}
+          TOKEN: ${{ steps.app.outputs.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          cd pr
           case "$BRANCH" in
-            dependabot/*) ;;
-            *) echo "::error::refusing to push to '$BRANCH', which is no Dependabot branch"; exit 1 ;;
+            renovate/*) ;;
+            *) echo "::error::refusing to push to '$BRANCH', which is no Renovate branch"; exit 1 ;;
           esac
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "veyq-renovate[bot]"
+          git config user.email "359998714+veyq-renovate[bot]@users.noreply.github.com"
           git commit --all --quiet --file "$RUNNER_TEMP/message.txt"
           git show --stat HEAD
-          git push origin "HEAD:refs/heads/$BRANCH"
+          git push "https://x-access-token:${TOKEN}@github.com/${REPO}.git" "HEAD:refs/heads/$BRANCH"

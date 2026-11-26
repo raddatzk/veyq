@@ -134,7 +134,7 @@ export type MoveRefusalCode =
   | 'slug_taken' | 'illegal_structure' | 'illegal_scope' | 'stale_placement' | 'stale_epoch' | 'node_rekey_pending'
   | 'share_not_contributable' | 'gone' | 'rate_limited' | 'scope_deleting' | 'failed'
 
-/** What a refusal says: the words the apps' notices say too (`words.*`, ADR 0136 § The web's words) and the web's own
+/** What a refusal says: the words the apps' notices say too (`words.*`, ADR 0161 § The web's words) and the web's own
  *  for the refusals no app notice raises. */
 export const MOVE_REFUSAL_TEXT: Record<MoveRefusalCode, string> = {
   slug_taken: 'words.move_refused_slug_taken',

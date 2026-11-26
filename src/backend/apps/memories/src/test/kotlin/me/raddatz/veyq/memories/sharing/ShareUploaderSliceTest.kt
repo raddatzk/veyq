@@ -226,6 +226,29 @@ class ShareUploaderSliceTest {
     }
 
     /**
+     * A guest whose every photo a member trashed is no contributor any more: the "Beiträge" list leaves their primary
+     * out, and a restore lists them again — the row was kept, so the name and the bucket come back unchanged.
+     */
+    @Test
+    fun aGuestWhoseMediaAreAllTrashedLeavesTheBucketListUntilARestore() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val identityId = createIdentity(createShare(userId, memory, role = "WRITE_ONLY"))
+        val first = seedMedia(scopeId, memory, identityId = identityId)
+        val auth = bearer(userId)
+        fun guestPrimaries() = given().header("Authorization", auth).`when`().get("/api/scopes/$scopeId/nodes/$memory/buckets")
+            .then().statusCode(200).extract().path<List<String>>("buckets.findAll { it.ownerKey == 'share:$identityId' }.bucketId")
+
+        val listed = guestPrimaries()
+        assertEquals(1, listed.size) // the positive control: the guest is listed while a photo of theirs lives
+        given().header("Authorization", auth).`when`().delete("/api/scopes/$scopeId/media/$first").then().statusCode(204)
+        assertEquals(emptyList<String>(), guestPrimaries())
+
+        given().header("Authorization", auth).`when`().post("/api/scopes/$scopeId/media/$first/restore").then().statusCode(204)
+        assertEquals(listed, guestPrimaries())
+    }
+
+    /**
      * B3 (ADR 0029 §7) — deleting a link deletes the LINK: the photos its guest added belong to the Memory, and an
      * uploader guest's photo opens only through their identity's wrapped key and the Memory's drop key. Both stay,
      * and so does every byte (a delete reclaims nothing).

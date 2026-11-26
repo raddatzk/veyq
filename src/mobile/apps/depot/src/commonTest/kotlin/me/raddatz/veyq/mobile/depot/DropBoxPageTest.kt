@@ -14,7 +14,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** A drop box's page both phones drew (ADR 0136 decision 2 and its Consequences, Depot's screens) — over a tree the test plays. */
+/** A drop box's page both phones drew (ADR 0161 decision 2 and its Consequences, Depot's screens) — over a tree the test plays. */
 class DropBoxPageTest {
     private val box = NodeAt("s", "box", DepotFiles.DROPBOX, "Inbox")
 

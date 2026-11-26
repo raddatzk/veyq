@@ -6,11 +6,14 @@ import { resealingScopes } from './scopeRekey'
 // metadata is shown — pubkeys/roles, never a key. Every listed member holds the tenant's key from its join on (ADR 0111:
 // an invitee grants itself at accept). Inviting is owner-only (the backend 403s otherwise); the directory is any
 // key-holder's.
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, useId, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
+import VeyqInput from '../../shared/ui/VeyqInput.vue'
+import { NOT_A_LOGIN } from '../../shared/ui/notALogin'
+import { INVITE_LABEL_MAX_LENGTH } from './inviteLabel'
 import InviteMemberDialog from './InviteMemberDialog.vue'
 import InviteLinkResult from './InviteLinkResult.vue'
 import VeyqDialog from '../../shared/ui/VeyqDialog.vue'
@@ -29,7 +32,9 @@ import {
   setTenantMemberRole,
   SetTenantMemberRoleRequestRoleEnum,
   memberError,
+  openMemberInviteLabels,
   prepareInviteCode,
+  setMemberInviteLabel,
   type InvitePhase,
   type MemberInviteLinkResult,
   type PendingMemberInvite,
@@ -60,6 +65,15 @@ const { ask, askWithOptions } = useConfirm()
 // Locally-decrypted real names (first+last) keyed by userId — the sealed blob opened with K_tenant on-device.
 const names = ref<Record<string, MemberName | null>>({})
 const pendingInvites = ref<PendingMemberInvite[]>([])
+// The link invites' private labels this client opened (ADR 0129 decision 7), by invite id; one that does not open is no
+// entry, and its row says "Link invitation" (uc.spaces.manage-member-invites E2).
+const inviteLabels = ref(new Map<string, string>())
+// The label being edited: its invite, the draft, and the write in flight.
+const labelEditing = ref<PendingMemberInvite | null>(null)
+const labelDraft = ref('')
+const labelSaving = ref(false)
+const labelError = ref('')
+const labelInputId = useId()
 const actionError = ref('')
 const inviteOpen = ref(false)
 
@@ -141,6 +155,10 @@ const { members, isOwner, trust, trustRefusal, loading, loadError, reload, on401
     else tenantIcon.clear()
     // Only the owner may read the pending-invite list (the backend 403s any non-owner).
     pendingInvites.value = owner ? await listMemberInvites(activeSpace.tenantId) : []
+    // A label that cannot be opened leaves its row named "Link invitation", never the panel unloaded.
+    inviteLabels.value = owner
+      ? await openMemberInviteLabels(activeSpace.tenantId, pendingInvites.value).catch(() => new Map<string, string>())
+      : new Map<string, string>()
     return { rows, isOwner: owner }
   })
 
@@ -216,6 +234,30 @@ async function removeIcon() {
   }
 }
 
+function editLabel(invite: PendingMemberInvite) {
+  labelEditing.value = invite
+  labelDraft.value = inviteLabels.value.get(invite.inviteId) ?? ''
+  labelError.value = ''
+}
+
+/** Seal and save the draft as the edited link invite's label, or clear it when the draft is empty. */
+async function saveLabel() {
+  const invite = labelEditing.value
+  if (!invite || labelSaving.value) return
+  labelSaving.value = true
+  labelError.value = ''
+  try {
+    await setMemberInviteLabel(activeSpace.tenantId!, invite.inviteId, labelDraft.value)
+    labelEditing.value = null
+    await reload()
+  } catch (e) {
+    on401(e)
+    if (!isUnauthorized(e)) labelError.value = t('members.labelFailed')
+  } finally {
+    labelSaving.value = false
+  }
+}
+
 async function reissue(invite: PendingMemberInvite) {
   if (reissuing.value) return // one at a time: the buttons are disabled, and a click that slips through sends nothing
   reissuing.value = invite.inviteId
@@ -230,7 +272,10 @@ async function reissue(invite: PendingMemberInvite) {
     const onPhase = (p: InvitePhase) => (reissuePhase.value = p)
     if (invite.email === undefined) {
       // A link invite (ADR 0129 decision 2): a new link in its place, shown once - the old one opens nothing any more.
-      reissuedLink.value = await reissueMemberInviteLink(activeSpace.tenantId!, invite.inviteId, secret, onPhase)
+      // Its label, as this client opened it, is sealed anew for the new invite (ADR 0129 decision 7).
+      reissuedLink.value = await reissueMemberInviteLink(
+        activeSpace.tenantId!, invite.inviteId, secret, onPhase, inviteLabels.value.get(invite.inviteId) ?? null,
+      )
       toast.success(t('members.linkReissued'))
     } else {
       await reissueMemberInvite(activeSpace.tenantId!, invite.inviteId, invite.email, secret, onPhase)
@@ -561,9 +606,13 @@ async function revoke(invite: PendingMemberInvite) {
         <div class="veyq-list management-list-items">
           <div v-for="invite in pendingInvites" :key="invite.inviteId" class="veyq-list-row invite-row">
             <div class="veyq-row-main">
-              <!-- A link invite has no address (ADR 0129 decision 2): it is named by its expiry. -->
-              <strong class="veyq-row-title">{{ invite.email ?? t('members.pendingLink') }}</strong>
+              <!-- A link invite has no address (ADR 0129 decision 2): it is named by its label, else as a link invitation,
+                   with its expiry (decision 7). -->
+              <strong class="veyq-row-title" data-testid="invite-title">
+                {{ invite.email ?? inviteLabels.get(invite.inviteId) ?? t('members.pendingLink') }}
+              </strong>
               <span v-if="invite.email === undefined" class="veyq-row-subtitle" data-testid="invite-expiry">
+                <template v-if="inviteLabels.has(invite.inviteId)">{{ t('members.pendingLink') }} · </template>
                 {{ t('members.pendingExpires', { date: expiryFormat.format(invite.inviteExpiresAt) }) }}
               </span>
               <div class="veyq-row-meta">
@@ -582,6 +631,18 @@ async function revoke(invite: PendingMemberInvite) {
               </p>
             </div>
             <div class="management-actions">
+              <VeyqButton
+                v-if="invite.email === undefined"
+                icon="pencil"
+                variant="secondary"
+                appearance="outlined"
+                size="small"
+                :aria-label="t('members.labelEdit')"
+                :title="t('members.labelEdit')"
+                :disabled="reissuing === invite.inviteId"
+                data-testid="invite-label-edit"
+                @click="editLabel(invite)"
+              />
               <VeyqButton
                 icon="link"
                 variant="secondary"
@@ -669,6 +730,43 @@ async function revoke(invite: PendingMemberInvite) {
 
     <!-- The owner's icon editor (uc.spaces.set-space-icon): pick + frame 1:1; on save the crop is baked + encoded
          on-device and this panel seals + POSTs it. -->
+    <!-- A link invite's private label (ADR 0129 decision 7): an empty one clears it. -->
+    <VeyqDialog
+      :visible="labelEditing !== null"
+      :header="t('members.labelTitle')"
+      class="tenant-dialog"
+      :closable="!labelSaving"
+      :close-on-escape="!labelSaving"
+      data-testid="invite-label-dialog"
+      @update:visible="(v: boolean) => { if (!v) labelEditing = null }"
+    >
+      <form class="veyq-form" @submit.prevent="saveLabel">
+        <div class="veyq-form-field">
+          <label :for="labelInputId">{{ t('members.linkLabel') }}</label>
+          <VeyqInput
+            v-bind="NOT_A_LOGIN"
+            :id="labelInputId"
+            v-model="labelDraft"
+            :maxlength="INVITE_LABEL_MAX_LENGTH"
+            :disabled="labelSaving"
+            data-testid="invite-label-input"
+          />
+          <span class="veyq-form-copy">{{ t('members.linkLabelHint') }}</span>
+        </div>
+        <VeyqMessage v-if="labelError" tone="error">{{ labelError }}</VeyqMessage>
+        <div class="veyq-dialog-action-row">
+          <VeyqButton
+            :label="t('common.cancel')"
+            icon="times"
+            variant="secondary"
+            appearance="outlined"
+            :disabled="labelSaving"
+            @click="labelEditing = null"
+          />
+          <VeyqButton type="submit" :label="t('common.save')" icon="check" :loading="labelSaving" data-testid="invite-label-save" />
+        </div>
+      </form>
+    </VeyqDialog>
     <SpaceIconDialog v-if="iconDialogOpen" :busy="iconBusy" @save="onIconSave" @close="iconDialogOpen = false" />
 
     <!-- Review a changed identity key (cr-0099); the proactive compare is on the member's profile (ADR 0028 Decision 3). -->

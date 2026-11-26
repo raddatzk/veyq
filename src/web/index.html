@@ -6,7 +6,36 @@
     <title>veyq</title>
   </head>
   <body>
-    <div id="app"></div>
+    <!-- The start screen (ADR 0136 decision 1): the first paint, shown while the scripts load or hang, replaced by the app's
+         mount. Plain markup styled by the app's own sheet (`styles/start.css`), which the built page links in <head>; no
+         `style` attribute and no inline script (the CSP, cc.security.csp). No text but the name, so it needs no language;
+         the slow panel's words are the watchdog's (`src/boot/watchdog.ts`), which fills and shows it. -->
+    <div id="app">
+      <div class="veyq-start" aria-busy="true">
+        <div class="veyq-start__brand">
+          <picture>
+            <source srcset="/src/assets/brand/logo-dark.svg" media="(prefers-color-scheme: dark)" />
+            <img class="veyq-start__mark" src="/src/assets/brand/logo-light.svg" alt="" />
+          </picture>
+          <span class="veyq-start__name">veyq</span>
+        </div>
+        <div class="veyq-spinner veyq-start__progress" id="veyq-start-progress" aria-hidden="true">
+          <svg class="veyq-spinner__spin" viewBox="25 25 50 50">
+            <circle class="veyq-spinner__circle" cx="50" cy="50" r="20" fill="none" stroke-width="2" stroke-miterlimit="10" />
+          </svg>
+        </div>
+        <section class="veyq-start__slow" id="veyq-start-slow" role="alert" hidden>
+          <h1 class="veyq-start__heading" id="veyq-start-heading"></h1>
+          <p class="veyq-start__step" id="veyq-start-step"></p>
+          <button type="button" class="veyq-button veyq-button--primary veyq-button--filled" id="veyq-start-reload">
+            <span class="veyq-button__label" id="veyq-start-reload-label"></span>
+          </button>
+        </section>
+      </div>
+    </div>
+    <!-- The start watchdog (ADR 0136 decision 2): its own unhashed build entry, `vite-ignore`d so Vite does not fold it
+         into the app's entry, and `async` so it runs as soon as it arrives, never behind the app's module graph. -->
+    <script type="module" async src="/boot-watchdog.js" vite-ignore></script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

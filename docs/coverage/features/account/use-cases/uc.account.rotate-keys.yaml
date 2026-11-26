@@ -104,7 +104,7 @@ acceptanceCriteria:
         integration:
           - RotationSliceTest.aStalePinStoreRevisionRollsTheWholeRotationBack
           - RotationSliceTest.aStaleRegisterRevisionRollsTheWholeRotationBack
-          - RotationSliceTest.anAccountWithNoDocumentYetGetsBothBornInTheRotation
+          - RotationSliceTest.anAccountWithNoDocumentYetGetsEachBornInTheRotation
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
   - id: rotation-rekeys-every-pin-entry
     # ADR 0104 § Consequences. Bitten: a rotation that ignored a stale pin store answered 200; one that answered the
@@ -115,7 +115,7 @@ acceptanceCriteria:
         integration:
           - RotationSliceTest.aRotationThatKeepsAPinEntryIsRefused
           - RotationSliceTest.aStalePinStoreRevisionRollsTheWholeRotationBack
-          - RotationSliceTest.anAccountWithNoDocumentYetGetsBothBornInTheRotation
+          - RotationSliceTest.anAccountWithNoDocumentYetGetsEachBornInTheRotation
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
   - id: too-large-is-refused-without-a-retry
     # uc §E10, inbox #553. Measured in headless Chrome: a body past the limit reads the server's 413 (59/60; one 502

@@ -1,4 +1,4 @@
-//! A picked photo's or video's tiers, made for the core (ADR 0137's Consequences, the tiers; ADR 0136 decision 1: decoding
+//! A picked photo's or video's tiers, made for the core (ADR 0137's Consequences, the tiers; ADR 0161 decision 1: decoding
 //! and encoding are the platform's, the spec — edges, qualities, the poster's moment — the core's, in the request). The
 //! core asks on its upload queue's own thread (`Media.Duration`, then `Media.Tiers`), never GTK's, and this answers there:
 //! - a photo through gdk-pixbuf, which reads it through glycin's loaders and turns it upright by its EXIF orientation

@@ -1,7 +1,7 @@
 import SwiftUI
 import VeyqCore
 
-/// What the account's Settings page asks of whoever holds its model (`uc.account.sessions`; ADR 0136 decision 2): each a call of core's
+/// What the account's Settings page asks of whoever holds its model (`uc.account.sessions`; ADR 0161 decision 2): each a call of core's
 /// `AccountSettings`, so the page decides nothing. `AppModel` holds the real one; a debug build's `DevSettings` plays one.
 @MainActor
 protocol SettingsActions: AnyObject {

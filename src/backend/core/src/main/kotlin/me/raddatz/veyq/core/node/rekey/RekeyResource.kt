@@ -17,6 +17,7 @@ import me.raddatz.veyq.core.generated.model.ScopeRekeyRewrap
 import me.raddatz.veyq.core.generated.model.ScopeRekeyRootNode
 import me.raddatz.veyq.core.generated.model.ScopeRekeyShare
 import me.raddatz.veyq.core.generated.model.ScopeRekeyStage as ScopeRekeyStageRequest
+import me.raddatz.veyq.core.generated.model.ScopeRekeyInviteLabel
 import me.raddatz.veyq.core.generated.model.ScopeRekeyVerification
 import me.raddatz.veyq.core.http.HttpFailure
 import me.raddatz.veyq.core.http.httpError
@@ -164,6 +165,9 @@ class RekeyResource(
             r.verifications.orEmpty().forEach { v ->
                 wrap("${v.verifierUserId}|${v.subjectUserId}", ScopeRekeyCommit.VERIFICATION_WRAP, v.wrappedValueKey, v.replacedValueKey)
             }
+            r.inviteLabels.orEmpty().forEach { i ->
+                wrap(i.inviteId.toString(), ScopeRekeyCommit.INVITE_LABEL_WRAP, i.wrappedValueKey, i.replacedValueKey)
+            }
         }
         return when (val o = scopeRekey.stage(
             identity.principal.name, scopeId.toString(), rekeyId.toString(), r.fromEpoch.validated(), ScopeRekeyStage.CORE, values,
@@ -201,6 +205,7 @@ class RekeyResource(
                 epoch = it.epoch, wrappedValueKey = it.wrappedValueKey,
             )
         },
+        inviteLabels = inviteLabels.map { ScopeRekeyInviteLabel(inviteId = UUID.fromString(it.id), wrappedValueKey = it.wrappedLabelValueKey!!) },
         more = more,
         cursor = cursor,
     )

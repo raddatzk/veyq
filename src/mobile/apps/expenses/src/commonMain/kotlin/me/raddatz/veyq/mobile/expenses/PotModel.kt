@@ -25,7 +25,7 @@ import me.raddatz.veyq.mobile.session.LocalDays
 import me.raddatz.veyq.mobile.session.TenantSession
 
 /**
- * The Pot open in the app (ADR 0136 decision 2): its session and what its screens show ([PotView]) — loading, failed,
+ * The Pot open in the app (ADR 0161 decision 2): its session and what its screens show ([PotView]) — loading, failed,
  * saving a write and that write's refusal —, its live poll while a screen runs it (skipped while a write is saving), a
  * pull to refresh, the writes, and a new Pot's creation. Both apps observe [state] (or [watch]); what they draw is theirs.
  *

@@ -6,6 +6,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.delete-tenant.md
   - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
   - docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md
+  - docs/features/account/use-cases/uc.account.remember-this-device.md
 ---
 
 ## „Dieser Bereich ist vorübergehend offline“
@@ -23,7 +24,19 @@ vorher stoppt. Dein Konto bleibt, und deine anderen Bereiche auch.
 ## „Dieser Server ist gerade nicht erreichbar“
 
 veyq kann nicht mit seinem Server sprechen: Deine Internetverbindung ist weg, oder der Server ist es. Prüfe deine
-Verbindung und versuch es später erneut. Auf deinem Gerät geht nichts verloren; deine Schlüssel bleiben, wo sie waren.
+Verbindung und tippe dann neben der Meldung auf **Neu laden**, um es erneut zu versuchen. Auf deinem Gerät geht nichts
+verloren; deine Schlüssel bleiben, wo sie waren.
+
+## „Das dauert länger als üblich“
+
+Während veyq startet, zeigt es sein Logo. Ist der Start nach etwa 15 Sekunden nicht fertig, lädt es die Seite einmal
+von selbst neu, so wie du es sonst von Hand tun würdest. Hängt der Start wieder, steht dort **Das dauert länger als
+üblich** mit dem Knopf **Neu laden**. Es geht nichts verloren: Dieses Gerät bleibt gemerkt, und deine Inhalte liegen
+weiter auf dem Server.
+
+Die Zeile darunter nennt den Schritt, auf den der Start wartet, etwa `status` (der Server wird nach sich selbst
+gefragt), `session` (deine Anmeldung) oder `vault` (deine Schlüssel werden auf diesem Gerät geöffnet). Passiert es
+öfter, nenne diese Zeile, wenn du es meldest.
 
 ## „Offline — Stand …“ in der App
 

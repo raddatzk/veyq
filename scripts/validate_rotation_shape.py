@@ -5,8 +5,8 @@
 
   1. `components.schemas.RotateAccountKeysRequest` has exactly the property set
      {identityPublicKey, wrappedIdentityPrivateKey, passwordWrap, recoveryWrap, secretKeyProofSignature,
-     identityPins, deviceRegister, keyChainStep, stageId, stagedGrantsDigest, unreadableScopeIds, authPublicKey,
-     attestationSignature, secretKeyProofPublicKey, secretKeyProofPossession}.
+     identityPins, deviceRegister, kitRecord, keyChainStep, stageId, stagedGrantsDigest, unreadableScopeIds,
+     authPublicKey, attestationSignature, secretKeyProofPublicKey, secretKeyProofPossession}.
   2. Its `required` list equals that same set — **every** property is mandatory. An optional field is a
      discriminator spelled by omission: leave `recoveryWrap` out and you have asked for a rotation that
      rewrites one cold wrap and leaves the other holding the old Master Key, which is identity-only rotation
@@ -39,7 +39,10 @@
      re-sealed after the publish, a failed re-seal left a document under a key that no longer exists, which every
      device then refuses (ADR 0028 Decision 7). Required like the rest — "this rotation leaves the pin store
      behind" is the omission this guard exists to make unsayable, and an account with no document yet sends it
-     empty rather than leaving the field out.
+     empty rather than leaving the field out. `kitRecord` is a `$ref` to `SealedKitRecord`, the blob the record's
+     own write (`KitRecordUpdate`) carries (ADR 0157 decision 4): the layout of the kit the ceremony prints for the
+     new Secret Key, sealed under the new Master Key. The ceremony always prints a kit, so the record is never absent
+     — required like the rest, and "rotate without it" is no mode.
   5. `keyChainStep` is a `$ref` to `KeyChainStepSignatures`, and that schema has exactly {identitySignature,
      proofSignature}. The step's statement is the server's to rebuild from the stored head and the request's own
      `identityPublicKey` and `secretKeyProofPublicKey`; a step object that carried keys, an index or a predecessor of
@@ -60,15 +63,17 @@ documents agree on is still prose.
 
   6. **The whole body has an upper bound, and it fits the server's request limit.** The guard computes the longest
      JSON `RotateAccountKeysRequest` admits from the contract's own caps — every string's `maxLength` (a `uuid`'s 36,
-     a `date-time`'s 35), every array's `maxItems`, an integer's 20 characters, `$ref`s resolved, a nullable at its
-     longer branch — and fails when a string or array in it carries **no** cap (a list without a cap has no upper
+     a `date-time`'s 35), every array's `maxItems`, an integer's 20 characters, `$ref`s resolved (a local one in
+     the spec, a `_common` alias in `_common`; a chain deeper than eight is refused), a nullable at its longer branch — and fails when a string or array in it carries **no** cap (a list without a cap has no upper
      bound) or when the total exceeds the limit: `quarkus.http.limits.max-body-size` as `application.properties` sets
      it, else the default `RequestTooLargeRoutes` reads (10240K = 10,485,760 bytes). It assumes no value needs a JSON
      escape, which holds for what the request carries (base64, hex, uuids, integers). The rotation re-seals the whole
      pin store inside its one body (ADR 0104), so this is where its 25,000-entry cap meets the limit; the self-grants
      moved to a stage because memberships have no cap (ADR 0111 decision 6). The defect that bought it: the slice test
      that claimed this bound kept a hand-written overhead that counted seven fewer fields than the request had grown
-     (inbox #569, 2026-10-28) — green by a 3.7 % margin nobody had measured.
+     (inbox #569, 2026-10-28) — green by a 3.7 % margin nobody had measured. The resolver read every `$ref` by its
+     last segment in the spec itself until the kit record (cr-kit-layout-record): `SealedKitRecord` is an alias to the
+     `_common` schema of the same name, so the alias resolved to itself and the guard died of recursion.
 
 **Its limit.** This is a *contract* sensor over *two schemas in one file*, and it checks the **request shape**,
 nothing else. A green run does **not** prove that rotation rotates both halves: the handler could ignore a
@@ -78,9 +83,9 @@ ciphertext blob is invisible here and always will be. Of the cold-credential gat
 only that `secretKeyProofSignature`, `secretKeyProofPossession`, `attestationSignature` and the step's two
 signatures are present and required; whether the server *verifies* them, and whether it refuses a stage that does
 not cover its own set, is the backend's bite tests' job. Green means exactly: **the rotation request still has
-these fifteen mandatory fields and no sixteenth, its wraps still carry no method, its two documents still arrive
-as their own update shapes, and its step carries two signatures and nothing else.** That the server writes those
-two documents inside the rotation's transaction is `RotationSliceTest`'s to prove, not this guard's.
+these sixteen mandatory fields and no seventeenth, its wraps still carry no method, its three documents still arrive
+as their own write shapes, and its step carries two signatures and nothing else.** That the server writes those
+three documents inside the rotation's transaction is `RotationSliceTest`'s to prove, not this guard's.
 
 Two narrower predicates were reached for first and are wrong; recorded so the next reader does not re-derive
 them (§ *run the predicate against the untouched tree*, `changes/README.md`):
@@ -103,6 +108,8 @@ import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SPEC = ROOT / "contracts" / "api" / "account.openapi.yaml"
+# How many `$ref`s one value may pass through before the guard calls it a cycle (SpecSets' bound in the backend build).
+REF_DEPTH = 8
 
 REQUEST = "RotateAccountKeysRequest"
 WRAP = "RotatedWrap"
@@ -120,6 +127,7 @@ REQUEST_PROPS = {
     "secretKeyProofSignature",
     "identityPins",
     "deviceRegister",
+    "kitRecord",
     "keyChainStep",
     "stageId",
     "stagedGrantsDigest",
@@ -133,8 +141,13 @@ STEP = "KeyChainStepSignatures"
 STEP_PROPS = {"identitySignature", "proofSignature"}
 WRAP_PROPS = {"wrappedKey", "kdfParams"}
 WRAP_REFS = ("passwordWrap", "recoveryWrap")
-# Each document arrives in its own named field, as the shape its own PUT already takes.
-DOCUMENT_REFS = {"identityPins": "IdentityPinsWrite", "deviceRegister": "DeviceRegisterUpdate"}
+# Each document arrives in its own named field, as the shape its own PUT already takes (the kit record's: the blob
+# `KitRecordUpdate` carries).
+DOCUMENT_REFS = {
+    "identityPins": "IdentityPinsWrite",
+    "deviceRegister": "DeviceRegisterUpdate",
+    "kitRecord": "SealedKitRecord",
+}
 
 # Spellings a mode would plausibly arrive under. Not the enforcement — the property-set pin above is — but a
 # named hit earns a message that says *why* rather than "unexpected field".
@@ -189,16 +202,38 @@ def body_limit() -> tuple[int | None, str]:
     return None, "nothing"
 
 
-def longest_json(spec: dict, node: dict, path: str, unbounded: list[str]) -> int:
+def resolve_ref(spec: dict, ref: str) -> tuple[dict, dict] | None:
+    """The document a `$ref` lands in and its target schema: `#/components/schemas/X` in `spec` itself,
+    `<file>#/components/schemas/X` in that file beside the account spec (a `_common` alias). None when it does not
+    resolve. `spec` is the document the `$ref` was READ in, so a reference inside `_common` resolves in `_common`."""
+    file, _, pointer = ref.partition("#")
+    prefix = "/components/schemas/"
+    if not pointer.startswith(prefix):
+        return None
+    doc = spec
+    if file:
+        target_file = SPEC.parent / file
+        if not target_file.is_file():
+            return None
+        doc = yaml.safe_load(target_file.read_text(encoding="utf-8")) or {}
+    target = schema_of(doc, pointer[len(prefix):])
+    return (doc, target) if target is not None else None
+
+
+def longest_json(spec: dict, node: dict, path: str, unbounded: list[str], depth: int = 0) -> int:
     """The longest JSON text `node` admits, from the contract's caps. A string or array with no cap is recorded in
-    `unbounded` and counted as nothing."""
+    `unbounded` and counted as nothing. `spec` is the document `node` was read in."""
     ref = node.get("$ref")
     if isinstance(ref, str):
-        target = schema_of(spec, ref.rsplit("/", 1)[-1])
-        if target is None:
+        if depth >= REF_DEPTH:
+            unbounded.append(f"{path}: a $ref chain deeper than {REF_DEPTH} ({ref}) — a cycle, or an alias of an alias")
+            return 0
+        resolved = resolve_ref(spec, ref)
+        if resolved is None:
             unbounded.append(f"{path}: $ref {ref} does not resolve")
             return 0
-        return longest_json(spec, target, path, unbounded)
+        doc, target = resolved
+        return longest_json(doc, target, path, unbounded, depth + 1)
     types = node.get("type")
     kinds = types if isinstance(types, list) else [types]
     longest = 0

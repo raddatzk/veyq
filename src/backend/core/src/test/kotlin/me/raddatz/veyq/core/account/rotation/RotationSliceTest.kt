@@ -7,6 +7,7 @@ import me.raddatz.veyq.core.account.erasure.AccountPurge
 import me.raddatz.veyq.core.identity.AccountErasureEntity
 import me.raddatz.veyq.core.account.identitypins.IdentityPinEntryEntity
 import me.raddatz.veyq.core.account.identitypins.IdentityPinsEntity
+import me.raddatz.veyq.core.account.kitrecord.KitRecordEntity
 import me.raddatz.veyq.core.account.login.SessionFamilyEntity
 import me.raddatz.veyq.core.account.login.SessionService
 import me.raddatz.veyq.core.account.pairing.DevicePairingEntity
@@ -553,21 +554,27 @@ class RotationSliceTest {
         val (rotation, world) = seedWorld()
         QuarkusTransaction.requiringNew().run {
             DeviceRegisterEntity().apply { accountId = rotation.userId; sealedBlob = "b2xkLXJlZ2lzdGVy"; revision = 2 }.persist()
+            KitRecordEntity().apply { accountId = rotation.userId; sealedBlob = OLD_KIT_RECORD }.persist()
         }
         val (stageId, grants) = stageAll(rotation)
 
         rotation.send(rotation.publish(stageId, grants).copy(registerRevision = 1)).then().statusCode(409).body("code", equalTo("stale_revision"))
         assertNothingWritten(rotation, world)
         assertEquals("b2xkLXJlZ2lzdGVy" to 2L, registerRow(rotation.userId))
+        assertEquals(OLD_KIT_RECORD, kitRecordOf(rotation.userId), "the kit record the old key sealed stays with it")
 
         rotation.send(rotation.publish(stageId, grants).copy(registerRevision = 2)).then().statusCode(200) // control
         assertEquals(TestRotation.NEW_REGISTER to 3L, registerRow(rotation.userId))
+        // The rotation replaces the row the old Master Key sealed with the new key's (ADR 0157 decision 4).
+        assertEquals(TestRotation.NEW_KIT_RECORD, kitRecordOf(rotation.userId), "the kit record replaced in the same commit")
     }
 
     @Test
-    fun anAccountWithNoDocumentYetGetsBothBornInTheRotation() {
+    fun anAccountWithNoDocumentYetGetsEachBornInTheRotation() {
         val (rotation, _) = seedWorld()
+        assertNull(kitRecordOf(rotation.userId)) // control: a kit made before ADR 0157 left no record
         rotation.run().then().statusCode(200)
+        assertEquals(TestRotation.NEW_KIT_RECORD, kitRecordOf(rotation.userId), "the kit record is born with the new key")
         assertEquals(TestRotation.NEW_REGISTER to 1L, registerRow(rotation.userId))
         assertEquals(TestRotation.NEW_PINS to 1L, QuarkusTransaction.requiringNew().call<Pair<String?, Long>?> {
             IdentityPinsEntity.findById(rotation.userId)?.let { it.sealedBlob to it.revision }
@@ -639,7 +646,8 @@ class RotationSliceTest {
         val (rotation, _) = seedWorld()
         val (stageId, grants) = stageAll(rotation)
         val json = rotation.publish(stageId, grants).json()
-        for (field in listOf("\"secretKeyProofPossession\"", "\"authPublicKey\"", "\"stagedGrantsDigest\"")) {
+        // `kitRecord` among them (ADR 0060 decision 1): a rotation prints a kit, so it always records its layout.
+        for (field in listOf("\"secretKeyProofPossession\"", "\"authPublicKey\"", "\"stagedGrantsDigest\"", "\"kitRecord\"")) {
             val without = json.replace(Regex("$field:\"[^\"]*\",?"), "")
             given().header("Authorization", rotation.bearer()).contentType(ContentType.JSON).body(without)
                 .`when`().post("/api/account/rotation").then().statusCode(400).body("code", equalTo("invalid_request"))
@@ -876,6 +884,9 @@ class RotationSliceTest {
         IdentityPinEntryEntity.list("accountId", userId).associate { it.pinId to it.sealedEntry }
     }
 
+    private fun kitRecordOf(userId: String): String? =
+        QuarkusTransaction.requiringNew().call<String?> { KitRecordEntity.findById(userId)?.sealedBlob }
+
     private fun registerRow(userId: String): Pair<String?, Long>? = QuarkusTransaction.requiringNew().call<Pair<String?, Long>?> {
         DeviceRegisterEntity.findById(userId)?.let { it.sealedBlob to it.revision }
     }
@@ -954,4 +965,9 @@ class RotationSliceTest {
 
     private fun b64(b: ByteArray): String = Base64.getEncoder().encodeToString(b)
     private fun decode(s: String): ByteArray = Base64.getDecoder().decode(s)
+
+    private companion object {
+        /** A kit record the account's current (old) Master Key sealed — a stand-in, the server opens none. */
+        const val OLD_KIT_RECORD = "b2xkLWtpdC1yZWNvcmQ="
+    }
 }

@@ -49,7 +49,7 @@ One meaning per word, in docs, code and the wiki (EN+DE):
 | **track** (*Titel*) | one piece of a Memory's or a Chapter's music (owner 2026-11-22) | *Track* in German, which there names only a GPX track on a Memory's map |
 | **tenant** (*Tenant*) | one instance's household or organization ([architecture](../architecture/README.md)); stays English in German (owner 2026-11-22) | a German translation |
 
-**The owner's copy answers of 2026-11-22**, beside the three words above (they settled the pairs ADR 0136 § The web's
+**The owner's copy answers of 2026-11-22**, beside the three words above (they settled the pairs ADR 0161 § The web's
 words left open): the step that saves the Emergency Kit is **"Notfall-Kit sichern"** in German on every client (the
 web's wording); and a text that quotes a screen quotes its title as the screen is named — "Add a device", never
 "add a device".

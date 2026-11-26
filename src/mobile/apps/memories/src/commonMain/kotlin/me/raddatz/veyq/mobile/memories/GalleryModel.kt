@@ -38,10 +38,10 @@ import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Piece
 
 /**
- * A Memory's or a chapter's page (Memories' `MemoryDetail.vue` with `MediaGrid.vue`, ADR 0136 decision 2): the chapters a
+ * A Memory's or a chapter's page (Memories' `MemoryDetail.vue` with `MediaGrid.vue`, ADR 0161 decision 2): the chapters a
  * Memory holds, then its media as [Row]s in the grid's order ([MemoryMedia.order]), each tile the grid's tier
  * ([MemoryMedia.Item.gridBlob]) read when the platform asks for it ([tile]) — the core caches no bytes; decoding and the
- * decoded picture's cache are the platform's (ADR 0136 decision 1).
+ * decoded picture's cache are the platform's (ADR 0161 decision 1).
  *
  * **When it reads anew is the core's:** on each revision of the shell's lists ([Door.revisions]), and when a medium this
  * device uploaded into this node is in ([Door.uploaded], [MediaUploads]); nothing else re-reads it. A lightbox opened on it

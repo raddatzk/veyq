@@ -212,7 +212,7 @@ fn activate(app: &adw::Application) {
         eprintln!("veyq: the data directory did not open ({e}); nothing is kept offline");
     }
     let offline_root = data.is_dir().then(|| data.join("offline")).and_then(|p| p.to_str().map(str::to_owned));
-    // no window owns a prompt here: the Secret Service asks nothing of its own (ADR 0136's Consequences)
+    // no window owns a prompt here: the Secret Service asks nothing of its own (ADR 0161's Consequences)
     // the geocoder's language is the words' own (ADR 0143 decision 2)
     // a debug build logs every request to an outside host on stderr (inbox #947, Android's `veyq-net`); a release build
     // asks the core for none

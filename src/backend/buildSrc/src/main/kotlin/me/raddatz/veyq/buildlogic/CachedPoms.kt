@@ -8,7 +8,13 @@ import javax.xml.parsers.DocumentBuilderFactory
 
 /**
  * A module's POM read out of Gradle's file store, accepted only when its SHA-256 is the one
- * `gradle/verification-metadata.xml` pins for it: [ThirdPartyLicenses]' POMs under `--offline`.
+ * `gradle/verification-metadata.xml` pins for it: [ThirdPartyLicenses]' POMs, always tried first ([pomOrNull]) and the
+ * only source under `--offline` ([pom]).
+ *
+ * Tried first online too, because the online artifact query costs a request to the repository per POM (~270) even on a
+ * warm cache whose artifact index lacks them, and every CI job that runs `quarkusBuild` asks at once: on 2026-11-22
+ * Maven Central answered one of them 429 Too Many Requests and failed the API-fuzzing job's build (Checks run
+ * 45036274578), its Gradle cache restored. A cached file verified against the pin is the same trust as the query.
  *
  * Why it exists: the graph's resolution reads every POM as METADATA (the store's resource index), but an artifact query
  * for the same POM (`createArtifactResolutionQuery` with `MavenPomArtifact`, or a `g:a:v@pom` dependency) is answered from
@@ -43,18 +49,29 @@ class CachedPoms(private val filesStore: File, private val verificationMetadata:
         out
     }
 
+    /** The verified POM, or null when the metadata does not pin it or no cached copy matches the pin. */
+    fun pomOrNull(group: String, name: String, version: String): File? {
+        val file = "$name-$version.pom"
+        val expected = pinned["$group:$name:$version/$file"].orEmpty()
+        if (expected.isEmpty()) return null
+        return candidates(group, name, version, file).firstOrNull { sha256(it) in expected }
+    }
+
     fun pom(group: String, name: String, version: String): File {
         val file = "$name-$version.pom"
         val expected = pinned["$group:$name:$version/$file"].orEmpty()
         if (expected.isEmpty()) throw GradleException("$group:$name:$version: $file is not pinned in ${verificationMetadata.name}")
-        val candidates = filesStore.resolve(group).resolve(name).resolve(version).listFiles().orEmpty()
-            .map { it.resolve(file) }.filter { it.isFile }
+        val candidates = candidates(group, name, version, file)
         return candidates.firstOrNull { sha256(it) in expected }
             ?: throw GradleException(
                 "$group:$name:$version: no $file in Gradle's file store matches its pinned SHA-256" +
                     (if (candidates.isEmpty()) " (none cached; build once online)" else " (${candidates.size} cached, none verified)"),
             )
     }
+
+    private fun candidates(group: String, name: String, version: String, file: String): List<File> =
+        filesStore.resolve(group).resolve(name).resolve(version).listFiles().orEmpty()
+            .map { it.resolve(file) }.filter { it.isFile }
 
     private fun sha256(f: File): String =
         MessageDigest.getInstance("SHA-256").digest(f.readBytes()).joinToString("") { "%02x".format(it) }

@@ -290,7 +290,7 @@ type Notice = { key: string; item: UploadItem<FileUploadResult, FileJobExtra>; t
 const KNOWN_ERRORS = new Set<string>([...Object.values(FileUploadError), QUOTA_EXCEEDED, APPLICATION_OFF])
 function noticeText(code: string, name: string): string {
   if (guest && code === QUOTA_EXCEEDED) return t('depot.guest.linkFull', { name })
-  // a peer's replace is said in the apps' notices' words (ADR 0136 § The web's words)
+  // a peer's replace is said in the apps' notices' words (ADR 0161 § The web's words)
   if (code === FileUploadError.staleFile) return t('words.depot_error_stale_file', [name])
   return t(`depot.errors.${code}`, { name })
 }

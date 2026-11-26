@@ -8,7 +8,7 @@ import me.raddatz.veyq.mobile.qr.QrFrame
 import me.raddatz.veyq.mobile.session.SessionModel
 
 /**
- * What a platform draws for a kit's read (ADR 0136 decision 1: the platform draws, the core decides): a PDF's pages
+ * What a platform draws for a kit's read (ADR 0161 decision 1: the platform draws, the core decides): a PDF's pages
  * through its own renderer, a picture through its own decoder. Each answers null where it cannot.
  */
 interface KitPictures {

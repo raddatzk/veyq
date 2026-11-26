@@ -93,7 +93,7 @@ public sealed partial class MainWindow : Window
         MusicHost.Start(DispatcherQueue, WinRT.Interop.WindowNative.GetWindowHandle(this));
         try
         {
-            // the window owns Windows Hello's prompt, in the app's words (ADR 0136's Consequences)
+            // the window owns Windows Hello's prompt, in the app's words (ADR 0161's Consequences)
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this).ToInt64();
             // the accounts' offline stores in the data folder this process has (ADR 0140 decision 3: the package's under
             // the MSIX, %LOCALAPPDATA%\veyq or a pass's VEYQ_DATA_DIR unpackaged); none where it cannot be made — then nothing is kept offline

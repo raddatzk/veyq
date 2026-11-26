@@ -43,14 +43,14 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "22"
+          node-version: "26"
 
       # pnpm at exactly the version package.json pins in `packageManager` (validate_pnpm_installs_gated.py holds
       # the two equal). GitHub's runner only: a local run (scripts/run_pipeline.py) uses the host's pnpm, which
       # switches itself to the pinned version.
       - name: Install pnpm
         if: runner.environment == 'github-hosted'
-        run: npm install -g pnpm@12.16.1
+        run: npm install -g pnpm@12.22.0
 
       # site/ is outside the root workspace with a lockfile of its own; this is its only install, so it asks the
       # registry (no --skip-registry-check).

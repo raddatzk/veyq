@@ -153,7 +153,7 @@ object AppKinds {
 
     /**
      * Whether a node of [kind] downloads as its own content rather than the web's ZIP (a Depot file: the file itself, under
-     * its own name, ADR 0136's Consequences); every other kind downloads the ZIP of it with everything under it.
+     * its own name, ADR 0161's Consequences); every other kind downloads the ZIP of it with everything under it.
      */
     fun downloadsItself(kind: String): Boolean = applications.any { it.downloadsItself(kind) }
 

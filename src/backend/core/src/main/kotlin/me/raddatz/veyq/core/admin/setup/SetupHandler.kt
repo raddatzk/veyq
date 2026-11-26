@@ -1,6 +1,10 @@
 package me.raddatz.veyq.core.admin.setup
 
+import me.raddatz.veyq.core.platform.capabilities.ApplicationErasureStore
+import me.raddatz.veyq.core.platform.capabilities.CapabilityEntryTexts
 import me.raddatz.veyq.core.platform.capabilities.CapabilityRegistry
+import me.raddatz.veyq.core.platform.capabilities.CapabilityTexts
+import me.raddatz.veyq.core.platform.capabilities.StoredCapabilitySwitches
 import me.raddatz.veyq.core.platform.capabilities.ExternalServiceAddresses
 import me.raddatz.veyq.core.platform.capabilities.ServiceAddress
 import me.raddatz.veyq.core.platform.capabilities.PlatformMajor
@@ -34,7 +38,14 @@ data class OwnerRegistration(
     val secretKeyProofPublicKey: String,
     val wraps: List<WrapInput>,
     val moderationEpoch: ModerationEpochOne,
+    /** The kit record sealed under the new Master Key (ADR 0157 decision 4), or null: a client that predates it births without. */
+    val kitRecord: String? = null,
+    /** The applications the Server Owner left out (ADR 0088 decision 12), switched off for the instance with the owner. */
+    val applicationsOff: List<String> = emptyList(),
 )
+
+/** One application setup asks about, with its words from the catalog (ADR 0088 decisions 12 and 13). */
+data class SetupApplicationView(val id: String, val texts: CapabilityEntryTexts)
 
 /** Epoch 1 of the instance moderation key, minted by the setup client and sealed to this owner (ADR 0099 § 3). */
 data class ModerationEpochOne(val kemPublicKey: String, val signPublicKey: String, val sealedGrant: String)
@@ -43,6 +54,9 @@ data class ModerationEpochOne(val kemPublicKey: String, val signPublicKey: Strin
 class ModerationEpochInvalid : RuntimeException("invalid_request")
 
 data class WrapInput(val method: String, val wrappedKey: String, val kdfParams: String? = null)
+
+/** An id in `applicationsOff` is no application of the register, or is named twice; nothing is stored. */
+class ApplicationsOffInvalid : RuntimeException("invalid_request")
 
 /** Setup is already complete; a second owner cannot be bootstrapped. */
 class SetupAlreadyComplete : RuntimeException("setup_already_complete")
@@ -58,6 +72,7 @@ class SetupHandler(
     private val instanceStore: InstanceStore,
     private val capabilities: CapabilityRegistry,
     private val services: ExternalServiceAddresses,
+    private val switches: StoredCapabilitySwitches,
     config: VeyqConfig,
 ) {
     // The advertised version (ADR 0032). `major` is the ONLY hard gate and the platform's one major, generated from
@@ -87,14 +102,29 @@ class SetupHandler(
         services = services.configured(),
     )
 
+    /**
+     * The applications setup asks about (uc.admin.setup-server step 5): the register's applications in catalog order,
+     * each with its words. Only while setup is open; afterwards [SetupAlreadyComplete], as the owner post answers.
+     */
+    fun applications(): List<SetupApplicationView> {
+        if (store.isSetupComplete()) throw SetupAlreadyComplete()
+        return ApplicationErasureStore.APPLICATIONS.map { SetupApplicationView(it, CapabilityTexts.BY_ID.getValue(it)) }
+    }
+
     fun createOwner(registration: OwnerRegistration): String {
         // Field validation (non-blank, size, base64) is enforced at the boundary by @Valid on the
-        // generated request model; here we only guard the single-owner invariant.
+        // generated request model; here we guard the single-owner invariant and what the contract cannot know: which
+        // ids are this build's applications (uc.admin.setup-server E2), before anything is stored.
         if (store.isSetupComplete()) throw SetupAlreadyComplete()
+        val off = registration.applicationsOff
+        if (off.any { it !in ApplicationErasureStore.APPLICATIONS } || off.toSet().size != off.size) throw ApplicationsOffInvalid()
         // Two setups that both read "not complete" both get here; the loser of the insert answers as a replay does.
         val userId = createOrConflict(
             conflict = { if (store.isSetupComplete()) throw SetupAlreadyComplete() else null },
         ) { store.persistOwner(registration) }
+        // The switches committed with the owner: forget the cached set, so the next manifest and every gate read them
+        // (CapabilitySwitchHandler.set's order: commit, then invalidate).
+        if (off.isNotEmpty()) switches.invalidate()
         return userId
     }
 }

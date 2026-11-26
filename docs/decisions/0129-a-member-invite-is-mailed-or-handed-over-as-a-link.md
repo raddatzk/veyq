@@ -41,7 +41,7 @@ all three.
 **2. A link invite is bound to nobody.** Whoever opens it registers with an address they type, or signs in with any
 account of this instance; an account already a member is refused at accept. Its open invite counts against the
 tenant's mint budget, not a recipient's, and several may be open at once (supersede-on-mint is per address and has
-none). The pending list names it by its expiry, re-issue gives a new link (new token, key and code) and revoke works as
+none). The pending list names it by its label (decision 7), else as a link invitation, with its expiry; re-issue gives a new link (new token, key and code) and revoke works as
 for a mailed one.
 
 **3. Mail stays a precondition for inviting at all** (owner 2026-11-12). A tenant that cannot send refuses both ways
@@ -67,6 +67,18 @@ distinct from a revoked or expired one, and the accept page tells the person to 
 a link someone else took first is noticed; it is detection, not prevention. The row is kept until the terminal-invite
 purge, so this holds for the retention window after expiry; after it the token is unknown.
 
+**7. A link invite carries a private label** (owner 2026-11-15: with several open links the owner loses track of whom
+each was for). Optional, set at mint and changeable later by any owner of the tenant, and the pending row's title. Only
+a link invite has one: a mailed invite is named by its address. The label is content, so it is sealed as an
+[ADR 0115](0115-a-scope-key-is-replaced-never-chained.md) value: a value key of its own, wrapped under the tenant scope's
+current key, field purpose `member-invite-label`, its value address bound to the tenant and the invite's id, so a
+server that moves a label onto another invite gets one that does not open. Every owner opens it. Every member holds the
+key that would, so the server hands it out only in the owner-gated pending list, never in `listOpenInvites`. A tenant
+rotation re-wraps its value key like any other tenant value's (the rotator is handed the wrap, never the sealed label).
+An invite that ends drops its label in the statement that drops its key and grant. A re-issue mints a new invite id,
+so the owner's client seals the label anew for it. Its last editor is recorded
+([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 8).
+
 ## Consequences
 
 - **A link is a bearer credential.** Whoever holds it joins with the tenant key, and what they read before the owner
@@ -74,7 +86,8 @@ purge, so this holds for the retention window after expiry; after it the token i
   readers (the messenger, the mail provider, the screen). A taker who redeems first is noticed by the real invitee
   (decision 6); a taker who names themselves like the invitee is caught only so, or by the safety number.
 - **The operator sees less, not more, of a link invite** than of a mailed one: no address, no sealed part, nothing to
-  guess. It still learns that an invite exists, when it was minted, redeemed and by which account.
+  guess. It still learns that an invite exists, when it was minted, redeemed and by which account, and whether it
+  carries a label and roughly how long it is (decision 7), as for a share's label.
 - **An address a link registration binds may be one its holder does not read.** Recovery then cannot reach them;
   the banner (decision 5) and the confirmation mail sent at once make that loud on day one.
 - **Rotation cost is unchanged in bound:** every open invite is re-granted at a rotation (ADR 0111 decision 2), and
@@ -89,6 +102,10 @@ purge, so this holds for the retention window after expiry; after it the token i
     need a removal rotation; a new membership state would reach every read, the member list and every rotation.
   - **Proving the address before the account exists** (a mailed code at registration). It keeps ADR 0074 decision 3
     whole, at the cost of a second step for every invitee — the chore this ADR removes from the owner.
+  - **The label under the invite's own key, or in the link** (decision 7). A re-issue replaces that key, and the link's
+    sealed part reaches whoever takes it, who would then read what the owner called them.
+  - **The label under the minting owner's own key** (decision 7). Co-owners, who manage the same pending list, would
+    see none.
   - **Link invites only for existing accounts.** It would leave the new person, the common case, on the two-channel way.
 
 ## Related

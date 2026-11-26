@@ -11,7 +11,7 @@
 # is the Dockerfile's.
 tag v1.6.0
 commit 4fa21912338357f89e4fd51cf2368325b59e9bd9
-image emscripten/emsdk:7.0.0@sha256:6bd7aef93408b10bf7b36642cb7c91119b302f720b9ec2d20439f73cf07fe894
+image emscripten/emsdk:7.0.1@sha256:73aece2e0ab748487945ad117b79fc4d277e9f656e54fc800a9b1a0a6562715b
 sha256 e9ae9facf0ceca531dab77ecd241a649cda5b8a34c76cd63d5bdffb2fc81ef44 wasm/webp_encoder.wasm
 sha256 59848fb42a1d4649bc9300b29d5f46f47c0a5a016508ac1c3d5dc40bb0fe64b6 wasm/webp_encoder.mjs
 sha256 5aec868f669e384a22372a4e8a1a6cd7d44c64cd451f960ca69cc170d1e13acf COPYING

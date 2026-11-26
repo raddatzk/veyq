@@ -8,6 +8,7 @@ sources:
   - docs/decisions/0040-coverage-gaps-and-http-not-a-surface.md
   - docs/decisions/0127-the-web-client-encodes-webp-with-its-own-build-of-libwebp.md
   - docs/decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md
+  - docs/decisions/0158-every-pin-has-an-updater-a-self-hosted-renovate-proposes-each-bump-with-what-moves-with-it.md
   - docs/ai/README.md
   - docs/architecture/README.md
 ---
@@ -187,6 +188,7 @@ triggers.
 | Stage | In CI: workflow › job, and when | Budget | Local run |
 |---|---|---|---|
 | Guards | `checks.yml › guards`, every commit; and `trust-chain.yml › trust-chain`, every push and pull request to `main`, docs-only ones included — the only place a docs-only change is checked | 3 min | 1.5 min in the pipeline run; 97 s timed in sequence |
+| Pin inventory | `checks.yml › pins`, every commit: Renovate's extract-only run of this tree, then every pin the tree holds compared with what it extracted (ADR 0158 decision 1) | 10 min, an estimate | 12 s for Renovate's extraction with its image already pulled, under 1 s for the comparison (2026-11-23) |
 | Guard gaps | `trust-chain.yml › guard-gaps`, always in full: when a push or pull request to `main` changes `scripts/`, the trust-chain skill or that workflow, nightly on `main`, and by hand. Locally it skips while nothing it reads changed since its last green full run | 10 min | 2.5–7 min with six workers (147–431 s over six runs, load average 13 to 99) |
 | Surface checks, crypto conformance | `checks.yml › backend` (`./gradlew check`), `› frontend` (crypto, core-js, web, admin-web), `› kotlin-core` (the Kotlin core's tests on the JVM, every module of `src/mobile` but the bridge, whose tests `› app-inputs` runs on macOS), the core's native tests (`› app-inputs` runs macOS's and links the Linux and Windows test binaries, `› kotlin-core-linux` runs them on x86-64 and arm64 Linux, `› kotlin-core-windows` on x64 Windows), `› chart`; every commit | backend 30 min, kotlin-core 20 (an estimate), kotlin-core-linux and kotlin-core-windows 20 each (estimates), frontend and chart 15 each | backend 8.1 min, frontend 5.0, chart 0.4; kotlin-core 3.9 min in the pipeline run, a warm Gradle cache, under a load of 13–25 (2026-11-23), no CI run yet; the bridge's tests 1.7 min alone once its libraries are linked; the native tests on the arm64 Mac (2026-11-23, under a load of 10–17): macOS's 2.7 min to run once linked (23 min from a fresh checkout, every library built), the Linux and Windows test binaries 9.6 min to link, the Windows ones' run against the ARM Windows VM 2.7 min, the Linux ones' not run here (the Mac's Docker disk was full), no CI run yet. The backend's first CI run (2026-11-05, an empty Gradle cache, a 4-vCPU runner) outran its first budget of 15: 5.5 min to resolve the dependencies and build the build logic, 2 more to compile, the tests started at minute 7.7, and `:core`'s were still running at 15. Estimated at 18–21 min cold, from the share of the local test time each project had run; a cold cache is every dependency bump's, so the budget is set for it |
 | Races on MariaDB | `checks.yml › backend-races`, every commit | 20 min | 9.5 min beside the backend's check, 7.0 alone; once, under a heavier load, over its budget beside it. Locally the jobs share one machine; in CI each has its own runner. The first CI run (2026-11-05, cold) outran its first budget of 10 with three of its four projects green, inside `:core`'s; each of the three took about 17 s plus at most 1.24 times its classes' local time (a local run of 2026-11-02), which puts `:core`'s at 6 min and the job at 13–17 min cold |
@@ -203,16 +205,22 @@ triggers.
 | Profiling | no job: run by hand on one quiet machine, and never a verdict | — | unlock, the Chapter and the encryption reading 8 min at `87266fe3` (2026-10-23); the upload's six runs 12 min at `d4eab6be` (2026-10-24); the upload's and the import's twelve runs, the import's download made first, 8 min at `3a44065b` (2026-10-29), the same twelve again, 8 min each, at `0d48e569` and with the import and the tiles changed (2026-10-29); the video upload's six runs, 5 min each, before, without the tiles' posters and after (2026-10-29), and again before, with the size probe's player let go, without the probe, after, without the tiles' posters and with them drawn but not shown (2026-10-29) |
 
 The jobs that are no stage carry a budget too, so that none runs on GitHub's 360-minute default: reading the version
-5 min, the pipeline's gate (`green`) 5, Publish's finding of the Checks run 5, the snapshot's publish 15, its tag 5 and the staging retention 10, the desktop apps' stage 10, a release's check and promote 15 each, its pull of the app packages 10, its MSIX signing 15, its publish 10 and its channels
+5 min, the pipeline's gate (`green`) 5, Publish's finding of the Checks run 130 (120 of them the weekly schedule's wait for a Checks run still going; a dispatch never waits), the snapshot's publish 15, its tag 5, its release draft 5 and the staging retention 10, the desktop apps' stage 10, a release's check and promote 15 each, its pull of the app packages 10, its MSIX signing 15, its publish 10 and its channels
 and refusal 5 each, a path-filter job 5, CodeQL's analysis 30, the docs site's check 10 and its deploy 5,
-the dependency graph's resolve 15 and its submit 5. A budget no
+the dependency graph's resolve 15 and its submit 5, a pull request's release-note check 5, Renovate's weekly run 30,
+its follow's read-only derive 90 (a cold Gradle build with the mutation run, as the backend's recipe asks) and its push
+10. A budget no
 run has measured is an estimate until the first CI run replaces it.
 
 Per commit in CI, the longest path — the surface checks, or the image build and then the lanes — is *estimated* at
-20–25 minutes; the first CI run replaces the estimate. Three other workflows check the repository without being a stage:
+20–25 minutes; the first CI run replaces the estimate. Four other workflows check the repository without being a stage:
 CodeQL's static analysis (`codeql.yml`), the docs site's build (`site.yml`) and the backend's resolved dependency
 graph, submitted on every push to `main` so Dependabot's alerts reach the transitive Gradle dependencies
-(`dependency-submission.yml`).
+(`dependency-submission.yml`), and that every pull request carries a release note, from which the weekly release
+draft is gathered (`release-note.yml`). Nor is the pins' updater a stage: a self-hosted Renovate (`renovate.yml`) proposes
+every pin's bump on Saturday, and the Renovate follow (`renovate-follow-derive.yml`, `renovate-follow.yml`) writes onto
+its pull request what only the bumped build can write; each such pull request then runs every stage above, like any
+other.
 
 ### One command runs the pipeline locally
 

@@ -7,7 +7,7 @@ import kotlin.math.min
 
 /**
  * The justified gallery grid's geometry, the web's `features/memories/mediaGridLayout.ts` ported once for every app (ADR
- * 0136 decision 1: a layout rule is logic, drawing it the platform's). Rows of aspect-kept tiles are justified to the
+ * 0161 decision 1: a layout rule is logic, drawing it the platform's). Rows of aspect-kept tiles are justified to the
  * container's width (Google Photos' and Flickr's look); the last, widow row keeps the target height instead of stretching.
  * A medium's aspect comes from its sealed dimensions ([GalleryModel.Row.aspect]), bounded by [displayAspect] so one extreme
  * photo cannot take a row. Pure arithmetic in the platform's own unit (CSS px, dp, pt — one each, never pixels).

@@ -10,7 +10,7 @@ options:
     tvOS: "26.0"
   createIntermediateGroups: true
   # The words' String Catalogs exist before Xcode plans a first build, which reads a catalog's languages before any
-  # script runs; each target's pre-build script keeps its own current (ADR 0136 decision 3). The manifest's words
+  # script runs; each target's pre-build script keeps its own current (ADR 0161 decision 3). The manifest's words
   # (the usage descriptions: InfoPlist.xcstrings, and InfoPlist.xcconfig, the app's config file) exist before the
   # project does, since a build reads its config files before any script runs.
   preGenCommand: python3 ../words/generate_words.py --apple-strings build/generated/app/Words.xcstrings --apple-swift build/generated/app/Msg+Words.swift --apple-infoplist build/generated/app && python3 ../words/generate_words.py --apple-strings build/generated/share/Words.xcstrings --apple-swift build/generated/share/Msg+Words.swift && python3 ../words/generate_words.py --apple-strings build/generated/tv/Words.xcstrings --apple-swift build/generated/tv/Msg+Words.swift
@@ -33,7 +33,7 @@ targets:
       - path: Veyq
         # the TV's root and the applications' TV pages are VeyqTV's alone (ADR 0159 decision 1)
         excludes: [Info.plist, "*.entitlements", "TV/**", "Apps/*/Tv*.swift"]
-      # Every word the app shows, generated before the build from src/mobile/words/words.json (ADR 0136 decision 3).
+      # Every word the app shows, generated before the build from src/mobile/words/words.json (ADR 0161 decision 3).
       # The core's plan enums as exhaustive Swift enums (ADR 0154 decision 2, inbox #1050), generated before the build.
       - path: build/generated/app/Plans.swift
         optional: true
@@ -85,7 +85,7 @@ targets:
         basedOnDependencyAnalysis: false
         outputFiles: ["$(SRCROOT)/build/generated/app/Words.xcstrings", "$(SRCROOT)/build/generated/app/Msg+Words.swift", "$(SRCROOT)/build/generated/app/InfoPlist.xcstrings"]
         script: |
-          # The catalog's English and German as the String Catalog `Words` (ADR 0136 decision 3), and the usage
+          # The catalog's English and German as the String Catalog `Words` (ADR 0161 decision 3), and the usage
           # descriptions' (InfoPlist.xcconfig, read before this runs, is current as of the project's generation).
           python3 "$SRCROOT/../words/generate_words.py" --apple-strings "$SRCROOT/build/generated/app/Words.xcstrings" --apple-swift "$SRCROOT/build/generated/app/Msg+Words.swift" --apple-infoplist "$SRCROOT/build/generated/app"
     settings:
@@ -154,7 +154,7 @@ targets:
         basedOnDependencyAnalysis: false
         outputFiles: ["$(SRCROOT)/build/generated/share/Words.xcstrings", "$(SRCROOT)/build/generated/share/Msg+Words.swift"]
         script: |
-          # The catalog's English and German as the String Catalog `Words` (ADR 0136 decision 3).
+          # The catalog's English and German as the String Catalog `Words` (ADR 0161 decision 3).
           python3 "$SRCROOT/../words/generate_words.py" --apple-strings "$SRCROOT/build/generated/share/Words.xcstrings" --apple-swift "$SRCROOT/build/generated/share/Msg+Words.swift"
     settings:
       base:

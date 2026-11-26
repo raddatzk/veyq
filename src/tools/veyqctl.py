@@ -2913,7 +2913,8 @@ def age_recipient_of(host: Host, key_file: Path) -> str:
 
 def tree_sha256(root: Path) -> str:
     """veyq-server's `scripts/tree_hash.py` over a checked-out tree: sorted `<mode> <sha256> <path>` lines, the files
-    git tracks (no .git), mode as git records it (120000 a link, 100755 executable, else 100644)."""
+    git tracks (no .git), mode as git records it (120000 a link, 100755 executable, else 100644). A listing, not the
+    hash of `git archive`: its tar may differ between git versions, and the manifest's hash must not."""
     lines: list[bytes] = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if not (Path(dirpath) == root and d == ".git")]
@@ -3085,6 +3086,8 @@ def check_server_system(host: Host, top: Path, address: str, admin_user: str) ->
     known = top / SERVER_KNOWN_HOSTS
     tried = []
     for user in ("root", admin_user):
+        # ClearAllForwardings: the ssh config's LocalForward ports are bound while the tunnel is open, and a
+        # second connection that asks for them again fails — a read needs none.
         read = host.run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=15", "-o", "ClearAllForwardings=yes",
                          "-o", f"UserKnownHostsFile={known}", "-o", "StrictHostKeyChecking=yes", f"{user}@{address}",
                          "cat /etc/os-release"], check=False)

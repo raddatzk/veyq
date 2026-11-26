@@ -58,7 +58,7 @@ A Gradle build of its own, run through its own wrapper.
   each picked file handed back once the queue is done with it, `MediaUploads`, and what it sends into a node as the grid's
   placeholder tiles, `MediaUploads.tiles` → `UploadTile` → `GalleryModel.State.uploading`, laid out first by
   `GalleryModel.layout(rows, uploading, width)` (ADR 0145 decision 3);
-  the tier spec, `MediaUpload`'s; ADR 0136's Consequences; its music, `memories/music/` (ADR 0142 decisions 4–12): a node's tracks listed and numbered once and its queue, `MusicQueue`; their facts, `AudioFacts` (a WAV's trim from its PCM, `Wav`; a decoded format's from its two ends as the platform decodes them, `MusicUpload.Measure.ends`, each a WAV `PcmWav` wraps; an ADTS file's length counted, `Frames`); a picked file checked and uploaded, `MusicUpload`; a rename of the raw listed tier, `TrackLabel`; the Music view, `MusicModel` over the gallery, whose header plays and stops the music and whose lightbox's video interrupts it; a medium's ITEM report, `MediumReport` — drawn for a track by every app's Music view; a photo's or a video's offered by the gallery and its lightbox, `GalleryModel.reportSheet`, ADR 0149 decision 6); a Memory's and a chapter's part of a node's re-key, `MemoryRekey` (ADR 0149 decision 2: the banner's wraps moved in the meta core's `NodeRekey.RekeyContext.meta` hands it before sealing, every medium's sealed tiers live and trashed, the bucket names but a contributor's primary); its part in a download and a copy, `MemoryExport` (the web's content of `contracts/export/memories/content.schema.json`, names only for a member) and `MemoryCopy` (each original and tier read by frame and uploaded as it is, the listed tier verbatim, nothing decoded; the cover and the banner as their own blobs; ADR 0149 decision 3); its item marks, `ItemMarks` (every member's sealed set, the count and the caller's own by its self-tag, a toggle refused before the own set was read; the open and seal `ItemMarksRotation` shares), the gallery's filter, `GalleryFilter` (the marks' mode, a day chip and core search's year, place and kind chips, the name's text; one predicate, `GalleryModel.State.shown`, the grid's and the lightbox's; the viewer's day from the platform's `GalleryFilter.Calendar`), the contributions, `Buckets` and the Contributions view `Contributions` (a guest named from its bucket's seal, `MediaDetails.uploaders`; whether the view is offered: `Contributions.OFFERED`, pending the owner) — the marks and the buckets kept reads (`KeptRead.ITEM_FAVORITES`, `NODE_BUCKETS`; ADR 0149 decisions 4–6), which
+  the tier spec, `MediaUpload`'s; ADR 0161's Consequences; its music, `memories/music/` (ADR 0142 decisions 4–12): a node's tracks listed and numbered once and its queue, `MusicQueue`; their facts, `AudioFacts` (a WAV's trim from its PCM, `Wav`; a decoded format's from its two ends as the platform decodes them, `MusicUpload.Measure.ends`, each a WAV `PcmWav` wraps; an ADTS file's length counted, `Frames`); a picked file checked and uploaded, `MusicUpload`; a rename of the raw listed tier, `TrackLabel`; the Music view, `MusicModel` over the gallery, whose header plays and stops the music and whose lightbox's video interrupts it; a medium's ITEM report, `MediumReport` — drawn for a track by every app's Music view; a photo's or a video's offered by the gallery and its lightbox, `GalleryModel.reportSheet`, ADR 0149 decision 6); a Memory's and a chapter's part of a node's re-key, `MemoryRekey` (ADR 0149 decision 2: the banner's wraps moved in the meta core's `NodeRekey.RekeyContext.meta` hands it before sealing, every medium's sealed tiers live and trashed, the bucket names but a contributor's primary); its part in a download and a copy, `MemoryExport` (the web's content of `contracts/export/memories/content.schema.json`, names only for a member) and `MemoryCopy` (each original and tier read by frame and uploaded as it is, the listed tier verbatim, nothing decoded; the cover and the banner as their own blobs; ADR 0149 decision 3); its item marks, `ItemMarks` (every member's sealed set, the count and the caller's own by its self-tag, a toggle refused before the own set was read; the open and seal `ItemMarksRotation` shares), the gallery's filter, `GalleryFilter` (the marks' mode, a day chip and core search's year, place and kind chips, the name's text; one predicate, `GalleryModel.State.shown`, the grid's and the lightbox's; the viewer's day from the platform's `GalleryFilter.Calendar`), the contributions, `Buckets` and the Contributions view `Contributions` (a guest named from its bucket's seal, `MediaDetails.uploaders`; whether the view is offered: `Contributions.OFFERED`, pending the owner) — the marks and the buckets kept reads (`KeptRead.ITEM_FAVORITES`, `NODE_BUCKETS`; ADR 0149 decisions 4–6), which
   uses core's session and is never used by it; an application's spec is generated into `api.<application>`. **Built**
   ([ADR 0143](../../docs/decisions/0143-the-apps-draw-a-memorys-places-and-maps-mapkit-on-apple-the-cores-raster-map-elsewhere-one-consent-per-device.md)): the map services in core's `map/` (the consent per device, the tile
   fetch, its memory cache and its sealed shelf in the offline store's automatic tier (`TileShelf`, inbox #939), the geocoder, the viewport, clustering), a Memory's date and place in `memories/place/`
@@ -189,7 +189,7 @@ A Gradle build of its own, run through its own wrapper.
   sources and their Swift names from the framework's `VeyqCore.h`, checked equal or the build stops. A Swift `switch`
   over the Kotlin class needs a `default:` the structure guard refuses; over `.entry` it takes none, and an entry the
   core adds fails every drawing that forgot it (ADR 0154 decision 2, inbox #1050).
-- `bridge/` — the core as one shared library, `libveyq.so` on Linux and `veyq.dll` on Windows (ADR 0136 decision 5;
+- `bridge/` — the core as one shared library, `libveyq.so` on Linux and `veyq.dll` on Windows (ADR 0161 decision 5;
   what was built and measured is ADR 0123's Consequences, the bridge). `bridge.h` is its whole C surface, six functions written
   by hand and held to Kotlin/Native's own header by `BridgeHeaderTest`. `commonMain` holds the wire (`Wire.kt`: the
   `Call`s, the `HostRequest`s, what the core sends), the dispatch onto the core's models (`Bridge.kt`) and the host's
@@ -289,7 +289,7 @@ A Gradle build of its own, run through its own wrapper.
   device's link is done, the account it signed in is the open tenant, as after a sign-in call (a close while its grant is
   spent ends the screen, never that sign-in).
   The generated layer copies a payload once (Rust `Option<Vec<u8>>`, C# `byte[]?`); no screen touches a pointer.
-- `linux/` — the Linux app (ADR 0136 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
+- `linux/` — the Linux app (ADR 0161 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
   committed and every cargo run `--locked`. `src/lib.rs` is the library: `bridge` (the safe wrapper over the six
   functions, the host function), `words`, `said` (money, days and sizes the desktop's way), `theme`, `create_action`
   and one module per screen (`sign_in` with the unlock, `shell` with Search, `home` (every row with its cover, `Shell.RowCover`, a folder's level with its head), `pot` with its download,
@@ -334,7 +334,7 @@ A Gradle build of its own, run through its own wrapper.
   library from `VEYQ_LIB_DIR`, both set by `run.py`. `Containerfile` (Fedora 44 by digest) is its build and run
   environment. `run.py` is its one entry point (§ Prove your work); `run.py lock` is the one writer of `Cargo.lock`.
   Crates are held to the no-deprecated rule by reading each one's repository: cargo has no deprecation gate.
-- `windows/` — the Windows app (ADR 0136 decision 5; ADR 0123's Consequences, the Windows app): .NET 10 projects in C#.
+- `windows/` — the Windows app (ADR 0161 decision 5; ADR 0123's Consequences, the Windows app): .NET 10 projects in C#.
   `Veyq.Bridge` (net10.0, no Windows API) is the safe wrapper over the six functions, the host's device store in the
   app's data folder (`DataFolder`: the package's own `LocalState` when packaged, `%LOCALAPPDATA%\veyq\` unpackaged, or
   a debug build's `VEYQ_DATA_DIR`, which `run.py run` sets to `<VEYQ_WINDOWS_DIR>\data`; the app's `AppData` asks for
@@ -415,12 +415,12 @@ A Gradle build of its own, run through its own wrapper.
   holds it: no core UI file names an application but the root, no application another's, and Android's core UI no core
   application's package (`…mobile.<application>`, `…mobile.api.<application>`, inbox #1056; the Kotlin core's own
   direction is `validate_mobile_module_graph.py`'s).
-- `words/` — every word the apps show (ADR 0136 decision 3): `words.json` (English and German, `{n}` / `{n:int}`
+- `words/` — every word the apps show (ADR 0161 decision 3): `words.json` (English and German, `{n}` / `{n:int}`
   placeholders, plurals by CLDR category) is the one source; `generate_words.py` writes the core's `Msg` keys
   (`:core:generateWords`), Android's resources and `Context.words` (`:android:generateWords`; the app has no
   `strings.xml` of its own) and the Apple String Catalog `Words` with `Msg+Words.swift` (the project's `preGenCommand`
   and pre-build step; `say(msg, …)`, `say(notice)`; `Msg` is a class of one getter per word, never an enum, so the web
-  loads only the words it reads — the Swift file gives each its enum-era name, `Msg.trashMoved`: ADR 0136 § The words'
+  loads only the words it reads — the Swift file gives each its enum-era name, `Msg.trashMoved`: ADR 0161 § The words'
   form for JavaScript), the Linux app's gettext catalogs with `words.rs` (`--gettext`, which `run.py build`
   runs; `build.rs` compiles each `.po` with `msgfmt --check`) and the Windows app's `.resw` catalogs with `Words.g.cs`
   (`--resw`, which `windows/run.py build` runs; a plural is one entry per CLDR category, `key#one`, and each catalog
@@ -432,7 +432,7 @@ A Gradle build of its own, run through its own wrapper.
   platform; what the core raises is a `Notice` (`words/Notices.kt`). `apple_en` / `apple_de` give a key Apple's own form
   (Title Case on a button or menu entry). `scripts/validate_mobile_words.py` holds it; its docstring is the rule list
   (every source a platform shows text from, and the manifests) and its limits. The web's catalog is held to this one
-  (ADR 0136 § The web's words): `words/web.json` pairs each meaning both say (`twins`, held equal; `apart` / `open` with
+  (ADR 0161 § The web's words): `words/web.json` pairs each meaning both say (`twins`, held equal; `apart` / `open` with
   why) and names the notices' words the web reads (`read`), which `--web` writes to
   `src/web/src/i18n/words.generated.json` (committed); `scripts/validate_web_words.py` holds both, and goes red on a new
   sentence of three words or more both catalogs say until it is paired. A rewording of a twin changes both catalogs, the
@@ -1182,7 +1182,7 @@ plans it (`NodeHeaderTest`), each app's `NodeHeaderActions` draws it and owns ev
 registers its page — `KindPages` (Android) / `KindPage` (Apple): it brings a share sheet, takes a cover, contributes a
 subtitle, its rights narrowing, its copy and download doors and own actions, and draws its body. The header's state and
 actions are core's `NodeHeaderModel` and its sheets core's `TrashSheet`, `MoveSheet`, `ShareSheet` and `ReportSheet`
-(ADR 0136's Consequences): an app draws them and decides nothing. Linux (`header.rs`) draws every entry of the plan,
+(ADR 0161's Consequences): an app draws them and decides nothing. Linux (`header.rs`) draws every entry of the plan,
 each `HeaderAction` one arm (`header::doer`: the header's own call or the page's window action); Windows (`NodeHeader.cs`)
 draws every entry of it too (ADR 0154 decision 2, `scripts/validate_mobile_structure.py`), a page's own ones done by that
 page (`PageHooks`). A new kind registers
@@ -1393,7 +1393,7 @@ order is held to the web's `sections.ts` by `PlansAreTheWebsTest`: it changes on
   node it made, and the next run fills it (`into`, the web's `fileUploadJob`); before, the retry collided with its own empty
   file and offered its replace (measured on the emulator in airplane mode).
 - A guest's new folder in a drop box shows only once the tenant's tree is read anew: the session caches it, and nothing polls.
-  `ShellModel.refresh()` forgets it first (the desktops' F5 / Refresh, the phones' pull to refresh; ADR 0136's Consequences).
+  `ShellModel.refresh()` forgets it first (the desktops' F5 / Refresh, the phones' pull to refresh; ADR 0161's Consequences).
 - Driving the web from a mobile pass (headless system Chrome, `?devlogin`): a level row's `locator.click()` waits forever
   for a stable element; click the row's bounding box with `page.mouse`, or open by hash (`#app-depot-2/alpha-txt`). A file
   page's Replace is its hidden `input.files-picker` (`setInputFiles`), then "Ersetzen". A pass of a web change runs on a Vite

@@ -11,7 +11,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** What the shell says, finds and creates, both apps' once (ADR 0136); the two had drifted on two tab words. */
+/** What the shell says, finds and creates, both apps' once (ADR 0161); the two had drifted on two tab words. */
 class ShellWordsTest {
     init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
 

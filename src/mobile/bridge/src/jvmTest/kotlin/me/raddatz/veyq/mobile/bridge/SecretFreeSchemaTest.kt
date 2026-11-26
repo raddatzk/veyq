@@ -107,7 +107,7 @@ class SecretFreeSchemaTest {
     }
 
     /**
-     * A device link (ADR 0136's Consequences) crosses as its state alone: no field of any shape is named like the
+     * A device link (ADR 0161's Consequences) crosses as its state alone: no field of any shape is named like the
      * pairing's secrets (the code's text, the channel's handle or key, the grant, its envelope, the transport key), and
      * the link's own outward shapes carry exactly these fields — the code itself is a picture beside the JSON
      * (`Link.Code`), the five-digit number and the six digits are on screen by design. A field added to them is red here

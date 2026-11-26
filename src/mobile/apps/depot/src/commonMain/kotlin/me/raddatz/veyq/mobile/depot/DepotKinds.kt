@@ -76,7 +76,7 @@ object DepotKinds : ApplicationKinds {
         )
     }
 
-    // a file downloads as itself, under its own name (ADR 0136's Consequences)
+    // a file downloads as itself, under its own name (ADR 0161's Consequences)
     override fun downloadsItself(kind: String): Boolean = kind == FILE
 
     override suspend fun ownDownload(tenant: TenantSession, ref: NodeAt, sink: (ByteArray) -> Unit): Boolean =

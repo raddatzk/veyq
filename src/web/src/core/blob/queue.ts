@@ -19,7 +19,7 @@ import { reactive, computed } from 'vue'
 // (a transport reports `onProgress(0)` right before the first chunk PUT).
 export type UploadStatus = 'queued' | 'preparing' | 'uploading' | 'done' | 'failed' | 'cancelled'
 
-/** A file's state as it is said, in the apps' notices' words (ADR 0136 § The web's words): the upload menu's and a
+/** A file's state as it is said, in the apps' notices' words (ADR 0161 § The web's words): the upload menu's and a
  *  Memory's upload tiles alike. */
 export const UPLOAD_STATUS_TEXT: Record<UploadStatus, string> = {
   queued: 'words.upload_status_queued',

@@ -8,7 +8,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 
-vi.mock('../features/setup/setupServer', () => ({ prepareServerOwner: vi.fn(), createServerOwner: vi.fn() }))
+vi.mock('../features/setup/setupServer', () => ({
+  prepareServerOwner: vi.fn(),
+  createServerOwner: vi.fn(),
+  listSetupApplications: vi.fn(),
+}))
 // The kit screen's own checks are EmergencyKitSave's; here a button stands for "the owner confirmed they saved it".
 vi.mock('../features/setup/EmergencyKitSave.vue', () => ({
   default: { emits: ['update:modelValue'], template: '<button class="stub-kit-saved" @click="$emit(\'update:modelValue\', true)" />' },
@@ -20,7 +24,7 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 import { serverState } from '../shared/state/serverState'
 
 import SetupView from './SetupView.vue'
-import { createServerOwner, prepareServerOwner } from '../features/setup/setupServer'
+import { createServerOwner, listSetupApplications, prepareServerOwner } from '../features/setup/setupServer'
 import type { PreparedServerOwner } from '../features/setup/setupServer'
 import { httpError } from '../test/httpError'
 import { pwnedCount } from '../shared/pwned'
@@ -57,8 +61,12 @@ const i18n = createI18n({
       setup: {
         title: 'Set up', sub: 'sub', submit: 'Set up', submitting: 'Setting up', failed: 'failed', kitTitle: 'Kit', kitSub: 'kit',
         kitProceed: 'Proceed', creating: 'Creating', createFailed: 'create failed', alreadyComplete: 'already complete',
-        dutiesTitle: 'What you may have to state',
+        dutiesTitle: 'What you may have to state', applicationsTitle: 'Which applications does this server offer?',
+        applicationsLater: 'Each can be switched on or off later under {page}.', applicationsAtLeastOne: 'Keep one.',
+        applicationsLoading: 'Reading', applicationsFailed: 'applications failed', applicationsRetry: 'Try again',
       },
+      admin: { server: 'Server' },
+      capabilities: { navTitle: 'Capabilities' },
       operatorDuties: {
         exemption: 'household exemption', owes: 'owes a name', everyTenant: 'every space', gap: 'not stated by this operator',
         assessment: 'your own assessment, not veyq’s, and not legal advice',
@@ -68,12 +76,19 @@ const i18n = createI18n({
 })
 
 const PREPARED = { email: 'owner@example.com' } as unknown as PreparedServerOwner
+// The register's applications as the server serves them (ADR 0088 decision 13): the words are never this package's.
+const APPLICATIONS = [
+  { id: 'memories', title: { en: 'Memories', de: 'Erinnerungen' }, purpose: { en: 'Keep photos.', de: 'Fotos aufbewahren.' } },
+  { id: 'depot', title: { en: 'Depot', de: 'Depot' }, purpose: { en: 'Keep files.', de: 'Dateien aufbewahren.' } },
+  { id: 'expenses', title: { en: 'Expenses', de: 'Ausgaben' }, purpose: { en: 'Share costs.', de: 'Kosten teilen.' } },
+]
 
 beforeEach(() => {
   serverState.breachRangeUrl = 'https://api.pwnedpasswords.com/range/' // a new instance's manifest
   vi.clearAllMocks()
   vi.mocked(prepareServerOwner).mockResolvedValue({ request: PREPARED, emergencyKit: { secretKey: 'A3-SECRET' } })
   vi.mocked(createServerOwner).mockResolvedValue({ userId: 'u-owner' })
+  vi.mocked(listSetupApplications).mockResolvedValue(APPLICATIONS)
   // The check is automatic, so every submit passes through it: clean unless a case says otherwise.
   vi.mocked(pwnedCount).mockResolvedValue(0)
 })
@@ -168,6 +183,12 @@ describe('SetupView — the owner is created only after the kit is confirmed and
     await flushPromises()
     return w
   }
+  const toApplicationsStep = async () => {
+    const w = await toDutiesStep()
+    await w.find('button.setup-duties-continue').trigger('click')
+    await flushPromises()
+    return w
+  }
 
   it('mints the account and shows the kit, but creates no owner yet — closing the tab here leaves setup open', async () => {
     const w = await toKitScreen()
@@ -184,21 +205,22 @@ describe('SetupView — the owner is created only after the kit is confirmed and
     expect(w.find('[data-test="operator-duties"]').text()).toContain('household exemption')
     expect(w.find('input[type="checkbox"]').exists()).toBe(false)
     expect(w.findAll('[role="radio"], .opt-PRIVATE, .opt-ORGANISATION')).toHaveLength(0)
-    expect(proceedButton(w).attributes('disabled')).toBeUndefined()
+    expect(w.find('button.setup-duties-continue').attributes('disabled')).toBeUndefined()
+    expect(proceedButton(w).exists()).toBe(false)
     expect(createServerOwner).not.toHaveBeenCalled()
   })
 
-  it('creates the owner with no mode once the kit is confirmed, then goes to sign-in', async () => {
-    const w = await toDutiesStep()
+  it('creates the owner with no mode and every application on once the kit is confirmed, then goes to sign-in', async () => {
+    const w = await toApplicationsStep()
     await proceedButton(w).trigger('click')
     await flushPromises()
-    expect(createServerOwner).toHaveBeenCalledWith(PREPARED)
+    expect(createServerOwner).toHaveBeenCalledWith(PREPARED, [])
     expect(push).toHaveBeenCalledWith({ name: 'login' })
   })
 
   it('keeps the kit and says so when someone else finished setup first', async () => {
     vi.mocked(createServerOwner).mockRejectedValue(httpError(409, 'setup_already_complete'))
-    const w = await toDutiesStep()
+    const w = await toApplicationsStep()
     await proceedButton(w).trigger('click')
     await flushPromises()
     expect(w.text()).toContain('already complete')
@@ -207,7 +229,7 @@ describe('SetupView — the owner is created only after the kit is confirmed and
 
   it('lets a failed create be tried again with the same kit', async () => {
     vi.mocked(createServerOwner).mockRejectedValueOnce(httpError(500))
-    const w = await toDutiesStep()
+    const w = await toApplicationsStep()
     await proceedButton(w).trigger('click')
     await flushPromises()
     expect(w.text()).toContain('create failed')
@@ -216,5 +238,77 @@ describe('SetupView — the owner is created only after the kit is confirmed and
     expect(createServerOwner).toHaveBeenCalledTimes(2)
     expect(vi.mocked(prepareServerOwner)).toHaveBeenCalledOnce() // the same account, not a second one
     expect(push).toHaveBeenCalledWith({ name: 'login' })
+  })
+})
+
+describe('SetupView — which applications the server offers, asked once before the post (uc.admin.setup-server step 5)', () => {
+  const toApplicationsStep = async () => {
+    const w = mount(SetupView, { global: { plugins: [i18n], stubs } })
+    await flushPromises()
+    await w.find('input[type="email"]').setValue('owner@example.com')
+    await w.find('input[type="password"]').setValue('a long enough password')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    await w.find('.stub-kit-saved').trigger('click')
+    await w.find('button.setup-kit-continue').trigger('click')
+    await flushPromises()
+    await w.find('button.setup-duties-continue').trigger('click')
+    await flushPromises()
+    return w
+  }
+  type Wrapper = Awaited<ReturnType<typeof toApplicationsStep>>
+  const boxes = (w: Wrapper) => w.findAll('[data-test="setup-applications"] input[type="checkbox"]')
+  const proceedButton = (w: Wrapper) => w.find('button.setup-create')
+
+  it('asks with the served words, every application ticked, and names where each is switched later', async () => {
+    const w = await toApplicationsStep()
+    expect(listSetupApplications).toHaveBeenCalledOnce()
+    expect(w.text()).toContain('Which applications does this server offer?')
+    const list = w.find('[data-test="setup-applications"]').text()
+    for (const app of APPLICATIONS) {
+      expect(list).toContain(app.title.en)
+      expect(list).toContain(app.purpose.en)
+    }
+    expect(boxes(w).map((b) => (b.element as HTMLInputElement).checked)).toEqual([true, true, true])
+    expect(w.text()).toContain('Each can be switched on or off later under Server → Capabilities.')
+    expect(createServerOwner).not.toHaveBeenCalled()
+  })
+
+  it('posts what is unticked as left out — and only that', async () => {
+    const w = await toApplicationsStep()
+    await boxes(w)[1]!.setValue(false) // Depot
+    await proceedButton(w).trigger('click')
+    await flushPromises()
+    expect(createServerOwner).toHaveBeenCalledWith(PREPARED, ['depot'])
+    expect(push).toHaveBeenCalledWith({ name: 'login' })
+  })
+
+  it('cannot continue with none ticked; one ticked again, it can', async () => {
+    const w = await toApplicationsStep()
+    for (const box of boxes(w)) await box.setValue(false)
+    expect(proceedButton(w).attributes('disabled')).toBeDefined()
+    expect(w.text()).toContain('Keep one.')
+    await proceedButton(w).trigger('click')
+    await flushPromises()
+    expect(createServerOwner).not.toHaveBeenCalled()
+
+    // Control on the same button: one application back, and the post goes with the other two left out.
+    await boxes(w)[0]!.setValue(true)
+    expect(proceedButton(w).attributes('disabled')).toBeUndefined()
+    await proceedButton(w).trigger('click')
+    await flushPromises()
+    expect(createServerOwner).toHaveBeenCalledWith(PREPARED, ['depot', 'expenses'])
+  })
+
+  it('a list that could not be read is said so and read again, and nothing is posted meanwhile', async () => {
+    vi.mocked(listSetupApplications).mockRejectedValueOnce(httpError(500))
+    const w = await toApplicationsStep()
+    expect(w.text()).toContain('applications failed')
+    expect(proceedButton(w).exists()).toBe(false)
+    await w.find('button.setup-applications-retry').trigger('click')
+    await flushPromises()
+    expect(listSetupApplications).toHaveBeenCalledTimes(2)
+    expect(boxes(w)).toHaveLength(3)
+    expect(createServerOwner).not.toHaveBeenCalled()
   })
 })

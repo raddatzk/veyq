@@ -36,6 +36,13 @@ import me.raddatz.veyq.mobile.qr.QrMatrix
  * are Strings, which cannot be zeroed — they are let go.
  */
 object KitWriter {
+    /**
+     * The kit layout this writer prints (ADR 0157 decision 1): 1, every kit before ADR 0157 — the web's layout 2 labels
+     * the key "9 blocks in 3 lines", which this page does not yet. A rotation records it in the account's kit record
+     * (`kitRecord`, ADR 0157 decision 4), so the web suggests its clearer kit to an account whose last kit was this one.
+     */
+    const val LAYOUT = 1
+
     const val PAGE_WIDTH = 595.28
     const val PAGE_HEIGHT = 841.89
 

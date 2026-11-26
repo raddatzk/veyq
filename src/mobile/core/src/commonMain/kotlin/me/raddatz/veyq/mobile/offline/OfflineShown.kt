@@ -72,7 +72,7 @@ enum class LimitUnit(val bytes: Long, val word: Msg) { MB(1_000_000L, Msg.STORAG
 @SerialName("LimitField")
 data class LimitField(val amount: String, val unit: LimitUnit, val off: Boolean)
 
-/** The words and rules phase 5's screens show; the platforms only draw them (ADR 0136 decisions 1 and 3). */
+/** The words and rules phase 5's screens show; the platforms only draw them (ADR 0161 decisions 1 and 3). */
 object OfflineShown {
     /** The status of the pin of [node] among [pins], [progress] its fetch where one runs; [OfflineStatus.OFF] where none is. */
     fun status(node: String, pins: List<Pin>, progress: Map<String, OfflineFetching.Progress>): OfflineStatus {

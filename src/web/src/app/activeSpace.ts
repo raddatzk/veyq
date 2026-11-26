@@ -24,6 +24,7 @@ import { refreshMyInvitations, clearMyInvitations } from '../features/spaces/inv
 import { isUnlocked } from './vault'
 import { handleTenantSuspended } from './tenantSuspension'
 import { TrustStateRefused, refusalMessageKey } from '../features/account/trustMarks'
+import { resetKitLayout } from '../features/account/emergencyKit/kitRecord'
 
 export type SpaceStatus = 'idle' | 'loading' | 'ready' | 'no-tenant' | 'error'
 
@@ -215,7 +216,12 @@ export async function refreshActiveScope(): Promise<void> {
   await registry.scopeEntered(activeSpace.scopeId)
 }
 
-/** Drop the active space + zero the held key (logout / re-lock). */
+/**
+ * Drop the active space + zero the held key (logout / re-lock). No production code calls it today: a sign-out is a
+ * document load (ADR 0070), so in-memory state goes with the page. State that must also go where THIS tab swaps or
+ * drops a key without a reload (a rotation's unknown outcome or its resume) resets there too — the kit layout does
+ * (`rotateKeys.ts`); a reset only here is never run.
+ */
 export function clearActiveSpace(): void {
   entry++ // an entry still opening must not install its keys after the clear
   stopGrantDeliveryPolling()
@@ -241,6 +247,7 @@ export function clearActiveSpace(): void {
   resetCovers() // …nor the decrypted covers (core's, inbox #411)
   resetPeopleDirectory() // …nor the decrypted names and the profile pictures' object URLs (core's, ADR 0084)
   resetSearchIndex() // …nor the search's documents of every space (core's, ADR 0125 decision 2)
+  resetKitLayout() // …nor what the kit record said (ADR 0157 decision 6): the next unlock reads it again
   registry.scopeReset() // …nor what an application decrypted (Memories' covers)
 }
 

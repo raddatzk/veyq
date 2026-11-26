@@ -22,7 +22,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** The move and copy sheet both apps drew (ADR 0136 decision 2, the header CR's D1 and D4) — over a door the test plays. */
+/** The move and copy sheet both apps drew (ADR 0161 decision 2, the header CR's D1 and D4) — over a door the test plays. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class MoveSheetTest {
     init { me.raddatz.veyq.mobile.composition.AppComposition.install() }

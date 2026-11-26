@@ -29,7 +29,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * What a Memory's page and its lightbox do beyond what the phones drew first (ADR 0136's Consequences), over a gallery the test plays and on virtual time: the
+ * What a Memory's page and its lightbox do beyond what the phones drew first (ADR 0161's Consequences), over a gallery the test plays and on virtual time: the
  * rights deciding what is offered (one page for a member and a guest), a medium trashed with its Undo in its window and not
  * after, a guest's own purge asked first and without Undo, the live poll reading only when the media moved and ending with
  * the page, the slideshow's clock, a chapter made only on a Memory.

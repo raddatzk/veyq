@@ -8,7 +8,8 @@
 // donation banner as a member's (uc.platform.support-the-project, ADR 0124) — on the signed-in app only, never on the
 // public or plain layouts' login, invite, join and recovery pages — and above it, while the account's address is
 // unconfirmed, the banner that says so and cannot be dismissed (ADR 0129 decision 5), on the same pages only. While it
-// stands — and until its read has answered — the donation banner and the finish-your-profile prompt wait (owner
+// stands — and until its read has answered — the donation banner, the finish-your-profile prompt and the clearer-kit
+// notice (ADR 0157 decision 5) wait (owner
 // 2026-11-13): one notice at a time, the one that asks the member to act; they appear as before once the address is
 // confirmed or cannot be read. The banner's read is the only one (`unconfirmedAddress.ts`). Below the footer sits core's
 // audio bar (`core/audio/AudioBar.vue`, ADR 0135 decision 8), mounted here once so the music outlives every change of page,
@@ -20,6 +21,7 @@ import { RouterView } from 'vue-router'
 import AppSidebar from './AppSidebar.vue'
 import AppTopbar from './AppTopbar.vue'
 import FinishProfilePrompt from '../../features/account/profile/FinishProfilePrompt.vue'
+import KitRenewalPrompt from '../../features/account/emergencyKit/KitRenewalPrompt.vue'
 import OperatorIdentification from '../../core/operator/OperatorIdentification.vue'
 import DonationBanner from '../../core/project/DonationBanner.vue'
 import UnconfirmedEmailBanner from '../../features/account/email/UnconfirmedEmailBanner.vue'
@@ -42,6 +44,7 @@ defineProps<{ otherNoticesOn: boolean; audioBarOn: boolean }>()
         <OpenInAppBanner v-if="otherNoticesOn" />
         <DonationBanner v-if="otherNoticesOn" member />
         <FinishProfilePrompt v-if="otherNoticesOn" />
+        <KitRenewalPrompt v-if="otherNoticesOn" />
         <RouterView />
       </main>
       <footer class="app-operator-footer">

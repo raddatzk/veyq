@@ -24,7 +24,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** A node's header both apps drew (ADR 0136 decision 2): its rights, pin, trash with its undo, rename — over a door the test plays. */
+/** A node's header both apps drew (ADR 0161 decision 2): its rights, pin, trash with its undo, rename — over a door the test plays. */
 class NodeHeaderModelTest {
     init { me.raddatz.veyq.mobile.composition.AppComposition.install() }
 

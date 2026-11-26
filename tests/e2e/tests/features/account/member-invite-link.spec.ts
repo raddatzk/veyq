@@ -4,7 +4,8 @@
 //      it for a fresh owner, who points its mail at the run's relay — mail stays a precondition for inviting at all
 //      (decision 3). The owner opens "Invite member", which opens on sharing a link, creates one and reads it out of the
 //      message the dialog prefills: `…/tenant/accept#<token>.<sealed>.<code>` on the tenant's own domain — and no mail
-//      went out for it. The pending list names it "Link invitation".
+//      went out for it. The owner gives it a label first (decision 7), and the pending list names it by that label,
+//      opened again after the page is left and reached anew, beside "Link invitation".
 //   2. A second browser context opens the link: no code is asked for, the page offers an address field, and the newcomer
 //      registers with an address it types; the done step says a confirmation mail is on its way, and the relay holds it
 //      (decision 4). Signed in, the app carries the unconfirmed-address banner, which has no close (decision 5); the
@@ -40,6 +41,8 @@ const linkDomain = () => `link.${stack().domain}`
 const linkOrigin = () => `https://${linkDomain()}`
 // Per-tenant handles: declared plaintext (`pii`), so no canaries.
 const handles = { owner: `link-owner-${stamp}`, member: `link-member-${stamp}` }
+// The owners' private label of the link (ADR 0129 decision 7): sealed for the invite, a canary like every value typed.
+const inviteLabel = `Für Tante Hildegard aus Bielefeld ${stamp}`
 
 let admin: Device // the Server Owner's console
 let owner: Device // the tenant's owner, who creates the link
@@ -134,6 +137,7 @@ test(
     tag: [
       '@uc.spaces.add-member:invite-as-a-link',
       '@uc.spaces.add-member:a-link-joins-whoever-opens-it',
+      '@uc.spaces.manage-member-invites:a-link-invite-carries-a-private-label',
       '@uc.account.confirm-email-address:unconfirmed-account-banner',
     ],
   },
@@ -190,11 +194,13 @@ test(
     const invite = page.getByRole('dialog', { name: 'Invite member' })
     await expect(invite.getByRole('button', { name: 'Share a link' })).toHaveAttribute('aria-pressed', 'true')
     await expect(invite.getByLabel('Email address'), 'a link is bound to nobody: no address to type').toHaveCount(0)
+    await invite.getByLabel('Label (optional)').fill(recordTyped(inviteLabel))
     await invite.getByRole('button', { name: 'Create link' }).click()
     const message = invite.getByTestId('invite-link-message')
     await expect(message).toBeVisible({ timeout: 30_000 })
     const text = await message.inputValue()
     expect(text, 'the message names the space').toContain(TENANT)
+    expect(text, 'the label is the owners\' own, never in what is handed over').not.toContain(inviteLabel)
     inviteLink = /https:\/\/\S+/.exec(text)?.[0] ?? ''
     const url = new URL(inviteLink)
     expect(url.origin, 'the link opens on the tenant domain').toBe(linkOrigin())
@@ -205,6 +211,9 @@ test(
     await invite.getByRole('button', { name: 'Done' }).click()
     await expect(page.locator('.invite-row').filter({ hasText: 'Link invitation' })).toHaveCount(1)
     expect(await invitationMails(), 'the link was handed over, never mailed').toBe(0)
+    // The label, fetched as ciphertext and opened again on a fresh read of the list, titles the row.
+    await openSettingsOn(owner, accountOwner, 'Members')
+    await expect(page.locator('.invite-row').getByTestId('invite-title')).toHaveText(inviteLabel, { timeout: 60_000 })
 
     // The holder opens it in a browser of its own: the code rides in the link, so none is asked for.
     const tab = invitee.page

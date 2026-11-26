@@ -922,7 +922,7 @@ private struct LightboxPage: View {
     let current: Bool
     @State private var picture: CGImage?
     @State private var read = false
-    /// The platform's zoom (ADR 0136's Consequences: a pinch, a double tap; the model knows nothing of it) and its pan while zoomed in.
+    /// The platform's zoom (ADR 0161's Consequences: a pinch, a double tap; the model knows nothing of it) and its pan while zoomed in.
     @State private var scale: CGFloat = 1
     @State private var settled: CGFloat = 1
     @State private var offset: CGSize = .zero

@@ -124,8 +124,20 @@ Five rules follow:
    in a stubbed DOM); none clicked what the browser rendered. Unit tests prove the logic; the click proves the
    screen.
 
-   **A live parallel session is a hazard for WRITES too, and this one bites harder than a stale count.** Commits
-   here go straight to `main`, so a second session's tip and its uncommitted tree share yours. Two moves are
+   **Work reaches `main` only through a pull request, and only once it is releasable.** A CR, a feature or a fix is
+   built on its own branch (a worktree when a session has one) and lands as one squashed pull request; `main` never
+   holds a half-built feature, because `main` is what the weekly snapshot publishes and a release promotes (owner
+   2026-11-13 and 2026-11-22; [ADR 0091](../decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
+   decision 5). A CR's phases are commits on that branch, not merges into `main`. **Its body carries the release
+   note** — a `## Release note` section in the release's own words (Use-area tone), or `none` when nobody using or
+   running veyq would notice: the Monday release draft is gathered from those sections, so it is written by whoever
+   built the change, while the context is fresh (`.github/pull_request_template.md`, `release-note.yml`; the form is
+   `scripts/release_notes.py`'s docstring). A line that is no note below it — the attribution a session's pull request
+   ends with — sits below a `---`, which ends the section.
+
+   **A live parallel session is a hazard for WRITES too, and this one bites harder than a stale count.** A checkout
+   can still be shared — the main checkout carries IntelliJ and every session started without a worktree — and
+   there a second session's tip and its uncommitted tree share yours. Two moves are
    therefore forbidden regardless of how clean the tree *looked* when the phase started: `git add -A` (which on
    2026-09-20 swept a neighbour's in-progress CR and inbox rows into an unrelated docs commit) and any
    `git reset` by relative ref such as `HEAD~1` (the same session then reset what it thought was its own tip,
@@ -142,7 +154,7 @@ Five rules follow:
    there while cr-files-becomes-depot committed). The form that cannot sweep anything up builds the commit in an index
    of its own: `GIT_INDEX_FILE=<scratch> git read-tree <tip>`, `git add` by explicit path (or `git update-index
    --cacheinfo` for a file whose working copy already carries the next phase), `git write-tree`, `git commit-tree -p
-   <tip>`, then `git update-ref refs/heads/main <new> <tip>`, which refuses when a neighbour moved the tip in between;
+   <tip>`, then `git update-ref refs/heads/<branch> <new> <tip>`, which refuses when a neighbour moved the tip in between;
    afterwards `git reset -q -- <your paths>` re-syncs the shared index for your paths only.
 
    **And the rule reaches a *delegated* read, where nobody can apply it from inside.** A subagent measures
@@ -258,6 +270,11 @@ A refined CR nails **decisions, not keystrokes**:
   The same holds for a core feature over application nodes: name the registry hook that carries each kind's answer
   (cr-select-nodes said "capabilities decide per node", and core may not call an application's capability function -
   the implementer had to add `LevelRow.selection`).
+  And a decision that computes from what a control shows names the control's granularity: cr-memory-capture-time-shift
+  took the offset as "new time minus old, in ms" over a minute-granular editor, so a photo taken at 10:03:27 and set
+  to 11:15 would have moved the selection by a value the member never saw; the implementer took it against the minute shown.
+  A write planned over a reactive list says when it reads that list and who else patches it: the same CR's "with the
+  revision it read" left open whether the run re-reads the items a live poll patches in place between question and choice.
 - **Run the locator here — from two angles, and read the output as a list.** Handing one over unrun is the
   estimate wearing a command's clothes. And the first command you reach for is a paraphrase of what you already
   believe, so it fails silently wherever that belief is wrong: cr-0171's refine measured "246 scalars" with a
@@ -306,7 +323,9 @@ A refined CR nails **decisions, not keystrokes**:
   and every reader with the thread each runs on: cr-bundled-store-adopts-itself locked only the check's promotion,
   though its adoption inserts the same row the Server Owner's save does (a 500 under the race), and invalidated a cache
   the app shell reads on a Vert.x IO thread, where a cold cache cannot read the database (the first page after a change
-  hung). And a test class a CR names as a case's home is read for its profile: that CR put an ingress re-render case in
+  hung). A refine that says a write "cannot interleave" with a switch names the lock each *write path* takes, not only
+  the row writers': cr-setup-asks-for-applications claimed it, and write gates read the cached switch outside any lock.
+  And a test class a CR names as a case's home is read for its profile: that CR put an ingress re-render case in
   a class whose profile renders no ingress.
 - **Price a confidentiality layer against what the same attacker already reads.** `cr-guest-names-for-members-only`
   was refined to a per-Memory name keypair under `K_SC` so that *a link plus a database dump* could not read guest

@@ -23,7 +23,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** A file's page both phones drew (ADR 0136 decision 2 and its Consequences, Depot's screens) — over a file the test plays. */
+/** A file's page both phones drew (ADR 0161 decision 2 and its Consequences, Depot's screens) — over a file the test plays. */
 class FileModelTest {
     init { me.raddatz.veyq.mobile.TestApplications.install(me.raddatz.veyq.mobile.depot.DepotKinds) }
 

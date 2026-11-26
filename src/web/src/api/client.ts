@@ -21,6 +21,7 @@ import {
   AccountEmailApi,
   AccountEmailChangeApi,
   AccountErasureApi,
+  AccountKitRecordApi,
   AccountPasswordApi,
   AccountProfileApi,
   AccountRotationApi,
@@ -126,6 +127,11 @@ export function accountIdentityPinsApi(): AccountIdentityPinsApi {
 
 export function accountDeviceRegisterApi(): AccountDeviceRegisterApi {
   return new AccountDeviceRegisterApi(new AccountConfiguration(bearerParams()))
+}
+
+/** The account's sealed kit record (ADR 0157 decision 3) — the caller's own, session-authenticated. */
+export function accountKitRecordApi(): AccountKitRecordApi {
+  return new AccountKitRecordApi(new AccountConfiguration(bearerParams()))
 }
 
 /** The caller's own address and its confirmation (ADR 0074) — session-authenticated, unlock not required. */

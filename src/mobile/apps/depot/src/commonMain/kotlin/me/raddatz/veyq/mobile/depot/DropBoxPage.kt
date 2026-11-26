@@ -20,7 +20,7 @@ import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.session.LivePoll
 
 /**
- * A drop box's page for a member (Depot's `DropBoxDetail.vue`, `docs/apps/depot.md` § The drop box; ADR 0136 decision 2):
+ * A drop box's page for a member (Depot's `DropBoxDetail.vue`, `docs/apps/depot.md` § The drop box; ADR 0161 decision 2):
  * its guests' folders ([DropBoxes.folders]) read anew on every revision of the shell's lists — one trigger for every app,
  * whatever changed them (a move out, a delete, an upload, another device) —, a folder moved out through the move sheet
  * ([at] the node it opens on) and a folder's delete asked first ([askDelete]) and then done through the header's trash

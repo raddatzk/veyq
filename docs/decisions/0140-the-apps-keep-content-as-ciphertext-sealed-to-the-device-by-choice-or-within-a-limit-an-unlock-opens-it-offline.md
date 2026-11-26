@@ -233,7 +233,7 @@ What the apps do today (measured 2026-11-13, commands from `src/mobile/` unless 
   Consequences say so.
 - **No contract, backend or web change:** every read the store keeps exists. The core gains a store, a reachability
   state, an offline unlock and a read path per screen model; the bridge carries sizes, states and `asOf`, never a key,
-  seal or token (`SecretFreeSchemaTest`, [ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)
+  seal or token (`SecretFreeSchemaTest`, [ADR 0161](0161-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)
   decisions 1 and 2).
 - **A device whose trust is the Secret Key at every start gets no offline content** — the cost of decision 4.
 - **Decision 2's measurement held** (2026-11-15, `OfflineManifestLoadTest`, its `veyq-measure:` line; 100,000

@@ -18,7 +18,7 @@ fun Notices.potCopyRefused(outcome: PotCopy.Outcome): Notice? = when (outcome) {
     PotCopy.Outcome.FAILED -> Notice(Msg.COPY_FAILED)
 }
 
-/** A problem of an entry's form or its write path (the web says a form's in these words, its `PROBLEM_WORDS`, ADR 0136 § The web's words); any other: an unknown participant. */
+/** A problem of an entry's form or its write path (the web says a form's in these words, its `PROBLEM_WORDS`, ADR 0161 § The web's words); any other: an unknown participant. */
 fun Notices.entryProblem(problem: String): Msg = when (problem) {
     "title" -> Msg.PROBLEM_TITLE
     "date" -> Msg.PROBLEM_DATE

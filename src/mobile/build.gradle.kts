@@ -74,7 +74,7 @@ subprojects {
             linuxArm64()
             linuxX64()
             mingwX64()
-            // The targets reached through the bridge (ADR 0136 decision 5), Linux and Windows, share `bridgedMain`; Apple and
+            // The targets reached through the bridge (ADR 0161 decision 5), Linux and Windows, share `bridgedMain`; Apple and
             // Linux share `posixMain` (a file opened by its path as the bytes it is, where Windows takes it as UTF-16); the
             // tests that block a thread or run on a pool of them live in `threadedTest`, between `commonTest` and the JVM and
             // native targets (in `commonTest` they would fail `compileTestKotlinJs`). The default template is extended.

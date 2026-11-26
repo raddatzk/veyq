@@ -71,9 +71,13 @@ sequenceDiagram
   are derived on the device, and the server sees no secret.
 - **E1 — wrong password or Secret Key:** the KEK fails to open the wrap (AEAD tag mismatch) → **generic
   unlock failure**; the server is **uninvolved** and learns nothing; the user retries locally.
-- **E1a — a typo in the Secret Key:** a typed key of the full length whose check symbols disagree is named a typo
-  in the Secret-Key field itself, before anything is derived; a key that does not read at all says nothing while it
-  is typed. Submitted anyway, either is refused like a wrong key.
+- **E1a — a Secret Key that does not read:** the Secret-Key field says where a typed key stands before anything is
+  derived (`shared/ui/secretKeyEntry.ts`): while it is shorter than a whole key, the block being typed ("Block 3 of 9");
+  a character no key has, a key longer than one, or a full-length key whose check symbols disagree (a typo), each by
+  its own reason. **Until the key reads, the screen's submit is grey** — on every screen that asks for one (*One
+  Secret-Key control* below), so no unreadable key reaches the unlock. The first person to sign in with a kit typed its
+  first printed line alone, three of the nine blocks, and the submit sent it, to meet E1's generic failure (owner
+  2026-11-22). The unlock still refuses an unreadable key like a wrong one, as the backstop for a screen that forgot.
 - **E2 — no PASSWORD wrap / not authenticated:** the wrap cannot be fetched or does not exist; the user
   must (re-)login or use a recovery/alternate method.
 - **E3 — a served key-derivation profile the client does not write:** the client derives only with the
@@ -121,6 +125,9 @@ stateDiagram-v2
   know. It is one component for a second reason too: a screen that renders a bare input instead is
   indistinguishable from one that simply has not been built yet, which is how the import came to exist on
   exactly one of five screens while three use-cases asserted it everywhere.
+- **The submit waits for a whole key, and the field says why.** Every screen greys its submit with the field's own
+  answer (`secretKeyReady`), and the field explains every key that is not ready — the block count while typing, a
+  reason for the rest (E1a). The two are one rule: a grey button the field did not explain would be a dead end.
 - **A kit from the wrong account warns; it never blocks.** Where the screen already knows which account is
   expected (an invite's owner e-mail, the recovery material's e-mail, the signed-in account), an imported kit
   carrying a *different* e-mail says so. It cannot be an error: the e-mail in a kit is metadata, an account may

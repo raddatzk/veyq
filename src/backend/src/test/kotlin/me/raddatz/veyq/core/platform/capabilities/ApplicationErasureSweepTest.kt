@@ -161,10 +161,11 @@ class ApplicationErasureSweepTest {
             assertTrue(HoldPinEntity.count("holdId", w.hold) > 0, "and its pins")
         }
 
-        // The window ends with every scope done, and the application is still off: a fresh day, from now.
-        val fresh = read { ApplicationErasureEntity.findById(ApplicationErasureKey(w.tenant, MEMORIES))!! }
-        assertTrue(fresh.offSince.isAfter(Instant.now().minusSeconds(120)), "a fresh window starts at the end")
-        assertTrue(fresh.noticeMailedAt?.isBefore(fresh.offSince) == false, "and its notice went again, in the same tick")
+        // The window ends with every scope done, and the application is still off — but nothing of it is left, so no next
+        // window starts (ADR 0088 decision 5). A node made after a switch-on keeps one going
+        // (ApplicationErasureSliceTest.aWindowThatEndsWithNothingLeftStartsNoNextOneWhileStillOff).
+        assertTrue(read { store.isOff(w.tenant, MEMORIES) }, "Memories is still off")
+        assertNull(read { ApplicationErasureEntity.findById(ApplicationErasureKey(w.tenant, MEMORIES)) }, "no next window")
     }
 
     @Test

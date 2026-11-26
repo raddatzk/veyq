@@ -226,8 +226,8 @@ switch refuses only what is new.
   opens and downloads, for members and through the links that exist, and members can still delete to the trash and
   restore. A rotation of keys and a moderation measure still reach it. The application's own entries below it
   (`memories.places`, `memories.map`, `expenses.exchange-rates`) are off with it.
-- **An application left off is erased on its day.** When an application goes off for a tenant, at your level or the
-  tenant owner's, the tenant gets a day: that moment plus `veyq.application.off.retention`, 30 days unless you set
+- **An application left off is erased on its day.** When an application goes off for a tenant that holds something
+  of it, at your level or the tenant owner's, the tenant gets a day: that moment plus `veyq.application.off.retention`, 30 days unless you set
   another ([Configuration](/run/configuration/#backend-keys-for-tuning)). Every member sees a banner naming the
   day, the tenant owner sees it beside the entry, and where the instance has its own mail
   ([Storage and email](/run/storage-and-email/#the-instances-own-mail-to-you)) every member is mailed a notice and,
@@ -238,6 +238,11 @@ switch refuses only what is new.
   a new Memory, file or Pot stays. Switched off for the whole instance, every tenant gets its own day, a tenant already
   off keeps its earlier one, and the notice says only you can switch it back on. Only an application's own entry
   erases; `memories.places` and the other children erase nothing.
+- **Where nothing of it exists, an application off is simply absent.** A tenant that holds nothing of the application,
+  nothing in its trash either, gets no day, no banner and no mail: its members are not offered it, and that is all.
+  That is a tenant created while you hold the application off, every tenant of an instance where you left it out at
+  [first-run setup](/run/first-run/#create-the-server-owner), and a tenant whose window ended with nothing of it left,
+  which then starts no next one.
 - **Feature switches refuse only what is new.** With `core.group-space` off no group can be created, and every
   existing group stays fully usable.
 

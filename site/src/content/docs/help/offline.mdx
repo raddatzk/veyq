@@ -6,6 +6,7 @@ sources:
   - docs/features/admin/use-cases/uc.admin.delete-tenant.md
   - docs/decisions/0140-the-apps-keep-content-as-ciphertext-sealed-to-the-device-by-choice-or-within-a-limit-an-unlock-opens-it-offline.md
   - docs/decisions/0153-the-apps-queue-a-persons-own-additions-made-offline-sealed-to-the-device-and-send-them-through-the-online-write-path-expenses-joins-the-store.md
+  - docs/features/account/use-cases/uc.account.remember-this-device.md
 ---
 
 ## "This space is temporarily offline"
@@ -21,8 +22,17 @@ do your other spaces.
 
 ## "This server can't be reached right now"
 
-veyq cannot talk to its server: your internet connection is down, or the server is. Check your connection and try
-again later. Nothing on your device is lost; your keys stay where they were.
+veyq cannot talk to its server: your internet connection is down, or the server is. Check your connection, then
+press **Reload** beside the message to try again. Nothing on your device is lost; your keys stay where they were.
+
+## "Taking longer than usual"
+
+veyq shows its logo while it starts. If the start does not finish within about 15 seconds, it reloads the page once by
+itself, which is what you would otherwise do by hand. If the start hangs again, it says **Taking longer than usual**
+and offers **Reload**. Nothing is lost: this device stays remembered, and your content is on the server as before.
+
+The line below names the step the start is waiting for, such as `status` (asking the server about itself), `session`
+(your sign-in) or `vault` (opening your keys on this device). If it keeps happening, quote that line when you report it.
 
 ## "Offline — content as of …" in the app
 

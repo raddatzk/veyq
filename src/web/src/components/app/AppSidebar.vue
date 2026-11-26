@@ -28,8 +28,7 @@ import CreateGroupDialog from '../../features/spaces/CreateGroupDialog.vue'
 import { useCapabilities } from '../../shared/state/useCapabilities'
 import { CORE_GROUP_SPACE } from '../../features/platform/capabilities'
 import { useThemeState } from '../../shared/state/useThemeState'
-import { parseHash, TENANT_SCOPE, isPersonalScope, personalScope } from '../../core/node/location'
-import { getMyProfile } from '../../features/account/profile/profile'
+import { parseHash, TENANT_SCOPE, isPersonalScope, PERSONAL_SCOPE } from '../../core/node/location'
 import { slugify } from '../../shared/naming'
 import { TenantStatus, type MyTenant } from '../../api/generated/scopes'
 import { suspensionSignals } from '../../app/tenantSuspension'
@@ -202,10 +201,8 @@ watch(groups, () => void measureCompactGroupNav())
 let groupResizeObserver: ResizeObserver | null = null
 onBeforeUnmount(() => groupResizeObserver?.disconnect())
 
-// The caller's own per-tenant username builds the Personal link `#~<username>` (ADR 0023); until it resolves (or
-// if there's no profile in this tenant), the `~me` fallback still routes to the personal scope.
-const myUsername = ref('')
-const personalHash = computed(() => `#${personalScope(myUsername.value)}`)
+// The Personal link is `#~me` for every member (ADR 0015, amended 2026-11-18): no username in the address.
+const personalHash = `#${PERSONAL_SCOPE}`
 
 // The active tenant drives the merged switcher row (cr-0108): its avatar + name + domain, and its body enters
 // the shared Tenant home. Falls back to the first known tenant until the active id resolves.
@@ -219,11 +216,6 @@ const tenantOverview = ref<InstanceType<typeof VeyqPopover> | null>(null)
 
 onMounted(async () => {
   await loadTenants()
-  try {
-    myUsername.value = (await getMyProfile()).username
-  } catch {
-    /* no profile in this tenant yet → the ~me fallback still routes to the personal scope */
-  }
   await loadGroups()
   // measure once + observe the strip and the hidden clone so the pack re-runs as the compact bar reflows.
   void measureCompactGroupNav()

@@ -140,7 +140,7 @@ class JoinRecords(private val suite: V1) {
         /** `seal.ts` `VALUE_KEY_PURPOSES`: the purposes sealed under a value key of their own. */
         val VALUE_PURPOSES = setOf(
             "group-name", "space-icon", "share-key-recovery", "item-favorites",
-            "member-name", "member-avatar", "member-join-record", "member-verification",
+            "member-name", "member-avatar", "member-join-record", "member-verification", "member-invite-label",
         )
     }
 }

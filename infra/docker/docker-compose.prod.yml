@@ -52,7 +52,7 @@ services:
   # holds each one to the `user:` of the service that writes the volume. A root that already matches is left
   # alone, so every later `up` is a no-op, and it never walks a store's data tree. The image is busybox for its
   # `sh`, `stat` and `chown` and nothing else: a step that does one thing reads as that thing. It is pinned by
-  # digest like every other image here, and Dependabot's `docker-compose` ecosystem bumps it.
+  # digest like every other image here, and Renovate's `docker-compose` manager bumps it.
   volume-ownership:
     image: busybox:1.38.0@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
     <<: *hardened
@@ -76,7 +76,7 @@ services:
       - veyq-acme:/chown/65532/acme
 
   mariadb:
-    image: mariadb:12.3@sha256:d46e102fa8b9b72bfcdeb56f9dd538742092119dc8b11f31fe662605cd234cd9
+    image: mariadb:12.3@sha256:4aaf88b3106382c8c18e49f0cec60267be618fc22f858c4503afb2a2555afed3
     restart: unless-stopped
     <<: *hardened
     logging: *logging
@@ -261,7 +261,7 @@ services:
   # And every invitation link is built as https://<domain>/tenant/accept#<token>, so an HTTP-only instance mails
   # links pointing at a scheme it does not answer.
   traefik:
-    image: traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d
+    image: traefik:v3.8@sha256:00c9734983e74ae35a1fc18eaee9e9da13f3dde95c4e45b3b8c3b60e0dbd2d17
     restart: unless-stopped
     <<: *hardened
     logging: *logging

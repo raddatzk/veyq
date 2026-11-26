@@ -33,7 +33,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Device linking through the bridge (ADR 0059; ADR 0136's Consequences): the `Link.*` calls, [Watched.Link], and a link's scan
+ * Device linking through the bridge (ADR 0059; ADR 0161's Consequences): the `Link.*` calls, [Watched.Link], and a link's scan
  * through `Scan.*` of kind [ScanKind.LINK], over the core's real `DeviceLink` and a played relay (core's [PlayedServer],
  * serialized here: the bridge's calls run on many threads). Two bridges link with each other as the host drives them —
  * a trusted one signed in by password, a new one at its sign-in —, the code crossing only as a PNG the test reads back

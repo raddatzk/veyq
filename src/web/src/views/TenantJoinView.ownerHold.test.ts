@@ -61,6 +61,9 @@ import { buildAccount } from '@veyq/crypto/accountBirth'
 import { realI18n, t } from '../test/i18n'
 import { invitePreview, setupStatus } from '../test/models'
 import * as v1 from '@veyq/crypto/v1'
+import { TYPED_SECRET_KEY } from '../test/secretKey'
+import { layoutOf } from '../features/account/emergencyKit/kitRecord'
+import { KIT_LAYOUT } from '../features/account/emergencyKit/emergencyKit'
 
 const TENANT_ID = '5c09e000-0000-4000-8000-0000000000e3'
 const EMAIL = 'owner@acme.example'
@@ -131,18 +134,23 @@ describe('TenantJoinView - an OWNER\'s accept holds the tenant key its birth min
     await w.find('input[type="password"]').setValue('a long enough password')
     await w.find('form').trigger('submit')
     await flushPromises()
+    expect(registerAndAccept, 'the kit is on screen: nothing is registered, no record written yet').not.toHaveBeenCalled()
     await w.findAll('button').find((b) => b.text() === t('tenant.join.join'))!.trigger('click')
     await settled(w, t('tenant.join.doneNote'))
     const born = (await vi.mocked(buildAccount).mock.results[0].value) as { masterKey: Uint8Array }
     expect(born.masterKey.every((b) => b === 0)).toBe(true)
     expect(await heldUnder(BORN_MK)).toEqual(BORN)
+    // The kit just kept is recorded with the account, sealed under the Master Key the birth handed back (ADR 0157 decision 4).
+    const kitRecord = vi.mocked(registerAndAccept).mock.calls[0][9]
+    expect(layoutOf(BORN_MK, kitRecord)).toBe(KIT_LAYOUT)
+    expect(KIT_LAYOUT).toBeGreaterThan(1) // control: the answer above is the record's, not the no-record default
   })
 
   it('an existing account signing in: held under the vault its unlock opened', async () => {
     const w = await mountView(true)
     await w.find('input[name="username"]').setValue('kevin')
     await w.find('input[type="password"]').setValue('the password')
-    await w.find('input.secret-key').setValue('A3-SECRET')
+    await w.find('input.secret-key').setValue(TYPED_SECRET_KEY)
     await w.find('form').trigger('submit')
     await settled(w, t('tenant.join.doneNote'))
     expect(await heldUnder(VAULT_MK)).toEqual(BORN)

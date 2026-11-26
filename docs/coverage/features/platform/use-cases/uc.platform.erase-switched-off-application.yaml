@@ -6,10 +6,15 @@ title: An application left switched off is erased
 # veyq_application_erasure's, served to a member (applicationErasures) and to the tenant owner (erasureDueAt).
 acceptanceCriteria:
   - id: the-day-is-set-once
-    text: "When an application's own entry goes off for a tenant, at either level, the tenant gets one day for it, the moment it went off plus veyq.application.off.retention (default P30D), and a second level switching it off keeps that day; a tenant created while the instance holds it off gets its own day from its creation."
+    text: "When an application's own entry goes off for a tenant that holds a node of it, at either level, the tenant gets one day for it, the moment it went off plus veyq.application.off.retention (default P30D), and a second level switching it off keeps that day; one off with no day yet (a node that arrived without one) gets it from the next purge tick."
     coverage:
       backend:
-        integration: [ApplicationErasureSliceTest.aTenantSwitchOffNamesTheDayAndASwitchOnBeforeItCancelsIt, ApplicationErasureSliceTest.anInstanceSwitchGivesEveryTenantItsDayAndKeepsAnEarlierOne, ApplicationErasureSliceTest.aTenantCreatedWhileTheInstanceHoldsAnApplicationOffGetsItsOwnDayAndNoNotice, ApplicationErasureSliceTest.aMissingRowIsOpenedByTheTickFromNowNeverEarlier]
+        integration: [ApplicationErasureSliceTest.aTenantSwitchOffNamesTheDayAndASwitchOnBeforeItCancelsIt, ApplicationErasureSliceTest.anInstanceSwitchGivesEveryTenantItsDayAndKeepsAnEarlierOne, ApplicationErasureSliceTest.aMissingRowIsOpenedByTheTickFromNowNeverEarlier]
+  - id: nothing-held-no-day
+    text: "A tenant that holds no node of the application, trashed ones included, gets no day, no banner and no mail (ADR 0088 decision 5): neither switch nor the purge tick makes one, a tenant created while the instance holds the application off gets none, and a window that ends with nothing of it left starts no next one, though the application is still off. A trashed node counts as held."
+    coverage:
+      backend:
+        integration: [ApplicationErasureSliceTest.aTenantSwitchOffWhereTheTenantHoldsNothingOfTheApplicationNamesNoDay, ApplicationErasureSliceTest.aTrashedNodeOfTheApplicationCountsAsHeld, ApplicationErasureSliceTest.anInstanceSwitchGivesEveryTenantItsDayAndKeepsAnEarlierOne, ApplicationErasureSliceTest.aTenantCreatedWhileTheInstanceHoldsAnApplicationOffGetsNoDay, ApplicationErasureSliceTest.aMissingRowIsOpenedByTheTickFromNowNeverEarlier, ApplicationErasureSliceTest.aWindowThatEndsWithNothingLeftStartsNoNextOneWhileStillOff, ApplicationErasureSliceTest.anInstanceSwitchNoticeNamesTheOperatorAsTheOnlyOneWhoCanSwitchItOn, ApplicationErasureSliceTest.aTenantThatHoldsNothingOfTheApplicationReadsNoDay]
   - id: every-member-is-told-the-day
     text: "Every member of the tenant (pendingConsent = false) is told the day by the banner at the top of veyq, the tenant owner also by the Settings → Capabilities row, and, where the instance has mail, by one notice mail within one purge tick and one reminder mail seven days before the day (none for a window of seven days or less); a member with pendingConsent gets no mail, and without instance mail nothing is sent, the switch is not refused and the day does not move."
     coverage:
@@ -40,7 +45,7 @@ acceptanceCriteria:
       backend:
         integration: [ApplicationErasureSweepTest.memoriesOffPastItsDayIsErasedInEveryScopeAndNothingElseIs, ApplicationErasureSweepTest.aRestoreThatBringsAnErasedMemoryBackErasesItAgain]
   - id: switched-on-before-the-day-nothing-is-lost
-    text: "Switched on before the day, nothing is erased and the day is cancelled; switched on after it, what existed is erased with its whole subtree and a node of its own made after the switch-on (a new Memory) stays; off again once the erasure finished, a fresh day starts and a fresh notice goes."
+    text: "Switched on before the day, nothing is erased and the day is cancelled; switched on after it, what existed is erased with its whole subtree and a node of its own made after the switch-on (a new Memory) stays; off again once the erasure finished, a fresh day starts and a fresh notice goes while such a node is still held."
     coverage:
       backend:
         integration: [ApplicationErasureSliceTest.aTenantSwitchOffNamesTheDayAndASwitchOnBeforeItCancelsIt, ApplicationErasureSliceTest.aSwitchOnFromTheDayKeepsTheRowUntilThePurgeEndsItAndAStillOffApplicationStartsAgain, ApplicationErasureSweepTest.switchedOnAfterTheDayWhatExistedGoesAndAMemoryMadeAfterwardsStays]
@@ -50,7 +55,7 @@ acceptanceCriteria:
     text: "Switched off for the instance, every tenant gets its own day, a tenant already off keeps its earlier one, and the notice names the operator as the only one who can switch it on again; switched on for the instance, each day ends except where the tenant's own switch holds it off, and two levels switching at once leave the record the final state implies."
     coverage:
       backend:
-        integration: [ApplicationErasureSliceTest.anInstanceSwitchGivesEveryTenantItsDayAndKeepsAnEarlierOne, ApplicationErasureSliceTest.anInstanceSwitchNoticeNamesTheOperatorAsTheOnlyOneWhoCanSwitchItOn, ApplicationErasureRaceSliceTest.aTenantSwitchOnOverlappingAnInstanceSwitchOnLeavesNoRow, ApplicationErasureRaceSliceTest.anInstanceSwitchOnOverlappingATenantSwitchOnLeavesNoRow, ApplicationErasureRaceSliceTest.aTenantCreatedOverlappingAnInstanceSwitchOffGetsItsRow]
+        integration: [ApplicationErasureSliceTest.anInstanceSwitchGivesEveryTenantItsDayAndKeepsAnEarlierOne, ApplicationErasureSliceTest.anInstanceSwitchNoticeNamesTheOperatorAsTheOnlyOneWhoCanSwitchItOn, ApplicationErasureRaceSliceTest.aTenantSwitchOnOverlappingAnInstanceSwitchOnLeavesNoRow, ApplicationErasureRaceSliceTest.anInstanceSwitchOnOverlappingATenantSwitchOnLeavesNoRow]
       web:
         unit: [src/features/tenant/tenantCapabilities.test.ts]
 gaps:
@@ -61,8 +66,8 @@ gaps:
     candidate, with the overlay's thirty-second window and a five-second tick: a tenant owner switches Depot off; the
     confirmation, the owner's row and the member's banner (in English, and the dated banner once in German) name the
     day, and the notice reaches Mailpit; switched on before it, the day and the banner are gone; off again and left
-    off, the files in the shared and the personal space go, while the core folders and a Memory stay, and a fresh day
-    and notice follow. Not driven there (ADR 0090 decision 9: what a slice test proves with an injected clock is not
+    off, the files in the shared and the personal space go, while the core folders and a Memory stay, and with nothing
+    of Depot left no next day, banner or notice follows (nothing-held-no-day's end of a window). Not driven there (ADR 0090 decision 9: what a slice test proves with an injected clock is not
     waited out again in a browser): that nothing is erased once a cancelled day has passed
     (ApplicationErasureSliceTest.aTenantSwitchOffNamesTheDayAndASwitchOnBeforeItCancelsIt), the reminder (a window
     short enough to wait out has none), a switch-on after the day (a race with the tick's phase, not a state a browser

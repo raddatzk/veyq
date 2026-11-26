@@ -90,7 +90,10 @@ salt that key was derived with, one per write and 16 bytes of length more, and l
   signature over it and that owner's identity key, the tenant key wrapped to the invite key, and the owner's own such
   grant kept beside it as the invite's anchor; the key, the signature, the grant and the anchor are cleared once the
   invite is accepted, revoked, re-sent or expires. The code that opens the invite link never reaches the server; a
-  mailed link's sealed part passes through it only while it is mailed, and a shared link's never does.
+  mailed link's sealed part passes through it only while it is mailed, and a shared link's never does. A shared link's
+  optional label ("for whom", the owners' own) is stored only sealed under a key of its own whose wrap is under the
+  tenant key, and cleared with the invite's key; the server learns that it exists, roughly how long it is and which
+  owner last wrote it.
 - **Who invited whom:** per member, the owner whose invite they joined through, recorded at the accept, and that
   owner's signed endorsement of the member's sealed join record, written when the owner secures their account
   ([ADR 0111](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)

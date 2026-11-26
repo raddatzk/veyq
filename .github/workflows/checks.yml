@@ -3,7 +3,7 @@ name: Checks
 # The one pipeline per commit (ADR 0091 decision 2): the guards, the surface checks, the races, the API end-to-end
 # run, the API fuzzing and the image build start together, the stack lanes wait for the build, and `green` waits for
 # every stage. Every pull request and every push to `main` or `release/<major>.x` runs it, and it publishes nothing:
-#   - a pull request (Dependabot's included) builds and tests the images and keeps them in the runner — no job of a
+#   - a pull request (an updater's included) builds and tests the images and keeps them in the runner — no job of a
 #     pull request's run holds a write permission (`build-local` builds there, `build` only on a push);
 #   - a push to `main` or `release/<major>.x` also STAGES them: the `version` job's `kind` is `stage`, `build` pushes the
 #     per-arch `build-<sha>-<arch>` staging tags (unsigned, no published name), lane L1 pulls exactly those by digest,
@@ -43,13 +43,13 @@ concurrency:
   cancel-in-progress: false
 
 # Helm for the `chart` job: the official release tarball, checked against this SHA-256 before it runs — the shape ADR
-# 0057 §6 uses for the OpenAPI generator JAR, and no setup action. Measured 2026-10-14: get.helm.sh's
-# helm-v4.0.1-linux-amd64.tar.gz.sha256sum, the tarball's own hash and the checksum in the GitHub release notes of
-# helm/helm v4.0.1 all agree. publish.yml and release.yml carry the same two lines for their chart packaging;
+# 0057 §6 uses for the OpenAPI generator JAR, and no setup action. Measured 2026-11-22: get.helm.sh's
+# helm-v4.3.2-linux-amd64.tar.gz.sha256sum, the tarball's own hash and the checksum in the GitHub release notes of
+# helm/helm v4.3.2 all agree. publish.yml and release.yml carry the same two lines for their chart packaging;
 # validate_release_identity.py holds every copy equal. Bumping it is part of cutting a release.
 env:
-  HELM_VERSION: v4.0.1
-  HELM_SHA256: e0365548f01ed52a58a1181ad310b604a3244f59257425bb1739499372bdff60
+  HELM_VERSION: v4.3.2
+  HELM_SHA256: d1c0278d46beab79582d7e50f5b3dc206944ba8e577cde618513fd07daa53983
 
 # Least-privilege default; each job widens only what it needs (see per-job permissions blocks).
 permissions:
@@ -75,7 +75,7 @@ jobs:
         run: |
           shopt -s nullglob
           python3 -m venv .venv
-          .venv/bin/pip install --quiet pyyaml
+          .venv/bin/pip install --quiet --require-hashes --only-binary :all: -r scripts/requirements-release.txt
           count=0
           for f in scripts/validate_*.py; do
             if [ "$f" = "scripts/validate_guard_gaps.py" ]; then
@@ -96,10 +96,32 @@ jobs:
       - name: Import cases reproduce
         run: python3 contracts/export/import-cases/generate.py --check
 
+      # A Gradle verification metadata change only adds trust: the trust rules and every checksum already committed for
+      # a kept artifact stay as the base has them (scripts/verification_metadata_diff.py; ADR 0158 decision 4).
+      # It compares two trees, so it is no `validate_*.py`, which read one: the base is a pull request's base or a
+      # push's previous tip, fetched alone. A first push reports an all-zero `before`, and a local run of
+      # scripts/run_pipeline.py none; the check then holds the file's form only, and says so.
+      - name: Verification metadata only gains
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE"
+          fi
+          .venv/bin/python scripts/verification_metadata_diff.py --base "${BASE:-0}"
+
+      - name: Verification metadata self-test
+        run: .venv/bin/python scripts/verification_metadata_diff_selftest.py
+
       # The snapshot's pure decisions (the asset-set hash, the lane records and predicates, the write-once verdicts),
       # offline: publish.yml acts on them only after every stage, so they are proven here, before it.
       - name: Snapshot self-test
         run: .venv/bin/python scripts/snapshot_selftest.py
+
+      # The release draft's decisions (scripts/release_notes.py, run by publish.yml's `release-draft` and by
+      # release-note.yml): the note's form, the body, the edit marker and the one-draft rule, before a Monday shows them.
+      - name: Release notes self-test
+        run: .venv/bin/python scripts/release_notes_selftest.py
 
       # The promotion's decisions (scripts/promote.py, run by release.yml): proven on every commit that could change
       # them, not first on the day of a release.
@@ -116,10 +138,59 @@ jobs:
       - name: MSIX signing self-test
         run: .venv/bin/python scripts/msix_sign_selftest.py
 
-      # What dependabot-follow.yml writes onto a Dependabot branch, and the forgeries it refuses
-      # (scripts/dependabot_follow.py): proven on every commit that could change it, before its next push.
-      - name: Dependabot follow self-test
-        run: .venv/bin/python scripts/dependabot_follow_selftest.py
+      # What renovate-follow.yml writes onto a Renovate branch (the Gradle metadata, the rebuilt WebP encoder, the
+      # fuzzer's lock), and the forgeries it refuses (scripts/renovate_follow.py): proven on every commit that could
+      # change it, before its next push.
+      - name: Renovate follow self-test
+        run: .venv/bin/python scripts/renovate_follow_selftest.py
+
+      # What Renovate's postUpgradeTasks write beside a bump (scripts/pin_follow.py: Helm's SHA-256, the OpenAPI
+      # generator JAR's, PyYAML's hashes) and the release pages it refuses, offline: proven before a bump runs it.
+      - name: Pin follow self-test
+        run: .venv/bin/python scripts/pin_follow_selftest.py
+
+      # The `pins` job's verdicts (scripts/pin_inventory.py) on synthetic trees and reports: a pin of each shape
+      # unreached, skipped or without a version is red, a derived one follows its partner.
+      - name: Pin inventory self-test
+        run: .venv/bin/python scripts/pin_inventory_selftest.py
+
+  # Every pin has an updater (ADR 0158 decision 1): Renovate extracts every dependency it reaches from this checkout,
+  # and scripts/pin_inventory.py is red on a pin found by shape that no manager extracted, or one with no version.
+  # Renovate is the image renovate.yml runs (read from that file, so it is pinned once), in its extract-only dry run on
+  # the `local` platform: no token, no lookup, nothing written but the report. The checkout is mounted read-only. The
+  # image's user (uid 12021) is not the runner's, so the report goes to a directory of its own that it may write, and
+  # git is told the checkout is safe: refused as another user's repository, Renovate would glob the files instead of
+  # listing the tracked ones. `RENOVATE_GITHUB_TOKEN_WARN=false`: without a token Renovate marks every dependency
+  # looked up on GitHub `github-token-required`, a fact about this run, not about the config (an extraction needs no
+  # lookup; measured 2026-11-23, every action and Helm carried it).
+  pins:
+    name: Every pin has an updater
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Extract every dependency with Renovate
+        run: |
+          set -euo pipefail
+          image="$(python3 scripts/pin_inventory.py --renovate-image)"
+          report_dir="${RUNNER_TEMP}/renovate-report"
+          mkdir -p "$report_dir"
+          chmod 777 "$report_dir"
+          docker run --rm \
+            -v "${GITHUB_WORKSPACE}:/usr/src/app:ro" -v "${report_dir}:/report" -w /usr/src/app \
+            -e LOG_LEVEL=info \
+            -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory -e GIT_CONFIG_VALUE_0=/usr/src/app \
+            -e RENOVATE_PLATFORM=local -e RENOVATE_DRY_RUN=extract \
+            -e RENOVATE_ONBOARDING=false -e RENOVATE_REQUIRE_CONFIG=required -e RENOVATE_GITHUB_TOKEN_WARN=false \
+            -e RENOVATE_REPORT_TYPE=file -e RENOVATE_REPORT_PATH=/report/renovate-report.json \
+            "$image" renovate
+
+      - name: Compare the pins with the extraction
+        run: python3 scripts/pin_inventory.py --report "${RUNNER_TEMP}/renovate-report/renovate-report.json"
 
       # The apps' manifest words (generate_words.py --apple-infoplist, --metainfo): the usage descriptions and the
       # Flatpak's summary and description in English and German, which no platform's words test reads.
@@ -129,8 +200,8 @@ jobs:
   backend:
     name: Backend checks
     runs-on: ubuntu-latest
-    # Sized for a cold Gradle cache, which is no first-run accident: setup-java's `cache: gradle` keys on the build
-    # files' hash with no restore key and saves only from a green job, so every dependency bump starts cold. The first
+    # Sized for a cold Gradle cache, which is no first-run accident: GitHub evicts a cache a week unused or past the
+    # repository's 10 GB, and before 2026-11-22 every dependency bump started cold (the cache step below says why). The first
     # CI run (2026-11-05, cold, 4 vCPU) was cancelled at the old 15 with `:core:test` 6 min in: 5.5 min of dependency
     # resolution and buildSrc before the first project task, 2 min of compiling, the tests from minute 7.7; the whole
     # check is estimated at 18–21 min. The measurement behind the value is the stage map's (how-veyq-is-tested.md).
@@ -140,11 +211,26 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Java
-        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: "25"
-          cache: gradle
+
+      # Gradle's dependency and wrapper caches, restored by prefix when the key missed: a dependency bump starts from the
+      # last cache and fetches only what changed, where it once fetched all of it (~500 MB) from Maven Central, whose rate
+      # limit failed a cold run's burst of jobs (429, 2026-11-22). The key hashes what decides the resolved graph: every
+      # build script, the version catalog, the verification metadata every dependency change rewrites, the wrapper. The job
+      # saves the cache at its end, only if green and only if the key missed. It replaces setup-java's `cache: gradle`,
+      # which had no restore key and hashed a root `gradle/*.versions.toml`, so src/backend's catalog never changed its key.
+      - name: Restore the Gradle cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/backend/**/*.gradle.kts', 'src/backend/gradle/libs.versions.toml', 'src/backend/gradle/verification-metadata.xml', 'src/backend/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Validate the Gradle wrapper JAR
         uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
@@ -168,11 +254,21 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Java
-        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: "25"
-          cache: gradle
+
+      # The Gradle cache, keyed and restored as `backend`'s says.
+      - name: Restore the Gradle cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/backend/**/*.gradle.kts', 'src/backend/gradle/libs.versions.toml', 'src/backend/gradle/verification-metadata.xml', 'src/backend/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Validate the Gradle wrapper JAR
         uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
@@ -191,7 +287,7 @@ jobs:
       # `@veyq/core-js` is the Kotlin core compiled for JavaScript (ADR 0155 decision 6): its build runs src/mobile's
       # Gradle, whose JVM side compiles for 21 (`jvmToolchain(21)`) and which provisions no JDK itself — as `app-inputs`.
       - name: Set up Java
-        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: "21"
@@ -203,14 +299,27 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "22"
+          node-version: "26"
 
       # pnpm at exactly the version package.json pins in `packageManager` (validate_pnpm_installs_gated.py holds
       # the two equal). GitHub's runner only: a local run (scripts/run_pipeline.py) uses the host's pnpm, which
       # switches itself to the pinned version.
       - name: Install pnpm
         if: runner.environment == 'github-hosted'
-        run: npm install -g pnpm@12.16.1
+        run: npm install -g pnpm@12.22.0
+
+      # The OpenAPI generator JAR (ADR 0057 §6), restored to the storageDir both openapitools.json name, so the install's
+      # `generate:api` reads it from the cache instead of asking Maven Central in every job: several jobs start at once,
+      # and Central answered HTTP 429 to both packages' download (2026-11-22, the stack lane on PR #43). A cached file is
+      # trusted no more than a downloaded one: scripts/verify_openapi_generator_jar.mjs hashes it against
+      # scripts/openapi_generator_jar.sha256 on every run and fails the install on a mismatch, leaving the file (a bad
+      # entry then stays red until it is deleted: `gh cache delete <key>`). Keyed on the pin and both configs that name
+      # the version, so a bump is a new key; a hit saves nothing. Every job that installs the root lockfile restores it.
+      - name: Restore the OpenAPI generator JAR
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.openapi-generator
+          key: openapi-generator-jar-${{ hashFiles('scripts/openapi_generator_jar.sha256', 'src/web/openapitools.json', 'src/admin-web/openapitools.json') }}
 
       # One install for the whole workspace (a root `pnpm install` links `@veyq/crypto` into src/web/), then each
       # package proves ITSELF. The shared crypto package is checked first and separately on purpose: it is the
@@ -272,7 +381,7 @@ jobs:
 
       # src/mobile's Gradle build compiles its JVM side for 21 (`jvmToolchain(21)`) and provisions no JDK itself.
       - name: Set up Java
-        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: "21"
@@ -293,9 +402,9 @@ jobs:
     # image and is red on any byte that differs from the pin or the committed files — never waved through: a rebuild
     # that stops being byte-identical stays red until the cause is found. It rebuilds when anything under
     # src/web/webp-encoder/ changed since the run's base (a pull request's base, a push's previous tip); when that base
-    # cannot be read (a new branch, a local run of scripts/run_pipeline.py) it rebuilds anyway. Dependabot's bump of the
-    # Emscripten digest lands in that directory, so its pull request rebuilds — and is red until `build.py --write` is
-    # run on it, because a new toolchain writes new bytes.
+    # cannot be read (a new branch, a local run of scripts/run_pipeline.py) it rebuilds anyway. Renovate's bump of libwebp or of
+    # the Emscripten digest lands in that directory, so its pull request rebuilds, and compares what the Renovate follow
+    # wrote onto it with `build.py --write` (scripts/renovate_follow.py): a new toolchain writes new bytes.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -362,7 +471,7 @@ jobs:
       - name: Chart checks
         run: |
           python3 -m venv "${RUNNER_TEMP}/chart-venv"
-          "${RUNNER_TEMP}/chart-venv/bin/pip" install --quiet pyyaml
+          "${RUNNER_TEMP}/chart-venv/bin/pip" install --quiet --require-hashes --only-binary :all: -r scripts/requirements-release.txt
           "${RUNNER_TEMP}/chart-venv/bin/python" scripts/chart_meta_check.py
 
       # What `veyqctl init --gitops` writes (ADR 0126) rendered with this Helm against this tree's chart AND the newest
@@ -412,11 +521,21 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Java
-        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: "25"
-          cache: gradle
+
+      # The Gradle cache, keyed and restored as `backend`'s says.
+      - name: Restore the Gradle cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/backend/**/*.gradle.kts', 'src/backend/gradle/libs.versions.toml', 'src/backend/gradle/verification-metadata.xml', 'src/backend/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Validate the Gradle wrapper JAR
         uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
@@ -424,14 +543,14 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "22"
+          node-version: "26"
 
       # pnpm at exactly the version package.json pins in `packageManager` (validate_pnpm_installs_gated.py holds
       # the two equal). GitHub's runner only: a local run (scripts/run_pipeline.py) uses the host's pnpm, which
       # switches itself to the pinned version.
       - name: Install pnpm
         if: runner.environment == 'github-hosted'
-        run: npm install -g pnpm@12.16.1
+        run: npm install -g pnpm@12.22.0
 
       # Build the runnable fast-jar ONCE; the orchestrator boots it again per e2e file, because every suite
       # cold-births its own Server Owner and asserts setupRequired===true, and an instance has one.
@@ -444,6 +563,13 @@ jobs:
       - name: Build backend fast-jar
         working-directory: src/backend
         run: ./gradlew --no-daemon quarkusBuild
+
+      # The OpenAPI generator JAR, cached and verified as `frontend`'s says.
+      - name: Restore the OpenAPI generator JAR
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.openapi-generator
+          key: openapi-generator-jar-${{ hashFiles('scripts/openapi_generator_jar.sha256', 'src/web/openapitools.json', 'src/admin-web/openapitools.json') }}
 
       - name: Install frontend dependencies
         # The registry half is asked once per commit, by `frontend`.
@@ -502,11 +628,21 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Java
-        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: "25"
-          cache: gradle
+
+      # The Gradle cache, keyed and restored as `backend`'s says.
+      - name: Restore the Gradle cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/backend/**/*.gradle.kts', 'src/backend/gradle/libs.versions.toml', 'src/backend/gradle/verification-metadata.xml', 'src/backend/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Validate the Gradle wrapper JAR
         uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
@@ -514,18 +650,25 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "22"
+          node-version: "26"
 
       # pnpm at exactly the version package.json pins in `packageManager` (validate_pnpm_installs_gated.py holds
       # the two equal). GitHub's runner only: a local run (scripts/run_pipeline.py) uses the host's pnpm, which
       # switches itself to the pinned version.
       - name: Install pnpm
         if: runner.environment == 'github-hosted'
-        run: npm install -g pnpm@12.16.1
+        run: npm install -g pnpm@12.22.0
 
       - name: Build backend fast-jar
         working-directory: src/backend
         run: ./gradlew --no-daemon quarkusBuild
+
+      # The OpenAPI generator JAR, cached and verified as `frontend`'s says.
+      - name: Restore the OpenAPI generator JAR
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.openapi-generator
+          key: openapi-generator-jar-${{ hashFiles('scripts/openapi_generator_jar.sha256', 'src/web/openapitools.json', 'src/admin-web/openapitools.json') }}
 
       - name: Install frontend dependencies
         # The seeder (src/web/scripts/fuzz-seed.mts) runs on web's generated client; the registry half is `frontend`'s.
@@ -846,7 +989,8 @@ jobs:
           # keeps the staged images as long.
           retention-days: 30
 
-  # A pull request's image build: `build`'s matrix and steps (YAML aliases, so the two cannot drift), without its
+  # A pull request's image build: `build`'s matrix and steps (YAML aliases, so the two cannot drift; aliases only,
+  # never merge keys `<<:`, which GitHub does not document), without its
   # `packages: write` — every registry write of those steps is gated on `kind == 'stage'`, which a pull request never
   # is, and the token could not write anyway. It builds every image, runs the tools image's self-test inside it, and
   # keeps everything in the runner.
@@ -928,14 +1072,21 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "22"
+          node-version: "26"
 
       # pnpm at exactly the version package.json pins in `packageManager` (validate_pnpm_installs_gated.py holds
       # the two equal). GitHub's runner only: a local run (scripts/run_pipeline.py) uses the host's pnpm, which
       # switches itself to the pinned version.
       - name: Install pnpm
         if: runner.environment == 'github-hosted'
-        run: npm install -g pnpm@12.16.1
+        run: npm install -g pnpm@12.22.0
+
+      # The OpenAPI generator JAR, cached and verified as `frontend`'s says.
+      - name: Restore the OpenAPI generator JAR
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.openapi-generator
+          key: openapi-generator-jar-${{ hashFiles('scripts/openapi_generator_jar.sha256', 'src/web/openapitools.json', 'src/admin-web/openapitools.json') }}
 
       # The browser container installs nothing: it mounts this root install read-only, with `@playwright/test` pinned
       # to the image's version (the orchestrator refuses a mismatch). The registry half is asked once per commit, by
@@ -947,7 +1098,7 @@ jobs:
       - name: Set up the orchestrator's Python
         run: |
           python3 -m venv "${RUNNER_TEMP}/stack-venv"
-          "${RUNNER_TEMP}/stack-venv/bin/pip" install --quiet pyyaml
+          "${RUNNER_TEMP}/stack-venv/bin/pip" install --quiet --require-hashes --only-binary :all: -r scripts/requirements-release.txt
 
       - name: Set up Docker Buildx
         if: needs.version.outputs.kind != 'stage'
@@ -1137,11 +1288,21 @@ jobs:
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
       - name: Set up Java
         if: steps.predecessor.outputs.ref != ''
-        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: "25"
-          cache: gradle
+      # The Gradle cache, keyed and restored as `backend`'s says.
+      - name: Restore the Gradle cache
+        if: steps.predecessor.outputs.ref != ''
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/backend/**/*.gradle.kts', 'src/backend/gradle/libs.versions.toml', 'src/backend/gradle/verification-metadata.xml', 'src/backend/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-${{ runner.arch }}-
       - name: Validate the Gradle wrapper JAR
         if: steps.predecessor.outputs.ref != ''
         uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
@@ -1149,18 +1310,26 @@ jobs:
         if: steps.predecessor.outputs.ref != ''
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "22"
+          node-version: "26"
 
       # pnpm at exactly the version package.json pins in `packageManager` (validate_pnpm_installs_gated.py holds
       # the two equal). GitHub's runner only: a local run (scripts/run_pipeline.py) uses the host's pnpm, which
       # switches itself to the pinned version.
       - name: Install pnpm
         if: steps.predecessor.outputs.ref != '' && runner.environment == 'github-hosted'
-        run: npm install -g pnpm@12.16.1
+        run: npm install -g pnpm@12.22.0
       - name: Build the candidate's fast-jar
         if: steps.predecessor.outputs.ref != ''
         working-directory: src/backend
         run: ./gradlew --no-daemon quarkusBuild
+      # The OpenAPI generator JAR, cached and verified as `frontend`'s says.
+      - name: Restore the OpenAPI generator JAR
+        if: steps.predecessor.outputs.ref != ''
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.openapi-generator
+          key: openapi-generator-jar-${{ hashFiles('scripts/openapi_generator_jar.sha256', 'src/web/openapitools.json', 'src/admin-web/openapitools.json') }}
+
       - name: Install the candidate's dependencies
         if: steps.predecessor.outputs.ref != ''
         # The registry half is asked once per commit, by this workflow's `frontend`.
@@ -1206,7 +1375,7 @@ jobs:
 
       # src/mobile's Gradle build compiles its JVM side for 21 (`jvmToolchain(21)`) and provisions no JDK itself.
       - name: Set up Java
-        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
         with:
           distribution: temurin
           java-version: "21"
@@ -1563,6 +1732,7 @@ jobs:
     timeout-minutes: 5
     needs:
       - guards
+      - pins
       - backend
       - backend-races
       - frontend
@@ -1585,6 +1755,7 @@ jobs:
     if: >-
       always()
       && needs.guards.result == 'success'
+      && needs.pins.result == 'success'
       && needs.backend.result == 'success'
       && needs.backend-races.result == 'success'
       && needs.frontend.result == 'success'

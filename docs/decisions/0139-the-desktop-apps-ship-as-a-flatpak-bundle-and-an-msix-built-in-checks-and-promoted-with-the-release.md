@@ -8,7 +8,7 @@
 ## Context
 
 The Linux app (GTK 4 and libadwaita in Rust, `src/mobile/linux`) and the Windows app (WinUI 3 in C#, `src/mobile/windows`)
-([ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) decisions 4 and 5) ran only
+([ADR 0161](0161-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) decisions 4 and 5) ran only
 from a developer's build: Linux in a Fedora container under Broadway or in the test VM's session, Windows unpackaged and
 copied onto the VM. Neither could be handed to a person. Each needs a package a person installs, built from this
 repository, carried by a release and verifiable without a store — and each platform's package format brings its own
@@ -68,7 +68,7 @@ What constrains the choice:
    --locked` output — cargo's own command, checked against `Cargo.lock`'s checksums, no generator tool added. The app's
    module then runs, inside `org.gnome.Sdk//51` with `rust-stable`, `cargo clippy --locked -- -D warnings`, `cargo test
    --locked` (all but what a build's sandbox cannot run, each named in `run.py` with why) and `cargo build --release
-   --locked`: the app is built and tested against the runtime it ships on (ADR 0136
+   --locked`: the app is built and tested against the runtime it ships on (ADR 0161
    decision 4). `run.py build` proves the app in that SDK; the Fedora container stays the environment of `run.py run`'s
    Broadway passes and `run.py test`'s core binary — a pass's environment, not the proof of the app.
 

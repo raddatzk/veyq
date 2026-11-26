@@ -66,7 +66,7 @@ import { MEMORY_VIEW, memberMemorySource, guestMemorySource } from '../source'
 import { ShareRole } from '../../../api/generated/sharing'
 import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
 import { authenticatedCalls } from '../../../test/guestMode'
-import { setAccountUserId } from '../../../app/account'
+import { clearAccount, setAccountUserId } from '../../../app/account'
 
 // Stub the layer's Select + Menu (not under test) and MediaGrid (renders the tile slot per item so the tile chrome
 // — checkbox + 3-dot — is exercised).
@@ -76,7 +76,13 @@ const SelectStub = {
   template:
     '<div class="select-stub"><slot name="value" /><button v-for="o in options" :key="o.value" class="bucket-opt" :data-val="o.value" type="button" @click="$emit(\'update:modelValue\', o.value)" /></div>',
 }
-const MenuStub = { template: '<div class="menu-stub" />' }
+// A menu's entries drawn as buttons, so a test reads and picks them without the layer's popup.
+const MenuStub = {
+  props: ['items'],
+  methods: { toggle() {} },
+  template:
+    '<div class="menu-stub"><button v-for="i in items" :key="i.label" type="button" class="menu-entry" :disabled="i.disabled" @click="i.command && i.command()">{{ i.label }}</button></div>',
+}
 const MediaGridStub = {
   props: ['items'],
   template:
@@ -95,10 +101,10 @@ const memberView = (scopeId: string) => ({
   [MEMORY_VIEW as symbol]: { source: memberMemorySource({ scopeId: () => scopeId }), rights: computed(() => memberMemoryRights()) },
 })
 
-function mountBuckets(mediaItems: MediaItem[]) {
+function mountBuckets(mediaItems: MediaItem[], provide: Record<symbol, unknown> = memberView('s-1')) {
   return mount(MemoryBuckets, {
     props: { scopeId: 's-1', nodeId: 'n-1', nodeEpoch: 0, memoryKey: new Uint8Array(32), media: mediaItems, thumbs: new Map() },
-    global: { plugins: [realI18n()], stubs: { VeyqSelect: SelectStub, VeyqMenu: MenuStub, MediaGrid: MediaGridStub }, provide: memberView('s-1') },
+    global: { plugins: [realI18n()], stubs: { VeyqSelect: SelectStub, VeyqMenu: MenuStub, MediaGrid: MediaGridStub }, provide },
   })
 }
 
@@ -284,8 +290,9 @@ describe('MemoryBuckets — selection + delete-to-trash + undo (cr-0122)', () =>
     await wrapper.find('.bucket-selection-bar .veyq-text-button').trigger('click') // "Select all"
     expect(wrapper.findAll('.media-tile.is-selected').length).toBe(2)
 
-    const del = wrapper.find('.bucket-selection-bar .bucket-action-danger')
-    expect(del.attributes('disabled')).toBeUndefined() // enabled with a selection
+    const del = wrapper.find('.bucket-selection-bar .bucket-delete-button')
+    expect(del.attributes('aria-label')).toBe(t('memory.buckets.deleteSelection')) // an icon: its words the name (and tooltip)
+    expect(del.attributes('aria-disabled')).toBeUndefined() // enabled with a selection
     await del.trigger('click')
     await flushPromises()
 
@@ -310,10 +317,12 @@ describe('MemoryBuckets — selection + delete-to-trash + undo (cr-0122)', () =>
     expect(wrapper.findAll('.media-tile-check').length).toBe(1) // selection ungated for a contributor bucket
 
     await wrapper.find('.bucket-selection-bar .veyq-text-button').trigger('click') // select all → 1 selected
-    const move = wrapper.find('.bucket-selection-bar .bucket-action-button:not(.bucket-action-danger)')
-    expect(move.attributes('disabled')).toBeDefined() // no same-owner sibling to move into
-    const del = wrapper.find('.bucket-selection-bar .bucket-action-danger')
-    expect(del.attributes('disabled')).toBeUndefined() // delete still works (any member soft-deletes)
+    const move = wrapper.find('.bucket-selection-bar .bucket-move-button')
+    expect(move.attributes('aria-disabled')).toBe('true') // no same-owner sibling to move into
+    await move.trigger('click') // aria-disabled, not disabled (its tooltip shows): the click itself must do nothing
+    expect(wrapper.findAllComponents({ name: 'VeyqDialog' }).some((d) => d.props('visible')), 'no move dialog').toBe(false)
+    const del = wrapper.find('.bucket-selection-bar .bucket-delete-button')
+    expect(del.attributes('aria-disabled')).toBeUndefined() // delete still works (any member soft-deletes)
   })
 
   it('contributor root: Move enables to a same-owner sibling sub-bucket (cr-0123)', async () => {
@@ -328,8 +337,8 @@ describe('MemoryBuckets — selection + delete-to-trash + undo (cr-0122)', () =>
     await selectBucket(wrapper, 'b-share') // switch into the contributor root (own is the default)
 
     await wrapper.find('.bucket-selection-bar .veyq-text-button').trigger('click') // select all → 1 selected
-    const move = wrapper.find('.bucket-selection-bar .bucket-action-button:not(.bucket-action-danger)')
-    expect(move.attributes('disabled')).toBeUndefined() // a same-owner sibling exists → Move is available
+    const move = wrapper.find('.bucket-selection-bar .bucket-move-button')
+    expect(move.attributes('aria-disabled')).toBeUndefined() // a same-owner sibling exists → Move is available
   })
 
   it('opens with YOUR OWN bucket preselected — not the alphabetically-first contributor (cr-0122 f/u)', async () => {
@@ -503,6 +512,166 @@ describe('MemoryBuckets — a drop goes into the bucket it landed on (inbox #106
     await drop(w, [text, new File(['y'], 'list.pdf', { type: 'application/pdf' })])
     expect(w.emitted('dropFiles')).toBeUndefined()
     expect(toastError.mock.calls.map(([line]) => line)).toEqual(['2 files were not added: only photos and videos go into a Memory.'])
+  })
+})
+
+// uc.memory.buckets § Correct a selection's capture time: the selection reaches the lightbox, and "Shift capture time" — an
+// icon of the selection bar — opens it over the selected media alone, in grid order, with the editor open; offered from two
+// selected on, and only where a capture time may be edited (editMeta and the source's media-meta door).
+describe('MemoryBuckets — a selection\'s capture-time shift', () => {
+  const shiftButton = (w: ReturnType<typeof mountBuckets>) => w.find('.bucket-selection-bar .bucket-shift-button')
+  const ORDER = ['m1', 'm2', 'm3'] // the grid's order: the tiles carry no id of their own here
+  const check = (w: ReturnType<typeof mountBuckets>, id: string) => w.findAll('.media-tile-check input')[ORDER.indexOf(id)]
+
+  async function threeOwn(provide?: Record<symbol, unknown>) {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 3)])
+    const w = mountBuckets(ORDER.map((id) => media(id, 'user:me', 'b-own')), provide)
+    await flushPromises()
+    return w
+  }
+
+  it('opens the lightbox over the selected media alone, in grid order, with their grid numbers and the editor open', async () => {
+    const w = await threeOwn()
+    expect(shiftButton(w).attributes('aria-label')).toBe(t('memory.buckets.shiftCapturedAt'))
+    expect(shiftButton(w).text(), 'an icon, no label').toBe('')
+    expect(shiftButton(w).attributes('aria-disabled'), 'nothing selected').toBe('true')
+    await check(w, 'm3').trigger('change')
+    expect(shiftButton(w).attributes('aria-disabled'), 'one selected: there is nothing to shift with it').toBe('true')
+    await shiftButton(w).trigger('click')
+    expect(w.emitted('openLightbox'), 'an inactive click does nothing').toBeUndefined()
+    await check(w, 'm2').trigger('change')
+    expect(shiftButton(w).attributes('aria-disabled'), 'control: two selected').toBeUndefined()
+    await shiftButton(w).trigger('click')
+    const [payload] = w.emitted('openLightbox')!.at(-1) as [
+      { items: MediaItem[]; index: number; selected: string[]; editCapturedAt?: boolean; numbers?: Record<string, number> },
+    ]
+    expect(payload.items.map((m) => m.mediaId), 'the selection alone, in grid order, not in the order clicked').toEqual(['m2', 'm3'])
+    expect(payload.index).toBe(0)
+    expect([...payload.selected].sort()).toEqual(['m2', 'm3'])
+    expect(payload.numbers, 'each keeps its number in the grid').toEqual({ m2: 2, m3: 3 })
+    expect(payload.editCapturedAt).toBe(true)
+  })
+
+  it('a tile opened while a selection stands hands the selection to the lightbox, the editor closed', async () => {
+    const w = await threeOwn()
+    await check(w, 'm1').trigger('change')
+    await check(w, 'm3').trigger('change')
+    await w.findAll('.media-tile-open')[ORDER.indexOf('m3')].trigger('click')
+    const [payload] = w.emitted('openLightbox')!.at(-1) as [{ index: number; selected: string[]; editCapturedAt?: boolean }]
+    expect(payload.index).toBe(2)
+    expect([...payload.selected].sort()).toEqual(['m1', 'm3'])
+    expect(payload.editCapturedAt).toBeFalsy()
+  })
+
+  it('is not offered where the capture time may not be edited: no editMeta, or a source without the media-meta door', async () => {
+    const source = memberMemorySource({ scopeId: () => 's-1' })
+    const views = {
+      'no editMeta': { source, rights: computed(() => ({ ...memberMemoryRights(), editMeta: false })) },
+      'no door': { source: { ...source, mediaMeta: undefined }, rights: computed(() => memberMemoryRights()) },
+    }
+    for (const [why, view] of Object.entries(views)) {
+      const w = await threeOwn({ [MEMORY_VIEW as symbol]: view })
+      await w.find('.bucket-selection-bar .veyq-text-button').trigger('click') // "Select all"
+      expect(shiftButton(w).exists(), why).toBe(false)
+      w.unmount()
+    }
+    const control = await threeOwn()
+    await control.find('.bucket-selection-bar .veyq-text-button').trigger('click')
+    expect(shiftButton(control).attributes('aria-disabled'), 'control: a member').toBeUndefined()
+  })
+})
+
+describe('MemoryBuckets — the counts follow the live media (an upload while the tab is open)', () => {
+  /** The count the picker shows beside the active bucket. */
+  const shownCount = (w: ReturnType<typeof mountBuckets>) => w.find('.bucket-select-value small').text()
+
+  it("the active bucket's count grows with the media the gallery hands in, not the count the list was read with", async () => {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 1)])
+    const wrapper = mountBuckets([media('m1', 'user:me', 'b-own')])
+    await flushPromises()
+    expect(shownCount(wrapper)).toBe('1')
+
+    await wrapper.setProps({ media: ['m1', 'm2', 'm3'].map((id) => media(id, 'user:me', 'b-own')) }) // two uploads landed
+    expect(shownCount(wrapper)).toBe('3')
+    expect(wrapper.findAll('.media-tile-check').length).toBe(3)
+    expect(listBuckets, 'a known bucket needs no re-read').toHaveBeenCalledTimes(1)
+  })
+
+  it('a stale server count never shows: each bucket counts its own media only', async () => {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 7), bucket('b-share', 'share:x', 9, 'ct')])
+    const wrapper = mountBuckets([media('m1', 'user:me', 'b-own'), media('m2', 'user:me', 'b-own'), media('m3', 'share:x', 'b-share')])
+    await flushPromises()
+    expect(shownCount(wrapper)).toBe('2')
+    await selectBucket(wrapper, 'b-share')
+    expect(shownCount(wrapper)).toBe('1')
+  })
+
+  it('the first upload that materializes your primary re-reads the list once, quietly, and shows the medium under it', async () => {
+    vi.mocked(listBuckets).mockResolvedValueOnce([]) // no primary of yours yet: the virtual one
+    const wrapper = mountBuckets([])
+    await flushPromises()
+    expect(shownCount(wrapper)).toBe('0')
+
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 1)])
+    await wrapper.setProps({ media: [media('m1', 'user:me', 'b-own')] }) // the server put it into the new primary
+    expect(wrapper.find('.media-grid-placeholder').exists(), 'the grid stays, no spinner').toBe(false)
+    await flushPromises()
+    expect(listBuckets).toHaveBeenCalledTimes(2)
+    expect(shownCount(wrapper)).toBe('1')
+    expect(wrapper.findAll('.media-tile-check').length).toBe(1)
+
+    await wrapper.setProps({ media: [media('m1', 'user:me', 'b-own'), media('m2', 'user:me', 'b-own')] })
+    await flushPromises()
+    expect(listBuckets, 'a bucket the list now holds is not read for again').toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('MemoryBuckets — an uploader whose every medium was deleted leaves the picker (as the server lists it)', () => {
+  const options = (w: ReturnType<typeof mountBuckets>) => w.findAll('.bucket-opt').map((o) => o.attributes('data-val'))
+  beforeEach(() => setAccountUserId('me'))
+  afterEach(() => clearAccount())
+
+  it("a guest's last photo deleted while the tab is open: the guest is gone at once, and a restore brings them back", async () => {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 1), bucket('b-share', 'share:x', 1, 'ct')])
+    const guestPhoto = media('m2', 'share:x', 'b-share')
+    const wrapper = mountBuckets([media('m1', 'user:me', 'b-own'), guestPhoto])
+    await flushPromises()
+    expect(options(wrapper)).toEqual(['b-share', 'b-own']) // the positive control: the guest is listed
+
+    await wrapper.setProps({ media: [media('m1', 'user:me', 'b-own')] })
+    expect(options(wrapper)).toEqual(['b-own'])
+
+    await wrapper.setProps({ media: [media('m1', 'user:me', 'b-own'), guestPhoto] })
+    expect(options(wrapper)).toEqual(['b-share', 'b-own'])
+    expect(listBuckets, 'the bucket was kept: no re-read').toHaveBeenCalledTimes(1)
+  })
+
+  it("another member's emptied primary leaves too; your own stays, empty, where your next upload goes", async () => {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 1), bucket('b-bob', 'user:bob', 1)])
+    const wrapper = mountBuckets([media('m1', 'user:me', 'b-own'), media('m2', 'user:bob', 'b-bob')])
+    await flushPromises()
+    expect(options(wrapper)).toHaveLength(2)
+
+    await wrapper.setProps({ media: [] })
+    expect(options(wrapper)).toEqual(['b-own'])
+  })
+
+  it('a sub-bucket curated under the emptied guest keeps the guest listed', async () => {
+    vi.mocked(listBuckets).mockResolvedValue([
+      bucket('b-own', 'user:me', 1), bucket('b-share', 'share:x', 1, 'ct'), bucket('s-share', 'share:x', 0, 'sub', false, 'b-share'),
+    ])
+    const wrapper = mountBuckets([media('m1', 'user:me', 'b-own'), media('m2', 'share:x', 'b-share')])
+    await flushPromises()
+    await wrapper.setProps({ media: [media('m1', 'user:me', 'b-own')] })
+    expect(options(wrapper)).toContain('b-share')
+    expect(options(wrapper)).toContain('s-share')
+  })
+
+  it("a guest whose photos have not arrived yet stays: only a bucket emptied on screen leaves", async () => {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 0), bucket('b-share', 'share:x', 1, 'ct')])
+    const wrapper = mountBuckets([]) // the gallery's pages are still on their way
+    await flushPromises()
+    expect(options(wrapper)).toContain('b-share')
   })
 })
 

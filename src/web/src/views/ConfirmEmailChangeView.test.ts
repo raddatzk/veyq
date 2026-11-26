@@ -17,6 +17,10 @@ vi.mock('../features/account/coldCredential', async (orig) => ({
   ...(await orig<typeof import('../features/account/coldCredential')>()),
   checkColdCredential: vi.fn(),
 }))
+vi.mock('../features/account/emergencyKit/kitRecord', async (orig) => ({
+  ...(await orig<typeof import('../features/account/emergencyKit/kitRecord')>()),
+  writeKitRecord: vi.fn(),
+}))
 const push = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 
@@ -29,6 +33,9 @@ import { checkColdCredential, ColdCredentialRefused } from '../features/account/
 import { account } from '../app/account'
 import { session } from '../app/session'
 import { realI18n, t } from '../test/i18n'
+import { layoutOf, writeKitRecord } from '../features/account/emergencyKit/kitRecord'
+import { KIT_LAYOUT } from '../features/account/emergencyKit/emergencyKit'
+import * as v1 from '@veyq/crypto/v1'
 
 const OLD = 'me@example.com'
 const NEW = 'me.new@example.com'
@@ -39,7 +46,11 @@ const stubs = {
   VeyqMessage: { template: '<div class="msg"><slot /></div>' },
   VeyqPassword: { props: ['modelValue'], emits: ['update:modelValue'], template: '<input name="kit-password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
   SecretKeyField: { props: ['modelValue'], emits: ['update:modelValue'], template: '<input name="secret-key" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
-  EmergencyKitSave: { props: ['email', 'secretKey'], template: '<div class="kit-save" :data-email="email" :data-key="secretKey" />' },
+  EmergencyKitSave: {
+    props: ['email', 'secretKey'],
+    emits: ['kept'],
+    template: '<div class="kit-save" :data-email="email" :data-key="secretKey"><button class="kit-kept" @click="$emit(\'kept\')" /></div>',
+  },
 }
 
 const mounted: ReturnType<typeof mount>[] = []
@@ -114,7 +125,7 @@ describe('ConfirmEmailChangeView', () => {
   it('prints no kit from a Secret Key that does not pass the cold-credential check', async () => {
     vi.mocked(checkColdCredential).mockRejectedValue(new ColdCredentialRefused('credentialRejected'))
     const w = await checkKitWith('d3Jvbmc=')
-    expect(checkColdCredential).toHaveBeenCalledWith('the password', 'd3Jvbmc=')
+    expect(checkColdCredential).toHaveBeenCalledWith('the password', 'd3Jvbmc=', expect.any(Function))
     expect(w.find('.kit-save').exists()).toBe(false)
     expect(w.find('[data-testid="change-email-kit-error"]').text()).toBe(t('emailChange.kitRefused'))
 
@@ -126,13 +137,42 @@ describe('ConfirmEmailChangeView', () => {
   it('prints the kit with the NEW address and the checked key once the check passes — and drops it if the key changes', async () => {
     vi.mocked(checkColdCredential).mockResolvedValue(undefined)
     const w = await checkKitWith('  c2VjcmV0  ')
-    expect(checkColdCredential).toHaveBeenCalledWith('the password', 'c2VjcmV0')
+    expect(checkColdCredential).toHaveBeenCalledWith('the password', 'c2VjcmV0', expect.any(Function))
     const kit = w.find('.kit-save')
     expect(kit.attributes('data-email')).toBe(NEW)
     expect(kit.attributes('data-key')).toBe('c2VjcmV0')
 
     await w.find('input[name="secret-key"]').setValue('c2VjcmV0eA==')
     expect(w.find('.kit-save').exists(), 'an unchecked key replaces the checked one: no kit').toBe(false)
+  })
+
+  // ADR 0157 decision 4: the address change makes a kit, so it writes the account's kit record — sealed by the check with
+  // the Master Key it opened, and PUT only once the kit was saved and kept, never at render.
+  it('writes the kit record, sealed with the floor’s Master Key, once the kit was kept — not when it renders', async () => {
+    const floorKey = v1.randomBytes(32)
+    let handed: Uint8Array | undefined
+    vi.mocked(checkColdCredential).mockImplementation(async (_pw, _key, use) => {
+      handed = floorKey.slice()
+      use?.(handed)
+      handed.fill(0) // the helper zeroes what it handed over
+    })
+    vi.mocked(writeKitRecord).mockResolvedValue(undefined)
+    const w = await checkKitWith('c2VjcmV0')
+    expect(w.find('.kit-save').exists()).toBe(true)
+    expect(writeKitRecord, 'the kit is on screen, not yet kept: nothing written').not.toHaveBeenCalled()
+
+    await w.find('.kit-kept').trigger('click')
+    await flushPromises()
+    expect(writeKitRecord).toHaveBeenCalledTimes(1)
+    expect(layoutOf(floorKey, vi.mocked(writeKitRecord).mock.calls[0][0])).toBe(KIT_LAYOUT)
+    expect(KIT_LAYOUT).toBeGreaterThan(1) // control: the layout read above is the record's, not the no-record answer
+  })
+
+  it('writes no record when the check refused: there is no kit to keep', async () => {
+    vi.mocked(checkColdCredential).mockRejectedValue(new ColdCredentialRefused('credentialRejected'))
+    const refused = await checkKitWith('d3Jvbmc=')
+    expect(refused.find('.kit-kept').exists()).toBe(false)
+    expect(writeKitRecord).not.toHaveBeenCalled()
   })
 
   it('says a failed check (not a refusal) made no kit either', async () => {

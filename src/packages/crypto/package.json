@@ -13,6 +13,7 @@
     "./accountBirth": "./src/accountBirth.ts",
     "./emergencyKit": "./src/emergencyKit.ts",
     "./secretKey": "./src/secretKey.ts",
+    "./crockford": "./src/crockford.ts",
     "./base64": "./src/base64.ts",
     "./testArgon": "./src/testArgon.ts",
     "./canaryRule": "./src/canaryRule.ts",
@@ -35,11 +36,11 @@
   "devDependencies": {
     "@stryker-mutator/core": "^10.1.1",
     "@stryker-mutator/vitest-runner": "^10.1.1",
-    "@types/node": "^22.20.5",
-    "eslint": "^10.14.0",
+    "@types/node": "^26.6.6",
+    "eslint": "^10.15.0",
     "happy-dom": "^21.0.4",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.72.1",
-    "vitest": "^5.1.0"
+    "typescript-eslint": "^8.73.0",
+    "vitest": "^5.1.1"
   }
 }

@@ -211,7 +211,7 @@ shows it:
 - **Nothing in the backend or `contracts/api/`** — the client uses the existing node, blob and quota endpoints. The
   schemas under `contracts/export/` are the one contract artefact: core's envelope and each application's content
   schema beside it, so a new application adds its own file and core's is not touched.
-- **The apps write the same archive and copy the same way** (ADR 0136's core for every kind it exports): a Memory's and a
+- **The apps write the same archive and copy the same way** (ADR 0161's core for every kind it exports): a Memory's and a
   chapter's content and copy as the web's are [ADR 0149](0149-the-apps-take-memories-rest-a-memory-re-keyed-downloaded-and-copied-its-marks-filter-and-contributions-and-tiles-the-webs-rules-in-the-core.md) decision 3;
   their import is [ADR 0152](0152-the-apps-import-a-download-as-the-web-does-the-webs-reader-and-walk-in-the-core-each-kinds-import-its-applications-recognised-by-every-depot-upload.md)'s — the web's reader and walk in the core, held to one set of cases.
 - **The format is a public promise.** `version` bumps only for a change an old reader would misread; kinds version their

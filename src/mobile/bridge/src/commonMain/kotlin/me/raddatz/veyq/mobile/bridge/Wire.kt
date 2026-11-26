@@ -655,7 +655,7 @@ internal sealed class Call {
 
     /**
      * The header's Replace on file [file]'s page, chosen before the host's open dialog opens (`FileModel.chooseReplace`, the
-     * web's rule, ADR 0136's Consequences: the replace expects the content shown now, whatever a peer writes while the dialog is open). Refused
+     * web's rule, ADR 0161's Consequences: the replace expects the content shown now, whatever a peer writes while the dialog is open). Refused
      * where the page offers no replace.
      */
     @Serializable @SerialName("File.ChooseReplace") data class FileChooseReplace(val file: Long) : Call()
@@ -1011,7 +1011,7 @@ internal sealed class Call {
     @Serializable @SerialName("Scan.Close") data class ScanClose(val scan: Long) : Call()
 
     /**
-     * A device link (ADR 0059; core's `DeviceLink`, ADR 0136's Consequences), answered with its id ([Answer.LinkOpened])
+     * A device link (ADR 0059; core's `DeviceLink`, ADR 0161's Consequences), answered with its id ([Answer.LinkOpened])
      * for [Watched.Link] and the `Link.*` calls. The trusted device's two, from Settings' "Add a device" over the
      * connection whose key is [connection] — *add a new device* shows a code, *sign in with a QR code* scans one —, need
      * a tenant open and close with it (refused `NO_TENANT_OPEN`, `NO_SUCH_CONNECTION`).
@@ -1237,7 +1237,7 @@ internal sealed class Call {
     @Serializable @SerialName("Gallery.ChapterCover") data class GalleryChapterCover(val gallery: Long, val nodeId: String) : Call()
 
     /**
-     * Gallery [gallery]'s rows laid out as the justified grid [width] wide (core's `GalleryModel.layout`, ADR 0136's Consequences: the
+     * Gallery [gallery]'s rows laid out as the justified grid [width] wide (core's `GalleryModel.layout`, ADR 0161's Consequences: the
      * web's `MediaGrid.vue`; in the host's own unit, a GTK or WinUI view's logical pixels), seen from [top] down [viewHeight]:
      * [Answer.GridLayout] — the rows a view mounts there (`MediaGridLayout.Layout.window`: the view's and one view each way,
      * ADR 0105), each with its place and its tiles' frames by medium id, and the grid's whole height. Asked anew when the
@@ -2389,7 +2389,7 @@ internal sealed class Watched {
     @Serializable @SerialName("Pot") data class Pot(val pot: Long) : Watched()
 
     /**
-     * Pot [pot]'s live poll (`PotModel.live`, ADR 0136 decision 2), for as long as this watch stands: a host watches it
+     * Pot [pot]'s live poll (`PotModel.live`, ADR 0161 decision 2), for as long as this watch stands: a host watches it
      * while the Pot's page shows and its window is active, and drops the watch when either ends. It delivers no update of
      * its own — what a tick changed arrives on [Pot]'s. Its lifetime is the poll's, so a page torn down stops it.
      */
@@ -2728,7 +2728,7 @@ internal sealed class Update {
 }
 
 /**
- * A Memory's or a chapter's page as the host draws it (core's `GalleryModel`, ADR 0136 decision 2; one view for a member and
+ * A Memory's or a chapter's page as the host draws it (core's `GalleryModel`, ADR 0161 decision 2; one view for a member and
  * a link's guest, whose rights only remove functions), each field the model's own answer:
  * - its [node], its [rows] in the grid's order (null while the first read runs), [failed] (the last read did not: the rows
  *   before stay) with what it says ([failure], `GalleryModel.State.failure`), how many it holds ([count], `memory_items`), and a Memory's [chapters] (each cover through
@@ -3899,7 +3899,7 @@ internal class HistoryShown(val line: List<Piece>, val writer: String?, val at: 
 }
 
 /**
- * A file's page as the host draws it (core's `FileModel`, ADR 0136's Consequences), each field the model's own answer:
+ * A file's page as the host draws it (core's `FileModel`, ADR 0161's Consequences), each field the model's own answer:
  * - [view], what shows in the content's place, and [words], what the page says there where it shows no content (opening,
  *   failed, not uploaded yet, too large, empty, not shown here — and a medium, for a host that does not play one);
  * - an image ([mediaType], decoded to [edge] pixels on its longest side at most) and a PDF, their bytes through
@@ -4173,7 +4173,7 @@ internal class TrashShown(
 /**
  * What the shell shows beside its state, each value the core's own function's answer — what the Android and Apple apps
  * ask the core for while they draw (their `AppModel` and shell screens), so a host without Kotlin computes none of it
- * (ADR 0136 decision 1). Built by [Bridge] one line per field; a rule found there is a defect to move into the core.
+ * (ADR 0161 decision 1). Built by [Bridge] one line per field; a rule found there is a defect to move into the core.
  */
 @Serializable
 internal class ShellShown(
@@ -4329,7 +4329,7 @@ internal sealed class HostRequest {
     @Serializable @SerialName("Store.Remove") data class StoreRemove(val name: String) : HostRequest()
 
     /**
-     * An Emergency Kit's read (`KitImport`; ADR 0136 decision 1: the platform draws, the core decides), each on the file
+     * An Emergency Kit's read (`KitImport`; ADR 0161 decision 1: the platform draws, the core decides), each on the file
      * at [path] the host itself gave ([Call.SessionSignInKit]) — a path and a number outward, never a byte of the file:
      * how many pages the platform's renderer opens the PDF with ([HostReply.Value], the count as its text; [HostReply.Failed]
      * where it does not open).
@@ -4350,7 +4350,7 @@ internal sealed class HostRequest {
     @Serializable @SerialName("Picture.Luma") data class PictureLuma(val path: String, val longSide: Int) : HostRequest()
 
     /**
-     * A picked video's length (a Memories upload, [Call.MemoryUpload]; ADR 0136 decision 1: the platform decodes, the core
+     * A picked video's length (a Memories upload, [Call.MemoryUpload]; ADR 0161 decision 1: the platform decodes, the core
      * decides): [HostReply.Value], its milliseconds as text; null or [HostReply.Failed] where the platform cannot tell. The
      * core takes the poster's time from it (`MediaUpload.posterAtMs`) for [MediaTiers].
      */
@@ -4423,7 +4423,7 @@ internal sealed class HostRequest {
     @Serializable @SerialName("Controls.Clear") data object ControlsClear : HostRequest()
 
     /**
-     * Words the core needs as text where a core function takes a string, not a notice (the core renders no word, ADR 0136
+     * Words the core needs as text where a core function takes a string, not a notice (the core renders no word, ADR 0161
      * decision 3): [words] as the host says them, answered [HostReply.Value]. An untitled track's title (`music_untitled`
      * with its number, ADR 0142 decision 4), which its queue carries to the bar and the system's controls.
      */

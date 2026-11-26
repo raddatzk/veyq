@@ -625,7 +625,7 @@ private class Open<A : Connection>(val models: Tenant, val account: A, val tenan
 /**
  * The dispatch (ADR 0123's Consequences, the bridge): each [Call] is one line onto a model's own function, each
  * [Watched] one model's state flow, and the registry of what is open — the tenant's models, the Pots by id, the watches
- * by id. Nothing here decides anything the person sees: a rule found here is a defect to move into the core (ADR 0136
+ * by id. Nothing here decides anything the person sees: a rule found here is a defect to move into the core (ADR 0161
  * decision 1).
  *
  * Every answer and update is delivered on a core thread ([Dispatchers.Default]); [compose] runs there too, so a host
@@ -2647,7 +2647,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
 
     /**
      * A link the host is done with: its watch delivers null, its scans leave the registry, and it ends — a new device's
-     * whose grant is being spent still signs in (the core runs that tail to its end whatever a close says, ADR 0136's
+     * whose grant is being spent still signs in (the core runs that tail to its end whatever a close says, ADR 0161's
      * Consequences), and [newDeviceLink] opens its tenant on [DeviceLink.signedIn], not on the state's DONE.
      */
     private fun closeLink(held: HeldLink) {

@@ -68,6 +68,7 @@ EXCLUSIONS = {
     "MasterKeyWrapEntity.wrapped_key": "an account's Master Key under an unlock KEK",
     "VeyqUser.wrapped_identity_private_key": "the identity under the Master Key",
     "DeviceRegisterEntity.sealed_blob": "the device register under the Master Key",
+    "KitRecordEntity.sealed_blob": "the kit record under the Master Key (ADR 0157 decision 3)",
     "IdentityPinsEntity.sealed_blob": "the identity-pin head under the Master Key",
     "IdentityPinEntryEntity.sealed_entry": "an identity pin under the Master Key",
     "TenantProfileEntity.sealed_name": "a member's real name under a value key of its own, which K_tenant, the tenant's "
@@ -79,6 +80,9 @@ EXCLUSIONS = {
     "VerificationEntity.sealed_statement": "a member's verification under a value key of its own (ADR 0111 decision 12) — "
                                            "the rotation's scope commit re-wraps that key",
     "VerificationEntity.wrapped_value_key": "that verification's value key under K_tenant — the rotation's scope commit",
+    "TenantInviteEntity.sealed_label": "a link invite's private label under a value key of its own (ADR 0129 decision 7) — "
+                                       "the rotation's scope commit re-wraps that key",
+    "TenantInviteEntity.wrapped_label_value_key": "that label's value key under K_tenant — the rotation's scope commit",
     "ItemFavoritesEntity.wrapped_value_key": "a member's item marks' value key under the scope key, no node's (ADR 0068) — "
                                              "Memories' scope re-key participant re-wraps it (validate_scope_rekey_arity.py)",
     "TenantInviteEntity.wrapped_grant": "a tenant epoch key sealed to an open invite's key, written by the rotation (ADR 0111)",

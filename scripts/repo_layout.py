@@ -47,7 +47,7 @@ MOBILE_TESTING = MOBILE / "testing"
 MOBILE_SETTINGS = MOBILE / "settings.gradle.kts"
 # The Linux app (ADR 0123's Consequences, the Linux app): a Cargo package, built and run in a container by its `run.py`.
 MOBILE_LINUX = MOBILE / "linux"
-# The Windows app (ADR 0136 decision 5): driven on a Windows host from this one by its `run.py`.
+# The Windows app (ADR 0161 decision 5): driven on a Windows host from this one by its `run.py`.
 MOBILE_WINDOWS = MOBILE / "windows"
 # The desktop packages' outward identity (ADR 0139 decision 12): the Flatpak's app id and the MSIX's Publisher.
 DESKTOP_IDENTITY = MOBILE / "desktop-identity.json"

@@ -8,13 +8,13 @@
 # the runtime refuses the class files.
 java = "25"
 kotlin = "2.4.21"
-quarkus = "3.40.1.1"
+quarkus = "3.40.1.2"
 # The next three are above the Quarkus BOM's own versions on purpose, each for a published advisory: the root build lifts
 # the BOM's constraint to them (build.gradle.kts `liftedAboveBom` says why and when each goes).
-opentelemetry = "1.67.0"
-mariadb-jdbc = "3.5.11"
+opentelemetry = "1.68.0"
+mariadb-jdbc = "4.0.0"
 # Also the floor `buildSrc` holds its own classpath to (buildSrc/build.gradle.kts).
-guava = "33.7.2-jre"
+guava = "33.8.0-jre"
 
 [libraries]
 quarkus-bom = { module = "io.quarkus.platform:quarkus-bom", version.ref = "quarkus" }
@@ -24,4 +24,4 @@ quarkus-gradle-plugin = { module = "io.quarkus:gradle-application-plugin", versi
 # The one generator version the three surfaces run (src/web/ and src/admin-web/ name it in openapitools.json):
 # scripts/validate_build_input_pins.py holds them to one value and to scripts/openapi_generator_jar.sha256, and reads
 # it in this `group:name:version` spelling only (another spelling is red there, never silently unread).
-openapi-generator = "org.openapitools:openapi-generator:7.23.0"
+openapi-generator = "org.openapitools:openapi-generator:7.27.0"

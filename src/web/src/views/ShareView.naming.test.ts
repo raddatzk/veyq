@@ -145,11 +145,12 @@ describe("the share page's one naming flow", () => {
     await flushPromises()
     expect(loadGuestSession(SHARE_ID)).toBeNull()
     expect(identityLine(w).exists()).toBe(false)
-    expect(document.body.textContent).not.toContain(t('share.guest.nameTitle'))
+    expect(w.find('.dialog-stub').exists()).toBe(false)
     await createFolder(w)
     await flushPromises()
-    // (the real confirmation dialog is mounted beside the page, so the layer's dialog renders for real here: teleported)
-    expect(document.body.textContent, 'asked afresh').toContain(t('share.guest.nameTitle'))
+    // The page's `stubs` hold for the page alone (test-utils ≥ 2.6 scopes them per app), so the confirmation mounted
+    // beside it does not unstub the page's dialog: the name prompt renders in place, like the tests above read it.
+    expect(w.find('.dialog-stub .header').text(), 'asked afresh').toBe(t('share.guest.nameTitle'))
   })
 
   it('a READ link has no line and no write to name anyone for', async () => {

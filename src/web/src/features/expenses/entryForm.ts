@@ -372,7 +372,7 @@ function allocationOf(form: EntryForm, amount: bigint): { allocation: Allocation
  *  (`not-settled` → `notSettled`), as every key of the catalog is spelled. */
 export const problemKey = (problem: string): string => problem.replace(/-([a-z])/g, (_, c: string) => c.toUpperCase())
 
-/** A form's problems say what the apps' notices say, in the apps' catalog's words (`words.*`, ADR 0136 § The web's
+/** A form's problems say what the apps' notices say, in the apps' catalog's words (`words.*`, ADR 0161 § The web's
  *  words); a `Record` so a new problem cannot go unsaid. */
 export const PROBLEM_WORDS: Record<FormProblem, string> = {
   title: 'words.problem_title',

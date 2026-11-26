@@ -4,7 +4,7 @@
 - Built: yes (not built: decision 9's lane proof that an older `veyqctl` of a major upgrades to its newest release)
 - Date: 2026-10-16
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
-- Replaced in part: decision 8 by ADR 0126 (not built)
+- Replaced in part: decision 8 by ADR 0126
 
 ## Context
 

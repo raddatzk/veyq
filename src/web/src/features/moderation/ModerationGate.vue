@@ -13,6 +13,7 @@ import VeyqInput from '../../shared/ui/VeyqInput.vue'
 import VeyqMessage from '../../shared/ui/VeyqMessage.vue'
 import VeyqPassword from '../../shared/ui/VeyqPassword.vue'
 import SecretKeyField from '../../shared/ui/SecretKeyField.vue'
+import { secretKeyReady } from '../../shared/ui/secretKeyEntry'
 import { LoginVerifyRequestSessionScopeEnum } from '../../api/generated/auth'
 import { session } from '../../app/session'
 import { login } from '../account/login/login'
@@ -196,7 +197,8 @@ onUnmounted(clearModerationKeys)
           <label for="moderation-secret-key">{{ t('moderation.secretKey') }}</label>
           <SecretKeyField v-model="secretKey" input-id="moderation-secret-key" required :expected-email="appointment!.address" />
           <small class="field-hint">{{ t('moderation.noTrustedDevice') }}</small>
-          <VeyqButton type="submit" class="moderation-unlock-button" :label="t('moderation.unlock')" icon="lock-open" :loading="busy" />
+          <VeyqButton type="submit" class="moderation-unlock-button" :label="t('moderation.unlock')" icon="lock-open" :loading="busy"
+                      :disabled="!secretKeyReady(secretKey)" />
         </form>
 
         <template v-else>

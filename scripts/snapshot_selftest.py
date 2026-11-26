@@ -164,6 +164,41 @@ check(refused(snapshot.pick_run, [run_of(head_branch="release/0.x")], SHA, "main
 check(refused(snapshot.pick_run, [run_of(path=".github/workflows/publish.yml")], SHA, "main"),
       "another workflow's run is taken")
 check(refused(snapshot.pick_run, [], SHA, "main"), "no Checks run at all is not refused")
+
+
+class FakeTime:
+    def __init__(self):
+        self.now, self.slept = 0.0, []
+
+    def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.now += seconds
+
+    def clock(self) -> float:
+        return self.now
+
+
+def awaited(statuses: list[str], wait: int, start: str = "in_progress"):
+    t, reads = FakeTime(), list(statuses)
+
+    def fetch(run_id):
+        return run_of(id=run_id, status=reads.pop(0) if reads else "in_progress", conclusion=None)
+    with contextlib.redirect_stdout(io.StringIO()):
+        got = snapshot.await_completion(run_of(id=5, status=start, conclusion=None), fetch, wait, sleep=t.sleep,
+                                        clock=t.clock)
+    return got, t, len(statuses) - len(reads)
+
+
+got, t, fetched = awaited(["in_progress", "completed"], 0)
+check(got["status"] == "in_progress" and fetched == 0 and not t.slept, "a dispatch (no wait) waits or re-reads the run")
+got, t, fetched = awaited(["queued", "in_progress", "completed"], 7200, start="pending")
+check(got["status"] == "completed" and fetched == 3 and t.now == 180,
+      f"a running Checks run is not re-read each minute until it completes: {got['status']}, {fetched} reads, {t.now}s")
+got, t, fetched = awaited([], 150)
+check(got["status"] != "completed" and t.now == 150 and refused(snapshot.checks_verdict, got, jobs_of(), ARCHS, DOMAINS),
+      f"the wait runs past its bound, or a run still going after it is published from: {t.now}s, {t.slept}")
+got, t, fetched = awaited(["completed"], 7200, start="completed")
+check(fetched == 0 and not t.slept, "a completed run is waited for")
 check(refused(snapshot.checks_verdict, run_of(status="in_progress", conclusion=None), jobs_of(), ARCHS, DOMAINS),
       "a running Checks run is published from")
 check(refused(snapshot.checks_verdict, run_of(conclusion="cancelled"), jobs_of(), ARCHS, DOMAINS),
@@ -256,6 +291,15 @@ check(got.get("published") == "snapshot-0.12" and got.get("commit") == C and got
 check(walk([H, C], {H: [run_of(head_sha=H)]}, {}, tags={H: "snapshot-0.13"}).get("published") == "snapshot-0.13",
       "a HEAD that carries its snapshot publishes again")
 check(walk_refused([M, C], {C: [run_of(head_sha=C)]}, {M: ["docs/a.md"]}), "a walk that does not start at HEAD is taken")
+for tags, want in ((["snapshot-1.247"], "snapshot-1.247"), (["v1.247"], "v1.247"), (["v1.247", "x"], "v1.247"),
+                   (["v1.247-rc"], ""), (["v1"], ""), (["release-1.2"], ""), ([], "")):
+    check(snapshot.published_by(tags) == want, f"the tags {tags} make a commit published as {snapshot.published_by(tags)!r}, "
+                                               f"not {want!r}")
+for published, want in (("snapshot-1.262", "1.262"), ("v1.262", ""), ("snapshot-1.262 v1.262", ""),
+                        ("v1.262 snapshot-1.262", ""), ("snapshot-1.261 snapshot-1.262", ""), ("", ""),
+                        ("snapshot-1.262-rc", "")):
+    check(snapshot.unreleased_snapshot(published) == want,
+          f"the published tags {published!r} name {snapshot.unreleased_snapshot(published)!r} for a draft, not {want!r}")
 
 
 # The wiring, on a throwaway history: `checks_run` walks git, reads checks.yml's filter, counts C's version, names C.
@@ -309,12 +353,44 @@ with tempfile.TemporaryDirectory(prefix="snapshot_walk_") as tmp:
     try:
         found = quiet(head)
         check(found == {"kind": "snapshot", "commit": tested, "run_id": "11", "attempt": "2", "version": "0.1",
-                        "run_url": "https://github.com/o/veyq/actions/runs/7"},
+                        "run_url": "https://github.com/o/veyq/actions/runs/7", "draft_version": "0.1"},
               f"a docs-only HEAD's publish does not name its tested ancestor and that commit's version: {found}")
+        pending = {"workflow_runs": [run_of(head_sha=tested, id=11, status="queued", conclusion=None)]}
+        reads = []
+
+        def later(url):
+            if url.endswith("/actions/runs/11"):
+                reads.append(url)
+                return run_of(head_sha=tested, id=11)
+            return jobs if "/jobs?" in url else pending if f"head_sha={tested}" in url else {"workflow_runs": []}
+        snapshot._gh_json = later
+        fake = FakeTime()
+        real_time = snapshot.time.sleep, snapshot.time.monotonic
+        snapshot.time.sleep, snapshot.time.monotonic = fake.sleep, fake.clock
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                waited = snapshot.checks_run("o/veyq", head, "main", repo, wait_seconds=600)
+        finally:
+            snapshot.time.sleep, snapshot.time.monotonic = real_time
+        check(waited.get("kind") == "snapshot" and reads,
+              f"the schedule's checks-run does not wait for a queued Checks run and publish it once green: {waited}")
+        check("refused" in quiet(head), "a dispatch's checks-run (no wait) publishes from a queued Checks run")
+        snapshot._gh_json = lambda url: (jobs if "/jobs?" in url else green if f"head_sha={tested}" in url
+                                         else {"workflow_runs": []})
         git(repo, "tag", "snapshot-0.1", tested)
         found = quiet(head)
         check(found.get("kind") == "none" and found.get("commit") == tested,
               f"a docs-only HEAD over a tested ancestor that has its snapshot publishes again: {found}")
+        check(found.get("draft_version") == "0.1",
+              f"a run over an unreleased snapshot does not name it for its draft to be refreshed: {found}")
+        git(repo, "tag", "-d", "snapshot-0.1")
+        git(repo, "tag", "v0.1", tested)
+        found = quiet(head)
+        check(found.get("kind") == "none" and found.get("commit") == tested,
+              f"a released commit whose snapshot tag the release deleted is published as a snapshot again: {found}")
+        check(found.get("draft_version") == "",
+              f"a released commit gets its draft written again: {found}")
+        git(repo, "tag", "-d", "v0.1")
         git(repo, "mv", "docs/a.md", "a.kt")
         git(repo, "commit", "-q", "-m", "a doc becomes code")
         moved = git(repo, "rev-parse", "HEAD")

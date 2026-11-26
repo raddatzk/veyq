@@ -533,7 +533,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val newDevice = link.role == me.raddatz.veyq.mobile.session.DeviceLink.Role.SCAN_FROM_TRUSTED ||
             link.role == me.raddatz.veyq.mobile.session.DeviceLink.Role.SHOW_FOR_SIGN_IN
         // the new device signed in: the shell opens over the account the grant made, its offer over it — awaited apart from
-        // the watch, which a close ends: a close while the grant is spent ends the screen, not the sign-in (ADR 0136's Consequences)
+        // the watch, which a close ends: a close while the grant is spent ends the screen, not the sign-in (ADR 0161's Consequences)
         if (newDevice) viewModelScope.launch { session.signedInBy(link)?.let { show(it) } }
         linkWatch = viewModelScope.launch {
             link.state.collect { s ->

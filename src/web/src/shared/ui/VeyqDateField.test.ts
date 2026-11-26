@@ -98,7 +98,9 @@ describe('VeyqDateField', () => {
   it('at minute granularity writes the time after the day, in the language\'s clock, with named segments', async () => {
     const { wrapper } = host('2026-05-03T09:05', undefined, 'minute')
     await flushPromises()
-    expect(shown().trim()).toBe('05/03/2026, 09:05\u202fAM') // the language's narrow space before AM/PM
+    // The space before AM/PM is the language's, read from the runtime's ICU: Node 22's writes U+202F (a narrow
+    // no-break space), Node 26's a plain space (measured in CI 2026-11-23). Either is the field showing Intl's own text.
+    expect(shown().trim()).toMatch(/^05\/03\/2026, 09:05[ \u202f]AM$/)
     expect(segments().map((s) => s.getAttribute('aria-label'))).toEqual(['Month', 'Day', 'Year', 'Hour', 'Minute', 'AM/PM'])
     const { i18n } = await import('../../i18n')
     i18n.global.locale.value = 'de'
@@ -131,6 +133,38 @@ describe('VeyqDateField', () => {
     await flushPromises()
     expect(day.value).toBe('2026-05-10T21:30')
     wrapper.unmount()
+  })
+
+  // Inbox #865: in the lightbox the calendar opened on a segment's focus hung over Save while the time was typed.
+  it('opens the calendar on a segment\'s focus, and from its button alone where it is told to', async () => {
+    const panel = () => document.querySelector('.veyq-date-panel')
+    const focusFirst = async () => {
+      const first = segments()[0]!
+      first.focus()
+      first.dispatchEvent(new FocusEvent('focusin', { bubbles: true }))
+      await flushPromises()
+    }
+    const plain = mount(VeyqDateField, { props: { modelValue: '2026-05-03T09:05', granularity: 'minute' }, attachTo: document.body, global: { plugins: [realI18n()] } })
+    await flushPromises()
+    await focusFirst()
+    expect(panel()).not.toBeNull() // the default: focus opens it
+    plain.unmount()
+    await flushPromises()
+
+    const buttonOnly = mount(VeyqDateField, {
+      props: { modelValue: '2026-05-03T09:05', granularity: 'minute', calendarFromButtonOnly: true },
+      attachTo: document.body,
+      global: { plugins: [realI18n()] },
+    })
+    await flushPromises()
+    await focusFirst()
+    expect(panel()).toBeNull()
+    const trigger = document.querySelector<HTMLElement>('.veyq-date-field__trigger')!
+    trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+    trigger.click()
+    await flushPromises()
+    expect(panel()).not.toBeNull()
+    buttonOnly.unmount()
   })
 
   it('reads a click its label forwards to the calendar button as the first segment, and a click inside as its own', async () => {

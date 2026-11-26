@@ -1,4 +1,4 @@
-// The core, reached through veyq.dll's six functions (ADR 0136 decision 5; ADR 0123's Consequences, the bridge): the
+// The core, reached through veyq.dll's six functions (ADR 0161 decision 5; ADR 0123's Consequences, the bridge): the
 // wire's types (Veyq.Bridge.Wire, generated from the core's serial descriptors and bridge.h, never written here), a safe
 // wrapper over the functions, and the host function — the one way the core asks the device for something (its store).
 //
@@ -51,7 +51,7 @@ public static unsafe class Core
 
     /// <summary>
     /// What draws an Emergency Kit file the core asks for (<c>Pdf.Pages</c>, <c>Pdf.Page</c>, <c>Picture.Luma</c>) and a
-    /// picked medium's tiers (<c>Media.Duration</c>, <c>Media.Tiers</c>; ADR 0136 decision 1: the platform draws, the core
+    /// picked medium's tiers (<c>Media.Duration</c>, <c>Media.Tiers</c>; ADR 0161 decision 1: the platform draws, the core
     /// decides): the app's, set before the core starts; null for a request it does not draw. Its task's payload (a
     /// drawing's luminance, a medium's two JPEGs) goes beside the reply and is zeroed once the core copied it. Without one,
     /// every such request is answered failed.

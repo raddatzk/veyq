@@ -65,7 +65,7 @@ describe('web message catalog', () => {
   })
 })
 
-// The notices' move (ADR 0136 § The web's words): the words the web says as the apps do are registered under `words`, from
+// The notices' move (ADR 0161 § The web's words): the words the web says as the apps do are registered under `words`, from
 // `words.generated.json`, the keys `web.json`'s `read` names. A source naming a word that is not there renders the raw key
 // only when a test happens to render it — so every `words.<key>` a source quotes is held to the registered words here
 // (and the test above holds every registered word to a source that names it: nothing unread rides the eager set).

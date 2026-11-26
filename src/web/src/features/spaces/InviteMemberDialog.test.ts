@@ -304,7 +304,7 @@ describe('InviteMemberDialog — the link way (ADR 0129 decision 1)', () => {
     const w = mountOpen()
     const prepared = vi.mocked(prepareInviteCode).mock.results[0].value as ReturnType<typeof prepareInviteCode>
     await create(w)
-    expect(createMemberInviteLink).toHaveBeenCalledWith('t-1', prepared, expect.any(Function))
+    expect(createMemberInviteLink).toHaveBeenCalledWith('t-1', prepared, expect.any(Function), '') // no label typed
     expect(inviteMember).not.toHaveBeenCalled()
     expect(w.emitted('invited')).toEqual([['link']])
     const message = w.get<HTMLTextAreaElement>('[data-testid="invite-link-message"]').element.value
@@ -313,6 +313,14 @@ describe('InviteMemberDialog — the link way (ADR 0129 decision 1)', () => {
     expect(message).toContain('2026') // its expiry
     expect(w.text()).toContain(t('members.linkWarning'))
     expect(w.find('[data-testid="invite-way"]').exists()).toBe(false) // the result replaces the switch
+  })
+
+  it('hands the label the owner typed to the mint, and puts it nowhere in the link\'s message (ADR 0129 decision 7)', async () => {
+    const w = mountOpen()
+    await w.get('[data-testid="invite-link-label"]').setValue('Oma')
+    await create(w)
+    expect(vi.mocked(createMemberInviteLink).mock.calls[0][3]).toBe('Oma')
+    expect(w.get<HTMLTextAreaElement>('[data-testid="invite-link-message"]').element.value).not.toContain('Oma')
   })
 
   it('copy, the mail program and the share sheet take the message as edited', async () => {

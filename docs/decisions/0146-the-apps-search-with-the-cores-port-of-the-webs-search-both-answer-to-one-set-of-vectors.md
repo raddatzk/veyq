@@ -16,7 +16,7 @@ the settings sections as results, no guest search. The apps had a name-only sear
 contains the typed text, no folders, no facets, no order, no diacritic folding, called from each platform's UI.
 
 An app's logic is the Kotlin core's, and each platform draws only its own UI
-([ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)). The core already walks every
+([ADR 0161](0161-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)). The core already walks every
 space for the shell: the drawer, Home and every application list every space
 ([ADR 0122](0122-one-app-holds-every-application-the-drawer-chooses-the-bar-belongs-to-it.md)), so each space's tree is
 opened at the session's start and held (`TenantSession.trees()`, with `fromTree` for what is derived from it). The web's

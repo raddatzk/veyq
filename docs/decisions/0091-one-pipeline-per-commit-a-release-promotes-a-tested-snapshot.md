@@ -2,10 +2,10 @@
 
 - Status: Accepted
 - Built: partly (not built: decision 3's lanes L2 and L3, decision 5's rerun of moved lanes — a promotion refuses an
-  input it cannot compare instead — and the retention job, decision 6, decision 7; decision 5's snapshot — weekly and
-  by dispatch since its amendment of 2026-11-07, per green push before — its attestations, its `snapshot-` tag and the
-  promotion `release.yml` are built; one snapshot of a push was published on GitHub, the weekly and the dispatched one
-  have not run yet)
+  input it cannot compare instead — and the snapshot retention job, decision 6, decision 7; decision 5's snapshot —
+  weekly and by dispatch since its amendment of 2026-11-07, per green push before — its attestations, its `snapshot-`
+  tag, the staging retention (first run 2026-11-23) and the promotion `release.yml` are built, and since its amendment of 2026-11-22 the release draft Publish writes — v1.312
+  and v1.318 were released from such drafts)
 - Date: 2026-10-16
 - Model: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md)
 
@@ -198,6 +198,52 @@ several, or one on another tag is refused (`scripts/promote.py` check 1). A save
      name a commit that no attestation names, and the promotion counts the version from the tagged commit). The cost:
      a snapshot can lag `main`'s tip by its docs-only commits, and a C older than the 30 days its run's artifacts are
      kept cannot be published — re-run its Checks run, or push.
+   - **Amended 2026-11-22 (owner, cr-release-draft-from-publish): Publish writes the release draft; the release stays
+     the owner's click.** The owner asked for the release to be half-automatic: the draft is there every Monday, the
+     owner reads it and runs `release.yml`. A fully automatic release was weighed and declined by the owner — the
+     *Run workflow* click is the one deliberate "this is fit for operators", and a draft starts no workflow anyway
+     (GitHub runs none for a draft's events, and a published immutable release takes no files, so the draft cannot be
+     the trigger). So a snapshot of **`main`** gets a job `release-draft` after its tag, holding exactly `contents:
+     write` (drafts are listed and written only with push access) and `pull-requests: read`, signing and tagging
+     nothing; `scripts/release_notes.py` decides and the job's one create-or-edit line writes, never `draft: false`.
+     The notes come from the **pull requests**: since features land on `main` only as squashed pull requests once
+     releasable, each commit since the last `v<major>.*` tag is one pull request, and each carries a `## Release note`
+     section in the release's words, or `none` (`release-note.yml` checks every pull request; Dependabot's are exempt
+     and become one line). Rejected: commit titles (engineering language, never what the notes said) and a model
+     called in CI (a closed vendor and a secret in the release path, for text the owner reads anyway). `release.yml`'s
+     rule of exactly one draft is kept by the job: it moves its own **untouched** draft (a hash marker over its body)
+     onto the newer snapshot, creates one where none exists, and leaves an edited one — by a person, or carrying the
+     promotion's refusal — and any second draft alone, with a notice. A fix release on `release/<major>.x` and the first
+     release of a major are drafted by hand. With it, a commit that carries a **release tag** `v<major>.<minor>` counts
+     as published too: `release.yml` deletes the snapshot tag once it released the commit, so the schedule of
+     2026-11-16 made the already released `b7dda2de` a snapshot again (`snapshot-1.247`, beside `v1.247`), and a draft
+     would have followed it.
+     **Refined 2026-11-23 (owner, cr-release-draft-from-publish):** the first draft (run 45076081333) named a pull request
+     under **Needs a note**; its note was then written in the pull request, but no run could carry it into the draft — the
+     job ran only after a *new* snapshot tag, and a commit that has its snapshot publishes nothing. So the job also runs
+     when `checks-run` finds the commit already carrying its unreleased snapshot (`kind == 'none'`, no `v` tag;
+     `snapshot.py`'s `draft_version`), and a dispatch on `main` refreshes the untouched draft; `release_notes.py`
+     refuses unless `snapshot-<version>` names the commit, and the job's whole `if:` is pinned by
+     `validate_release_identity.py`. And the promotion refuses a draft that still lists anything under **Needs a note**
+     (`promote.py` check 1): until then such a draft was publishable as it stood.
+     **Refined 2026-11-26 (owner):** the **schedule waits** for a Checks run still going. GitHub starts a schedule late and
+     at no fixed hour: on 2026-11-23 it ran at 12:56, not 03:17, minutes after a merge, and `checks-run` refused HEAD's
+     `pending` Checks run (run 45179033821) — the week had no snapshot and no draft until a dispatch. Now the
+     schedule's `checks-run` re-reads that run every minute for up to 120 minutes (`snapshot.py --wait-minutes`,
+     `await_completion`; the job's budget 130) and judges it once completed; a dispatch still refuses at once, the owner
+     being there to run it again. Rejected: falling back to an older green commit (the snapshot would be of something
+     other than `main`'s tested HEAD, and the next week would repeat it) and a second cron (both fire late together).
+     **As built (2026-11-26):** the draft is written by a job of its own, `release-draft`, not a step of `snapshot-tag`
+     — that job is the one ref writer and holds `contents: write` alone (owner 2026-11-06), and the draft needs
+     `pull-requests: read` besides. A pull request's note is checked by a workflow of its own, `release-note.yml`
+     (advisory, no required check), so editing a body re-runs one small job and never the pipeline. No lede is
+     generated: summing several pull requests up in one sentence is the owner's judgement while reading the draft, and
+     v1.312 and v1.318 went out without one. Measured on GitHub: `commits/<sha>/pulls` returns the squash-merged pull
+     request (run 45076081333); a draft's body reads back from the API as untouched; the untouched draft moves to the
+     next snapshot with its notes regathered (run 45153047948, nine pull requests); a draft Publish wrote is promoted
+     (v1.312, v1.318). **Not observed on GitHub**, held by the selftests alone: a Monday with nothing new writing no
+     draft (a released HEAD's `draft_version` is empty, `snapshot_selftest.py`), a dispatch refreshing the draft of a
+     snapshot already made (`kind == 'none'`), and a late schedule waiting out a running Checks run.
 
 6. **The backup archive.** Every release publishes the L1 run's capture (ADR 0056's tool, test data only) **with its
    object pool** (`--objects-to`: a capture's store leg is only its index, ADR 0056 §3) as a signed OCI artifact

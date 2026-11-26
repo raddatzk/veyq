@@ -14,6 +14,10 @@ vi.mock('../../features/account/profile/FinishProfilePrompt.vue', async () => {
   const { h } = await import('vue')
   return { default: { render: () => h('p', { 'data-testid': 'finish-profile' }) } }
 })
+vi.mock('../../features/account/emergencyKit/KitRenewalPrompt.vue', async () => {
+  const { h } = await import('vue')
+  return { default: { render: () => h('p', { 'data-testid': 'kit-renewal' }) } }
+})
 vi.mock('../../core/project/DonationBanner.vue', async () => {
   const { h } = await import('vue')
   return { default: { render: () => h('p', { 'data-testid': 'donation-banner' }) } }
@@ -41,6 +45,7 @@ const BANNER = '[data-testid="unconfirmed-email-banner"]'
 const DONATION = '[data-testid="donation-banner"]'
 const FINISH = '[data-testid="finish-profile"]'
 const OPEN_IN_APP = '[data-testid="open-in-app"]'
+const KIT = '[data-testid="kit-renewal"]' // the clearer-kit notice (ADR 0157 decision 5): what it shows is KitRenewalPrompt.test.ts's
 const mounted: { unmount: () => void }[] = []
 
 async function mountAt(path: string) {
@@ -96,12 +101,13 @@ describe('AppShell — the unconfirmed-address banner', () => {
 })
 
 describe('AppShell — the other notices wait while the address is unconfirmed', () => {
-  it('an unconfirmed address shows the banner alone: no donation banner, no finish-your-profile prompt', async () => {
+  it('an unconfirmed address shows the banner alone: no donation banner, no finish-your-profile prompt, no kit notice', async () => {
     const w = await mountAt('/')
     expect(w.find(BANNER).exists()).toBe(true)
     expect(w.find(DONATION).exists()).toBe(false)
     expect(w.find(FINISH).exists()).toBe(false)
     expect(w.find(OPEN_IN_APP).exists()).toBe(false)
+    expect(w.find(KIT).exists()).toBe(false)
   })
 
   it('a confirmed address shows both, and no banner (the positive control)', async () => {
@@ -111,6 +117,7 @@ describe('AppShell — the other notices wait while the address is unconfirmed',
     expect(w.findAll(DONATION)).toHaveLength(1)
     expect(w.findAll(FINISH)).toHaveLength(1)
     expect(w.findAll(OPEN_IN_APP)).toHaveLength(1)
+    expect(w.findAll(KIT)).toHaveLength(1)
   })
 
   it('an address that cannot be read holds nothing back, as the banner shows nothing', async () => {

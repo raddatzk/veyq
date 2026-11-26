@@ -1,7 +1,7 @@
 /*
  * Windows' key stores for the core's WindowsDeviceKeys (mingwMain, session/WindowsDeviceKeys.kt): DPAPI for the bind
  * keys, the secrets and the unlock key where Windows Hello is not set up; the Microsoft Passport Key Storage Provider
- * (NCrypt) for the unlock key behind Windows Hello (ADR 0136's Consequences); the Credential Locker for a received link's
+ * (NCrypt) for the unlock key behind Windows Hello (ADR 0161's Consequences); the Credential Locker for a received link's
  * guest session (sharing/WindowsGuestSessions.kt, ADR 0150 decision 3).
  *
  * Every Windows call is made here, in C, and only plain integers, byte buffers and UTF-16 strings cross into Kotlin:

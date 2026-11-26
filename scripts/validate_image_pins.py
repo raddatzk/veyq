@@ -20,17 +20,20 @@ Dockerfile, `scratch`, or one of veyq's own published images (read out of `.gith
 build matrix). Every external reference must be written `repo:tag@sha256:<64 hex>` — the tag so a person can
 still read the version, the digest so what runs is what was pinned — and one `repo:tag` must carry one digest
 everywhere it appears, so the dev stack, the release recipe, the chart and the backup tool cannot quietly run
-different bits under the same name — and one repository one tag everywhere (2026-11-07), because Dependabot reaches
-the compose files and the Dockerfiles but not the chart or the backup tool, so a tag bump it proposes would
-otherwise leave those on the old version unremarked. The digest is the **multi-arch index** digest: a platform manifest's digest
+different bits under the same name — and one repository one tag everywhere (2026-11-07), because an updater that
+reaches only some sites would otherwise leave the rest on the old version unremarked: Dependabot reached the compose
+files and the Dockerfiles but not the chart or the backup tool, and Renovate reaches them all only through regex
+managers someone has to keep (renovate.json5; `pins` in checks.yml is red on a site none reaches). The digest is the **multi-arch index** digest: a platform manifest's digest
 would pin one architecture, and the publish builds amd64 and arm64. That is not checkable offline and is not
 checked here (limit below).
 
 One pair of pins more: **the Playwright image runs the library's version.** Every pinned `mcr.microsoft.com/playwright`
-reference's tag (`vX.Y.Z[-<suffix>]`) and every tracked `package.json`'s `@playwright/test` (an exact `X.Y.Z`) are one
-version — lane L1's browser is the image's, driven by the library (ADR 0090 decision 3), and Dependabot proposes the two
-in different pull requests, so it holds the image's version and the library's bump is red here until the image follows
-(2026-11-12). Each side without the other is red too: a check that finds one half checked nothing.
+reference's tag (`vX.Y.Z[-<suffix>]`), every tracked `package.json`'s `@playwright/test` (an exact `X.Y.Z`) and every
+version a tracked `pnpm-lock.yaml` resolves for `@playwright/test`, `playwright` and `playwright-core` (what installs,
+whatever the manifest says: an override or a second copy would drive another browser build) are one version — lane
+L1's browser is the image's, driven by the library (ADR 0090 decision 3). Dependabot proposed the two in different
+pull requests, so the library's bump was red here until the image followed (2026-11-12); Renovate's `playwright` group
+moves them in one. Each side without the other is red too: a check that finds one half checked nothing.
 
 **The defect that bought it.** Live when this guard was written (2026-09-25, cr-image-provenance-verifiable):
 the signed release recipe ran `mariadb`, `garage` and `traefik` by tag, the chart did the same, the backup tool
@@ -80,6 +83,12 @@ PLAYWRIGHT_REPO = "mcr.microsoft.com/playwright"
 PLAYWRIGHT_PACKAGE = "@playwright/test"
 PLAYWRIGHT_TAG = re.compile(r"^v(?P<version>[0-9]+\.[0-9]+\.[0-9]+)(?:-[A-Za-z0-9._-]+)?$")
 EXACT_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")
+# The packages a pnpm lockfile resolves for the library: it, the `playwright` it wraps, and `playwright-core`, which
+# carries the browser revision it drives. A `packages:`/`snapshots:` key, two spaces in, quoted or not, with or without
+# pnpm's peer suffix: `  '@playwright/test@1.65.1':`, `  playwright-core@1.65.1: {}`.
+PLAYWRIGHT_RESOLVED = re.compile(
+    r"""^  '?(?P<name>@playwright/test|playwright|playwright-core)@(?P<version>[^'():\s]+)(?:\([^']*\))?'?:""",
+    re.MULTILINE)
 
 errors: list[str] = []
 sites: list[tuple[str, str, str]] = []  # (where, kind, reference)
@@ -192,11 +201,11 @@ for where, kind, ref in sites:
     if match.group("repo") == PLAYWRIGHT_REPO:
         playwright_images.append((where, match.group("tag")))
 
-# One repository, one tag. Since 2026-11-07 Dependabot reaches the compose files and the Dockerfiles but not the chart
-# (its helm updater skips digest pins) nor the backup tool's constants, so a bump it proposes moves only some of a
-# repository's sites. A digest-only move is caught above (one `repo:tag`, one digest); a TAG move would leave the chart
-# on the old tag under a different name, which the digest rule cannot see. So every site of a repository names the same
-# tag, and the pull request is red until the sites Dependabot does not reach follow.
+# One repository, one tag. An updater may move only some of a repository's sites: Dependabot reached the compose files
+# and the Dockerfiles but not the chart (its helm updater skips digest pins) nor the backup tool's constants (2026-11-07),
+# and Renovate reaches those through regex managers only. A digest-only move is caught above (one `repo:tag`, one
+# digest); a TAG move would leave the chart on the old tag under a different name, which the digest rule cannot see. So
+# every site of a repository names the same tag, and the pull request is red until every site follows.
 tags_of: dict[str, dict[str, list[str]]] = {}
 for key, digests in digest_of.items():
     repo, tag = key.rsplit(":", 1)
@@ -206,8 +215,8 @@ for repo, tags in sorted(tags_of.items()):
         listing = "; ".join(f"`{t}` at {', '.join(w)}" for t, w in sorted(tags.items()))
         fail(
             f"`{repo}` is pinned under {len(tags)} different tags ({listing}). One image, one version everywhere: "
-            f"a bump that reaches only the compose files (Dependabot reaches neither the chart nor the backup tool) "
-            f"must be followed by hand at every other site in the same change."
+            f"a bump that reaches only some sites (an updater's manager missing one, or a hand edit) must move every "
+            f"other site in the same change."
         )
 
 for key, digests in sorted(digest_of.items()):
@@ -237,7 +246,27 @@ for rel in files:
         spec = (manifest.get(section) or {}).get(PLAYWRIGHT_PACKAGE)
         if spec is not None:
             playwright_packages.append((f"{rel} ({section})", str(spec)))
+# What the lockfile resolves is what installs: an exact spec in package.json can still resolve another version through
+# an override, a second copy pulled in by another package, or a lockfile written by hand. Every tracked pnpm lockfile
+# that resolves the library's packages is read; one that resolves none is not about Playwright.
+playwright_locked: list[tuple[str, str]] = []  # (where, version)
+for rel in files:
+    if rel.rsplit("/", 1)[-1] != "pnpm-lock.yaml":
+        continue
+    try:
+        lock_text = (ROOT / rel).read_text()
+    except OSError as exc:
+        fail(f"{rel} cannot be read ({exc}), so the Playwright version it installs cannot be checked")
+        continue
+    for match in PLAYWRIGHT_RESOLVED.finditer(lock_text):
+        line = lock_text.count("\n", 0, match.start()) + 1
+        playwright_locked.append((f"{rel}:{line} ({match.group('name')})", match.group("version")))
+if playwright_packages and not playwright_locked:
+    fail(f"{', '.join(w for w, _ in playwright_packages)} depend(s) on {PLAYWRIGHT_PACKAGE}, but no tracked pnpm-lock.yaml "
+         f"resolves it — the version that installs is held to nothing")
 playwright_versions: dict[str, list[str]] = {}
+for where, version in playwright_locked:
+    playwright_versions.setdefault(version, []).append(where)
 for where, spec in playwright_packages:
     if not EXACT_VERSION.match(spec):
         fail(f"{where}: {PLAYWRIGHT_PACKAGE} is `{spec}`, not an exact version — the library must be exactly the "
@@ -262,7 +291,8 @@ if len(playwright_versions) > 1:
     fail(
         f"Playwright is pinned at {len(playwright_versions)} versions ({listing}). The library must be exactly the "
         f"image's browser's: move the image to `{PLAYWRIGHT_REPO}:v<version>-<suffix>@sha256:<its multi-arch index "
-        f"digest>` in the same change as the library (Dependabot proposes only the library, .github/dependabot.yml)."
+        f"digest>` in the same change as the library, and the lockfile resolving it (Renovate's `playwright` group in "
+        f"renovate.json5 moves the two together)."
     )
 
 kinds = {kind for _, kind, _ in sites}
@@ -281,6 +311,6 @@ print(
     f"image pins OK: {external} third-party image reference(s) across {len({w.split(':')[0].split(' ')[0] for w, _, _ in sites})} "
     f"file(s) are each `repo:tag@sha256:…`, {len(tags_of)} repositories are each pinned under one tag, and "
     f"{len(digest_of)} distinct `repo:tag` carry one digest each; Playwright is one version "
-    f"({', '.join(playwright_versions)}) across {len(playwright_packages)} package.json pin(s) and "
-    f"{len(playwright_images)} image reference(s)"
+    f"({', '.join(playwright_versions)}) across {len(playwright_packages)} package.json pin(s), "
+    f"{len(playwright_locked)} lockfile resolution(s) and {len(playwright_images)} image reference(s)"
 )

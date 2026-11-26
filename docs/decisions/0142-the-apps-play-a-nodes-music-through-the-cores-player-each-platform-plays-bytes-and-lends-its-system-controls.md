@@ -35,7 +35,7 @@ What the apps have to build on (read at refine, 2026-11-15):
 - **On the web a lightbox video and the music both sound**: the lightbox makes no call into the player. The owner
   (2026-11-15) decided that this changes everywhere, the web included (decision 13).
 
-[ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) decides that an app's logic
+[ADR 0161](0161-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) decides that an app's logic
 is the Kotlin core's and each platform draws only its own UI; this ADR applies it to music and adds no rule to ADR
 0135's playlist.
 
@@ -301,7 +301,7 @@ Explained for users on the docs site: [Add background music](../../site/src/cont
 ## Alternatives considered
 
 - **Each platform's own player logic** (Media3's playlist, `AVQueuePlayer`, a GStreamer playlist) — five copies of the
-  order and fade rules, which ADR 0136 decision 1 forbids, and none of them crossfades.
+  order and fade rules, which ADR 0161 decision 1 forbids, and none of them crossfades.
 - **One player per tenant, kept alive across a switch** — the web stops at a switch, and keeping a tenant's readers
   alive after its session closed is what `closeTenant()` exists to prevent.
 - **Media3/ExoPlayer on Android** — a new dependency for what the framework player and `VolumeShaper` already do; its

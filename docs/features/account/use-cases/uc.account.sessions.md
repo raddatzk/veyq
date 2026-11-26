@@ -234,7 +234,7 @@ Key again.
   exists so the UI can keep "this is you" and "sign out everywhere else" honest.
 - **Only active families are listed.** Revoked and expired ones are noise, and the purge removes them anyway.
 - **The apps hold the same panel** on their account's Settings page (Android, the Apple app, Linux, Windows): one core
-  screen model (`session/AccountSettings` in `src/mobile/core`, [ADR 0136](../../../decisions/0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)
+  screen model (`session/AccountSettings` in `src/mobile/core`, [ADR 0161](../../../decisions/0161-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)
   decision 2) with the web's orderings and this use-case's E1–E5, the names joined from the register on the device, each
   app only drawing it. Its locked-device path (E3) stays the sign-in's and is not on that page: every app's sign-in
   offers it (`SessionModel.signInLocked`, `Gate.Locked`; [ADR 0154](../../../decisions/0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md)

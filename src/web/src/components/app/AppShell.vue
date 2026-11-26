@@ -20,6 +20,7 @@ import IncompatibleScreen from './IncompatibleScreen.vue'
 import { unconfirmedAddress } from '../../features/account/email/unconfirmedAddress'
 import OpenInAppBanner from '../../core/openInApp/OpenInAppBanner.vue'
 import { loadMemberChrome } from './memberChrome'
+import VeyqButton from '../../shared/ui/VeyqButton.vue'
 
 const MemberChrome = defineAsyncComponent(loadMemberChrome)
 
@@ -27,6 +28,10 @@ const route = useRoute()
 const { serverState } = useServerState()
 const { incompatibility } = useCapabilities()
 const { t } = useI18n()
+// The unreachable banner's Reload: the start again, which asks the instance again (ADR 0136 decision 5).
+function reload(): void {
+  location.reload()
+}
 // A `major` mismatch is a hard stop that supersedes every layout — the client and server are incompatible, so
 // nothing else (not even the anonymous share viewer) may render until one is updated (ADR 0032).
 const incompatible = computed(() => incompatibility() !== null)
@@ -70,7 +75,19 @@ watch(needsScope, (needs) => { if (needs) void enterScope(TENANT_SCOPE) }, { imm
   </main>
   <main v-else class="public-shell">
     <div class="veyq-shell-inner" :class="{ 'veyq-shell-inner--reading': readingLayout }">
-      <p v-if="serverState.unreachable" class="veyq-banner" role="alert">{{ t('common.unreachable') }}</p>
+      <!-- A request that failed at start is retried by starting again (ADR 0136 decision 5): the banner offers it. -->
+      <div v-if="serverState.unreachable" class="veyq-banner veyq-banner--with-action" role="alert" data-testid="unreachable-banner">
+        <span>{{ t('common.unreachable') }}</span>
+        <VeyqButton
+          :label="t('common.reload')"
+          icon="refresh"
+          size="small"
+          variant="danger"
+          appearance="outlined"
+          data-testid="unreachable-reload"
+          @click="reload"
+        />
+      </div>
       <OpenInAppBanner />
       <RouterView />
     </div>

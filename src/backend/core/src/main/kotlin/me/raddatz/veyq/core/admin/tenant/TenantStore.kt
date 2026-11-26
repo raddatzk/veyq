@@ -1,12 +1,11 @@
 package me.raddatz.veyq.core.admin.tenant
 
+import me.raddatz.veyq.core.crypto.SealedValue
 import me.raddatz.veyq.core.identity.keychain.KeyChainLink
 import me.raddatz.veyq.core.identity.keychain.KeyChainStore
 import me.raddatz.veyq.core.backup.ErasureKind
 import me.raddatz.veyq.core.backup.ErasureLedger
 import me.raddatz.veyq.core.identity.VeyqUser
-import me.raddatz.veyq.core.platform.capabilities.ApplicationErasureStore
-import me.raddatz.veyq.core.platform.capabilities.SwitchLevel
 import me.raddatz.veyq.core.membership.MembershipEntity
 import me.raddatz.veyq.core.membership.SignedGrant
 import me.raddatz.veyq.core.membership.MembershipStore
@@ -44,8 +43,9 @@ data class TenantView(
 data class InviteView(val ownerEmail: String, val status: String, val expiresAt: Instant, val bootstrapSecret: String? = null)
 
 /** A pending member invite in the owner-facing list (cr-0082) — metadata only, never the secret. [email] is null for a
- *  link invite, bound to nobody (ADR 0129 decision 2). */
-data class PendingInviteRow(val inviteId: String, val email: String?, val status: String, val expiresAt: Instant)
+ *  link invite, bound to nobody (ADR 0129 decision 2); [label] is a link invite's sealed private label, if it has one
+ *  (decision 7). */
+data class PendingInviteRow(val inviteId: String, val email: String?, val status: String, val expiresAt: Instant, val label: SealedValue? = null)
 
 /**
  * A member invite's key and grant as the owner's client built them (ADR 0111 decisions 1-2) — what
@@ -60,7 +60,12 @@ data class MemberInviteKey(
     val signerIdentityPublicKey: String,
     val epoch: Int,
     val grant: SignedGrant,
+    /** A link invite's private label, its wrap under the tenant key of [epoch] (ADR 0129 decision 7); null for none. */
+    val label: SealedValue? = null,
 )
+
+/** Why a link invite's label was not written (nothing written), or that it was. */
+enum class SetInviteLabel { SET, NOT_FOUND, STALE_EPOCH }
 
 /** Why a member invite was not minted (nothing written), or its id. */
 sealed interface MintMemberInvite {
@@ -142,7 +147,6 @@ class TenantStore(
     private val membership: MembershipStore,
     private val hosts: TenantHostResolver,
     private val ledger: ErasureLedger,
-    private val erasures: ApplicationErasureStore,
 ) {
 
     /** Whether some tenant already claims [domain] — through the one Host→tenant lookup, so "taken" and "resolves"
@@ -315,13 +319,37 @@ class TenantStore(
             anchorWrappedGrant = key.grant.wrappedGrant
             anchorEpoch = key.epoch
             anchorGrantSignature = key.grant.signature
+            // Only a link invite carries a label (ADR 0129 decision 7); the handler refuses one on a mailed mint.
+            sealedLabel = key.label?.value
+            wrappedLabelValueKey = key.label?.wrappedValueKey
+            labelEditorUserId = key.signerUserId.takeIf { key.label != null }
         }.persist()
         return MintMemberInvite.Minted(key.inviteId)
     }
 
     /** The tenant's pending (ACTIVE + unexpired) MEMBER invites — metadata only, for the owner's tracking list. */
     fun listPendingMemberInvites(tenantId: String): List<PendingInviteRow> =
-        openMemberInvites(tenantId).map { PendingInviteRow(it.id, it.ownerEmail, it.status, it.expiresAt) }
+        openMemberInvites(tenantId).map {
+            PendingInviteRow(it.id, it.ownerEmail, it.status, it.expiresAt, SealedValue.of(it.sealedLabel, it.wrappedLabelValueKey))
+        }
+
+    /**
+     * Replace a pending **link** invite's private label with [label], or clear it (null), and record [editorUserId] as its
+     * last editor (ADR 0129 decision 7, ADR 0093 § 8). Under the tenant rotation's lock: a label wrapped under [epoch] is
+     * written only while that is the tenant's current epoch, so a rotation either carries it or refuses it as stale. A
+     * mailed invite, one that ended or expired, and one of another tenant are [SetInviteLabel.NOT_FOUND].
+     */
+    @Transactional
+    fun setLinkInviteLabel(tenantId: String, inviteId: String, label: SealedValue?, epoch: Int?, editorUserId: String): SetInviteLabel {
+        val current = ScopeEntity.lockRow(tenantId)?.currentEpoch
+        val invite = findPendingMemberInvite(tenantId, inviteId)
+            ?.takeIf { it.ownerEmail == null && it.expiresAt.isAfter(Instant.now()) } ?: return SetInviteLabel.NOT_FOUND
+        if (label != null && current != epoch) return SetInviteLabel.STALE_EPOCH
+        invite.sealedLabel = label?.value
+        invite.wrappedLabelValueKey = label?.wrappedValueKey
+        invite.labelEditorUserId = editorUserId.takeIf { label != null }
+        return SetInviteLabel.SET
+    }
 
     /** The tenant's open MEMBER invites with their keys — what every member reads to carry them through a rotation
      *  (`listOpenInvites`). An open invite always holds its key; one that does not is skipped. */
@@ -491,10 +519,8 @@ class TenantStore(
         tokenHash: String,
         expiresAt: Instant,
     ): Pair<String, Instant> {
-        // The instance row's lock before the tenant exists (ApplicationErasureStore's lock order): an instance switch of
-        // an application either committed before this reads it, and the new tenant gets its erasure row below, or it
-        // waits and finds the tenant (uc.platform.erase-switched-off-application A4).
-        erasures.lockInstance()
+        // No erasure row, even while the instance holds an application off: a new tenant holds nothing of it, and a window
+        // exists only where there is something to erase (ADR 0088 decision 5, uc.platform.erase-switched-off-application A4).
         val now = Instant.now()
         val tenantId = UUID.randomUUID().toString()
         TenantEntity().apply {
@@ -505,11 +531,6 @@ class TenantStore(
             status = TenantEntity.PENDING
         }.persist()
         mintInvite(tenantId, ownerEmail, tokenHash, expiresAt, now)
-        TenantEntity.flush()
-        // Its own window from its creation, and no notice: nobody is a member yet. The reminder reaches who joins.
-        ApplicationErasureStore.APPLICATIONS.filter { erasures.isOff(tenantId, it) }.forEach {
-            erasures.reconcile(tenantId, it, SwitchLevel.INSTANCE, now, noticeOwed = false)
-        }
         return tenantId to expiresAt
     }
 

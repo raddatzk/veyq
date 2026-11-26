@@ -59,7 +59,7 @@ export async function restoreSelection(
 /** Why a node of a selection was not deleted, as the summary explains it ({@link DELETE_REFUSAL_TEXT}). */
 export type DeleteRefusalCode = 'gone' | 'scope_deleting' | 'failed'
 
-/** What each refusal says: the words the apps' notices say too (`words.*`, ADR 0136 § The web's words). */
+/** What each refusal says: the words the apps' notices say too (`words.*`, ADR 0161 § The web's words). */
 export const DELETE_REFUSAL_TEXT: Record<DeleteRefusalCode, string> = {
   gone: 'words.delete_refused_gone',
   scope_deleting: 'words.delete_refused_scope_deleting',

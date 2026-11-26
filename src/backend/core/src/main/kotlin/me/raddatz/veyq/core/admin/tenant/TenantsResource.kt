@@ -25,6 +25,7 @@ import me.raddatz.veyq.core.generated.model.MemberInviteLinkRequest
 import me.raddatz.veyq.core.generated.model.MemberInviteRequest
 import me.raddatz.veyq.core.generated.model.MemberInviteState
 import me.raddatz.veyq.core.generated.model.PendingMemberInvite
+import me.raddatz.veyq.core.generated.model.SetMemberInviteLabelRequest
 import me.raddatz.veyq.core.generated.model.ReassignOwnerRequest
 import me.raddatz.veyq.core.generated.model.InvitePreview
 import me.raddatz.veyq.core.generated.model.RegisterAndAcceptRequest
@@ -221,6 +222,7 @@ class TenantsResource(
                     PendingMemberInvite(
                         inviteId = UUID.fromString(it.inviteId), inviteStatus = InviteStatus.decode(it.status),
                         inviteExpiresAt = it.expiresAt.utc(), email = it.email,
+                        sealedLabel = it.label?.value, wrappedLabelValueKey = it.label?.wrappedValueKey,
                     )
                 },
             ).build()
@@ -244,7 +246,8 @@ class TenantsResource(
     @Authenticated
     @RateLimit(key = RateLimitKey.TENANT)
     override fun createMemberInviteLink(tenantId: UUID, memberInviteLinkRequest: MemberInviteLinkRequest): Response =
-        when (val o = handler.inviteMemberByLink(identity.principal.name, tenantId.toString(), memberInviteLinkRequest.toInput())) {
+        if (!memberInviteLinkRequest.labelPairs()) httpError(Failures.invalidRequest)
+        else when (val o = handler.inviteMemberByLink(identity.principal.name, tenantId.toString(), memberInviteLinkRequest.toInput())) {
             is LinkInviteOutcome.Done -> Response.status(Response.Status.CREATED).entity(o.toWire()).build()
             is LinkInviteOutcome.RateLimited -> rateLimited(o.retryAfterSeconds)
             is HttpFailure -> httpError(o)
@@ -253,13 +256,32 @@ class TenantsResource(
     @Authenticated
     @RateLimit(key = RateLimitKey.TENANT) // the same tenant budget as the first link mint
     override fun reissueMemberInviteLink(tenantId: UUID, inviteId: UUID, memberInviteLinkRequest: MemberInviteLinkRequest): Response =
-        when (val o = handler.reissueLinkInvite(identity.principal.name, tenantId.toString(), inviteId.toString(), memberInviteLinkRequest.toInput())) {
+        if (!memberInviteLinkRequest.labelPairs()) httpError(Failures.invalidRequest)
+        else when (val o = handler.reissueLinkInvite(identity.principal.name, tenantId.toString(), inviteId.toString(), memberInviteLinkRequest.toInput())) {
             is LinkInviteOutcome.Done -> Response.ok(o.toWire()).build()
             is LinkInviteOutcome.RateLimited -> rateLimited(o.retryAfterSeconds)
             is HttpFailure -> httpError(o)
         }
 
     private fun LinkInviteOutcome.Done.toWire() = MemberInviteLink(UUID.fromString(inviteId), token, expiresAt.utc())
+
+    // A link invite's private label (ADR 0129 decision 7): the label and its wrap come together with the epoch the wrap is
+    // under, or neither comes (cleared, an epoch beside them ignored) — the contract's rule, a 400 before any read. A
+    // missing field and a null bind alike, so the contract requires none of them (the API fuzzing found both halves).
+    @Authenticated
+    override fun setMemberInviteLabel(tenantId: UUID, inviteId: UUID, setMemberInviteLabelRequest: SetMemberInviteLabelRequest): Response {
+        val r = setMemberInviteLabelRequest
+        if (!SealedValue.pairs(r.sealedLabel, r.wrappedLabelValueKey) || (r.sealedLabel != null && r.epoch == null)) {
+            return httpError(Failures.invalidRequest)
+        }
+        return when (val o = handler.setMemberInviteLabel(
+            identity.principal.name, tenantId.toString(), inviteId.toString(), SealedValue.of(r.sealedLabel, r.wrappedLabelValueKey),
+            r.epoch.takeIf { r.sealedLabel != null },
+        )) {
+            SetInviteLabelOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+    }
 
     @Authenticated
     override fun revokeMemberInvite(tenantId: UUID, inviteId: UUID): Response =
@@ -414,7 +436,7 @@ class TenantsResource(
             with(r) { OwnerBirth.of(grant, grantSignature, recipientIdentityDigest) },
             with(r) { selfGrant.join(inviteProof, SealedValue.of(sealedJoinRecord, wrappedJoinRecordValueKey), signerIdentityDigest) },
             r.username, SealedValue.of(r.sealedName, r.wrappedNameValueKey), SealedValue.of(r.sealedAvatar, r.wrappedAvatarValueKey),
-            r.epoch, r.email,
+            r.epoch, r.email, r.kitRecord,
         )) {
             is RegisterAcceptOutcome.Activated -> Response.status(Response.Status.CREATED)
                 .entity(TenantActivatedWithUser(UUID.fromString(outcome.tenantId), TenantStatus.ACTIVE, UUID.fromString(outcome.userId)))
@@ -664,7 +686,11 @@ private fun MemberInviteLinkRequest.toInput() = InviteKeyInput(
     epoch = epoch.validated(),
     grant = SignedGrant(wrappedGrant, grantSignature),
     recipientIdentityDigest = recipientIdentityDigest,
+    label = SealedValue.of(sealedLabel, wrappedLabelValueKey),
 )
+
+/** Whether a link invite's label comes with its value key's wrap, or neither does (the contract's `dependentSchemas`). */
+private fun MemberInviteLinkRequest.labelPairs(): Boolean = SealedValue.pairs(sealedLabel, wrappedLabelValueKey)
 
 /** A MEMBER accept's parts, or null when any is missing (the handler answers it as a missing grant — a MEMBER accept
  *  without `signerIdentityDigest` among them, ADR 0111 decision 20). */

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generates every platform's words from the apps' one catalog (ADR 0136 decision 3).
+"""Generates every platform's words from the apps' one catalog (ADR 0161 decision 3).
 
 `words.json` beside this script is the source: per key its English (`en`) and German (`de`) text — a plural is an
 object of CLDR categories (`one`, `other`) — and an optional `note` for translators. A placeholder is `{n}` (a string)
@@ -167,7 +167,7 @@ def kotlin(words: dict, out: Path) -> None:
         " * edited): what the core's screen models raise; each platform renders it in the person's language.",
         " * [args] is the placeholder count, [plural] whether the first is the count a plural form is chosen by.",
         " *",
-        " * A class of one getter per word, not an enum (inbox #1341, ADR 0136 § The words' form for JavaScript): a",
+        " * A class of one getter per word, not an enum (inbox #1341, ADR 0161 § The words' form for JavaScript): a",
         " * Kotlin/JS enum builds all its entries the first time one is read, so every first load of the web carried all of",
         " * them; a getter nothing reads is dropped by the JavaScript link. Two words are equal by their [key]; [name] and",
         " * [entries] are what the enum's were, and on the wire a word is the enum by its name it was ([MsgName]) unless a",

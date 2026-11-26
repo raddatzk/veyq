@@ -96,6 +96,7 @@ import { realI18n, t } from '../test/i18n'
 import { CORE_DEVICE_LINKING, CORE_REMEMBER_DEVICE, CORE_REMEMBER_DEVICE_PASSWORDLESS } from '../features/platform/capabilities'
 import { KdfProfileRefused } from '@veyq/crypto/v1'
 import { httpError } from '../test/httpError'
+import { TYPED_SECRET_KEY } from '../test/secretKey'
 
 const stubs = {
   VeyqCard: { template: '<div><slot name="title" /><slot /></div>' },
@@ -266,6 +267,28 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     expect(buttonLabelled(trusted, t('login.submit'))).toBeDefined()
   })
 
+  // The first person to sign in with a kit typed its first line alone — three of its nine blocks — and the submit sent
+  // it, to answer "didn't match". The submit is now grey until the key is whole, the field saying which block is next.
+  it('keeps the sign-in grey while the Secret Key is not whole — the kit’s first line alone included', async () => {
+    const wrapper = mountView()
+    await fillCredentials(wrapper)
+    const submit = () => buttonLabelled(wrapper, t('login.submit'))!
+
+    await wrapper.find('input[name="secret-key"]').setValue(TYPED_SECRET_KEY.split('-').slice(0, 3).join('-'))
+    expect(submit().attributes('disabled')).toBeDefined()
+    expect(wrapper.find('.secret-key-progress').text()).toBe(t('unlock.secretKeyProgress', { block: 3, total: 9 }))
+
+    // The control on the same predicate: the whole key turns it on.
+    await wrapper.find('input[name="secret-key"]').setValue(TYPED_SECRET_KEY)
+    expect(submit().attributes('disabled')).toBeUndefined()
+
+    // And a device that needs no Secret Key never greys it for one.
+    vi.mocked(isTrusted).mockResolvedValue(true)
+    const trusted = mountView()
+    await fillCredentials(trusted)
+    expect(buttonLabelled(trusted, t('login.submit'))!.attributes('disabled')).toBeUndefined()
+  })
+
   it('logs in with SESSION scope even with the remember toggle on, and attempts no unlock', async () => {
     const wrapper = mountView()
     await fillCredentials(wrapper)
@@ -310,12 +333,12 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
 
       await buttonLabelled(wrapper, t('sessions.lockedBack'))!.trigger('click')
       await flushPromises()
-      await wrapper.find('input[name="secret-key"]').setValue('the-secret-key')
+      await wrapper.find('input[name="secret-key"]').setValue(TYPED_SECRET_KEY)
       await wrapper.find('form').trigger('submit')
       await flushPromises()
 
       // The unlock itself must work — the way back is a way back, not a dead end.
-      expect(unlockMasterKey).toHaveBeenCalledWith('the-password', 'the-secret-key')
+      expect(unlockMasterKey).toHaveBeenCalledWith('the-password', TYPED_SECRET_KEY)
       // …and it leaves this machine holding nothing. A saved key here is the exact asset the flow protects.
       expect(trustThisDevice).not.toHaveBeenCalled()
       expect(enrolDeviceKey).not.toHaveBeenCalled()
@@ -329,7 +352,7 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     // to suppress both tiers.
     const wrapper = mountView()
     await fillCredentials(wrapper)
-    await wrapper.find('input[name="secret-key"]').setValue('the-secret-key')
+    await wrapper.find('input[name="secret-key"]').setValue(TYPED_SECRET_KEY)
     await wrapper.find('form').trigger('submit')
     await flushPromises()
 
@@ -342,7 +365,7 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     const remembering = mountView()
     await fillCredentials(remembering)
     await turnRememberOn(remembering)
-    await remembering.find('input[name="secret-key"]').setValue('the-secret-key')
+    await remembering.find('input[name="secret-key"]').setValue(TYPED_SECRET_KEY)
     await remembering.find('form').trigger('submit')
     await flushPromises()
 
@@ -354,7 +377,7 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
   async function submitOrdinary(w: VueWrapper, remember: boolean) {
     await fillCredentials(w)
     if (remember) await turnRememberOn(w)
-    await w.find('input[name="secret-key"]').setValue('the-secret-key')
+    await w.find('input[name="secret-key"]').setValue(TYPED_SECRET_KEY)
     await w.find('form').trigger('submit')
     await flushPromises()
   }
@@ -401,11 +424,11 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     expect(secretKeyField(w).exists()).toBe(true)
     expect(w.text()).toContain(t('unlock.deviceHeldBack'))
     expect(w.text()).not.toContain(t('unlock.secretKeyHint'))
-    await secretKeyField(w).setValue('the-secret-key')
+    await secretKeyField(w).setValue(TYPED_SECRET_KEY)
     await w.find('form').trigger('submit')
     await flushPromises()
 
-    expect(unlockMasterKey).toHaveBeenCalledWith('the-password', 'the-secret-key')
+    expect(unlockMasterKey).toHaveBeenCalledWith('the-password', TYPED_SECRET_KEY)
     expect(unlockWithDevice).not.toHaveBeenCalled()
     expect(cacheSessionVault).toHaveBeenCalled() // control: the sign-in itself went through
     expect(untrustThisDevice).not.toHaveBeenCalled()
@@ -437,11 +460,11 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
 
     expect(secretKeyField(w).exists()).toBe(true)
     expect(w.text()).toContain(t('unlock.deviceHeldBack'))
-    await secretKeyField(w).setValue('the-secret-key')
+    await secretKeyField(w).setValue(TYPED_SECRET_KEY)
     await w.find('form').trigger('submit')
     await flushPromises()
 
-    expect(unlockMasterKey).toHaveBeenCalledWith('the-password', 'the-secret-key')
+    expect(unlockMasterKey).toHaveBeenCalledWith('the-password', TYPED_SECRET_KEY)
     expect(cacheSessionVault).toHaveBeenCalled() // control: the sign-in itself went through
     // Replacing the withheld DEVICE_KEY wrap with a DEVICE one would delete it, and its local key with it.
     expect(clearDeviceKey).not.toHaveBeenCalled()
@@ -457,7 +480,7 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
 
     expect(w.text()).not.toContain(t('unlock.deviceHeldBack'))
     expect(w.text()).toContain(t('unlock.secretKeyHint'))
-    await secretKeyField(w).setValue('the-secret-key')
+    await secretKeyField(w).setValue(TYPED_SECRET_KEY)
     await w.find('form').trigger('submit')
     await flushPromises()
 
@@ -476,7 +499,7 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     const w = mountView()
     await fillCredentials(w)
     expect(w.find('#remember-me').exists()).toBe(false) // the toggle stays hidden: nothing new is offered
-    await secretKeyField(w).setValue('the-secret-key')
+    await secretKeyField(w).setValue(TYPED_SECRET_KEY)
     await w.find('form').trigger('submit')
     await flushPromises()
 
@@ -553,13 +576,13 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     const w = mountView()
     await flushPromises()
     await w.find('#login-password').setValue('the-password')
-    await secretKeyField(w).setValue('the-secret-key')
+    await secretKeyField(w).setValue(TYPED_SECRET_KEY)
     await w.find('form').trigger('submit')
     await flushPromises()
 
     expect(login).not.toHaveBeenCalled()
     expect(leaveLiveSession).not.toHaveBeenCalled()
-    expect(unlockMasterKey).toHaveBeenCalledWith('the-password', 'the-secret-key')
+    expect(unlockMasterKey).toHaveBeenCalledWith('the-password', TYPED_SECRET_KEY)
   })
 
   it('a restored session keeps its sign-out button while the address is typed over (inbox #454)', async () => {
@@ -870,7 +893,7 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
       vi.mocked(unlockMasterKey).mockRejectedValueOnce(failure)
       const wrapper = mountView()
       await fillCredentials(wrapper)
-      await wrapper.find('input[name="secret-key"]').setValue('the-secret-key')
+      await wrapper.find('input[name="secret-key"]').setValue(TYPED_SECRET_KEY)
       await wrapper.find('form').trigger('submit')
       await flushPromises()
 

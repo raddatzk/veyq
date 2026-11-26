@@ -148,6 +148,15 @@ const C: Record<'ink' | 'muted' | 'brand' | 'brandDeep' | 'tint' | 'line' | 'war
 const WHITE: Rgb = [255, 255, 255]
 
 /**
+ * The layout this writer prints (ADR 0157 decision 1): raised only for a change that helps a person use the kit — type
+ * it, scan it, find their way back — never for a colour, a font or a wording (decision 2). Layout 1 is every kit before
+ * ADR 0157; layout 2 labels the key "Secret Key · 9 blocks in 3 lines". Never in the token: a new token version would
+ * make every printed kit unreadable. The other writer's file holds the same number (a test in each package pins it),
+ * and web's catalog a `kit.layoutNews.<n>` sentence for each layout from 2.
+ */
+export const KIT_LAYOUT = 2
+
+/**
  * Render the Emergency Kit PDF (A4): the human text in the caller's language, the Secret Key in its printed form, the QR,
  * three form fields for the addresses the person signs in at (the first holding the kit's server, where it has one), and
  * the token in the document information. Returns the

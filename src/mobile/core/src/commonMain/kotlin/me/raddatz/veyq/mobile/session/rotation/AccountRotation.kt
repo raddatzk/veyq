@@ -2,6 +2,7 @@ package me.raddatz.veyq.mobile.session.rotation
 
 import kotlinx.coroutines.CancellationException
 import me.raddatz.veyq.mobile.AppKinds
+import me.raddatz.veyq.mobile.account.KitWriter
 import me.raddatz.veyq.mobile.api.apis.AccountApi
 import me.raddatz.veyq.mobile.api.apis.AccountRotationApi
 import me.raddatz.veyq.mobile.api.apis.FavoritesApi
@@ -223,6 +224,8 @@ internal class AccountRotation(
                     secretKeyProofSignature = b64(p.ed25519Sign(oldProofSeed, statement)),
                     identityPins = pins,
                     deviceRegister = register,
+                    // the kit this ceremony prints, recorded under MK' as the web's rotation does (ADR 0157 decision 4)
+                    kitRecord = b64(suite.seal(Context("kit-record"), newMk, utf8("{\"layout\":${KitWriter.LAYOUT}}"))),
                     keyChainStep = KeyChainStepSignatures(b64(stepIdentitySignature), b64(stepProofSignature)),
                     stageId = stage.id,
                     stagedGrantsDigest = b64(digest),

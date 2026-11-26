@@ -1,10 +1,12 @@
 package me.raddatz.veyq.core.admin.setup
 
+import me.raddatz.veyq.core.account.kitrecord.KitRecordStore
 import me.raddatz.veyq.core.identity.AccountStore
 import me.raddatz.veyq.core.identity.ServerRoles
 import me.raddatz.veyq.core.identity.WrapData
 import me.raddatz.veyq.core.moderation.ModerationHandler
 import me.raddatz.veyq.core.moderation.ModerationOutcome
+import me.raddatz.veyq.core.platform.capabilities.CapabilitySwitchStore
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 
@@ -14,6 +16,8 @@ import jakarta.transaction.Transactional
 class SetupStore(
     private val accounts: AccountStore,
     private val moderation: ModerationHandler,
+    private val kitRecords: KitRecordStore,
+    private val switches: CapabilitySwitchStore,
 ) {
 
     fun isSetupComplete(): Boolean = ServerSetup.count() > 0
@@ -47,6 +51,12 @@ class SetupStore(
             userId, epoch.kemPublicKey, epoch.signPublicKey, registration.identityPublicKey, epoch.sealedGrant,
         )
         if (minted !is ModerationOutcome.Ok) throw ModerationEpochInvalid()
+        // The layout of the kit this setup printed, sealed under the new Master Key (ADR 0157 decision 4): stored with the
+        // account it belongs to, or nothing when the client sent none.
+        registration.kitRecord?.let { kitRecords.replace(userId, it) }
+        // The applications the Server Owner left out (ADR 0088 decision 12): the instance switch the console writes,
+        // in this transaction, never a preset beside it. No tenant exists yet, so no erasure row arises.
+        registration.applicationsOff.forEach { switches.set(it, off = true) }
 
         return userId
     }

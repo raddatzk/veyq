@@ -46,16 +46,18 @@ vi.mock('../../../sw/register', () => ({
 vi.mock('../share', async (orig) => ({ ...(await orig<typeof import('../share')>()), openShareLightbox: vi.fn(), openShareOriginal: vi.fn() }))
 
 // The toast channel (the layer's `shared/ui/toast.ts`, mocked here at `useToast`): the too-large download reports through it.
-const toastError = vi.hoisted(() => vi.fn())
+// A selection's capture-time shift reports through it too: its refusals, and its Undo bar (`showUndo`, captured to press it).
+const { toastError, showUndo } = vi.hoisted(() => ({ toastError: vi.fn(), showUndo: vi.fn() }))
 vi.mock('../../../shared/state/useToast', () => ({
-  useToast: () => ({ success: vi.fn(), error: toastError, showUndo: vi.fn(), dismissUndo: vi.fn() }),
+  useToast: () => ({ success: vi.fn(), error: toastError, showUndo, dismissUndo: vi.fn() }),
 }))
 
-import { reactive } from 'vue'
+import { reactive, defineComponent, h } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import MediaLightbox from './MediaLightbox.vue'
 import VeyqDateField from '../../../shared/ui/VeyqDateField.vue'
-import { addMedia, listMedia, type MediaDeriver, type MediaExif, type MediaItem } from '../media'
+import { addMedia, listMedia, unsealMeta, type MediaDeriver, type MediaExif, type MediaItem } from '../media'
+import { useCaptureTimeShift } from '../useCaptureTimeShift'
 import { readExifTags, type ExifTags } from '../../../shared/image/exifTags'
 import { blobApi } from '../../../api/client'
 import { mediaApi } from '../api'
@@ -235,7 +237,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     expect(wrapper.emitted('setCover')).toBeFalsy()
   })
 
-  it('pages prev/next through the grid order, reading the next item’s preview ahead, and clamps at the ends', async () => {
+  it('pages prev/next through the grid order, reading the next item’s preview ahead, and goes round at the ends', async () => {
     const memoryKey = v1.randomBytes(32)
     const { store, items } = await seedTwo(memoryKey)
     store.blob.presignBlobDownloads.mockClear()
@@ -245,8 +247,8 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
 
-    // at the first item: previous is disabled (clamp), next enabled
-    expect(wrapper.find('.lightbox-nav-previous').attributes('disabled')).toBeDefined()
+    // at the first item both go somewhere: paging goes round (owner 2026-11-26)
+    expect(wrapper.find('.lightbox-nav-previous').attributes('disabled')).toBeUndefined()
     expect(wrapper.find('.lightbox-nav-next').attributes('disabled')).toBeUndefined()
     // media 1: PREVIEW=up-5 → read ahead once media 0's preview is shown, never its original (up-3)
     expect(presigned()).toContain(store.blobIdOfUpload('up-5'))
@@ -256,11 +258,55 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     await wrapper.find('.lightbox-nav-next').trigger('click')
     await flushPromises()
 
-    // next paged to it, shown from what was read ahead; now next is disabled at the end
+    // next paged to it, shown from what was read ahead; at the last item next is still offered
     expect(presigned(), 'nothing read again').toEqual([])
     expect(wrapper.find('.media-lightbox-stage img').attributes('src')).toMatch(/^blob:/)
-    expect(wrapper.find('.media-lightbox-title small').text()).toBe(t('media.itemPosition', { index: 2, count: 2 }))
+    const position = () => wrapper.find('.media-lightbox-title small').text()
+    expect(position()).toBe(t('media.itemPosition', { index: 2, count: 2 }))
+    expect(wrapper.find('.lightbox-nav-next').attributes('disabled')).toBeUndefined()
+
+    // past the last comes the first, before the first the last - on the buttons and the arrow keys alike
+    await wrapper.find('.lightbox-nav-next').trigger('click')
+    await flushPromises()
+    expect(position(), 'next on the last goes round to the first').toBe(t('media.itemPosition', { index: 1, count: 2 }))
+    await wrapper.find('.lightbox-nav-previous').trigger('click')
+    await flushPromises()
+    expect(position(), 'previous on the first goes round to the last').toBe(t('media.itemPosition', { index: 2, count: 2 }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    await flushPromises()
+    expect(position(), 'ArrowRight on the last').toBe(t('media.itemPosition', { index: 1, count: 2 }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))
+    await flushPromises()
+    expect(position(), 'ArrowLeft on the first').toBe(t('media.itemPosition', { index: 2, count: 2 }))
+    expect(presigned(), 'both were held: going round reads nothing again').toEqual([])
+  })
+
+  it('a single item has nowhere to page: both buttons off, no slideshow, the arrow keys stay put', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedTwo(memoryKey)
+    const wrapper = mountLightbox(memoryKey, [items[0]], 0)
+    await flushPromises()
+    expect(wrapper.find('.media-lightbox-stage img').attributes('src'), 'control: the item shows').toMatch(/^blob:/)
+    expect(wrapper.find('.lightbox-nav-previous').attributes('disabled')).toBeDefined()
     expect(wrapper.find('.lightbox-nav-next').attributes('disabled')).toBeDefined()
+    expect(wrapper.find('[data-slideshow-toggle]').exists()).toBe(false)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))
+    await flushPromises()
+    expect(wrapper.find('.media-lightbox-title small').text()).toBe(t('media.itemPosition', { index: 1, count: 1 }))
+  })
+
+  it('removing the shown last item shows the first (the advance goes round, as paging does)', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedImages(memoryKey, 3)
+    const held = reactive(items.map((it) => ({ ...it })))
+    const wrapper = mountLightbox(memoryKey, held, 2)
+    await flushPromises()
+    expect(wrapper.find('.media-lightbox-title small').text(), 'control').toBe(t('media.itemPosition', { index: 3, count: 3 }))
+    held.splice(2, 1)
+    await flushPromises()
+    expect(wrapper.find('.media-lightbox-title small').text()).toBe(t('media.itemPosition', { index: 1, count: 2 }))
+    expect(wrapper.emitted('close'), 'one is left: it stays open').toBeFalsy()
   })
 
   // The previews read while the lightbox is open stay in memory (`../previewCache.ts`): a step back is instant, the
@@ -313,6 +359,21 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
       expect(items.map(props.readsOf), 'the shown one and its two neighbours, nothing further').toEqual([1, 1, 1, 0])
       expect(props.previewLoader.mock.calls[0][0].mediaId, 'the shown one first').toBe(items[1].mediaId)
       w.unmount()
+    })
+
+    it('reads ahead round the ends: on the last item the first, on the first the last', async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seedImages(memoryKey, 4)
+      const last = recordedPreview(memoryKey)
+      const w = mountLightbox(memoryKey, items, 3, last)
+      await flushPromises()
+      expect(items.map(last.readsOf), 'the last, the one before it, and the first').toEqual([1, 0, 1, 1])
+      w.unmount()
+      const first = recordedPreview(memoryKey)
+      const v = mountLightbox(memoryKey, items, 0, first)
+      await flushPromises()
+      expect(items.map(first.readsOf), 'the first, the one after it, and the last').toEqual([1, 1, 0, 1])
+      v.unmount()
     })
 
     it('reads nothing ahead of a blocked neighbour (every byte of it answers 451)', async () => {
@@ -1601,9 +1662,82 @@ describe('MediaLightbox — zoom (cr-lightbox-zoom-slideshow)', () => {
   })
 })
 
+// A swipe pages (inbox #863), round the ends as the buttons do: a finger on the stage of any item, never a mouse, never
+// while a photo is zoomed (a drag pans there). The gesture's rules are `shared/ui/useSwipe.test.ts`'s; this is the wiring.
+describe('MediaLightbox — swipe (#863)', () => {
+  const position = (w: ReturnType<typeof mountLightbox>) => w.find('.media-lightbox-title small').text()
+  const shown = (w: ReturnType<typeof mountLightbox>) => w.find('.media-lightbox-stage img')
+  const scaleOf = (w: ReturnType<typeof mountLightbox>) => Number(/scale\(([\d.]+)\)/.exec(shown(w).attributes('style') ?? '')?.[1] ?? 1)
+  /** A one-finger travel across the stage from x 400 by `dx`. */
+  async function swipe(w: ReturnType<typeof mountLightbox>, dx: number, pointerType = 'touch') {
+    const stage = w.find('.media-lightbox-stage').element
+    const at = (type: string, x: number) =>
+      stage.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 7, pointerType, button: 0, clientX: x, clientY: 300 }))
+    at('pointerdown', 400)
+    at('pointermove', 400 + dx / 2)
+    at('pointerup', 400 + dx)
+    await flushPromises()
+  }
+
+  it('left brings the next, right the previous, round the ends', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedImages(memoryKey, 3)
+    const w = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    await swipe(w, -150)
+    expect(position(w)).toBe(t('media.itemPosition', { index: 2, count: 3 }))
+    await swipe(w, 150)
+    expect(position(w)).toBe(t('media.itemPosition', { index: 1, count: 3 }))
+    await swipe(w, 150)
+    expect(position(w), 'right on the first goes round to the last').toBe(t('media.itemPosition', { index: 3, count: 3 }))
+    await swipe(w, -150)
+    expect(position(w), 'left on the last goes round to the first').toBe(t('media.itemPosition', { index: 1, count: 3 }))
+    w.unmount()
+  })
+
+  it('a short travel and a mouse drag page nothing', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedImages(memoryKey, 3)
+    const w = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    await swipe(w, -20)
+    await swipe(w, -300, 'mouse')
+    expect(position(w)).toBe(t('media.itemPosition', { index: 1, count: 3 }))
+    w.unmount()
+  })
+
+  it('pages nothing while the photo is zoomed - the drag pans - and pages again once it is back at 1x', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedImages(memoryKey, 3)
+    const w = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '+' }))
+    await flushPromises()
+    expect(scaleOf(w), 'control: zoomed').toBe(1.5)
+    await swipe(w, -150)
+    expect(position(w)).toBe(t('media.itemPosition', { index: 1, count: 3 }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '0' }))
+    await flushPromises()
+    await swipe(w, -150)
+    expect(position(w)).toBe(t('media.itemPosition', { index: 2, count: 3 }))
+    w.unmount()
+  })
+
+  it('pages on a stage that shows no zoomable photo too (a blocked medium)', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedImages(memoryKey, 2)
+    const w = mountLightbox(memoryKey, [{ ...items[0], blocked: true }, items[1]], 0)
+    await flushPromises()
+    expect(w.find('.media-lightbox-stage').classes(), 'control: nothing to zoom').not.toContain('media-lightbox-stage-zoomable')
+    await swipe(w, -150)
+    expect(position(w)).toBe(t('media.itemPosition', { index: 2, count: 2 }))
+    w.unmount()
+  })
+})
+
 // The slideshow (cr-lightbox-zoom-slideshow, uc.memory.gallery 3a), on fake interval/timeout/Date clocks (setImmediate stays
 // real, so `flushPromises` works): every 5 s one step through the items, a video's poster for one interval and never played,
-// a stop ON the last item, a pause on every interaction and a hidden tab, one preview ahead, and no EXIF read or place
+// round past the last item until paused, a pause on every interaction and a hidden tab, one preview ahead, and no EXIF read or place
 // backfill while it runs.
 describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
   beforeEach(() => vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'Date'] }))
@@ -1642,7 +1776,7 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
     return { ...p, previewLoader: vi.fn(p.previewLoader), originalLoader: vi.fn(p.originalLoader), exifLoader: vi.fn(p.exifLoader) }
   }
 
-  it('advances every 5 s through the items and stops on the last, announced', async () => {
+  it('advances every 5 s through the items and goes round past the last, announced', async () => {
     const memoryKey = v1.randomBytes(32)
     const { items } = await seed(memoryKey, ['image/png', 'image/jpeg', 'image/png'])
     const w = mountLightbox(memoryKey, items, 0)
@@ -1664,11 +1798,12 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
     expect(status(w)).toBe(t('media.slideshowPlaying'))
     await advance(5000)
     expect(position(w)).toBe(at(3))
-    expect(status(w), 'it stops ON the last item').toBe(t('media.slideshowEnded'))
-    expect(toggle(w).attributes('aria-label')).toBe(t('media.slideshowStart'))
-    expect(toggle(w).attributes('disabled'), 'nothing left to play').toBeDefined()
-    await advance(15000)
-    expect(position(w)).toBe(at(3))
+    expect(status(w), 'the last item is no end').toBe(t('media.slideshowPlaying'))
+    await advance(5000)
+    expect(position(w), 'past the last comes the first').toBe(at(1))
+    expect(toggle(w).attributes('aria-label')).toBe(t('media.slideshowPause'))
+    await advance(5000)
+    expect(position(w), 'and on, a second round').toBe(at(2))
     w.unmount()
   })
 
@@ -1809,15 +1944,16 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
 
   it('stays one preview ahead and shows each without a second fetch, paused or not', async () => {
     const memoryKey = v1.randomBytes(32)
-    const { items } = await seed(memoryKey, ['image/png', 'image/jpeg', 'image/png'])
+    // Four, so the one two steps on is neither neighbour: paging goes round, the last is the first one's other neighbour.
+    const { items } = await seed(memoryKey, ['image/png', 'image/jpeg', 'image/png', 'image/jpeg'])
     const props = recorded(memoryKey)
     const w = mountLightbox(memoryKey, items, 0, props)
     await flushPromises()
     const fetchedFor = (i: number) => props.previewLoader.mock.calls.filter(([it]) => it.mediaId === items[i].mediaId).length
-    expect([fetchedFor(0), fetchedFor(1), fetchedFor(2)], 'the next one, ahead, only one').toEqual([1, 1, 0])
+    expect(items.map((_, i) => fetchedFor(i)), 'one ahead each way, nothing further').toEqual([1, 1, 0, 1])
     await press(w)
     await advance(5000)
-    expect(position(w)).toBe(at(2))
+    expect(position(w)).toBe(at(2, 4))
     expect(w.find('.media-lightbox-stage img').attributes('src')).toBeTruthy()
     expect(fetchedFor(1), 'shown from the read ahead').toBe(1)
     expect(fetchedFor(2), 'and the next one ahead').toBe(1)
@@ -1869,5 +2005,423 @@ describe('MediaLightbox — slideshow (cr-lightbox-zoom-slideshow)', () => {
     expect(geocoded(), 'and resolves its place').toBe(2)
     expect(store.api.updateMediaMeta.mock.calls.length).toBe(writes + 1)
     w.unmount()
+  })
+
+  // The shuffle (inbox #862): rounds of every item once, the slideshow only. `Math.random` pinned to 0 makes the rounds
+  // exact: Fisher-Yates swaps each slot with the first, so after the start item (1) the round is 3, 4, 2; the next round
+  // would open with 2 - the one the last ended on - so its head is swapped with the second: 3, 2, 4, 1. The grid order
+  // (2, 3, 4, 1, 2, …) differs at the first step.
+  describe('shuffle (#862)', () => {
+    const shuffleToggle = (w: ReturnType<typeof mountLightbox>) => w.find('[data-slideshow-shuffle]')
+    async function pressShuffle(w: ReturnType<typeof mountLightbox>) {
+      shuffleToggle(w).element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, button: 0 }))
+      await shuffleToggle(w).trigger('click')
+      await flushPromises()
+    }
+    const four = ['image/png', 'image/jpeg', 'image/png', 'image/jpeg']
+
+    it('is offered from three items on, as a pressed toggle that does not pause a running slideshow', async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seed(memoryKey, ['image/png', 'image/jpeg', 'image/png'])
+      const two = mountLightbox(memoryKey, items.slice(0, 2), 0)
+      await flushPromises()
+      expect(toggle(two).exists(), 'control: the slideshow is offered').toBe(true)
+      expect(shuffleToggle(two).exists(), 'two items: the grid order or its reverse').toBe(false)
+      two.unmount()
+      const w = mountLightbox(memoryKey, items, 0)
+      await flushPromises()
+      expect(shuffleToggle(w).attributes('aria-pressed')).toBe('false')
+      expect(shuffleToggle(w).attributes('aria-label')).toBe(t('media.slideshowShuffle'))
+      await press(w)
+      await pressShuffle(w)
+      expect(shuffleToggle(w).attributes('aria-pressed')).toBe('true')
+      expect(status(w), 'pressing it is no interaction with the slideshow').toBe(t('media.slideshowPlaying'))
+      shuffleToggle(w).element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      await flushPromises()
+      expect(status(w), 'nor is Enter on it').toBe(t('media.slideshowPlaying'))
+      w.unmount()
+    })
+
+    it('shows each item once per round in a shuffled order, and the next round never opens with the last one', async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seed(memoryKey, four)
+      const w = mountLightbox(memoryKey, items, 0)
+      await flushPromises()
+      const random = vi.spyOn(Math, 'random').mockReturnValue(0)
+      try {
+        await pressShuffle(w)
+        await press(w)
+        const seen: string[] = []
+        for (let i = 0; i < 7; i++) {
+          await advance(5000)
+          seen.push(position(w))
+        }
+        expect(seen).toEqual([3, 4, 2, 3, 2, 4, 1].map((n) => at(n, 4)))
+      } finally {
+        random.mockRestore()
+      }
+      w.unmount()
+    })
+
+    it('orders the slideshow only: by hand it pages in the grid order, and off again the slideshow does too', async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seed(memoryKey, four)
+      const w = mountLightbox(memoryKey, items, 0)
+      await flushPromises()
+      const random = vi.spyOn(Math, 'random').mockReturnValue(0)
+      try {
+        await pressShuffle(w)
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+        await flushPromises()
+        expect(position(w), 'by hand: the grid order').toBe(at(2, 4))
+        await press(w)
+        await advance(5000)
+        expect(position(w), 'the slideshow: the round, here 3 after 2').toBe(at(3, 4))
+        await pressShuffle(w)
+        expect(shuffleToggle(w).attributes('aria-pressed')).toBe('false')
+        await advance(5000)
+        expect(position(w), 'off: the grid order again').toBe(at(4, 4))
+      } finally {
+        random.mockRestore()
+      }
+      w.unmount()
+    })
+
+    it("reads the round's next item ahead, though it is no neighbour of the shown one", async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seed(memoryKey, four)
+      const props = recorded(memoryKey)
+      const w = mountLightbox(memoryKey, items, 0, props)
+      await flushPromises()
+      const readsOf = (i: number) => props.previewLoader.mock.calls.filter(([it]) => it.mediaId === items[i].mediaId).length
+      expect(readsOf(2), 'control: two steps on is no neighbour').toBe(0)
+      const random = vi.spyOn(Math, 'random').mockReturnValue(0)
+      try {
+        await pressShuffle(w)
+      } finally {
+        random.mockRestore()
+      }
+      await flushPromises()
+      expect(readsOf(2), 'the round opens with it: read ahead').toBe(1)
+      w.unmount()
+    })
+
+    it('skips an item removed meanwhile', async () => {
+      const memoryKey = v1.randomBytes(32)
+      const { items } = await seed(memoryKey, four)
+      const held = reactive(items.map((it) => ({ ...it })))
+      const w = mountLightbox(memoryKey, held, 0)
+      await flushPromises()
+      const random = vi.spyOn(Math, 'random').mockReturnValue(0)
+      try {
+        await pressShuffle(w) // the round: 3, 4, 2
+        held.splice(2, 1) // item 3 goes; the grid is now 1, 2, 4 (4 at position 3)
+        await flushPromises()
+        await press(w)
+        await advance(5000)
+        expect(w.find('.media-lightbox-title small').text(), 'the round goes on with 4').toBe(at(3, 3))
+        await advance(5000)
+        expect(position(w), 'then 2').toBe(at(2, 3))
+      } finally {
+        random.mockRestore()
+      }
+      w.unmount()
+    })
+  })
+})
+
+// uc.memory.buckets § Correct a selection's capture time: opened from the organizer's selection, the save of a selected medium
+// offers only it or every selected one by its offset; the shift is the detail's (`useCaptureTimeShift`), run here by a host
+// that wires it as `MemoryDetail` does — the member's real media-meta door over the fake store, the grid patched in place.
+describe('MediaLightbox — a selection\'s capture-time shift', () => {
+  const MIN = 60_000
+  const T1 = Date.UTC(2024, 5, 1, 10, 0, 0)
+  const T2 = Date.UTC(2024, 5, 1, 10, 20, 0)
+  const T3 = Date.UTC(2024, 5, 1, 11, 0, 0)
+  /** The date field's value for `ms`: local wall-clock to the minute, as the lightbox writes it. */
+  const local = (ms: number) => {
+    const d = new Date(ms)
+    const p = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+  }
+
+  /** Three photos taken at `times` (undefined: no capture time at all), in that order. */
+  async function seedThree(memoryKey: Uint8Array, times: (number | undefined)[]) {
+    const store = galleryFakeStore()
+    fakeApi(mediaApi, store.api)
+    fakeApi(blobApi, store.blob)
+    vi.stubGlobal('fetch', store.fetchStub)
+    for (const [i, at] of times.entries()) {
+      vi.mocked(readExifTags).mockResolvedValueOnce(at === undefined ? undefined : { DateTimeOriginal: at })
+      await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(i + 1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
+    }
+    const items = reactive(await listMedia(SCOPE_ID, NODE_ID)) as MediaItem[]
+    return { store, items }
+  }
+
+  /** The lightbox as `MemoryDetail` mounts it from the organizer, with the shift wired to the real door. */
+  function mountShift(memoryKey: Uint8Array, items: MediaItem[], startIndex: number, selected: string[], extra: Record<string, unknown> = {}) {
+    const props = memberProps(memoryKey)
+    const Host = defineComponent({
+      setup() {
+        const { run } = useCaptureTimeShift({
+          door: () => props.mediaMeta,
+          scopeId: () => SCOPE_ID,
+          memoryKey: () => memoryKey,
+          node: () => props.memoryNode,
+          metaOf: props.metaResolver,
+          onUpdated: (p) => { // the gallery's `onCapturedAtUpdated`: the listed item patched in place
+            const it = items.find((m) => m.mediaId === p.mediaId)
+            if (it) Object.assign(it, { wrappedMeta: p.wrappedMeta ?? undefined, metaRevision: p.metaRevision })
+          },
+        })
+        return () => h(MediaLightbox, {
+          memoryKey, items, startIndex, memoryName: 'Rom 2026', ...props, captureTimeShift: { selected: new Set(selected), run }, ...extra,
+        })
+      },
+    })
+    return mount(Host, { global: { plugins: [realI18n()] } })
+  }
+  const field = (w: ReturnType<typeof mountShift>) => w.findComponent(VeyqDateField)
+  /** The override sealed in the store for `mediaId` now — what a reload would show. */
+  const storedOverride = (store: ReturnType<typeof galleryFakeStore>, memoryKey: Uint8Array, item: MediaItem) => {
+    const sealed = store.media.find((m) => m.mediaId === item.mediaId)!.wrappedMeta
+    return unsealMeta(SCOPE_ID, memoryKey, { ...item, wrappedMeta: sealed ?? undefined })?.capturedAtOverride
+  }
+  const writesOf = (store: ReturnType<typeof galleryFakeStore>, mediaId: string) =>
+    store.api.updateMediaMeta.mock.calls.filter(([a]) => a.mediaId === mediaId).length
+
+  /**
+   * The conflict rule (ADR 0077): a peer corrected the third photo's time after the selection was read, so it is refused and
+   * named — never shifted from the peer's value — while the other two are written in the same run (the positive control).
+   * Undo then puts those two back, and leaves the refused one alone. Levers: write the conflicting medium anyway (drop the
+   * snapshot, `MetaConflictError` swallowed), or let Undo skip a medium.
+   */
+  it('a peer\'s change on one of three refuses that one and names it; the two others shift, and Undo restores both', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { store, items } = await seedThree(memoryKey, [T1, T2, T3])
+    const [m1, m2, m3] = items
+    const PEER = Date.UTC(2023, 0, 1, 9, 0, 0)
+    const peers = b64std(v1.sealField(
+      { purpose: 'media-meta', scopeId: SCOPE_ID, mediaId: m3.mediaId }, memoryKey,
+      new TextEncoder().encode(JSON.stringify({ v: 1, capturedAt: T3, capturedAtOverride: PEER })),
+    ))
+    const write = store.api.updateMediaMeta.getMockImplementation()!
+    let peerFirst = true
+    store.api.updateMediaMeta.mockImplementation(async (args) => {
+      if (args.mediaId === m3.mediaId && peerFirst) {
+        peerFirst = false
+        throw { response: new Response(JSON.stringify({ code: 'stale_revision', wrappedMeta: peers, metaRevision: 1 }), { status: 409 }) }
+      }
+      return write(args)
+    })
+
+    const w = mountShift(memoryKey, items, 1, items.map((m) => m.mediaId))
+    await flushPromises()
+    await w.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
+    field(w).vm.$emit('update:modelValue', local(T2 + 72 * MIN))
+    await flushPromises()
+    await w.find('.media-lightbox-date-form').trigger('submit')
+    await flushPromises()
+    expect(store.api.updateMediaMeta, 'the save asks first').not.toHaveBeenCalled()
+    const all = w.find('[data-testid="capture-time-shift-all"]')
+    expect(all.text()).toBe(t('media.shift.all', { count: 3, offset: '+1 h 12 min' }))
+    await all.trigger('click')
+    await flushPromises()
+
+    expect([storedOverride(store, memoryKey, m1), storedOverride(store, memoryKey, m2)], 'the two shifted').toEqual([T1 + 72 * MIN, T2 + 72 * MIN])
+    expect(writesOf(store, m3.mediaId), 'the refused one: one attempt, no retry over the peer').toBe(1)
+    expect(toastError.mock.calls.map(([line]) => line)).toEqual([
+      t('memory.buckets.shiftRefused', { names: t('memory.buckets.unnamedMedia', { n: 3 }), reason: t('memory.buckets.deleteRefusedReason.changed') }),
+    ])
+    expect(unsealMeta(SCOPE_ID, memoryKey, m3)?.capturedAtOverride, 'the grid learned the peer\'s time').toBe(PEER)
+    expect(w.find('#captured-at-input').exists(), 'the editor closed').toBe(false)
+    expect(w.text(), 'the shown photo reads as corrected').toContain(t('media.capturedAtCorrected'))
+
+    expect(showUndo).toHaveBeenCalledTimes(1)
+    const undo = showUndo.mock.calls[0][0]
+    expect(undo.summary).toBe(t('memory.buckets.shifted', { count: 2 }, 2))
+    toastError.mockClear()
+    undo.onUndo()
+    await flushPromises()
+    expect([storedOverride(store, memoryKey, m1), storedOverride(store, memoryKey, m2)], 'Undo: no override again').toEqual([undefined, undefined])
+    expect(writesOf(store, m3.mediaId), 'Undo leaves the refused one alone').toBe(1)
+    expect(toastError).not.toHaveBeenCalled()
+  })
+
+  /**
+   * The same rule when the peer's change reaches the grid first: a live poll patches the listed item in place (it is the
+   * lightbox's list too) between the save's question and the choice. The shift still writes from what it planned with, so the
+   * server's newer revision refuses it, instead of the shift being sealed onto the peer's tier as if it were read. Lever: run
+   * the shift from the listed items instead of the plan's reading (`ShiftRead`).
+   */
+  it('a peer\'s change patched into the grid after the plan was read is still refused, never shifted over', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { store, items } = await seedThree(memoryKey, [T1, T2, T3])
+    const m3 = items[2]
+    const PEER = Date.UTC(2023, 0, 1, 9, 0, 0)
+    const peers = b64std(v1.sealField(
+      { purpose: 'media-meta', scopeId: SCOPE_ID, mediaId: m3.mediaId }, memoryKey,
+      new TextEncoder().encode(JSON.stringify({ v: 1, capturedAt: T3, capturedAtOverride: PEER })),
+    ))
+    const write = store.api.updateMediaMeta.getMockImplementation()!
+    store.api.updateMediaMeta.mockImplementation(async (args) => {
+      // the server holds the peer's tier at revision 1: a write from any other revision is stale
+      if (args.mediaId === m3.mediaId && args.mediaMetaUpdate.metaRevision !== 1) {
+        throw { response: new Response(JSON.stringify({ code: 'stale_revision', wrappedMeta: peers, metaRevision: 1 }), { status: 409 }) }
+      }
+      return write(args)
+    })
+
+    const w = mountShift(memoryKey, items, 1, items.map((m) => m.mediaId))
+    await flushPromises()
+    await w.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
+    field(w).vm.$emit('update:modelValue', local(T2 + 72 * MIN))
+    await flushPromises()
+    await w.find('.media-lightbox-date-form').trigger('submit')
+    await flushPromises()
+    Object.assign(m3, { wrappedMeta: peers, metaRevision: 1 }) // the live poll's patch, after the plan read the selection
+    await w.find('[data-testid="capture-time-shift-all"]').trigger('click')
+    await flushPromises()
+
+    const sent = store.api.updateMediaMeta.mock.calls.filter(([a]) => a.mediaId === m3.mediaId)
+    expect(sent.map(([a]) => a.mediaMetaUpdate.metaRevision), 'written from the revision the plan read, once').toEqual([0])
+    expect(toastError.mock.calls.map(([line]) => line)).toEqual([
+      t('memory.buckets.shiftRefused', { names: t('memory.buckets.unnamedMedia', { n: 3 }), reason: t('memory.buckets.deleteRefusedReason.changed') }),
+    ])
+    expect(storedOverride(store, memoryKey, items[0]), 'control: the first shifted in the same run').toBe(T1 + 72 * MIN)
+  })
+
+  it('the offer counts the undated, and "Only this one" corrects the shown photo alone', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { store, items } = await seedThree(memoryKey, [T1, T2, undefined])
+    const w = mountShift(memoryKey, items, 1, items.map((m) => m.mediaId))
+    await flushPromises()
+    await w.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
+    field(w).vm.$emit('update:modelValue', local(T2 - 30 * MIN))
+    await flushPromises()
+    await w.find('.media-lightbox-date-form').trigger('submit')
+    await flushPromises()
+    const offer = w.find('.media-lightbox-date-form').text()
+    expect(offer).toContain(t('media.shift.all', { count: 3, offset: '−30 min' }))
+    expect(offer).toContain(t('media.shift.undated', { count: 1 }, 1))
+
+    await w.findAll('[data-testid="capture-time-shift-offer"] button').find((b) => b.text() === t('media.shift.onlyThis'))!.trigger('click')
+    await flushPromises()
+    expect(store.api.updateMediaMeta.mock.calls.map(([a]) => a.mediaId)).toEqual([items[1].mediaId])
+    expect(storedOverride(store, memoryKey, items[1])).toBe(T2 - 30 * MIN)
+    expect(showUndo, 'a single correction has no Undo bar').not.toHaveBeenCalled()
+  })
+
+  it('a shift writes no time into an undated photo, and Undo puts back an override a photo already had', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { store, items } = await seedThree(memoryKey, [T1, T2, undefined])
+    // the first photo already carries a correction: Undo must restore it, not drop it
+    const w0 = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    await w0.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
+    w0.findComponent(VeyqDateField).vm.$emit('update:modelValue', local(T1 + 5 * MIN))
+    await flushPromises()
+    await w0.find('.media-lightbox-date-form').trigger('submit')
+    await flushPromises()
+    w0.unmount()
+    Object.assign(items[0], { wrappedMeta: store.media[0].wrappedMeta ?? undefined, metaRevision: 1 })
+    store.api.updateMediaMeta.mockClear()
+
+    const w = mountShift(memoryKey, items, 1, items.map((m) => m.mediaId))
+    await flushPromises()
+    await w.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
+    field(w).vm.$emit('update:modelValue', local(T2 + 60 * MIN))
+    await flushPromises()
+    await w.find('.media-lightbox-date-form').trigger('submit')
+    await flushPromises()
+    await w.find('[data-testid="capture-time-shift-all"]').trigger('click')
+    await flushPromises()
+    expect(writesOf(store, items[2].mediaId), 'the undated photo').toBe(0)
+    expect(storedOverride(store, memoryKey, items[2])).toBeUndefined()
+    expect(storedOverride(store, memoryKey, items[0]), 'shifted from its corrected time').toBe(T1 + 65 * MIN)
+
+    showUndo.mock.calls[0][0].onUndo()
+    await flushPromises()
+    expect(storedOverride(store, memoryKey, items[0]), 'its own correction is back').toBe(T1 + 5 * MIN)
+    expect(storedOverride(store, memoryKey, items[1])).toBeUndefined()
+  })
+
+  it('"Shift capture time" opens with the editor open; a shown photo outside the selection saves alone, without asking', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { store, items } = await seedThree(memoryKey, [T1, T2, T3])
+    const opened = mountShift(memoryKey, items, 0, [items[0].mediaId, items[1].mediaId], { startEditing: true })
+    await flushPromises()
+    expect(opened.find('#captured-at-input').exists(), 'the editor is open').toBe(true)
+    opened.unmount()
+
+    const w = mountShift(memoryKey, items, 2, [items[0].mediaId, items[1].mediaId]) // the third is not selected
+    await flushPromises()
+    expect(w.find('#captured-at-input').exists(), 'control: closed without startEditing').toBe(false)
+    await w.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
+    field(w).vm.$emit('update:modelValue', local(T3 + 10 * MIN))
+    await flushPromises()
+    await w.find('.media-lightbox-date-form').trigger('submit')
+    await flushPromises()
+    expect(w.find('[data-testid="capture-time-shift-offer"]').exists()).toBe(false)
+    expect(store.api.updateMediaMeta.mock.calls.map(([a]) => a.mediaId)).toEqual([items[2].mediaId])
+  })
+  /**
+   * Opened from the organizer's ⋯ over the selection alone: the editor stays open on every photo paged to, so the member
+   * shifts through the one whose right time they know; a refused photo is named by its number in the organizer's grid,
+   * not its place in the lightbox. Levers: close the editor on paging again, or name by the lightbox's list.
+   */
+  it('over the selection alone the editor stays open while paging, and a refusal names the grid\'s number', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { store, items } = await seedThree(memoryKey, [T1, T2, T3])
+    const [, m2, m3] = items
+    const PEER = Date.UTC(2023, 0, 1, 9, 0, 0)
+    const peers = b64std(v1.sealField(
+      { purpose: 'media-meta', scopeId: SCOPE_ID, mediaId: m2.mediaId }, memoryKey,
+      new TextEncoder().encode(JSON.stringify({ v: 1, capturedAt: T2, capturedAtOverride: PEER })),
+    ))
+    const write = store.api.updateMediaMeta.getMockImplementation()!
+    let peerFirst = true
+    store.api.updateMediaMeta.mockImplementation(async (args) => {
+      if (args.mediaId === m2.mediaId && peerFirst) {
+        peerFirst = false
+        throw { response: new Response(JSON.stringify({ code: 'stale_revision', wrappedMeta: peers, metaRevision: 1 }), { status: 409 }) }
+      }
+      return write(args)
+    })
+    const selection = [m2, m3]
+    // As `mountShift`, with the organizer's grid numbers on the shift.
+    const Host = defineComponent({
+      setup() {
+        const props = memberProps(memoryKey)
+        const { run } = useCaptureTimeShift({
+          door: () => props.mediaMeta, scopeId: () => SCOPE_ID, memoryKey: () => memoryKey, node: () => props.memoryNode,
+          metaOf: props.metaResolver, onUpdated: () => {},
+        })
+        return () => h(MediaLightbox, {
+          memoryKey, items: selection, startIndex: 0, memoryName: 'Rom 2026', ...props, startEditing: true,
+          captureTimeShift: { selected: new Set(selection.map((m) => m.mediaId)), run, numbers: { [m2.mediaId]: 5, [m3.mediaId]: 7 } },
+        })
+      },
+    })
+    const box = mount(Host, { global: { plugins: [realI18n()] } })
+    await flushPromises()
+    expect(box.find('#captured-at-input').exists(), 'open on the first').toBe(true)
+    await box.find('.lightbox-nav-next').trigger('click')
+    await flushPromises()
+    expect(box.find('#captured-at-input').exists(), 'still open on the photo paged to').toBe(true)
+    expect(new Date(box.findComponent(VeyqDateField).props('modelValue') as string).getTime(), 'with that photo\'s time')
+      .toBe(Math.floor(T3 / MIN) * MIN)
+    box.findComponent(VeyqDateField).vm.$emit('update:modelValue', local(Math.floor(T3 / MIN) * MIN + 30 * MIN))
+    await flushPromises()
+    await box.find('.media-lightbox-date-form').trigger('submit')
+    await flushPromises()
+    await box.find('[data-testid="capture-time-shift-all"]').trigger('click')
+    await flushPromises()
+    expect(storedOverride(store, memoryKey, m3), 'the photo shifted through').toBe(T3 + 30 * MIN)
+    expect(toastError.mock.calls.map(([line]) => line)).toEqual([
+      t('memory.buckets.shiftRefused', { names: t('memory.buckets.unnamedMedia', { n: 5 }), reason: t('memory.buckets.deleteRefusedReason.changed') }),
+    ])
+    box.unmount()
   })
 })

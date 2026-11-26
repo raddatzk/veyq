@@ -10,7 +10,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNotEquals
 
 /**
- * The words' form (inbox #1341, ADR 0136 § The words' form for JavaScript): `Msg` is a class of one getter per word, not an
+ * The words' form (inbox #1341, ADR 0161 § The words' form for JavaScript): `Msg` is a class of one getter per word, not an
  * enum, so the JavaScript link drops every word nothing reads; what the apps read of the enum it was stays — a word is equal
  * to itself read again, its name, the catalog's order, and on the wire the enum by its name the desktops' types are.
  */

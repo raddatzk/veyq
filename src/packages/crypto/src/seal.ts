@@ -94,6 +94,11 @@ export const SEAL_PURPOSES = {
   // server cannot serve one contact's entry in another's slot.
   'identity-pin': [['pinId', 'digest']],
   'device-register': [['revision', 'uint']],
+  // The account's kit record (ADR 0157 decision 3): the layout of the last Emergency Kit it made, as the compact JSON
+  // `{"layout":n}`, under the Master Key. Purpose only, as `master-key`: the Master Key is the account's alone and an
+  // account has one record, and a birth seals it before the server has given the account an id. Last writer wins, so
+  // no revision is bound either.
+  'kit-record': [],
   // Purpose only: sealed under the share's own K_share (ADR 0072 Decision 2).
   'share-key': [],
   'share-password': [],
@@ -151,6 +156,7 @@ export const VALUE_KEY_PURPOSES = [
   'member-avatar',
   'member-join-record',
   'member-verification',
+  'member-invite-label',
 ] as const
 
 /**
@@ -186,6 +192,10 @@ export const FIELD_PURPOSES = {
   // written at, so a row served at another epoch does not open (a rotation re-wraps its K_v and leaves the row, ADR
   // 0115); and the subject, so a row moved to another subject's slot does not open. Not `verification`, which is the statement inside.
   'member-verification': [['scopeId', 'id'], ['userId', 'id'], ['subjectUserId', 'id'], ['epoch', 'uint']],
+  // A link member invite's private label (ADR 0129 decision 7): the owners' name for whom the link is for, sealed under
+  // its own K_v whose wrap K_tenant holds. Bound to the invite, because the tenant key is shared by every invite: a label
+  // served beside another invite does not open there. A re-issue's new invite seals it anew.
+  'member-invite-label': [['scopeId', 'id'], ['inviteId', 'id']],
   // One revision of an Expenses entry (ADR 0108 decision 4), padded to its size class (./pad.ts): its K_parent is that
   // revision's own K_rev (`expense-entry-key`), never the Pot's key, so a re-key re-wraps K_rev and never re-seals the
   // body. It keeps the object binding though K_rev is unique to the revision (ADR 0072 Decision 2), so a body served as

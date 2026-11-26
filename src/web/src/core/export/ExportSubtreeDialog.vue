@@ -20,7 +20,7 @@ import { prepareExport, type PreparedExport, type SkippedNode } from './exportSu
 import { archiveName } from './archiveName'
 import { ExportError, MANIFEST_APP_VERSION } from './manifest'
 
-/** Why a node stays out of the download: the apps' notices' words where they say it too (ADR 0136 § The web's words). */
+/** Why a node stays out of the download: the apps' notices' words where they say it too (ADR 0161 § The web's words). */
 const SKIP_TEXT: Record<SkippedNode['reason'], string> = {
   unsupported_kind: 'words.left_out_unsupported',
   nothing_to_export: 'words.left_out_nothing',

@@ -211,7 +211,7 @@ decided — is [`docs/crosscutting/release-and-deployment.md`](../docs/crosscutt
 section keeps the commands.
 
 **A snapshot is published weekly, or when you ask for one** ([ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
-decision 5, amended 2026-11-07). Every push to `main` or `release/<major>.x` and every pull request (Dependabot's
+decision 5, amended 2026-11-07). Every push to `main` or `release/<major>.x` and every pull request (Renovate's
 included) runs **Checks** (`.github/workflows/checks.yml`) — the one pipeline per commit, every stage listed once in the
 stage map of [How veyq is tested](../site/src/content/docs/security/how-veyq-is-tested.md#where-and-when-each-stage-runs)
 — and **publishes nothing**; a push to `main` or `release/<major>.x` also **stages** the images (`build-<sha>-<arch>`,
@@ -302,8 +302,13 @@ gh workflow run publish.yml --ref main               # the tip's snapshot now, a
   the next package installs beside the old app instead of updating it — so it is a change of identity, not a rotation
   (remembered from MSIX's package identity, not measured). Each person trusts the certificate itself, once: a new one
   is a new trust step for everyone, so say so in the notes of the first release it signs.
-- **Bumping a pin is part of cutting a release** (ADR 0057 §6), Helm's included: `HELM_VERSION` and `HELM_SHA256`
-  at the top of `checks.yml` and `publish.yml` (and `release.yml`; one value, held equal), checked against the published `.sha256sum` and the GitHub release notes.
+- **Bumping a pin is no part of cutting a release** (ADR 0158 decision 7): Renovate proposes every pin's bump on
+  Saturday with what moves with it (`.github/workflows/renovate.yml`, `renovate.json5`), and what is merged by Monday is
+  in that week's snapshot. A pull request of Renovate's that stays red is read like any other. A Renovate run is green
+  even where a lookup or a branch push failed (ADR 0158 decision 2): it runs three times on Saturday morning for that,
+  and a dispatch of `renovate.yml` on `main` retries at once. Its whole log is the run's log archive (`gh api
+  repos/<owner>/<repo>/actions/runs/<id>/logs`); `gh run view --log` cuts it short. To have Renovate rebase one of its
+  pull requests, tick the box at the end of its description, then dispatch.
 
 **A release promotes a snapshot** (ADR 0091 decision 5, `.github/workflows/release.yml`). Nothing is built: the
 images every lane tested get the release's names and a second signature, from `release.yml` — the identity Verify a
@@ -312,10 +317,18 @@ settings (ADR 0096 decision 3). Never delete a published release to redo it: Git
 release, but its tag name can never be used again (GitHub's immutable-releases page, 2026-11-06; not tried here). Then,
 per release:
 
-1. **GitHub → Releases → Draft a new release.** *Choose a tag*: the snapshot's, `snapshot-<major>.<minor>` — the list
-   offers exactly the snapshots that are still promotable. The title is overwritten (`veyq <major>.<minor>`); write the
-   **notes** in your words — whatever an operator must act on goes here. **Save draft** (never *Publish*). Leave no
-   other draft lying around: the promotion releases exactly one draft and refuses when there are several.
+1. **GitHub → Releases → read the draft.** Every Publish on `main` that made a snapshot (the Monday schedule, or a
+   dispatch) also writes the draft (`publish.yml` › `release-draft`, cr-release-draft-from-publish): `veyq
+   <major>.<minor>` on `snapshot-<major>.<minor>`, its **notes** gathered from the `## Release note` section of every
+   pull request merged since the last release — **What is new**, **Fixed**, the updaters' bumps (Renovate's, and
+   Dependabot's before it) in one line under **Under the hood**, a pull request without a usable note under **Needs a note**, and **What an operator must act
+   on** (*Nothing.* unless a note says otherwise). Read it, edit what needs it (a lede line, a note to fix), **Save
+   draft** (never *Publish*). A missing note can instead be written in its pull request: **Actions → Publish → Run
+   workflow** on `main` then rewrites the untouched draft of the snapshot already made, publishing nothing. Release
+   refuses a draft that still has a **Needs a note** section. An edited draft is never overwritten: a later Publish leaves it, with a notice, until it
+   is released or deleted — so a draft from an older week waits for you rather than moving on. A fix release on
+   `release/<major>.x`, and the first release of a major, get no draft: write one on their snapshot's tag by hand.
+   Leave no other draft lying around: the promotion releases exactly one draft and refuses when there are several.
 2. **GitHub → Actions → Release → Run workflow**, on the branch the snapshot came from: `main`, or `release/<major>.x`
    for a fix of a previous major. Tick `unscheduled_major` only for an unscheduled major (ADR 0085 decision 4).
 3. **Watch the run.** `check` decides — every refusal names what it saw, and the `refused` job writes it into the
@@ -325,7 +338,7 @@ per release:
    removes `snapshot-<major>.<minor>`. `channels` moves `<major>` and, from `main`, `latest`.
 
 ```sh
-gh workflow run release.yml --ref main                  # step 2 from a terminal, after the draft is saved
+gh workflow run release.yml --ref main                  # step 2 from a terminal, once the draft reads right
 gh run watch                                            # step 3
 ```
 

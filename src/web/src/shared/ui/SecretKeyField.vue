@@ -15,6 +15,10 @@
 // once came through here too, and a field named "Secret Key" was the sign-in screen's hidden way to add a device.
 // That way in is now the sign-in card's own button (`LoginView`), shown whether or not this field is.
 //
+// **Every host greys its submit with `secretKeyReady(model)`** (`secretKeyEntry.ts`), and this field says why for every
+// key that is not ready: the block being typed, or the reason. That pair is one rule — the first person to sign in with
+// a kit typed its first line (three of nine blocks), and a grey button this field did not explain would be a dead end.
+//
 // `expectedEmail` is optional on purpose. Where the screen knows which account it is for, a kit carrying a
 // different address WARNS — it never blocks and never clears the key. The e-mail in a kit is metadata, an
 // account may have changed address, and only the wrap can judge a key; the alternative to warning here is the
@@ -29,7 +33,7 @@ import VeyqInput from './VeyqInput.vue'
 import VeyqMessage from './VeyqMessage.vue'
 import VeyqIcon from './VeyqIcon.vue'
 import { parseKit, type KitData } from '@veyq/crypto/emergencyKit'
-import { readSecretKey } from '@veyq/crypto/secretKey'
+import { SECRET_KEY_BLOCKS, secretKeyEntry } from './secretKeyEntry'
 import { importKitFromFile } from '../../features/account/emergencyKit/emergencyKit'
 import KitScanner from '../../features/account/emergencyKit/KitScanner.vue'
 
@@ -72,14 +76,11 @@ const mismatchedEmail = ref('')
 const otherServer = ref('')
 const here = typeof location !== 'undefined' ? location.host : ''
 
-// A key of the full length whose check symbols disagree was misread or mistyped, and saying so here beats the generic
-// "password or Secret Key didn't match" after a slow derivation. Anything shorter, or outside the alphabet, says
-// nothing while it is being typed; the host's submit refuses it as it refuses any key that does not open the account.
-const typo = computed(() => {
-  const read = readSecretKey(model.value ?? '')
-  if (read.ok) read.key.fill(0)
-  return !read.ok && read.problem === 'typo'
-})
+// Where the typed key stands (`secretKeyEntry.ts`). The host greys its submit with `secretKeyReady` on the same answer,
+// so every state but `ready` and `empty` is said here — the block being typed as a quiet count (the kit prints three
+// lines of three blocks, and its first line alone looks like a whole key), the rest as the reason the submit is grey.
+// A typo said here also beats the generic "password or Secret Key didn't match" after a slow derivation.
+const entry = computed(() => secretKeyEntry(model.value ?? ''))
 
 // Offered only where a camera can exist at all; a camera-less device falls back to upload or paste.
 const scanSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
@@ -177,7 +178,13 @@ watch(model, (value) => {
       </button>
     </span>
   </div>
-  <VeyqMessage v-if="typo" tone="error">{{ t('unlock.secretKeyTypo') }}</VeyqMessage>
+  <!-- Polite, not the messages' alert: it changes once per block while the person types. -->
+  <small v-if="entry.state === 'partial'" class="field-hint secret-key-progress" aria-live="polite">
+    {{ t('unlock.secretKeyProgress', { block: entry.block, total: SECRET_KEY_BLOCKS }) }}
+  </small>
+  <VeyqMessage v-if="entry.state === 'foreign'" tone="error">{{ t('unlock.secretKeyForeign') }}</VeyqMessage>
+  <VeyqMessage v-if="entry.state === 'tooLong'" tone="error">{{ t('unlock.secretKeyTooLong', { total: SECRET_KEY_BLOCKS }) }}</VeyqMessage>
+  <VeyqMessage v-if="entry.state === 'typo'" tone="error">{{ t('unlock.secretKeyTypo') }}</VeyqMessage>
   <VeyqMessage v-if="unreadable" tone="error">{{ t('unlock.kitUnreadable') }}</VeyqMessage>
   <VeyqMessage v-if="mismatchedEmail" tone="warn">
     {{ t('unlock.kitEmailMismatch', { kitEmail: mismatchedEmail, expected: expectedEmail }) }}

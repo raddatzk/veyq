@@ -109,6 +109,12 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   const thumbFailed = pipeline.failed // mediaIds whose thumbnail read failed for good: the tile's error state
   const lightboxIndex = shallowRef<number | null>(null)
   const lightboxItems = shallowRef<MediaItem[]>([]) // a snapshot of the sorted order at open time (so an in-lightbox edit can't reorder underfoot)
+  // The organizer's selection the lightbox was opened from (uc.memory.buckets: a capture-time shift reaches it), and
+  // whether it opens with the capture-time editor open. None from the gallery or a search result.
+  const lightboxSelection = shallowRef<ReadonlySet<string> | null>(null)
+  const lightboxEditing = shallowRef(false)
+  // Each medium's number in the grid it was opened from, where the list handed up is not that grid (the organizer's shift).
+  const lightboxNumbers = shallowRef<Readonly<Record<string, number>> | null>(null)
   // date sort (cr-0066): newest first by default; the order is the model's (`MemoryMedia.order`)
   const sortDir = shallowRef<'newest' | 'oldest'>('newest')
   watch(sortDir, (dir) => {
@@ -218,6 +224,9 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   /** Open the lightbox on a grid tile, snapshotting the current sorted order so an in-lightbox edit can't reorder it. */
   function openLightboxAt(index: number) {
     lightboxItems.value = sortedItems.value.slice()
+    lightboxSelection.value = null
+    lightboxEditing.value = false
+    lightboxNumbers.value = null
     lightboxIndex.value = index
   }
   /** Open the lightbox on the medium `mediaId` (a search result, ADR 0125): in the gallery's order, or - where a filter
@@ -233,9 +242,13 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     openBucketLightbox({ items: items.value, index: all })
     return true
   }
-  /** Open the lightbox on a bucket-scoped list the organizer hands up (so prev/next stays within the picked bucket). */
-  function openBucketLightbox(payload: { items: MediaItem[]; index: number }) {
+  /** Open the lightbox on a bucket-scoped list the organizer hands up (so prev/next stays within the picked bucket), with
+   *  the organizer's selection where it has one and, from its "Shift capture time", the capture-time editor open. */
+  function openBucketLightbox(payload: { items: MediaItem[]; index: number; selected?: readonly string[]; editCapturedAt?: boolean; numbers?: Readonly<Record<string, number>> }) {
     lightboxItems.value = payload.items.slice()
+    lightboxSelection.value = payload.selected?.length ? new Set(payload.selected) : null
+    lightboxEditing.value = !!payload.editCapturedAt
+    lightboxNumbers.value = payload.numbers ?? null
     lightboxIndex.value = payload.index
   }
   /** A date correction from the lightbox → the item's sealed tier patched (the object the lightbox shares), and the model
@@ -322,6 +335,9 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     sortDir,
     lightboxItems,
     lightboxIndex,
+    lightboxSelection,
+    lightboxEditing,
+    lightboxNumbers,
     openLightboxAt,
     openLightboxOn,
     openBucketLightbox,

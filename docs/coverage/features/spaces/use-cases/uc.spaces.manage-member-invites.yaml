@@ -11,12 +11,29 @@ title: Manage pending member invites (list, re-issue link, revoke)
 # (MemberInviteManagementSliceTest); the .http covers the anonymous-401 boundary/authz.
 acceptanceCriteria:
   - id: list-pending-member-invites
-    text: The tenant owner lists the tenant's pending (ACTIVE, unexpired) MEMBER invites — each an email + invite status + expiry, a link invite without an email and shown as "Link invitation" with its expiry — beside the joined-member directory. Owner-gated (a non-owner gets 403); operator-blind (only invite metadata the server already stores; never the secret). Consumed/expired invites are not listed.
+    text: The tenant owner lists the tenant's pending (ACTIVE, unexpired) MEMBER invites — each an email + invite status + expiry, a link invite without an email and shown by its label, else as "Link invitation", with its expiry — beside the joined-member directory. Owner-gated (a non-owner gets 403); operator-blind (only invite metadata the server already stores; never the secret). Consumed/expired invites are not listed.
     coverage:
       backend:
         integration: [MemberInviteLinkSliceTest.linkInvitesCoexistAndAMailedMintSupersedesNoneOfThem, MemberInviteManagementSliceTest.ownerListsPendingMemberInvitesOutsiderIs404, MemberInviteManagementSliceTest.manageOnAnUnknownTenantIs404NotFound, TenantOwnerGateTest.ordinaryMemberWhoOwnsScopesIsRefusedAtEveryOwnerGatedEndpoint, TenantOwnerGateTest.realRootScopeOwnerStillPasses]
       web:
         unit: [src/features/spaces/TenantMembersPanel.test.ts]
+  - id: a-link-invite-carries-a-private-label
+    # ADR 0129 decision 7: an optional label at mint, changeable by any owner, the row's title; sealed as a tenant value
+    # bound to the invite, re-wrapped by a rotation, dropped with the invite's key; served only in the owners' list.
+    text: >-
+      A link invite may carry a private label, set at mint or later by any owner of the tenant (`setMemberInviteLabel`)
+      and cleared the same way; the server records that owner as its last editor. The label is sealed on the owner's
+      device under a value key of its own (`member-invite-label`, bound to the tenant and the invite) whose wrap is under
+      the tenant key, so one served beside another invite does not open there and the row then reads "Link invitation".
+      It is served only in the owners' pending list, never in `listOpenInvites`; a mailed invite, an ended one and one of
+      another tenant have none to set (404 `invite_not_found`), a non-owner is 403, a label without its wrap or epoch is
+      400 and one under a replaced epoch 409 `stale_epoch`. An invite that ends drops it with its key and grant; a
+      re-issue seals the label anew for the new invite; a tenant rotation re-wraps its value key and never the label.
+    coverage:
+      backend:
+        integration: [MemberInviteLabelSliceTest.aLinkMintsLabelIsListedToTheOwnersAndNeverInTheOpenInvites, MemberInviteLabelSliceTest.aLabelWithoutItsWrapIsTheRequestsOwnFault, MemberInviteLabelSliceTest.anOwnerSetsChangesAndClearsALabelAndIsItsLastEditor, MemberInviteLabelSliceTest.aMailedAnEndedAndAnotherTenantsInviteHaveNoLabelToSet, MemberInviteLabelSliceTest.anInviteThatEndsDropsItsLabelWithItsKey, MemberInviteLabelSliceTest.aLabelWrappedUnderAReplacedEpochIsStale, MemberInviteLabelSliceTest.aRotationReWrapsTheLabelsValueKeyAndNeverTheLabel]
+      web:
+        unit: [src/features/spaces/inviteLabel.test.ts, src/features/spaces/memberInvite.test.ts, src/features/spaces/TenantMembersPanel.test.ts, src/features/spaces/InviteMemberDialog.test.ts, src/features/spaces/scopeRekey.test.ts]
   - id: reissue-mails-a-fresh-link
     # Was `reissue-invite-link` ("returning the new copyable invite link … works without any mailer"). ADR 0055 §2
     # retired that: the fresh secret goes to the invitee, not to the owner. The ordering matters and is pinned —
@@ -76,3 +93,9 @@ acceptanceCriteria:
     coverage:
       backend:
         integration: [TenantInviteMailerLogTest.neverLogsTheRawBootstrapToken]
+gaps:
+  stack: >-
+    Lane L1's tests/e2e/tests/features/account/member-invite-link.spec.ts drives `a-link-invite-carries-a-private-label`:
+    the owner types a label (a canary) into the link dialog, it is in no handed-over message, and the pending row is
+    titled by it on a fresh read of the list. Green only in local runs of the lane (the V1 heavy stage), and ADR 0040
+    admits `stack` refs only once a CI run's log shows the suite executed.

@@ -133,6 +133,7 @@ internal class PlayedRotation(val p: Primitives) {
             ScopeRekeyMember(c.userId, wrappedNameValueKey = b64(values.wrap(p.randomBytes(32), epoch.toLong(), nameCtx(c.userId), cNameKey))),
         ),
         verifications = emptyList(),
+        inviteLabels = emptyList(),
         more = false,
         icon = ScopeRekeyIcon(1, b64(values.wrap(k3, epoch.toLong(), iconCtx, iconKey))),
     )

@@ -11,23 +11,12 @@ vi.mock('../../features/spaces/scopes', () => ({
   openMyTenantIcon: vi.fn(),
 }))
 
-// `onMounted` also asks for the caller's profile, and that one was missed when the tenant list above was
-// stubbed: unmocked, every mount of this component sent a real `GET /api/account/profile` out of the suite —
-// 14 of them per run, one per test, silently, because AppSidebar catches the failure and falls back (#149).
-// The username is returned EMPTY on purpose: `personalScope('')` is `~me`, which is the hash these tests drive
-// directly, so this stub restores today's behaviour rather than changing what the suite asserts.
-vi.mock('../../features/account/profile/profile', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../features/account/profile/profile')>()),
-  getMyProfile: vi.fn(),
-}))
-
 vi.mock('../../core/blob/transport', async (orig) => ({ ...(await orig<object>()), openBlob: vi.fn() }))
 
 import AppSidebar from './AppSidebar.vue'
 import VeyqIcon from '../../shared/ui/VeyqIcon.vue'
 import { listMyTenants, listMyGroups, openMyTenantIcon, type GroupSpace } from '../../features/spaces/scopes'
 import type { CompromiseRotation } from '../../api/generated/scopes'
-import { getMyProfile } from '../../features/account/profile/profile'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { treeStore } from '../../core/node/treeStore'
 import type { TreeNode } from '../../core/node/tree'
@@ -41,7 +30,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 
 import { realI18n, t } from '../../test/i18n'
-import { memberProfile, myTenant, treeNode } from '../../test/models'
+import { myTenant, treeNode } from '../../test/models'
 
 // The overview lives in a teleporting VeyqPopover — stub it with a pass-through that always renders its
 // slot (so the tenant list is assertable) and exposes the toggle/hide the trigger calls.
@@ -79,7 +68,6 @@ beforeEach(() => {
   ])
   vi.mocked(listMyGroups).mockResolvedValue([])
   vi.mocked(openMyTenantIcon).mockResolvedValue(null)
-  vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ username: '' }))
   clearActiveSpace()
   activeSpace.tenantId = 't-1' // as if the tenant space is the active one
 })
@@ -104,6 +92,11 @@ describe('AppSidebar space list', () => {
     const wrapper = await mountAt('#~me')
     expect(wrapper.get('.sidebar-personal-link').classes()).toContain('router-link-active')
     expect(wrapper.get('.sidebar-tenant-space-link').classes()).not.toContain('router-link-active')
+  })
+
+  it('links Personal as `#~me`, never by a username (ADR 0015, amended 2026-11-18)', async () => {
+    const wrapper = await mountAt('')
+    expect(wrapper.get('.sidebar-personal-link').attributes('href')).toMatch(/#~me$/)
   })
 
   it('marks the active tenant as waiting for its current key when the caller\'s grant does not open (behind or refused)', async () => {

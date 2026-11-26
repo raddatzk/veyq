@@ -93,14 +93,21 @@ a client red names the typed line it expects to fail — and runs `pnpm run chec
 by the request's newest existing field, grepped across the whole tree, not by the operation's name:**
 `cr-instance-contact-and-provider-identification` grepped `createServerOwner` in admin-web and predicted one red; the
 dev seeder, web's e2e harness and two backend tests also build that request, and `moderationEpoch` named all of them.
+**In the backend a new REQUIRED request field is a runtime red, not a compile red:** slice tests post raw JSON, which
+compiles whatever it lacks, so every one that builds the old body answers `400` once the contract lands.
+`cr-kit-layout-record` made the rotation's `kitRecord` required and left 55 `:core` tests red through one shared
+builder (`TestRotation.json()`) until the backend phase gave it the field — found by running `./gradlew check`, which a
+contracts phase that reshapes a request therefore runs once and names its reds from.
 **A reshaped *response* is found the same way, by its fields, not by its path:** cr-statement-delivery-report nested
 `blockAccountSignIn`'s `ModerationSteps` under `steps`, and its locator — the operation's path — missed the slice test
 that read `signInBlocks[0].id` off the answer; the first full check found it. Grep the answer's fields too.
 
 **The qualifier is load-bearing: an operation on a NEW tag compiles.** A new tag generates a *new* `…Api`
 interface that no `…Resource` implements yet, and an unimplemented interface compiles — so that contracts phase
-is green on every surface but three tests of `./gradlew check`, which see a new tag the day it lands:
-`ModuleCompositionTest` (a generated API no deployed resource implements answers 404) and, for an operation marked
+is green on every surface but the tests of `./gradlew check` that see a new tag the day it lands:
+`ModuleCompositionTest` (a generated API no deployed resource implements answers 404),
+`ApiMethodIndexContractTest.theIndexDeclaresExactlyTheContractsMethodsOnEveryApiPath` (the deployed method index lacks
+the new path — `cr-kit-layout-record` got it beside the first, unpredicted) and, for an operation marked
 `x-veyq-channel: admin`, `AdminChannelPostureSweepTest` and `AdminChannelGateSliceTest` (a marked operation no resource
 implements; the gate test's interface list is by hand, and its tripwire names the new interface).
 `cr-moderators-and-the-moderation-key` predicted an all-green contracts phase from this paragraph's earlier wording and
@@ -758,6 +765,25 @@ every file a CR edits, and a file in one keeps its I/O next door. A done-when th
 evidence for a file outside its manifest records nothing about it: cr-member-invite-as-a-link's crypto commit cited
 `pnpm run mutation --force` for a link codec in `invite.ts`, which the package's manifest does not list; six hand bites
 were its only grade.
+
+**Adding is reshaping too: a new thing of a kind meets every guard and lint rule already standing on that kind.** A
+refine names them, or the implementer meets them one red at a time. `cr-kit-layout-record` met four it did not name:
+- **A shared opaque scalar behind a `$ref`.** `validate_field_visibility.is_opaque` reads the *property*, never the
+  scalar it refers to, so a bare `$ref` to `SealedKitRecord` read as plaintext (`validate_opaque_names_disjoint.py` red);
+  every `$ref` to it states `contentEncoding: base64` beside it. And `validate_rotation_shape.py`'s body-bound resolver
+  read each `$ref` by its last segment in the one spec, so an alias to `_common` resolved to itself and the guard died in
+  a `RecursionError` (it now follows the file). A refine that adds a shared scalar greps `is_opaque` and every
+  `$ref`-resolving guard in `scripts/` first.
+- **A field on a request a guard pins.** `validate_rotation_shape.py` holds `RotateAccountKeysRequest` to a fixed set of
+  required properties (ADR 0060 decision 1); the CR had planned the field optional and its contracts phase had to be
+  re-decided. A refine that adds a field to a request greps `scripts/` for the schema's name.
+- **A new column of ciphertext.** `validate_node_rekey_arity.py` wants every sealed column either rewritten by a node
+  re-key or a named EXCLUSION with the key it is under, beside `validate_account_erasure_arity.py`'s demand that the
+  account erasure deletes the row. A refine that adds a sealed column names both guards, and its key for the
+  first one's EXCLUSIONS.
+- **A new door into Settings.** A shell notice that links into Settings meets the lint rule `veyq/one-settings-door`
+  (`src/web/eslint.config.js`): one more `ignores` entry with its reason there. A refine that adds UI reads the
+  `veyq/` rules of that file for the kind of component it adds.
 
 ### A move re-points its readers first, on the layout it is about to leave
 

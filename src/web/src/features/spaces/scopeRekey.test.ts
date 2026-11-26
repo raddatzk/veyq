@@ -25,6 +25,7 @@ import { memberNameContext, openMemberName, sealName as sealMemberName } from '.
 import { memberAvatarContext, openMemberAvatar, sealAvatar } from '../account/profile/memberAvatar'
 import { groupNameContext, openGroupNameWith, sealGroupName } from './inviteName'
 import { iconContext, openIcon, sealIcon } from './spaceIcon'
+import { openInviteLabel, sealInviteLabel } from './inviteLabel'
 import { openValue, openValueKey, sealValue } from './valueKey'
 import { SCOPE_STAGE_BATCH, resealingScopes, stageScopeLevelRekey } from './scopeRekey'
 import type { ScopeKey } from './epochs'
@@ -78,8 +79,12 @@ const name = sealMemberName(OLD, memberAddress, { firstName: 'Ada', lastName: 'L
 const avatar = sealAvatar(OLD, memberAddress, iconBytes)
 const joinRecord = sealValue(OLD, invite.joinRecordContext(joinAddress), (k) => invite.sealJoinRecord(k, joinAddress, record))
 const verified = sealValue(OLD, verification.verificationContext(slot), (k) => verification.sealVerification(k, slot, statement))
+const INVITE = '5c09e000-0000-4000-8000-0000000000c7'
+const label = sealInviteLabel(OLD, { scopeId: SCOPE, inviteId: INVITE }, 'Oma')
 /** Every value ciphertext the scope holds — none of which a stage may carry. */
-const VALUES = [groupName.sealed, icon.sealed, copy.sealedShareKey, name.sealedName, avatar.sealedAvatar, joinRecord.sealed, verified.sealed]
+const VALUES = [
+  groupName.sealed, icon.sealed, copy.sealedShareKey, name.sealedName, avatar.sealedAvatar, joinRecord.sealed, verified.sealed, label.sealedLabel,
+]
 
 /** The listing as the server serves it: each value's wrap with its address, never the value; each root entry whole. */
 function served(): ScopeRekeyParts {
@@ -94,6 +99,7 @@ function served(): ScopeRekeyParts {
       wrappedJoinRecordValueKey: joinRecord.wrapped,
     }],
     verifications: [{ verifierUserId: MEMBER, subjectUserId: SUBJECT, epoch: OLD.epoch, wrappedValueKey: verified.wrapped }],
+    inviteLabels: [{ inviteId: INVITE, wrappedValueKey: label.wrappedLabelValueKey }],
     more: false,
     cursor: 'c1',
   }
@@ -191,6 +197,14 @@ describe('stageScopeLevelRekey — every value key re-wrapped under the new key,
     expect(openValue(NEW, verification.verificationContext(slot), v.wrappedValueKey, (k) =>
       verification.openVerification(k, slot, fromB64std(verified.sealed)))).toEqual(statement)
     expect(v.replacedValueKey).toBe(verified.wrapped)
+
+    // an open link invite's label key, beside the wrap it replaces; the label itself unchanged (ADR 0129 decision 7)
+    const [l] = s.inviteLabels!
+    const labelAt = { scopeId: SCOPE, inviteId: INVITE }
+    expect(l.inviteId).toBe(INVITE)
+    expect(openInviteLabel(NEW, labelAt, label.sealedLabel, l.wrappedValueKey)).toBe('Oma')
+    expect(openInviteLabel(OLD, labelAt, label.sealedLabel, l.wrappedValueKey)).toBeNull()
+    expect(l.replacedValueKey).toBe(label.wrappedLabelValueKey)
   })
 
   it('carries no value: not one ciphertext the scope holds is in any stage, so every value stays byte-identical', async () => {
@@ -228,6 +242,7 @@ describe('stageScopeLevelRekey — every value key re-wrapped under the new key,
     many.rootNodes = []
     many.shares = []
     many.verifications = []
+    many.inviteLabels = []
     const member = many.members[0]
     many.members = Array.from({ length: SCOPE_STAGE_BATCH }, () => ({ ...member, wrappedAvatarValueKey: null, wrappedJoinRecordValueKey: null }))
     many.more = true
@@ -343,7 +358,7 @@ describe('stageScopeLevelRekey — every value key re-wrapped under the new key,
     fakeApi(rekeyApi, {
       listScopeRekeyParts: vi.fn<RekeyApi['listScopeRekeyParts']>(async () => {
         during = resealingScopes.has(SCOPE)
-        return { ...served(), groupName: null, icon: null, rootNodes: [], shares: [], members: [], verifications: [] }
+        return { ...served(), groupName: null, icon: null, rootNodes: [], shares: [], members: [], verifications: [], inviteLabels: [] }
       }),
       stageScopeRekey: vi.fn<RekeyApi['stageScopeRekey']>(async () => {}),
     })

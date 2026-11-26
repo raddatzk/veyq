@@ -19,10 +19,15 @@ acceptanceCriteria:
       backend: { integration: [MediaSliceTest.derivativesRoundTripWithOwnWraps] }
       web: { unit: [src/features/memories/media.test.ts, src/features/memories/components/MemoryDetail.test.ts] }
   - id: lightbox-preview
-    text: Opening an item shows its preview (not the multi-MB original) full-view, with prev/next paging the grid order.
+    text: >
+      Opening an item shows its preview (not the multi-MB original) full-view, with prev/next paging the grid order and
+      going round at its ends (past the last the first, before the first the last, the arrow keys alike; a single item
+      pages nowhere; removing the shown last item shows the first). On a touch screen a sideways swipe on the stage pages
+      the same way - left the next, right the previous - except for a mouse, a second finger, a zoomed photo and a
+      playing video (#863).
     coverage:
       backend: { integration: [MediaSliceTest.derivativesRoundTripWithOwnWraps] }
-      web: { unit: [src/features/memories/media.test.ts, src/features/memories/components/MediaLightbox.test.ts] }
+      web: { unit: [src/features/memories/media.test.ts, src/features/memories/components/MediaLightbox.test.ts, src/shared/ui/useSwipe.test.ts] }
   - id: lightbox-zoom
     text: >
       A photo in the lightbox zooms - double-click / double-tap toggles 1x / 2x at the pointer, a two-pointer pinch and
@@ -45,10 +50,13 @@ acceptanceCriteria:
   - id: lightbox-slideshow
     text: >
       A play / pause control in the lightbox advances every 5 s through the grid order, shows a video's poster for one
-      interval and never plays it, waits for a preview still loading, and stops on the last item; any key, pointer or
+      interval and never plays it, waits for a preview still loading, and goes round past the last item; any key, pointer or
       wheel in the lightbox, a hidden tab and a dialog over it pause it, the toggle's own press excepted; the state is
       announced (aria-live). One preview is fetched ahead and dropped when it is not shown. While it runs no EXIF read and
-      no place-name backfill happen; pausing on an item runs both (cr-lightbox-zoom-slideshow).
+      no place-name backfill happen; pausing on an item runs both (cr-lightbox-zoom-slideshow). From three items on a
+      shuffle toggle runs it in shuffled rounds - every item once per round, the next round never opening with the item
+      the last ended on - while paging by hand keeps the grid order; the round's next item is read ahead, an item removed
+      meanwhile skipped, and pressing the toggle does not pause it (#862).
     coverage:
       web:
         unit:

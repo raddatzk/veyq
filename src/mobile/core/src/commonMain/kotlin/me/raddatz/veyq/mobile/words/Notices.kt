@@ -25,7 +25,7 @@ import me.raddatz.veyq.mobile.session.ShareLinkChanges
 import me.raddatz.veyq.mobile.session.ShareLinks
 
 /**
- * What a screen says, as the catalog's key and its arguments (ADR 0136 decisions 1 and 3): each platform renders it in
+ * What a screen says, as the catalog's key and its arguments (ADR 0161 decisions 1 and 3): each platform renders it in
  * the person's language. An argument is a `String`, an `Int`, a [Bytes], a [Moment] or an [Amount] (each written by
  * [Shown] in the app's language, [Shown.args]), another [Notice] (a word inside the sentence) or a [Joined] list of those.
  *
@@ -289,7 +289,7 @@ object Notices {
     /** The undo of a trash did not bring [name] back. */
     fun trashUndoFailed(name: String) = Notice(Msg.TRASH_UNDO_FAILED, name)
 
-    /** Why a move did not go through (the web says these words too: its `MOVE_REFUSAL_TEXT`, ADR 0136 § The web's words). */
+    /** Why a move did not go through (the web says these words too: its `MOVE_REFUSAL_TEXT`, ADR 0161 § The web's words). */
     fun moveRefused(outcome: NodeMove.Outcome): Notice? = when (outcome) {
         NodeMove.Outcome.MOVED -> null
         NodeMove.Outcome.NAME_TAKEN -> Notice(Msg.MOVE_REFUSED_SLUG_TAKEN)

@@ -25,7 +25,7 @@
 A cover is **one uploaded image plus a crop**, deliberately chosen — **there is no auto-cover** (a cover never appears
 from nothing; unset ⇒ a placeholder shows, like a location is never auto-created). The image is the node's own **`COVER`
 attachment**, with **no `veyq_media` row** (it never appears in the gallery): a JPEG derived on the device at the PREVIEW
-tier's spec (long edge 2048, quality 0.85), sealed under a `K_blob` wrapped by `K_node`. Where the picked file is the
+tier's spec (long edge 2048, quality 0.85) - an SVG drawn at that edge and stored as a WebP ([uc.platform.node-cover](../../platform/use-cases/uc.platform.node-cover.md)), sealed under a `K_blob` wrapped by `K_node`. Where the picked file is the
 original of a photo the Memory's gallery already holds (same sealed size, same SHA-256 in its `blob-meta`), the attachment
 is a **second blob row on that photo's PREVIEW object** — the same picture at the same spec, nothing uploaded; the stored
 object goes only with the last row naming it, so deleting the photo keeps the cover, and the reverse.
@@ -39,7 +39,7 @@ offsets it.
 ## Main flow
 
 1. The header's **Cover** action (or the cover tile) opens core's dialog — **"Choose an image"** (an
-   `<input type=file accept=image/*>`), or the current cover pre-loaded to re-frame. **Remove cover** is a button of the
+   `<input type=file accept=image/*,.heic,.heif>`), or the current cover pre-loaded to re-frame. **Remove cover** is a button of the
    same dialog, offered where a cover exists. The gallery offers no way in.
 2. In the editor a **16:9 crop viewport** (filling the dialog width) shows the source — an **uploaded image** or the
    **current cover re-framed**; the user **drag-pans** and **zooms** (1–3×) to frame it. Save normalizes the pan/zoom back

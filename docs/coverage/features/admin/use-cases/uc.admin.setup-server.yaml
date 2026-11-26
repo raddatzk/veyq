@@ -31,8 +31,8 @@ acceptanceCriteria:
       backend: { unit: [SetupRequestSanitizationTest.trimsNameFields] }
   - id: setup-asks-for-no-operator-value
     text: >-
-      Setup asks for no operating mode and no operator value, and sets no capability switch: every value the Server Owner
-      may publish is optional and set later in admin-web. The setup step shows, as information and not as a choice,
+      Setup asks for no operating mode and no operator value, and sets no capability switch but the applications the
+      Server Owner left out (below): every value the Server Owner may publish is optional and set later in admin-web. The setup step shows, as information and not as a choice,
       which values an operator may owe and that this is their own assessment.
     coverage:
       backend:
@@ -42,6 +42,29 @@ acceptanceCriteria:
         reason: >-
           The setup slice proves the owner is created with no operator row and no switch row written. The step's
           information is admin-web's (`src/views/SetupView.test.ts`), waiting under the use-case gap.
+  - id: setup-reads-the-applications
+    text: >-
+      Before the post, setup reads the register's applications (`GET /api/setup/applications`) in catalog order, each
+      with its title and purpose in EN and DE and no whenOff, before sign-in and on the admin channel only (the public
+      port answers 404); once setup is complete the read answers 409 setup_already_complete.
+    coverage:
+      backend:
+        integration: [SetupServerSliceTest.theApplicationsAreReadOnTheAdminChannelOnlyWhileSetupIsOpen]
+  - id: applications-left-out-are-switched-off
+    text: >-
+      The applications named in `applicationsOff` are switched off for the instance in the owner's transaction — the
+      console's own switch row — and are gone from `GET /api/setup`'s manifest at once, while an application not left
+      out stays in it; absent or empty, no switch is written.
+    coverage:
+      backend:
+        integration: [SetupServerSliceTest.theApplicationsLeftOutAreSwitchedOffWithTheOwner, SetupServerSliceTest.createsOwner]
+  - id: an-invalid-application-stores-nothing
+    text: >-
+      An id in `applicationsOff` that is no application of the register (an entry below one, a core entry, an unknown
+      id) or one named twice answers 400 invalid_request and stores nothing: no owner, no switch, setup still open.
+    coverage:
+      backend:
+        integration: [SetupServerSliceTest.anApplicationsOffThatNamesNoApplicationOrOneTwiceStoresNothing]
 gaps:
   admin-web: >-
     Implemented (cr-0002) and, since cr-admin-web-extraction (ADR 0065), implemented HERE rather than in `web`:
@@ -51,9 +74,11 @@ gaps:
     (`checks.yml` → `frontend` → "Run admin surface checks") has never executed, so ADR 0040 admits it nowhere — a
     declared run is enough only on a job a run has already executed; every admin use-case holds its admin-web
     suites here for that one reason. On the first run whose log shows admin-web's suites executed, the suite
-    goes under `create-owner-and-complete` alone: it pins that the surface issues a valid Model-B request
+    goes under `create-owner-and-complete`: it pins that the surface issues a valid Model-B request
     (standard-base64 fields, both wraps with their kdfParams, never the raw password), while the 201 stays the
-    backend ref's sentence. It is deliberately NOT a ref for `reject-non-base64-key`: that the client never
+    backend ref's sentence; and `src/views/SetupView.test.ts`, which pins the question step (every application ticked
+    with the served words, what is unticked posted as `applicationsOff`, no continuing with none ticked), goes under
+    `setup-reads-the-applications` and `applications-left-out-are-switched-off`. It is deliberately NOT a ref for `reject-non-base64-key`: that the client never
     emits non-base64 is a different sentence from the server refusing it.
   web: >-
     No web part since ADR 0065 moved first-run Server-Owner registration to `admin-web` (the gap above). Web's

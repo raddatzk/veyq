@@ -2,7 +2,7 @@
 //! and arguments through [words::say], a `Piece` piece by piece, a line's pieces joined by the core's separator. Every
 //! size, day, moment, amount and length arrives as the core's text (ADR 0154 decision 5) and a notice shown on its own
 //! lives as its kind says, by the core's lifetimes (decision 4: [toast]); nothing here formats a value or holds a
-//! duration. Nothing here decides what is said; that is the core's (ADR 0136 decision 1). The same as Android's
+//! duration. Nothing here decides what is said; that is the core's (ADR 0161 decision 1). The same as Android's
 //! `NoticeText.kt` and Apple's `say(notice)`.
 use std::ffi::{CStr, c_char};
 use std::sync::OnceLock;

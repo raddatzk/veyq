@@ -33,6 +33,27 @@ Any member of the space may tidy any person's group, not only their own:
 3. A sub-bucket has **Rename** and **Delete** beside the group picker; a person's main group has neither. Deleting a
    sub-bucket moves its photos back to that person's main group; nothing is deleted.
 
+## Fix the time of several photos at once
+
+A camera whose clock was wrong, say one still on another time zone, is wrong by the same amount on every photo it
+took. You fix one of them, and the others follow:
+
+1. In the **Contributions** tab, select the photos (the box in each photo's corner, or **Select all**).
+2. Open one of them whose right time you know, choose **Edit capture time** in its **Details** and set the time it was
+   really taken. Or choose **Shift capture time**, the clock above the photos: it shows only the selected photos, with the
+   time ready to edit; page to the one whose right time you know.
+3. Choose **Save**. Because the photo is one of several selected, veyq asks: **Only this one**, or **All 3, shifted by
+   +1 h 12 min** — every selected photo moves by the amount you just moved this one.
+
+- A photo that has no capture time at all stays as it is; veyq says how many there are.
+- If someone else changed one of the photos' times in the meantime, that photo keeps their time, and a message names it.
+- **Undo** in the message that follows puts every photo's time back as it was.
+- A corrected photo shows at the end of the Contributions tab for now; the **Gallery** shows the photos in their new
+  order straight away.
+
+The new times are worked out and locked on your device, one photo at a time. The server stores them as it stores any
+correction and never learns by how much they moved.
+
 ## In the app
 
 In the veyq [app](/getting-started/install-the-app/) **Contributions** is the fourth choice beside **Photos**, **Music**

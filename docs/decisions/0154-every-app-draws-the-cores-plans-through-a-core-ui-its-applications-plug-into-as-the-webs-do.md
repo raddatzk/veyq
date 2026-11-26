@@ -11,14 +11,14 @@
 
 ## Context
 
-[ADR 0136](0136-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) put every rule in the Kotlin
+[ADR 0161](0161-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md) put every rule in the Kotlin
 core and left each platform its drawing. The owner's goal (2026-11-20): *the core provides all functionality, the apps
 only lay a native UI over it; every app has the same words and fundamentally the same UI structure* — the same places,
 order, sections, actions and flows; a control's look follows each platform's guidelines (a Mac sheet where iOS shows an
 alert is the same flow). And: *in every app a core of UI that the applications hang onto, so they all work alike and
 look alike — exactly as in the web.*
 
-An audit of the four apps on 2026-11-20 (measured at `a75188eb8`; the commands are the CRs' locators) found ADR 0136
+An audit of the four apps on 2026-11-20 (measured at `a75188eb8`; the commands are the CRs' locators) found ADR 0161
 held for the screens' models but not around them:
 
 - **Gates re-decided in a platform.** The desktops judge a drop target with their own gate instead of `AddHere.shown`
@@ -99,7 +99,7 @@ held for the screens' models but not around them:
 
 ## Consequences
 
-- ADR 0136 decision 1's line is drawn sharper: "which notice an outcome raises" now includes its lifetime, and "what it
+- ADR 0161 decision 1's line is drawn sharper: "which notice an outcome raises" now includes its lifetime, and "what it
   shows" includes its structure and its text's form. Its Status stands; this ADR extends it.
 - Each platform moves its files once (decision 3); the move changes no behaviour and lands before the structure work,
   so each plan is drawn once in the core UI rather than per page.
@@ -745,7 +745,7 @@ held for the screens' models but not around them:
   findings were all passed screens), and a pass sees one platform at a time.
 - **The core hands a view tree (server-driven UI).** One structure by construction, but every control, gesture and
   guideline (ADR 0123 decision 9) lost to a generic renderer — a fifth UI toolkit in effect.
-- **A shared UI toolkit (Compose Multiplatform).** Rejected by the owner in ADR 0136's alternatives; nothing new.
+- **A shared UI toolkit (Compose Multiplatform).** Rejected by the owner in ADR 0161's alternatives; nothing new.
 - **Vectors only, each platform formatting with its own formatter.** Four implementations held to one table; the
   locale data of four ICU versions differs (Windows' sizes already do), so a vector would hold one platform's output
   and fail another's for reasons no one chose. One core implementation held to the web's vectors is one source.

@@ -9,7 +9,7 @@
 # version: validate_image_pins.py): the core's `jvmToolchain(21)` binds only its JVM compilations, and only
 # `:core:jsPackage` runs — no JVM compile, no Android SDK, no Kotlin/Native and none of Kotlin's own Node, Yarn or npm
 # (src/mobile/build.gradle.kts refuses a build that reaches one). Python runs the core's two generators (theme, words).
-FROM eclipse-temurin:25-jdk-jammy@sha256:e4f029273ed9e4444697df30bb6098dbe51477291598aebc54dd0b48d95d6ae7 AS core-js-build
+FROM eclipse-temurin:25-jdk-jammy@sha256:43d6f1775a0660b561c1c42edfdf8538a89672a040961acb3730c3ccc53c53de AS core-js-build
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 \
     && rm -rf /var/lib/apt/lists/*
@@ -27,7 +27,7 @@ RUN ./gradlew --no-daemon --console=plain -q :core:jsPackage
 
 # --- web -------------------------------------------------------------------------------------------------
 # Was `frontend/` — the surface is `src/web/` since the greenfield reset.
-FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS frontend-build
+FROM node:26-bookworm-slim@sha256:0042e17d232a87a2cd485be1da7900fca4d10a4ad11b29e9285da1d2e54798c9 AS frontend-build
 # The install is a WORKSPACE install since cr-admin-web-extraction (ADR 0065): the lockfile lives at the repo
 # root and `src/web/` resolves `@veyq/crypto` through it, so the stage builds from /repo with src/web/ as a
 # workspace rather than treating it as a standalone project. The image mirrors the checkout under /repo (ADR 0106
@@ -43,7 +43,7 @@ RUN apt-get update \
 # pnpm itself, at exactly the version the root package.json pins in `packageManager` — the one npm install this image
 # runs (scripts/validate_pnpm_installs_gated.py holds the two equal). A layer of its own, above every COPY, so only a
 # pnpm bump rebuilds it.
-RUN npm install -g pnpm@12.16.1
+RUN npm install -g pnpm@12.22.0
 # The specs must land BEFORE the install: src/web/package.json has `"prepare": "pnpm run generate:api"`, which pnpm
 # runs as part of the install, and generate:api reads `../../contracts/api/*.openapi.yaml` relative to src/web/.
 # (Measured the hard way, under npm — with this COPY below the install, it fails with "spec file is not found".)
@@ -77,12 +77,14 @@ COPY VERSION /repo/VERSION
 # its sibling for ADR 0069: the policy file exists and index.html has no CSP <meta> — the two things the
 # backend's app shell refuses to boot without, caught here rather than at a self-hoster's first start.
 # verify:license-sources holds that the bundle's licence file names each package's source (MPL-2.0 §3.2), which the
-# runtime stage copies out of this dist.
-RUN pnpm run build && pnpm run verify:no-backdoor && pnpm run verify:csp && pnpm run verify:license-sources
+# runtime stage copies out of this dist. verify:boot-watchdog holds that the start watchdog shipped import-free and
+# is loaded async by index.html (ADR 0136 decision 2): an image without it starts blank again where a start hangs.
+RUN pnpm run build && pnpm run verify:no-backdoor && pnpm run verify:csp && pnpm run verify:license-sources \
+    && pnpm run verify:boot-watchdog
 
 # --- backend (JVM) ---------------------------------------------------------------------------------------
 # The JDK is the backend's one Java major (gradle/libs.versions.toml's `java`, ADR 0119): Gradle's toolchain finds it here.
-FROM eclipse-temurin:25-jdk-jammy@sha256:e4f029273ed9e4444697df30bb6098dbe51477291598aebc54dd0b48d95d6ae7 AS backend-build-base
+FROM eclipse-temurin:25-jdk-jammy@sha256:43d6f1775a0660b561c1c42edfdf8538a89672a040961acb3730c3ccc53c53de AS backend-build-base
 WORKDIR /repo/src/backend
 # gradle.properties (build-JVM heap) is not an optional extra, and neither is :core's pitest.scope.json:
 # core/build.gradle.kts parses the PIT manifest at CONFIGURATION time, so even `gradlew help` dies without it. Both
@@ -139,8 +141,8 @@ RUN ./gradlew --no-daemon quarkusBuild -x test
 # Google's distroless project packages from Adoptium's builds — and nothing else: no shell, no package manager, no
 # coreutils, no curl, no tar. `nonroot` is the variant whose default user is not root; the stage below sets its own
 # anyway. Pinned by the multi-arch index digest (amd64 + arm64, validate_image_pins.py's limits say how it was
-# checked); Dependabot's `docker` ecosystem bumps the digest of the `nonroot` tag.
-FROM gcr.io/distroless/java25-debian13:nonroot@sha256:8ac5525549d14b8ddd34562f9fc8e6ba4840c995363a1507b17cadf8bb7ab57e AS distroless-java
+# checked); Renovate's `dockerfile` manager bumps the digest of the `nonroot` tag.
+FROM gcr.io/distroless/java25-debian13:nonroot@sha256:4618e7a1a1f5177222985347e1ffd503076f6be5837b89c8fd02800bd8551bde AS distroless-java
 
 # Everything the runtime needs a shell for happens here, on the build JDK, and travels into the runtime as files: a
 # distroless stage can run nothing but `java`, so it has no `RUN`.

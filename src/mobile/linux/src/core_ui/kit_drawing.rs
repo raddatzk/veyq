@@ -1,4 +1,4 @@
-//! An Emergency Kit file drawn for the core's read (ADR 0136 decision 1: the platform draws, the core decides; ADR 0137
+//! An Emergency Kit file drawn for the core's read (ADR 0161 decision 1: the platform draws, the core decides; ADR 0137
 //! decision 3, a drawn page's pixels riding in beside the host's reply): the core reads the file the open dialog picked by
 //! its path, decides what needs drawing (`KitImport`: a kit found in the file's bytes needs none) and asks this host —
 //! `Pdf.Pages`, `Pdf.Page`, `Picture.Luma` — on its own thread, answered at once from there. A PDF is drawn by poppler-glib

@@ -1,0 +1,335 @@
+// The version policy of the self-hosted Renovate (ADR 0158 decision 5). The repository's
+// config, read by `.github/workflows/renovate.yml`, whose environment sets only the operator's part (which repository,
+// no onboarding, the commands a task may run). Nothing here is specific to GitHub, so the same file runs on another forge.
+//
+// The rules were ported from Dependabot's config (deleted when Renovate took over, ADR 0158; its history holds the comments with
+// each measured reason), and each rule here says its reason in its `description`. Rules are applied in order and a
+// later match wins, so the general groups come first and the exceptions after them.
+//
+// Every pin in the tree has a manager here (ADR 0158 decision 1): a built-in one, or a custom regex manager for each pin
+// no built-in one reads; `pins` in checks.yml is red on one that has none. What moves with a version is written in the
+// same pull request: by a manager, by a `postUpgradeTask` running scripts/pin_follow.py (admitted by name in
+// renovate.yml's allowed commands) where published bytes suffice, or by the Renovate follow
+// (.github/workflows/renovate-follow*.yml, scripts/renovate_follow.py) where the bumped tree must be executed — the
+// Gradle metadata, the WebP encoder, the fuzzer's lock — which never happens in Renovate's job.
+{
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+
+  // Nothing remote: a preset fetched at run time would be configuration this repository does not pin.
+  extends: [],
+
+  // `gradle-wrapper` belongs to Dependabot's `gradle` ecosystem, which bumped src/backend's wrapper (PR #48).
+  // `custom.regex` is every manager under `customManagers` below.
+  enabledManagers: [
+    "npm",
+    "gradle",
+    "gradle-wrapper",
+    "dockerfile",
+    "docker-compose",
+    "github-actions",
+    "pip_requirements",
+    "custom.regex",
+  ],
+
+  // tests/fuzz/requirements.txt is written whole by tests/fuzz/lock.py (every transitive package, pinned and hashed);
+  // its one input, Schemathesis, has a manager of its own below. Read as a requirements file, each of its packages
+  // would be bumped on its own (measured in the local dry run), so it is ignored. A manager's `managerFilePatterns`
+  // adds to its defaults and cannot leave a file out; `ignorePaths` replaces Renovate's default, hence node_modules.
+  ignorePaths: ["**/node_modules/**", "tests/fuzz/requirements.txt"],
+
+  customManagers: [
+    {
+      customType: "regex",
+      description: "Helm, the chart's checker and packager: `HELM_VERSION` in the `env:` of three workflows. Its SHA-256 follows (pin_follow.py helm).",
+      managerFilePatterns: ["/^\\.github/workflows/(checks|publish|release)\\.yml$/"],
+      matchStrings: ["HELM_VERSION: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      depNameTemplate: "helm",
+      packageNameTemplate: "helm/helm",
+      datasourceTemplate: "github-releases",
+    },
+    {
+      customType: "regex",
+      description: "Versions in the backend's catalog that no library entry references, read only by build code (the toolchain's Java, the versions `liftedAboveBom` in core's build.gradle.kts): Renovate's gradle manager extracts a [versions] entry only through a library's `version.ref` (found by scripts/pin_inventory.py).",
+      managerFilePatterns: ["/^src/backend/gradle/libs\\.versions\\.toml$/"],
+      matchStrings: [
+        "(?m)^opentelemetry = \"(?<currentValue>[^\"]+)\"$",
+      ],
+      depNameTemplate: "io.opentelemetry:opentelemetry-api",
+      datasourceTemplate: "maven",
+    },
+    {
+      customType: "regex",
+      description: "The MariaDB JDBC driver's version in the backend's catalog, lifted above the BOM by build code; see the entry above.",
+      managerFilePatterns: ["/^src/backend/gradle/libs\\.versions\\.toml$/"],
+      matchStrings: ["(?m)^mariadb-jdbc = \"(?<currentValue>[^\"]+)\"$"],
+      depNameTemplate: "org.mariadb.jdbc:mariadb-java-client",
+      datasourceTemplate: "maven",
+    },
+    {
+      customType: "regex",
+      description: "The backend toolchain's Java in the catalog: the same `java-jdk` as setup-java's, so it moves in the java major group and on LTS releases only.",
+      managerFilePatterns: ["/^src/backend/gradle/libs\\.versions\\.toml$/"],
+      matchStrings: ["(?m)^java = \"(?<currentValue>\\d+)\"$"],
+      depNameTemplate: "java-jdk",
+      datasourceTemplate: "java-version",
+    },
+    {
+      customType: "regex",
+      description: "Renovate's own version in renovate.yml, `<version>@<image digest>`. The github-actions manager reads the input but refuses the value with its digest (`invalid-value`, measured in the local dry run).",
+      managerFilePatterns: ["/^\\.github/workflows/renovate\\.yml$/"],
+      matchStrings: ["renovate-version: (?<currentValue>\\d+\\.\\d+\\.\\d+)@(?<currentDigest>sha256:[0-9a-f]{64})"],
+      depNameTemplate: "ghcr.io/renovatebot/renovate",
+      datasourceTemplate: "docker",
+    },
+    {
+      customType: "regex",
+      description: "pnpm where a job or an image installs it with npm. `packageManager` in the two package.json files is the npm manager's.",
+      managerFilePatterns: ["/^\\.github/workflows/[^/]+\\.yml$/", "/(^|/)Dockerfile$/"],
+      matchStrings: ["npm install -g pnpm@(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      depNameTemplate: "pnpm",
+      datasourceTemplate: "npm",
+    },
+    {
+      customType: "regex",
+      description: "Image pins outside a Dockerfile or a compose file: the chart's values and the image constants of the backup tool and the volume probe. Each shares its repo:tag with a pin the docker managers read, so they move in the images group.",
+      managerFilePatterns: [
+        "/^infra/kubernetes/charts/veyq/values\\.yaml$/",
+        "/^src/tools/instance_backup\\.py$/",
+        "/^scripts/measure_volume\\.py$/",
+      ],
+      matchStrings: [
+        "image: (?<depName>[a-z0-9./-]+):(?<currentValue>[A-Za-z0-9._-]+)@(?<currentDigest>sha256:[0-9a-f]{64})",
+        "_IMAGE = \"(?<depName>[a-z0-9./-]+):(?<currentValue>[A-Za-z0-9._-]+)@(?<currentDigest>sha256:[0-9a-f]{64})\"",
+      ],
+      datasourceTemplate: "docker",
+    },
+    {
+      customType: "regex",
+      description: "The OpenAPI generator the web clients run, `generator-cli.version` in their openapitools.json. The backend's Gradle dependency is the gradle manager's; the JAR's SHA-256 follows (pin_follow.py openapi-generator-jar).",
+      managerFilePatterns: ["/^src/(web|admin-web)/openapitools\\.json$/"],
+      matchStrings: ["\"version\": \"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""],
+      depNameTemplate: "org.openapitools:openapi-generator-cli",
+      datasourceTemplate: "maven",
+    },
+    {
+      customType: "regex",
+      description: "Schemathesis, the API fuzzing's one input; tests/fuzz/lock.py writes requirements.txt from it.",
+      managerFilePatterns: ["/^tests/fuzz/lock\\.py$/"],
+      matchStrings: ["SCHEMATHESIS = \"schemathesis==(?<currentValue>[^\"]+)\""],
+      depNameTemplate: "schemathesis",
+      datasourceTemplate: "pypi",
+    },
+    {
+      customType: "regex",
+      description: "The libwebp release the WebP encoder is built from (ADR 0127): a stable vX.Y.Z tag; libwebp publishes no GitHub releases.",
+      managerFilePatterns: ["/^src/web/webp-encoder/libwebp\\.pin$/"],
+      matchStrings: ["(?m)^tag (?<currentValue>v\\d+\\.\\d+\\.\\d+)$"],
+      depNameTemplate: "libwebp",
+      packageNameTemplate: "https://github.com/webmproject/libwebp",
+      datasourceTemplate: "git-tags",
+    },
+  ],
+
+  // `chore(deps): …`, as Dependabot's `commit-message.prefix: "chore"` with `include: "scope"` wrote it.
+  semanticCommits: "enabled",
+  semanticCommitType: "chore",
+  semanticCommitScope: "deps",
+
+  // A release must be this old before it is proposed: a cool-down against a hijacked release (ADR 0158 decision 5).
+  // Renovate reports the wait as the commit status `renovate/stability-days`, which is why the App may write commit
+  // statuses. `strict` opens no branch while the age is not reached. Security fixes are not held (decision 6): see
+  // `vulnerabilityAlerts` below.
+  // Kept at three days after the dry run (ADR 0158), a judgement, not a measurement: long enough that a hijacked
+  // release is usually pulled before it is proposed, short enough that a Saturday run proposes what shipped by Wednesday. Majors
+  // wait for no Dependency Dashboard approval: each is a pull request of its own (above), and a person merges it.
+  minimumReleaseAge: "3 days",
+  internalChecksFilter: "strict",
+
+  // Dependabot opened at most 5 pull requests per ecosystem and no hourly limit. Renovate's default hourly limit of 2
+  // would spread one Saturday's proposals over hours.
+  prHourlyLimit: 0,
+  prConcurrentLimit: 10,
+
+  dependencyDashboard: { enabled: true },
+
+  // A fix for a version GitHub's advisories name (Dependabot's alerts, which the App reads) opens at once, alone, not
+  // held by the cool-down: Renovate's defaults for these pull requests (44.257.9's config/options: `minimumReleaseAge:
+  // null`, `prCreation: "immediate"`, `vulnerabilityFixStrategy: "lowest"`, no group, no schedule). Dependabot's own
+  // security pull requests are switched off in the repository's settings (ADR 0158 decision 6), so one alert has one
+  // updater.
+  vulnerabilityAlerts: { enabled: true },
+
+  packageRules: [
+    // ---- groups ------------------------------------------------------------------------------------------------------
+    {
+      description: "A major never shares a pull request with minor and patch updates (owner 2026-11-07): Dependabot's first run grouped four majors with forty minors into one red PR (#4), so none of the minors could land. Majors fall through this group into one pull request each.",
+      matchManagers: ["npm"],
+      matchUpdateTypes: ["minor", "patch"],
+      groupName: "npm minor and patch",
+    },
+    {
+      description: "The docs site is its own package with its own lockfile (site/package.json says why), and has its own group, as it had its own Dependabot entry.",
+      matchManagers: ["npm"],
+      matchFileNames: ["site/**"],
+      matchUpdateTypes: ["minor", "patch"],
+      groupName: "site minor and patch",
+    },
+    {
+      description: "The backend's Gradle build, minor and patch together; a major arrives on its own.",
+      matchManagers: ["gradle", "gradle-wrapper"],
+      matchUpdateTypes: ["minor", "patch"],
+      groupName: "gradle minor and patch",
+    },
+    {
+      description: "Every image is pinned repo:tag@sha256 (ADR 0057 § 6), and one repo:tag carries one digest everywhere (scripts/validate_image_pins.py). A bump that reaches only some sites is red, so all images move in ONE pull request, majors included, wherever the pin is: a Dockerfile, a compose file, the chart, a constant.",
+      matchDatasources: ["docker"],
+      groupName: "images",
+      // Renovate would move a group's majors into a `major-` branch of their own; here they stay in the group.
+      separateMajorMinor: false,
+    },
+    {
+      description: "A digest move of an image (a re-pushed tag) carries no release time, and Docker Hub's tag pages past the tenth answer 403 (measured 2026-11-23 in the local dry run), so with the timestamp required no digest update would ever leave the cool-down. Without one, an image update is proposed at once; with one, the cool-down holds it.",
+      matchDatasources: ["docker"],
+      minimumReleaseAgeBehaviour: "timestamp-optional",
+    },
+    {
+      description: "The backend's catalog versions read by a regex manager move with the rest of the Gradle build.",
+      matchDepNames: ["io.opentelemetry:opentelemetry-api", "org.mariadb.jdbc:mariadb-java-client"],
+      matchUpdateTypes: ["minor", "patch"],
+      groupName: "gradle minor and patch",
+    },
+    {
+      description: "Every action is pinned by commit SHA with its full version as a comment (scripts/validate_action_pins.py); all of them move in one pull request.",
+      matchManagers: ["github-actions"],
+      groupName: "actions",
+      separateMajorMinor: false,
+    },
+    {
+      description: "Renovate's own image is CI tooling: it moves with the actions, not with the images veyq ships.",
+      matchDepNames: ["ghcr.io/renovatebot/renovate"],
+      groupName: "actions",
+    },
+    {
+      description: "Lane L1's browser image carries the browser @playwright/test drives, so the library and the image move as one version (scripts/validate_image_pins.py). Dependabot could not group across ecosystems, so a follow wrote the image; here both are one pull request, kept out of the npm and images groups, whose other updates it would otherwise hold back (PR #19, 2026-11-12).",
+      matchPackageNames: ["@playwright/test", "mcr.microsoft.com/playwright"],
+      groupName: "playwright",
+    },
+    {
+      description: "A Node major moves everywhere at once, when the owner decides: the build images' `node` base, `node-version` in the workflows and @types/node, whose types follow the runtime CI runs. Dependabot held @types/node's major back and left the rest to a hand-made commit; here they are one pull request of their own, so a runtime move never holds back the images or actions groups. Node's LTS needs no version rule (owner 2026-11-07: only LTS). Measured 2026-11-23 from nodejs/Release schedule.json: 23 and 25 never became LTS but are older than 26, the newest LTS, so nothing proposes them; from 27 on every major becomes LTS (27 on 2027-10-20), which Dependabot's rule, holding 27 back as odd, did not know. A new major's image is tagged months before its LTS date, so it can arrive here early; setup-node's `node` versioning waits for LTS. Removing the old rule changed no proposal in the dry run.",
+      // By dependency name: setup-node's `node-version` is looked up as the package `actions/node-versions`.
+      matchDepNames: ["node", "@types/node"],
+      matchUpdateTypes: ["major"],
+      groupName: "node major",
+      // One branch for all three: without a slug, an npm major's branch is prefixed `major-` and the others' are not.
+      groupSlug: "node-major",
+    },
+    {
+      description: "Renovate prefixes a major's group branch with `major-` whenever majors are kept apart, which would split @types/node from the rest of the node major. Kept together, @types/node is proposed only at its newest allowed version: while a Node major waits for the owner, the types' minor updates on the old line wait with it.",
+      matchDepNames: ["@types/node"],
+      separateMajorMinor: false,
+    },
+    {
+      description: "A Java major moves everywhere at once, like Node's: the backend's build image and `java-version` in the workflows.",
+      matchDepNames: ["eclipse-temurin", "java-jdk"],
+      matchUpdateTypes: ["major"],
+      groupName: "java major",
+      groupSlug: "java-major",
+    },
+    {
+      description: "Helm's three workflow pins move together.",
+      matchDepNames: ["helm"],
+      groupName: "helm",
+      // The tarball's SHA-256, read three ways and required equal, into all three workflows.
+      postUpgradeTasks: {
+        commands: ["python3 scripts/pin_follow.py helm"],
+        fileFilters: [".github/workflows/*.yml"],
+        executionMode: "branch",
+      },
+    },
+    {
+      description: "pnpm is pinned in package.json's packageManager (twice), in the jobs and in two images; scripts/validate_pnpm_installs_gated.py holds them equal, so they move as one pull request.",
+      matchDepNames: ["pnpm"],
+      groupName: "pnpm",
+    },
+    {
+      description: "The OpenAPI generator: the web clients' openapitools.json and the backend's Gradle dependency are held to one version (scripts/validate_build_input_pins.py), so they move as one pull request with the JAR's pin.",
+      matchPackageNames: ["org.openapitools:openapi-generator-cli", "org.openapitools:openapi-generator"],
+      groupName: "openapi generator",
+      // The JAR's SHA-256, checked against Maven Central's .sha1 and .md5, into scripts/openapi_generator_jar.sha256.
+      postUpgradeTasks: {
+        commands: ["python3 scripts/pin_follow.py openapi-generator-jar"],
+        fileFilters: ["scripts/openapi_generator_jar.sha256"],
+        executionMode: "branch",
+      },
+    },
+    {
+      description: "A Gradle wrapper bump moves `distributionUrl` alone: Renovate regenerates the wrapper only by running it (`gradleWrapper` in `allowedUnsafeExecutions`, which stays off — it would run the repository's Gradle in the job that holds the App's token), so `distributionSha256Sum` would keep the old distribution's (measured in 44.257.9's gradle-wrapper/artifacts.js). The task writes the new one, read from services.gradle.org's .sha256 and the zip's own hash, required equal. The wrapper JAR stays (scripts/gradle_wrapper_jar.sha256 pins it); the build's metadata is the Renovate follow's.",
+      matchManagers: ["gradle-wrapper"],
+      postUpgradeTasks: {
+        commands: ["python3 scripts/pin_follow.py gradle-distribution"],
+        fileFilters: ["**/gradle/wrapper/gradle-wrapper.properties"],
+        executionMode: "branch",
+      },
+    },
+    {
+      description: "The WebP encoder's two inputs, libwebp's tag and the Emscripten image, are one pull request of their own: either writes new encoder bytes, which the Renovate follow rebuilds with build.py --write (ADR 0127), and a slow rebuild does not hold back the images group.",
+      matchDepNames: ["libwebp", "emscripten/emsdk"],
+      groupName: "webp encoder",
+      separateMajorMinor: false,
+    },
+    {
+      description: "PyYAML's hashed wheels: a version bump rewrites the hashes to the set PyPI publishes for it.",
+      matchManagers: ["pip_requirements"],
+      matchFileNames: ["scripts/requirements-release.txt"],
+      postUpgradeTasks: {
+        commands: ["python3 scripts/pin_follow.py pypi-hashes scripts/requirements-release.txt"],
+        fileFilters: ["scripts/requirements-release.txt"],
+        executionMode: "branch",
+      },
+    },
+
+    // ---- held back ---------------------------------------------------------------------------------------------------
+    {
+      description: "typescript-eslint does not support TypeScript 7 (PR #4's CI: 'typescript-eslint does not support TS 7.0'). The site keeps the root's TypeScript major, so one major is checked repository-wide. Lifted when a typescript-eslint release declares typescript 7 in its peer range.",
+      matchPackageNames: ["typescript"],
+      // A range, not `enabled: false` on the major: Renovate's report still lists an update that a rule disabled, and
+      // `pins` in checks.yml reads that report. A range removes the version at lookup.
+      allowedVersions: "<7",
+    },
+    {
+      description: "MariaDB on its LTS line only (owner 2026-11-07): 12.3 is the LTS, the releases after it are rolling ones. 12.3's own digest moves still arrive. The next LTS is a migration step of its own, moved by hand. Applies to the compose files and to src/tools/Dockerfile, which copies the client from the server image.",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["mariadb"],
+      allowedVersions: "/^12\\.[0-3](\\.|$)/",
+    },
+    {
+      description: "Java on its LTS releases only, as every base here (owner 2026-11-07: only LTS). Oracle names every fourth release LTS since 21, so the regex lists 25, 29, 33 and 37; a release off that cadence is held, never proposed by mistake. 26, 27 and 28 are not LTS.",
+      matchPackageNames: ["eclipse-temurin", "java-jdk"],
+      allowedVersions: "/^(25|29|33|37)(\\.|-|\\+|$)/",
+    },
+    {
+      description: "The admin image on nginx's STABLE branch, the even minor (src/admin-web/Dockerfile says why). Measured 2026-11-07: nginx-unprivileged's 1.31-alpine is mainline-alpine's index, 1.30-alpine is stable-alpine's.",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["nginxinc/nginx-unprivileged"],
+      allowedVersions: "/^\\d+\\.\\d*[02468](\\.|-|$)/",
+    },
+    {
+      description: "The tools image's base follows the MariaDB image's base by hand: src/tools/Dockerfile copies the mariadb client out of mariadb:12.3, which is Ubuntu 24.04, and the C library must match. 24.04's own digest moves still arrive. Lifted with the MariaDB pin whose base moves.",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["ubuntu"],
+      allowedVersions: "/^24\\.04(\\.|$)/",
+    },
+    {
+      description: "Garage held on v2.0 until the move is done by hand (owner 2026-11-07): from v2.1 a fresh node answers the admin API 500 'Layout not ready', from v2.5 its cold /health answers 503, and v2.5 cannot be downgraded. Measured on throwaway containers 2026-11-07.",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["dxflrs/garage"],
+      allowedVersions: "/^v2\\.0\\./",
+    },
+    {
+      description: "The API fuzzer's base on Python 3.13: tests/fuzz/lock.py hashes the wheels for CPython 3.13 (`-cp313-`), so a new minor moves by hand, with lock.py's tags. 3.13's own digest and patch moves still arrive in the images group.",
+      matchDatasources: ["docker"],
+      matchPackageNames: ["python"],
+      allowedVersions: "/^3\\.13(\\.|-|$)/",
+    },
+  ],
+}
