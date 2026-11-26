@@ -399,6 +399,9 @@ const en = {
       label: 'Filter the photos of this Memory',
       placeholder: 'Day, place, name …',
       chipDay: 'Day',
+      // Who added a medium (inbox #1356): the suggestion's kind, and the chip as it reads.
+      chipAddedBy: 'Added by',
+      addedBy: 'Added by {name}',
       text: '“{text}”',
       marksMine: 'your marks',
       marksEveryone: 'everyone’s marks',
@@ -796,6 +799,8 @@ const de: typeof en = {
       label: 'Die Fotos dieser Erinnerung filtern',
       placeholder: 'Tag, Ort, Name …',
       chipDay: 'Tag',
+      chipAddedBy: 'Hinzugefügt von',
+      addedBy: 'Hinzugefügt von {name}',
       text: '„{text}“',
       marksMine: 'deine Markierungen',
       marksEveryone: 'Markierungen von allen',

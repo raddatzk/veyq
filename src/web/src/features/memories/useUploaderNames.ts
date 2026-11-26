@@ -67,5 +67,8 @@ export function useUploaderNames(ctx: UploaderNamesContext) {
   /** The uploader of `item`, or null when it is not known (no owner key, not yet read, or a session without the door). */
   const uploaderOf = (item: MediaItem): UploaderLabel | null => (item.ownerKey ? labels.value.get(item.ownerKey) ?? null : null)
 
-  return { uploaderOf, ensure }
+  /** The uploader of owner key `ownerKey` (the gallery filter's added-by chip, inbox #1356), or null when it is not known. */
+  const labelOf = (ownerKey: string): UploaderLabel | null => labels.value.get(ownerKey) ?? null
+
+  return { uploaderOf, labelOf, ensure }
 }

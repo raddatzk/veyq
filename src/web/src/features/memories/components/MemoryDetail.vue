@@ -77,7 +77,7 @@ import { searchOpenRequest, takeOpenRequest } from '../../../core/search/openReq
 import { mediaDocuments } from '../search'
 import {
   factPredicate, galleryChipKey, galleryChipLabel, galleryFacts, galleryPredicate, narrowsByFacts, suggestGalleryChips,
-  type GalleryChip, type GallerySuggestion,
+  type GalleryChip, type GalleryFacts, type GallerySuggestion,
 } from '../galleryFilter'
 import ViewModeToggle from '../../../core/node/ViewModeToggle.vue'
 import { GRID_VIEW, LIST_VIEW } from '../../../core/node/levelViews'
@@ -320,17 +320,37 @@ const factsNarrow = computed(() => can.value.filterFacts && narrowsByFacts(factC
 const galleryFilterPredicate = computed(() =>
   galleryPredicate(markFilterPredicate.value, factsNarrow.value ? factPredicate(() => facts.value, factChips.value, factText.value) : null),
 )
-const FACT_ICON: Record<GalleryChip['type'], VeyqIconName> = { day: 'calendar', year: 'calendar', place: 'map-marker', kind: 'tag' }
+const FACT_ICON: Record<GalleryChip['type'], VeyqIconName> = { day: 'calendar', year: 'calendar', place: 'map-marker', kind: 'tag', by: 'user' }
 const FACT_WORD: Record<GalleryChip['type'], string> = {
   day: 'media.filter.chipDay', year: 'shell.search.chipYear', place: 'shell.search.chipPlace', kind: 'shell.search.chipKind',
+  by: 'media.filter.chipAddedBy',
+}
+/** A chip as its tag and the empty state read it: who added it in the filter's words, any other as it reads. */
+const factChipText = (chip: GalleryChip) => (chip.type === 'by' ? t('media.filter.addedBy', { name: chip.label }) : galleryChipLabel(chip))
+/**
+ * Who added the gallery's media, by owner key, named as the Contributions tab names a primary (inbox #1356; `MemoryBuckets.vue`'s
+ * `labelFor`): a member by name, one not named (who left, the directory unread) "Member", a guest by its sealed name marked as a
+ * guest's, an unnamed one "Contribution". Read through the lightbox's uploader names (one buckets read per node), and only
+ * where more than one contributed: one contributor narrows nothing.
+ */
+function contributorNames(all: GalleryFacts): Map<string, string> {
+  const out = new Map<string, string>()
+  if (all.contributors.size < 2) return out
+  void uploaderNames.ensure()
+  for (const key of all.contributors) {
+    const known = uploaderNames.labelOf(key)
+    if (key.startsWith('share:')) out.set(key, known?.name ?? t('memory.buckets.contributor'))
+    else if (key.startsWith('user:')) out.set(key, known?.userId ? known.name : t('memory.buckets.member'))
+  }
+  return out
 }
 type FactTag = VeyqTag & { chip: GalleryChip }
 type FactOption = VeyqTagOption & { suggestion: GallerySuggestion }
-const factTags = computed<FactTag[]>(() => factChips.value.map((chip) => ({ key: galleryChipKey(chip), label: galleryChipLabel(chip), chip })))
+const factTags = computed<FactTag[]>(() => factChips.value.map((chip) => ({ key: galleryChipKey(chip), label: factChipText(chip), chip })))
 const factOptions = computed<FactOption[]>(() => {
   const all = factText.value.trim() ? facts.value : null
   if (!all) return []
-  return suggestGalleryChips(factText.value, factChips.value, all, { photo: t('memory.search.photo'), video: t('memory.search.video') })
+  return suggestGalleryChips(factText.value, factChips.value, all, { photo: t('memory.search.photo'), video: t('memory.search.video') }, contributorNames(all))
     .map((suggestion) => ({ key: `chip:${galleryChipKey(suggestion.chip)}`, label: galleryChipLabel(suggestion.chip), suggestion }))
 })
 function addFactChip(option: FactOption) {
@@ -347,7 +367,7 @@ const filterEmptyText = computed(() => {
   if (!factsNarrow.value) return markFilter.value === 'mine' ? t('media.marks.emptyMine') : t('media.marks.emptyEveryone')
   const named = [
     ...(markFilter.value === 'mine' ? [t('media.filter.marksMine')] : markFilter.value === 'everyone' ? [t('media.filter.marksEveryone')] : []),
-    ...factChips.value.map(galleryChipLabel),
+    ...factChips.value.map(factChipText),
     ...(factText.value.trim() ? [t('media.filter.text', { text: factText.value.trim() })] : []),
   ]
   return t('media.filter.empty', { filters: new Intl.ListFormat(locale.value, { type: 'conjunction' }).format(named) })

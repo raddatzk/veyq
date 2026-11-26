@@ -81,7 +81,7 @@ type BucketVM = {
 }
 type BucketRow = BucketVM & { depth: number }
 
-const rawBuckets = ref<BucketVM[]>([])
+const rawBuckets = ref<Omit<BucketVM, 'mediaCount'>[]>([]) // the count is the live one (`liveCounts` below)
 const status = ref<'idle' | 'loading' | 'ready' | 'error'>('idle')
 const activeBucketId = ref('')
 const selected = ref<Set<string>>(new Set())
@@ -125,9 +125,13 @@ function labelFor(b: BucketItem, key: Uint8Array | null, members: Map<string, st
   return members.get(b.ownerKey.slice('user:'.length)) ?? t('memory.buckets.member')
 }
 
-async function loadBuckets() {
+// The buckets a medium named while the list lacked them, each re-read for once (`liveCounts`' watch below).
+const listRequestedFor = new Set<string>()
+
+/** Read the bucket list. `quiet`: a re-read in the background keeps the grid on screen instead of the spinner. */
+async function loadBuckets(quiet = false) {
   const key = props.memoryKey
-  status.value = 'loading'
+  if (!quiet) status.value = 'loading'
   try {
     const [raw, people] = await Promise.all([
       buckets.list(props.nodeId),
@@ -142,7 +146,6 @@ async function loadBuckets() {
       parentBucketId: b.parentBucketId ?? null,
       isPrimary: b.isPrimary,
       displayName: labelFor(b, key, names, above),
-      mediaCount: b.mediaCount,
       canManage: b.ownerKey.startsWith('user:'), // your own bucket; a contributor (share:) is not yours to manage/move (yet — cr-0123)
       virtual: false,
     }))
@@ -152,7 +155,7 @@ async function loadBuckets() {
   }
 }
 
-watch(() => [props.nodeId, props.memoryKey] as const, () => { selected.value = new Set(); void loadBuckets() }, { immediate: true })
+watch(() => [props.nodeId, props.memoryKey] as const, () => { selected.value = new Set(); listRequestedFor.clear(); void loadBuckets() }, { immediate: true })
 
 // --- the virtual own-primary + the flattened hierarchy ----------------------
 
@@ -161,8 +164,28 @@ const virtualPrimaryCount = computed(() =>
   props.media.filter((m) => (!m.ownerKey || m.ownerKey.startsWith('user:')) && !m.bucketId).length,
 )
 
+// A bucket's count is read from the media the grid shows (the gallery's live list, every page), never the server's
+// `mediaCount` as the bucket list was read: that list is read on opening and on the organizer's own writes only, so
+// an upload, a move or a delete elsewhere left the picker at the count it opened with while the grid grew under it.
+const liveCounts = computed(() => {
+  const counts = new Map<string, number>()
+  for (const m of props.media) if (m.bucketId) counts.set(m.bucketId, (counts.get(m.bucketId) ?? 0) + 1)
+  return counts
+})
+
+// A medium in a bucket the list does not hold (the first upload materialized your primary, or someone made a
+// sub-bucket meanwhile): the list is read again, once per such bucket, so the medium has a bucket to show under.
+watch(liveCounts, (counts) => {
+  if (status.value !== 'ready') return
+  const known = new Set(rawBuckets.value.map((b) => b.id))
+  const unknown = [...counts.keys()].filter((id) => !known.has(id) && !listRequestedFor.has(id))
+  if (!unknown.length) return
+  for (const id of unknown) listRequestedFor.add(id)
+  void loadBuckets(true)
+})
+
 const bucketsWithSelf = computed<BucketVM[]>(() => {
-  const list = rawBuckets.value
+  const list = rawBuckets.value.map((b) => ({ ...b, mediaCount: liveCounts.value.get(b.id) ?? 0 }))
   if (list.some((b) => b.isPrimary && b.ownerKey.startsWith('user:'))) return list
   // no materialized own primary yet → synthesize a virtual one so you can create sub-buckets / upload
   return [
