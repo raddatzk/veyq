@@ -685,19 +685,25 @@ def csharp_words(words: dict, out: Path) -> None:
         if is_plural(entry) and not typed:
             conds = ["args[0] is long n"]
         arity = max(len(typed), 1 if is_plural(entry) else 0)
-        guard = f" when {' && '.join(conds)}" if conds else ""
-        dispatch.append(f"        ({cs_str(key)}, {arity}){guard} => {pascal(key)}({', '.join(names)}),")
+        test = " && ".join([f"args.Count == {arity}", *conds])
+        dispatch.append(f"            case {cs_str(key)}: {{ return {test} ? {pascal(key)}({', '.join(names)}) : null; }}")
     lines += [
         "    /// <summary>",
         "    /// <paramref name=\"key\"/>'s words with <paramref name=\"args\"/> (a core Notice's key and arguments: a",
         "    /// <c>string</c> for a <c>{n}</c> placeholder, a <c>long</c> for a <c>{n:int}</c> one); null for a key this catalog",
         "    /// does not have, or arguments of another count or kind than its placeholders.",
         "    /// </summary>",
-        "    public static string? Say(string key, IReadOnlyList<object> args) => (key, args.Count) switch",
+        "    // A switch statement over the key alone, each case its own block: a switch expression over (key, count) with a",
+        "    // guard per arm sent Roslyn's reachability check of its decision DAG past an hour at ~1,600 words (measured on",
+        "    // the Windows VM 2026-11-26, `DecisionDagBuilder.CheckOrAndAndReachability`); a string switch is a hash jump.",
+        "    public static string? Say(string key, IReadOnlyList<object> args)",
         "    {",
+        "        switch (key)",
+        "        {",
         *dispatch,
-        "        _ => null,",
-        "    };",
+        "            default: return null;",
+        "        }",
+        "    }",
         "",
         "    /// <summary>Every key of the catalog, in its order.</summary>",
         "    public static readonly IReadOnlyList<string> Keys =",
