@@ -14,10 +14,12 @@ acceptanceCriteria:
     text: >
       Opening an item shows its preview (not the multi-MB original) full-view, with prev/next paging the grid order and
       going round at its ends (past the last the first, before the first the last, the arrow keys alike; a single item
-      pages nowhere; removing the shown last item shows the first).
+      pages nowhere; removing the shown last item shows the first). On a touch screen a sideways swipe on the stage pages
+      the same way - left the next, right the previous - except for a mouse, a second finger, a zoomed photo and a
+      playing video (#863).
     coverage:
       backend: { integration: [MediaSliceTest.derivativesRoundTripWithOwnWraps] }
-      web: { unit: [src/features/memories/media.test.ts, src/features/memories/components/MediaLightbox.test.ts] }
+      web: { unit: [src/features/memories/media.test.ts, src/features/memories/components/MediaLightbox.test.ts, src/shared/ui/useSwipe.test.ts] }
   - id: lightbox-zoom
     text: >
       A photo in the lightbox zooms - double-click / double-tap toggles 1x / 2x at the pointer, a two-pointer pinch and

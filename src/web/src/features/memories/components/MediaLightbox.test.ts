@@ -1555,6 +1555,79 @@ describe('MediaLightbox — zoom (cr-lightbox-zoom-slideshow)', () => {
   })
 })
 
+// A swipe pages (inbox #863), round the ends as the buttons do: a finger on the stage of any item, never a mouse, never
+// while a photo is zoomed (a drag pans there). The gesture's rules are `shared/ui/useSwipe.test.ts`'s; this is the wiring.
+describe('MediaLightbox — swipe (#863)', () => {
+  const position = (w: ReturnType<typeof mountLightbox>) => w.find('.media-lightbox-title small').text()
+  const shown = (w: ReturnType<typeof mountLightbox>) => w.find('.media-lightbox-stage img')
+  const scaleOf = (w: ReturnType<typeof mountLightbox>) => Number(/scale\(([\d.]+)\)/.exec(shown(w).attributes('style') ?? '')?.[1] ?? 1)
+  /** A one-finger travel across the stage from x 400 by `dx`. */
+  async function swipe(w: ReturnType<typeof mountLightbox>, dx: number, pointerType = 'touch') {
+    const stage = w.find('.media-lightbox-stage').element
+    const at = (type: string, x: number) =>
+      stage.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 7, pointerType, button: 0, clientX: x, clientY: 300 }))
+    at('pointerdown', 400)
+    at('pointermove', 400 + dx / 2)
+    at('pointerup', 400 + dx)
+    await flushPromises()
+  }
+
+  it('left brings the next, right the previous, round the ends', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedImages(memoryKey, 3)
+    const w = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    await swipe(w, -150)
+    expect(position(w)).toBe(t('media.itemPosition', { index: 2, count: 3 }))
+    await swipe(w, 150)
+    expect(position(w)).toBe(t('media.itemPosition', { index: 1, count: 3 }))
+    await swipe(w, 150)
+    expect(position(w), 'right on the first goes round to the last').toBe(t('media.itemPosition', { index: 3, count: 3 }))
+    await swipe(w, -150)
+    expect(position(w), 'left on the last goes round to the first').toBe(t('media.itemPosition', { index: 1, count: 3 }))
+    w.unmount()
+  })
+
+  it('a short travel and a mouse drag page nothing', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedImages(memoryKey, 3)
+    const w = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    await swipe(w, -20)
+    await swipe(w, -300, 'mouse')
+    expect(position(w)).toBe(t('media.itemPosition', { index: 1, count: 3 }))
+    w.unmount()
+  })
+
+  it('pages nothing while the photo is zoomed - the drag pans - and pages again once it is back at 1x', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedImages(memoryKey, 3)
+    const w = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '+' }))
+    await flushPromises()
+    expect(scaleOf(w), 'control: zoomed').toBe(1.5)
+    await swipe(w, -150)
+    expect(position(w)).toBe(t('media.itemPosition', { index: 1, count: 3 }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: '0' }))
+    await flushPromises()
+    await swipe(w, -150)
+    expect(position(w)).toBe(t('media.itemPosition', { index: 2, count: 3 }))
+    w.unmount()
+  })
+
+  it('pages on a stage that shows no zoomable photo too (a blocked medium)', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedImages(memoryKey, 2)
+    const w = mountLightbox(memoryKey, [{ ...items[0], blocked: true }, items[1]], 0)
+    await flushPromises()
+    expect(w.find('.media-lightbox-stage').classes(), 'control: nothing to zoom').not.toContain('media-lightbox-stage-zoomable')
+    await swipe(w, -150)
+    expect(position(w)).toBe(t('media.itemPosition', { index: 2, count: 2 }))
+    w.unmount()
+  })
+})
+
 // The slideshow (cr-lightbox-zoom-slideshow, uc.memory.gallery 3a), on fake interval/timeout/Date clocks (setImmediate stays
 // real, so `flushPromises` works): every 5 s one step through the items, a video's poster for one interval and never played,
 // round past the last item until paused, a pause on every interaction and a hidden tab, one preview ahead, and no EXIF read or place

@@ -65,7 +65,12 @@
 3. **Lightbox:** clicking an item opens it full-view; the client fetches that item's **preview**, decrypts, and
    displays it; **prev/next** page through the grid order and **go round** at its ends - past the last item comes the
    first, before the first the last (owner 2026-11-26), on the buttons and the arrow keys alike; only a single item has
-   nowhere to page, and the position ("3 of 42") says where the viewer is. Removing the shown last item shows the first.
+   nowhere to page. On a touch screen a **swipe** pages the same way (inbox #863, `shared/ui/useSwipe.ts`): one finger or
+   pen travelling at least 50 px sideways, and at least 1.5 times as far sideways as up or down - left brings the next,
+   right the previous - on the stage of any item; never a mouse (it has the buttons and keys), never a second finger
+   (a pinch), never while a photo is zoomed (a drag pans there) and never on a playing video (its controls scrub on a
+   sideways drag). The stage does not follow the finger: the item changes when it lifts. Not yet seen on a real touch
+   screen. The position ("3 of 42") says where the viewer is. Removing the shown last item shows the first.
    (The preview — not the multi-MB original — keeps the
    lightbox fast.) The decrypted previews stay **in memory while the lightbox is open** (owner 2026-11-12,
    `previewCache.ts`): a step back shows the item at once, and once an item's preview is shown its two neighbours are
