@@ -30,6 +30,17 @@ nag and without standing between anyone and their content.
 6. **The donation page lives on the project's website** (`/donate/`, `/de/donate/`), lists the ways to donate as plain
    links and loads nothing from a third party.
 
+7. **In the apps (the owner, 2026-11-26).** The Linux and Windows apps show the banner as the web does (Flathub's
+   metadata even carries a donation URL; the Microsoft Store's rules are checked before #882's submission). The apps
+   that go through Apple's App Store and Google Play — Android, iOS/iPadOS, macOS — show no banner while veyq is no
+   recognised nonprofit; their Settings' *About veyq* carries a plain *Donate* link that opens the donation page in the
+   system browser, outside the app. Our reading of the stores' rules, not a reviewed answer: Apple's guidelines let an
+   app that is no approved nonprofit collect funds only outside the app, "such as via Safari" (3.2.2(iv)), and keep
+   tipping the developer to in-app purchase (3.1.1); Google's Payments policy exempts "tax exempt donations" from Play
+   Billing (3.2) without saying whether a donation to a project that is not tax-exempt is one; the EU's Digital
+   Markets Act terms of both stores speak of purchases of digital goods and services, not of donations. The first real
+   store review decides (inbox #884); a rejection moves the link, never the ask into an in-app purchase.
+
 ## Consequences
 
 - The server learns one more fact per account — that its holder dismissed the banner — which is low-sensitivity

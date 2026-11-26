@@ -96,12 +96,8 @@ The desktop apps' packages, a preview, are described to a person on the docs sit
 
 "Measured" means ADR 0123 records it run against a dev instance (and, where it says so, read back by the web); "built"
 means the code is there and compiles, nothing recorded beyond. Both apps hold everything listed unless a row says
-otherwise; the Linux and Windows apps hold only their first slice, the members' pictures, a Pot's download, the
-device trust with "Manage servers" (their rows above), the kit at sign-in, the account's Settings and device linking, a folder's and a Pot's header with every action on it: pin,
-trash with undo and the space's trash, rename, New folder, move and copy with the storage check, a folder's download,
-share links, a report and a cover with its crop, Expenses whole as its paragraph's but the share sheet's files,
-Depot whole as its paragraph's but Send a copy (measured 2026-11-12), and Memories as its paragraph's (measured
-2026-11-13/15; ADR 0123's Consequences, the Linux app and the Windows app).
+otherwise; the Linux and Windows apps hold every area below too (Memories whole measured 2026-11-13/15, the rest
+with each area's row; ADR 0123's Consequences, the Linux app and the Windows app), Depot but Send a copy.
 
 **Account and session.** Sign-in with password and Secret Key behind the `/api/setup` major gate, each grant judged as
 the web judges it (measured, `LiveSignInTest`, `GrantTrustTest`); several servers and tenants with their switcher,
@@ -673,8 +669,10 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   on screen. The owner's: iPhone and
   iPad (a flow's kit scanned with the real camera, the breach notice too), Touch ID and Windows Hello for real, a real
   mailbox, a safety code scanned with real cameras (#912).
-- Not in the apps: invites and members, recovery, terms, *Who's who* (#967), the moderation key (#965), the task
-  queue's jobs (#966), and an in-app choice of appearance and language (the apps follow the system's; the desktops
+- Not in the apps yet (the owner 2026-11-26: every app is to do what the web does — these are gaps, closed one by one):
+  joining a tenant from an invite, inviting, members and roles, groups and leaving a space, accepting and reading a
+  tenant's terms, finishing a recovery (the apps ask for the reset link; the web finishes it), the trust reset,
+  *Who's who* (#967), the moderation key (#965), the task queue's jobs (#966), and an in-app choice of appearance and language (the apps follow the system's; the desktops
   have no per-app language of their own).
 - **On macOS a session's menu in Settings was never driven** ("Weitere" → "Dieses Gerät abmelden" on another session:
   the background tools open no menu) — the owner's click (inbox #916); **and its rename alert shows the current name
@@ -693,8 +691,9 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   screen reader over the guest screens; Android's re-pass of the kept link's page and the guests' reports
   (#1032–#1036), Linux's signed-out Replace and a guest Pot's Settings, Windows' guest Download and a row's context-menu
   report; the `veyq:` link (§ O): the Mac's `open 'veyq://link'` (the coordinator's) and the iPhone from Safari (the
-  owner's). Not built: *Keep* on the web's share page (#1013); a moderator's review link (#1014); a link shared in from another app (#1015); a guest's
-  upload with the app left (#1016); a guest's pages following the link live, and a guest medium's EXIF (#1017).
+  owner's). Not built: *Keep* on the web's share page (#1013); a moderator's review link (#1014); a guest medium's EXIF (#1017).
+  Built, their device passes owed: a link shared in from another app (#1015), a guest's upload with the app left
+  (#1016), a guest's pages following the link live (#1017).
 - Dropping files onto the app (Android; Apple's drop is built, not measured).
 - Quick capture: widgets, shortcuts; notifications, among them the reminder of what one owes in a Pot (#550).
 
