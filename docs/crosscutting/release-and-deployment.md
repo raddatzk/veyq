@@ -11,7 +11,7 @@
   [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md).
 
 **Built, first run on GitHub.** Everything below is in the tree unless it stands under
-[§ Decided, not built](#decided-not-built). The repository has a remote since 2026-11-05 and the pipeline has run there; no
+[§ Decided, not built](#decided-not-built). The repository has a remote since 2026-11-05 and the pipeline has run there; the
 first release is `v0.2480` (2026-11-10), the last of major 0; `VERSION` is `1` since, and
 `scripts/applied_migrations.sha256` says `release: 202611070833` (the three baselines, frozen). A statement about what CI or a publish *does* is a statement about
 [`checks.yml`](../../.github/workflows/checks.yml) (the pipeline) and [`publish.yml`](../../.github/workflows/publish.yml)

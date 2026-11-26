@@ -42,15 +42,25 @@ accepted**:
   answer ([ADR 0026](docs/decisions/0026-client-trust-tiers.md)).
 - **Already-shared content.** Revoking a share stops future access; it cannot un-download what a recipient
   already has.
-- **The first-use trust gap.** Identity keys are trust-on-first-use. A changed key is surfaced, every grant is
-  signed by its granter, and out-of-band safety-number verification is built, but nothing *enforces* it: the
-  opt-in strict mode that would require a verified key before a first share is decided, not built — see
+- **The first-use trust gap.** Identity keys are trust-on-first-use where no join record anchors them (a tenant's
+  owners, contacts outside a shared tenant). A new key is accepted only through a key-chain step signed by the old
+  identity and the old Secret-Key proof key, every grant is signed by its granter, and out-of-band safety-number
+  verification is built, but nothing *enforces* it: the opt-in strict mode that would require a verified key before
+  a first share is not built, and its shape is still open — see the
+  [security model](docs/crosscutting/security-model.md)'s key-directory section and
   [ADR 0028 Decision 4](docs/decisions/0028-identity-authenticity-tofu-verification.md#decision).
 - Findings against the development stack in [`infra/`](infra/README.md), which is not a production
   deployment and is not presented as one.
 - Missing hardening headers or rate limits on an instance the reporter configured themselves — limits are
   deliberately per-instance tunable ([ADR 0051](docs/decisions/0051-declarative-rate-limit-posture.md)).
+- **No web application firewall.** Neither recipe ships one, on purpose: the content of a request body is
+  ciphertext, so a generic rule set has nothing to inspect there, and a request the API contract does not allow is
+  refused by the application itself
+  ([security-model § Threat model](docs/crosscutting/security-model.md#threat-model--trust-boundaries)). A missing
+  WAF is not a finding; an injection the contract lets through is.
 
 ## Supported versions
 
-veyq is pre-V1. There are no released versions and no backported fixes: fixes land on `main`.
+Supported: the newest 1.x release. A fix lands on `main` and ships in the next 1.x release; there are no backports
+to older 1.x releases. Major `0` (up to v0.2480) was a pre-release and gets no fixes
+([release and deployment](docs/crosscutting/release-and-deployment.md)).

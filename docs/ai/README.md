@@ -302,8 +302,9 @@ A refined CR nails **decisions, not keystrokes**:
   fed a chunked source to the upload pump (fine) and to Memories' import, which decodes whole (`createImageBitmap`) - a
   question back to the owner the refine could have asked. And a list of fields in a decision says whether it is
   **exhaustive or illustrative**. A **mode flag** that unlocks trust (a copy's extras riding content an archive also
-  carries) comes from the caller, never from the data. A CR that edits a pre-release baseline says there are **no existing rows** (every dev
-  database is recreated) rather than designing for legacy rows that cannot exist (cr-file-uploader). A CR that changes an
+  carries) comes from the caller, never from the data. A CR that changes stored data designs for the **rows a released instance already
+  holds**: since major 1 the baselines are frozen and no database is recreated (before it, a CR that edited a baseline
+  rightly said there were no existing rows, cr-file-uploader). A CR that changes an
   identifier greps the client's local records keyed by it too (cr-change-email found the remember-me record and the
   session vault only by following the address end to end), and a CR that erases what an identifier names greps the
   server's copies of it as well as the keys onto its row: cr-account-erasure's second angle searched for account ids and

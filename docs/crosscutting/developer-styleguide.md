@@ -225,7 +225,7 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
 - **Migrations are portable + Flyway-owned.** Use only column types valid on **both H2 and MariaDB** (the
   common subset); Flyway is the single schema authority. Versions are one global timestamp scheme across modules,
   each file names its owning module, and every file is pinned — the scheme, the baselines, the pin and the
-  pre-release caveat live in [`src/backend/CLAUDE.md`](../../src/backend/CLAUDE.md) § Migrations.
+  freeze since major 1 live in [`src/backend/CLAUDE.md`](../../src/backend/CLAUDE.md) § Migrations.
 - **An applied migration is immutable — including its comments.** Fix a mistake with a *new* migration; never
   edit a file that has run anywhere. Flyway checksums the file's whole content, so a one-word comment edit is
   indistinguishable from a schema change: the next `migrate` fails validation and the instance does not start.
@@ -240,8 +240,8 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
   a Quarkus bump re-reads its default). Only `%dev` escapes, via
   `quarkus.flyway.repair-at-start=true` — which is exactly why a broken checksum passes a developer's machine
   unnoticed and stops a production start. `scripts/validate_migration_versions.py` turns such an edit red unless
-  its pin line changes in the same diff, which before the first release is the one sanctioned way to change a
-  baseline.
+  its pin line changes in the same diff, which before the first release was the one sanctioned way to change a
+  baseline; since it, a released migration is only followed by a new one.
 
 ## 10. Testing
 
