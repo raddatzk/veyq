@@ -211,6 +211,42 @@ class MediaBucketsSliceTest {
             .then().statusCode(403).body("code", equalTo("illegal_target"))
     }
 
+    /**
+     * Another uploader's primary with no live medium and no sub-bucket is left out of the list; the viewer's own is
+     * listed empty (their next upload goes there), and a sub-bucket a member curates under the other root keeps it.
+     */
+    @Test
+    fun anotherUploadersEmptyPrimaryIsLeftOutUnlessItHoldsASubBucket() {
+        val (alice, scopeId, tenantId) = seedMemberScope()
+        val bob = addMemberToScope(scopeId, tenantId)
+        val memory = seedNode(scopeId, MemoriesNodeKinds.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val aliceMedia = completeOne(alice, scopeId, memory, wrap = "YQ==")
+        val bobMedia = completeOne(bob, scopeId, memory, wrap = "Yg==")
+        fun owners(viewer: String) = given().header("Authorization", bearer(viewer))
+            .`when`().get("/api/scopes/$scopeId/nodes/$memory/buckets")
+            .then().statusCode(200).extract().path<List<String>>("buckets.ownerKey").toSet()
+        assertEquals(setOf("user:$alice", "user:$bob"), owners(alice)) // the positive control
+
+        given().header("Authorization", bearer(alice)).`when`().delete("/api/scopes/$scopeId/media/$bobMedia").then().statusCode(204)
+        given().header("Authorization", bearer(alice)).`when`().delete("/api/scopes/$scopeId/media/$aliceMedia").then().statusCode(204)
+        assertEquals(setOf("user:$alice"), owners(alice)) // bob's empty primary is gone, alice's own empty one stays
+        assertEquals(setOf("user:$bob"), owners(bob))
+
+        // alice curates a sub-bucket under bob's empty root: the root stays listed, with its sub
+        val bobPrimary = QuarkusTransaction.requiringNew().call {
+            BucketEntity.find("nodeId = ?1 and ownerKey = ?2 and isPrimary = true", memory, "user:$bob").firstResult()!!.id
+        }
+        given().header("Authorization", bearer(alice)).contentType(ContentType.JSON)
+            .body("""{"nodeEpoch":0,"bucketId":"${TestIds.uuid()}","sealedName":"c3Vi","parentBucketId":"$bobPrimary"}""")
+            .`when`().post("/api/scopes/$scopeId/nodes/$memory/buckets")
+            .then().statusCode(200)
+        given().header("Authorization", bearer(alice))
+            .`when`().get("/api/scopes/$scopeId/nodes/$memory/buckets")
+            .then().statusCode(200)
+            .body("buckets.find { it.bucketId == '$bobPrimary' }.mediaCount", equalTo(0))
+            .body("buckets.findAll { it.parentBucketId == '$bobPrimary' }.size()", equalTo(1))
+    }
+
     @Test
     fun listBucketsByNonMemberIs404() {
         val (userId, scopeId) = seedMemberScope()

@@ -355,8 +355,10 @@ paths:
         `owner_key`) plus any **sub-buckets**, each with its opaque `ownerKey`, `parentBucketId` (null = primary),
         `isPrimary`, the `K_node`-sealed `sealedName` (null for a member's primary — the client shows the operator-
         visible username; present for a contributor primary + every sub-bucket), and a per-bucket `mediaCount`. The
-        client groups by uploader, unseals names client-side, and filters the gallery grid. Operator-blind — opaque
-        `owner_key` + structure only, never a cleartext name, never content.
+        client groups by uploader, unseals names client-side, and filters the gallery grid. Another uploader's
+        primary with no live medium (all trashed or purged) and no sub-bucket is left out — that uploader no longer
+        contributes; a restore or a new upload lists it again. The caller's own primary is listed even when empty.
+        Operator-blind — opaque `owner_key` + structure only, never a cleartext name, never content.
       security:
         - bearerAuth: []
       parameters:

@@ -66,6 +66,7 @@ import { MEMORY_VIEW, memberMemorySource, guestMemorySource } from '../source'
 import { ShareRole } from '../../../api/generated/sharing'
 import type { PublicShareHead } from '../../../core/sharing/resolvePublicShare'
 import { authenticatedCalls } from '../../../test/guestMode'
+import { clearAccount, setAccountUserId } from '../../../app/account'
 
 // Stub the layer's Select + Menu (not under test) and MediaGrid (renders the tile slot per item so the tile chrome
 // — checkbox + 3-dot — is exercised).
@@ -393,6 +394,55 @@ describe('MemoryBuckets — the counts follow the live media (an upload while th
     await wrapper.setProps({ media: [media('m1', 'user:me', 'b-own'), media('m2', 'user:me', 'b-own')] })
     await flushPromises()
     expect(listBuckets, 'a bucket the list now holds is not read for again').toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('MemoryBuckets — an uploader whose every medium was deleted leaves the picker (as the server lists it)', () => {
+  const options = (w: ReturnType<typeof mountBuckets>) => w.findAll('.bucket-opt').map((o) => o.attributes('data-val'))
+  beforeEach(() => setAccountUserId('me'))
+  afterEach(() => clearAccount())
+
+  it("a guest's last photo deleted while the tab is open: the guest is gone at once, and a restore brings them back", async () => {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 1), bucket('b-share', 'share:x', 1, 'ct')])
+    const guestPhoto = media('m2', 'share:x', 'b-share')
+    const wrapper = mountBuckets([media('m1', 'user:me', 'b-own'), guestPhoto])
+    await flushPromises()
+    expect(options(wrapper)).toEqual(['b-share', 'b-own']) // the positive control: the guest is listed
+
+    await wrapper.setProps({ media: [media('m1', 'user:me', 'b-own')] })
+    expect(options(wrapper)).toEqual(['b-own'])
+
+    await wrapper.setProps({ media: [media('m1', 'user:me', 'b-own'), guestPhoto] })
+    expect(options(wrapper)).toEqual(['b-share', 'b-own'])
+    expect(listBuckets, 'the bucket was kept: no re-read').toHaveBeenCalledTimes(1)
+  })
+
+  it("another member's emptied primary leaves too; your own stays, empty, where your next upload goes", async () => {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 1), bucket('b-bob', 'user:bob', 1)])
+    const wrapper = mountBuckets([media('m1', 'user:me', 'b-own'), media('m2', 'user:bob', 'b-bob')])
+    await flushPromises()
+    expect(options(wrapper)).toHaveLength(2)
+
+    await wrapper.setProps({ media: [] })
+    expect(options(wrapper)).toEqual(['b-own'])
+  })
+
+  it('a sub-bucket curated under the emptied guest keeps the guest listed', async () => {
+    vi.mocked(listBuckets).mockResolvedValue([
+      bucket('b-own', 'user:me', 1), bucket('b-share', 'share:x', 1, 'ct'), bucket('s-share', 'share:x', 0, 'sub', false, 'b-share'),
+    ])
+    const wrapper = mountBuckets([media('m1', 'user:me', 'b-own'), media('m2', 'share:x', 'b-share')])
+    await flushPromises()
+    await wrapper.setProps({ media: [media('m1', 'user:me', 'b-own')] })
+    expect(options(wrapper)).toContain('b-share')
+    expect(options(wrapper)).toContain('s-share')
+  })
+
+  it("a guest whose photos have not arrived yet stays: only a bucket emptied on screen leaves", async () => {
+    vi.mocked(listBuckets).mockResolvedValue([bucket('b-own', 'user:me', 0), bucket('b-share', 'share:x', 1, 'ct')])
+    const wrapper = mountBuckets([]) // the gallery's pages are still on their way
+    await flushPromises()
+    expect(options(wrapper)).toContain('b-share')
   })
 })
 

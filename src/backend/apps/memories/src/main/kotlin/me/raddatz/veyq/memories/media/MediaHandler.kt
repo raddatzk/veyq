@@ -299,7 +299,7 @@ class MediaHandler(
         access.check(userId, scopeId, READ)
             .refusal(ListBucketsOutcome.NoNode, ListBucketsOutcome.Suspended)?.let { return it }
         val node = store.findNode(scopeId, nodeId) ?: return ListBucketsOutcome.NoNode
-        return ListBucketsOutcome.Ok(store.listBuckets(nodeId), node.sealedDropPrivateKey)
+        return ListBucketsOutcome.Ok(store.listBuckets(nodeId, PrincipalKey.User(userId).format()), node.sealedDropPrivateKey)
     }
 
     /**

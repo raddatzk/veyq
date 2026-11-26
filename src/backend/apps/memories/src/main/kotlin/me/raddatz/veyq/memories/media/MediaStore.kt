@@ -724,11 +724,20 @@ class MediaStore(
      * a bucket delete reparents its media first ([deleteBucketReparent]) or erases them with it (`NodeSubtreePurge`),
      * and media never change node. The lazy backfill this once ran for media from before buckets was deleted
      * before V1 (inbox #264), which has no such rows to carry.
+     *
+     * An uploader whose media are all trashed or purged is no contributor any more, so **another uploader's empty
+     * primary is left out**: no live medium and no sub-bucket under it (a sub-bucket is a member's curation and stays,
+     * with its root). The row itself stays — primaries are never deleted apart from their node ([AttachResult.PrimaryAppeared]
+     * relies on it), and a restore or a new upload finds it, so the uploader is listed again. The viewer's own primary
+     * ([viewerOwnerKey]) is listed even when empty: it is where the viewer's next upload and sub-buckets go.
      */
     @Transactional
-    fun listBuckets(nodeId: String): List<BucketRow> {
-        return BucketEntity.find("nodeId = ?1 order by isPrimary desc, createdAt, id", nodeId).list().map { b ->
+    fun listBuckets(nodeId: String, viewerOwnerKey: String): List<BucketRow> {
+        val buckets = BucketEntity.find("nodeId = ?1 order by isPrimary desc, createdAt, id", nodeId).list()
+        val parents = buckets.mapNotNullTo(HashSet()) { it.parentBucketId }
+        return buckets.mapNotNull { b ->
             val count = MediaEntity.count("nodeId = ?1 and bucketId = ?2 and deletedAt is null", nodeId, b.id).toInt()
+            if (b.isPrimary && count == 0 && b.id !in parents && b.ownerKey != viewerOwnerKey) return@mapNotNull null
             val identity = contributorIdentityOf(b)
             BucketRow(
                 b.id, b.ownerKey, b.parentBucketId, b.isPrimary, b.sealedName, count, identity?.shareId, identity?.wrappedIdentityKey,
