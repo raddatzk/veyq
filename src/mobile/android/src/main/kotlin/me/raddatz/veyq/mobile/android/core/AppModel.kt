@@ -646,9 +646,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     // ---- a TV's way in and its own settings (ADR 0159 decision 4, ADR 0160) ----
 
-    /** The picker's tile of [account] picked: its PIN unlock. */
+    /** The picker's tile of [account] picked: its PIN unlock, or — kept without a PIN (owner 2026-11-26) — the account opened. */
     fun pick(account: String) {
-        session.pick(account)
+        viewModelScope.launch { session.pick(account)?.let { show(it) } }
     }
 
     /** From a PIN unlock back to the picker, nothing opened. */
@@ -688,9 +688,47 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** The open account's name on this TV's picker (core's `TrustedDevice.pickerLabel`); null without a PIN trust. */
+    /**
+     * The open account's name on this TV's picker (core's `TrustedDevice.pickerLabel`); null where this TV does not keep it
+     * (behind a PIN, or without one: owner 2026-11-26).
+     */
     fun pickerLabel(): String? = session.signedTo?.account?.trusted
-        ?.takeIf { it.method == TrustedDevice.Method.DEVICE_PIN }?.pickerLabel
+        ?.takeIf { it.method == TrustedDevice.Method.DEVICE_PIN || it.method == TrustedDevice.Method.DEVICE_KEY }?.pickerLabel
+
+    /** Whether this TV can keep an account behind a PIN (core's `ThisDevice.offersPin`: a TV with the hardware factor). */
+    val offersPin: Boolean get() = device.offersPin
+
+    /** How this TV keeps the open account: true behind a PIN, false without one, null not at all (this run only). */
+    fun keptWithPin(): Boolean? = when (session.signedTo?.account?.trusted?.method) {
+        TrustedDevice.Method.DEVICE_PIN -> true
+        TrustedDevice.Method.DEVICE_KEY -> false
+        else -> null
+    }
+
+    /**
+     * The open account kept on without its PIN from now on (owner 2026-11-26): [old] asked first through the server's
+     * count (core's `VeyqAccount.keepWithoutPin`); a wrap gone locks the TV.
+     */
+    fun keepWithoutPin(old: String, done: (VeyqAccount.PinChange) -> Unit) {
+        val account = session.signedTo?.account ?: return
+        viewModelScope.launch {
+            val change = trusting { account.keepWithoutPin(old) }
+            trustLog("PIN removed: ${change.outcome}")
+            if (change.outcome == VeyqAccount.PinChange.Outcome.GONE) session.lock()
+            done(change)
+        }
+    }
+
+    /** The open account, kept without a PIN, kept behind [pin] from now on (core's `VeyqAccount.trustWithPin`). */
+    fun setPin(pin: String, done: (Boolean) -> Unit) {
+        val account = session.signedTo?.account ?: return
+        viewModelScope.launch {
+            val kept = trusting { runCatching { account.trustWithPin(pin) == VeyqAccount.TrustOutcome.REMEMBERED }.getOrDefault(false) }
+            trustLog("PIN set: $kept")
+            if (!kept) trustFailed()
+            done(kept)
+        }
+    }
 
     /** The open account's picker name set to [label] (empty: its address again). */
     fun renameOnPicker(label: String) {

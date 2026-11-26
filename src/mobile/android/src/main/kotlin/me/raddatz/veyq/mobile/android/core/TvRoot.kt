@@ -57,6 +57,7 @@ import me.raddatz.veyq.mobile.android.R
 import me.raddatz.veyq.mobile.session.SessionModel
 import me.raddatz.veyq.mobile.session.SignInEntry
 import me.raddatz.veyq.mobile.session.SignInPlan
+import me.raddatz.veyq.mobile.session.StaySignedIn
 import me.raddatz.veyq.mobile.session.TrustChange
 import me.raddatz.veyq.mobile.words.Msg
 
@@ -160,7 +161,8 @@ private fun TvSignIn(state: Screen.SignIn, model: AppModel) {
 
 /**
  * A TV's account picker (ADR 0159 decision 4): every account kept here under its name on this TV and its server, the
- * most recently used first — picking one asks its PIN —, then *Add someone*, the QR sign-in. [Screen.Picker.error] says
+ * most recently used first — picking one asks its PIN, or opens it where it is kept without one —, then *Add someone*,
+ * the QR sign-in. [Screen.Picker.error] says
  * why it shows again (the account removed after the tenth wrong PIN).
  */
 @Composable
@@ -229,44 +231,91 @@ private fun TvPinUnlock(state: Screen.Unlock, model: AppModel) {
 
 /**
  * The offer after a TV's QR sign-in (ADR 0160 decision 1, core's `Offer.pin`): a PIN asked twice, then kept
- * ([AppModel.stayWithPin]); *Don't keep me signed in* declines (the account is held for this run only). Where this TV
- * cannot keep an account ([SessionModel.Offer.pin] false: no hardware factor) it says so, and OK declines.
+ * ([AppModel.stayWithPin]) — the recommended way, first and focused. Below it, where core's offer has the login level
+ * ([SessionModel.Offer.levels]), *Stay signed in without a PIN* (owner 2026-11-26): never taken at once, it leads to a
+ * confirmation step carrying the warning ([TvNoPinConfirm]). *Don't keep me signed in* declines (the account is held for
+ * this run only). Where this TV has no hardware factor ([SessionModel.Offer.pin] false) it says so; with no way to keep
+ * the account at all, OK declines.
  */
 @Composable
 private fun TvOffer(offer: SessionModel.Offer, model: AppModel) {
     val working by model.trustWorking.collectAsStateWithLifecycle()
+    val withoutPin = StaySignedIn.LOGIN in offer.levels
+    var confirming by remember { mutableStateOf(false) }
+    if (confirming) {
+        TvNoPinConfirm(working, onConfirm = { model.answerOffer(StaySignedIn.LOGIN) }, onCancel = { confirming = false })
+        return
+    }
     TvPage {
-        if (!offer.pin) {
+        if (!offer.pin && !withoutPin) {
             Text(stringResource(R.string.tv_pin_not_offered), textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 640.dp).testTag("tv-pin-not-offered"))
             val ok = remember { FocusRequester() }
             LaunchedEffect(Unit) { runCatching { ok.requestFocus() } }
             Button(onClick = { model.answerOffer(null) }, modifier = Modifier.focusRequester(ok).testTag("tv-offer-ok")) { Text(stringResource(R.string.ok)) }
             return@TvPage
         }
-        // the first PIN, held here until the second matches it; a mismatch or a refusal starts again
-        var first by remember { mutableStateOf<String?>(null) }
-        var error by remember { mutableStateOf<String?>(null) }
-        val mismatch = stringResource(R.string.tv_pin_mismatch)
-        val failed = say(Msg.TRUST_FAILED)
-        val held = first
-        if (held == null) {
-            TvPinPad(stringResource(R.string.tv_pin_set_title), hint = stringResource(R.string.tv_pin_set_hint), error = error, working = working) { pin ->
-                error = null
-                first = pin
-            }
-        } else {
-            TvPinPad(stringResource(R.string.tv_pin_confirm_title), working = working) { pin ->
-                first = null
-                if (pin != held) {
-                    error = mismatch
-                    return@TvPinPad
-                }
-                model.stayWithPin(pin) { change -> if (change != TrustChange.DONE) error = failed }
-            }
-        }
+        if (offer.pin) TvOfferPin(model, working)
+        else Text(stringResource(R.string.tv_pin_unavailable), textAlign = TextAlign.Center, modifier = Modifier.widthIn(max = 640.dp).testTag("tv-pin-unavailable"))
         if (working) androidx.compose.material3.CircularProgressIndicator()
+        if (withoutPin) OutlinedButton(onClick = { confirming = true }, enabled = !working, modifier = Modifier.testTag("tv-stay-no-pin")) {
+            Text(stringResource(R.string.tv_stay_no_pin))
+        }
         OutlinedButton(onClick = { model.answerOffer(null) }, enabled = !working, modifier = Modifier.testTag("tv-pin-skip")) {
             Text(stringResource(R.string.tv_pin_skip))
+        }
+    }
+}
+
+/** The offer's PIN: asked twice, then kept ([AppModel.stayWithPin]); a mismatch or a refusal starts again. */
+@Composable
+private fun TvOfferPin(model: AppModel, working: Boolean) {
+    // the first PIN, held here until the second matches it; a mismatch or a refusal starts again
+    var first by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val mismatch = stringResource(R.string.tv_pin_mismatch)
+    val failed = say(Msg.TRUST_FAILED)
+    val held = first
+    if (held == null) {
+        TvPinPad(stringResource(R.string.tv_pin_set_title), hint = stringResource(R.string.tv_pin_set_hint), error = error, working = working) { pin ->
+            error = null
+            first = pin
+        }
+    } else {
+        TvPinPad(stringResource(R.string.tv_pin_confirm_title), working = working) { pin ->
+            first = null
+            if (pin != held) {
+                error = mismatch
+                return@TvPinPad
+            }
+            model.stayWithPin(pin) { change -> if (change != TrustChange.DONE) error = failed }
+        }
+    }
+}
+
+/**
+ * The confirmation before a TV keeps an account without a PIN (owner 2026-11-26), a step of its own as Leanback's guided
+ * steps are: the question, the warning — anyone with the remote opens the account here —, then the choice and Cancel,
+ * Cancel focused, so the remote's first press never takes it. Back cancels. The offer's and Settings' alike.
+ */
+@Composable
+internal fun TvNoPinConfirm(working: Boolean, onConfirm: () -> Unit, onCancel: () -> Unit) {
+    BackHandler(enabled = !working, onBack = onCancel)
+    val cancel = remember { FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { cancel.requestFocus() } }
+    TvPage {
+        Text(stringResource(R.string.tv_stay_no_pin_title), style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
+        Text(
+            stringResource(R.string.tv_stay_no_pin_warning), textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(max = 640.dp).testTag("tv-stay-no-pin-warning"),
+        )
+        if (working) androidx.compose.material3.CircularProgressIndicator()
+        androidx.compose.foundation.layout.Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+            OutlinedButton(onClick = onConfirm, enabled = !working, modifier = Modifier.testTag("tv-stay-no-pin-confirm")) {
+                Text(stringResource(R.string.tv_stay_no_pin))
+            }
+            Button(onClick = onCancel, enabled = !working, modifier = Modifier.focusRequester(cancel).testTag("tv-stay-no-pin-cancel")) {
+                Text(stringResource(R.string.entry_cancel))
+            }
         }
     }
 }

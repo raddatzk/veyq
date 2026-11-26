@@ -13,8 +13,9 @@
 
 ## Main flow — set the PIN, then unlock with it
 
-1. Right after the QR sign-in the TV offers its one level, **PIN** (ADR 0160 decision 1): the person types six digits
-   twice with the remote's number pad. Declining keeps no wrap — the next start needs a new pairing.
+1. Right after the QR sign-in the TV offers its level, **PIN** (ADR 0160 decision 1), first: the person types six digits
+   twice with the remote's number pad. Declining (*Don't keep me signed in*) keeps no wrap — the next start needs a new
+   pairing. Below the PIN, *Stay signed in without a PIN* is the deliberate third choice (below).
 2. The TV computes the **hardware factor `F`** from its non-exportable key, draws a **server share `S`** (32 random
    bytes), derives `KEK = Argon2id(PIN, salt = HKDF(F ‖ S, "veyq/v1/pin-kek"))` and the **verifier**
    `V = HKDF(F, "veyq/v1/pin-verifier" ‖ PIN)` (vectors `pin_kek`, `pin_verifier`), wraps the Master Key under the KEK
@@ -39,7 +40,14 @@
 - **Change the PIN:** asks the old PIN first, through the same count; a new wrap with a new `S` and `V` is recorded
   before the old one is deleted (ADR 0160 decision 7).
 - **Forgotten PIN:** a new QR sign-in; the TV never knew the password.
-- **No hardware key** (a simulator, a device without one): the level is not offered; nothing is kept.
+- **No hardware key** (a simulator, a device without one): the level is not offered; the TV says it cannot protect the
+  account with a PIN and offers staying signed in without one, or keeping nothing.
+- **Stay signed in without a PIN** (owner 2026-11-26, ADR 0160 § Staying signed in without a PIN): chosen below the
+  PIN, it asks first, with the warning that anyone with the remote can then open the account on this TV (on Apple TV
+  from any other profile too). Confirmed, the TV keeps a `DEVICE_KEY` wrap at the login level, its unlock key bound to
+  nothing but this device; the account's tile is on the picker and opens without a PIN, and every lock returns to the
+  picker. In the TV's settings an account behind a PIN can drop it (the warning, then the current PIN through the same
+  count), and one without a PIN can set one.
 
 ## Quality notes
 
@@ -51,7 +59,8 @@
 ## User impact
 
 Everyone in a household can keep their own account on the TV behind their own six-digit PIN, and ten wrong tries
-remove the account from that TV until it is signed in again from a phone.
+remove the account from that TV until it is signed in again from a phone. Who wants no PIN can keep the account
+without one, told first that anyone with the remote then opens it.
 
 ## Related
 

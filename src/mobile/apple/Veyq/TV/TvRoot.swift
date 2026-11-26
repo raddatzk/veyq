@@ -117,7 +117,7 @@ private struct TvSignIn: View {
 }
 
 /// The account picker (ADR 0159 decision 4): every account kept on this TV under its name here and its server — picking
-/// one asks its PIN —, then *Add someone*. The error says why it shows again (the account removed after ten wrong PINs).
+/// one asks its PIN, or opens it where it is kept without one —, then *Add someone*. The error says why it shows again (the account removed after ten wrong PINs).
 private struct TvPicker: View {
     @Bindable var model: TvModel
     let gate: SessionModelGate.Picker
@@ -193,36 +193,65 @@ private struct TvPinUnlock: View {
     }
 }
 
-/// The offer after the QR sign-in (ADR 0160 decision 1, core's `Offer.pin`): a PIN asked twice, then kept; *Don't keep me
-/// signed in* declines. Where this TV has no hardware factor (`Offer.pin` false) it says so, and OK declines.
+/// The offer after the QR sign-in (ADR 0160 decision 1, core's `Offer.pin`): a PIN asked twice, then kept — the
+/// recommended way, first and focused. Below it, where core's offer has the login level (`Offer.levels`), *Stay Signed In
+/// Without a PIN* (owner 2026-11-26): never taken at once, it asks first in an alert carrying the warning (the HIG's way
+/// to confirm a choice with a consequence), its Cancel the default. *Don't keep me signed in* declines. Where this TV has
+/// no hardware factor (`Offer.pin` false) it says so; with no way to keep the account at all, OK declines.
 private struct TvOffer: View {
     @Bindable var model: TvModel
     let offer: SessionModelOffer
     @State private var first: String?
     @State private var error: String?
+    @State private var asksWithoutPin = false
+
+    private var withoutPin: Bool { offer.levels.contains(StaySignedIn.login) }
 
     var body: some View {
         TvPage {
-            if !offer.pin {
+            if !offer.pin && !withoutPin {
                 Text(say(.tvPinNotOffered)).multilineTextAlignment(.center).frame(maxWidth: 900)
                 Button(say(.ok)) { model.notNow() }
             } else {
-                if let held = first {
-                    TvPinPad(title: say(.tvPinConfirmTitle), hint: nil, error: nil, working: model.trustWorking) { pin in
-                        first = nil
-                        guard pin == held else { error = say(.tvPinMismatch); return }
-                        model.stayWithPin(pin) { change in if change != .done { error = say(.trustFailed) } }
-                    }
-                    .id("confirm")
-                } else {
-                    TvPinPad(title: say(.tvPinSetTitle), hint: say(.tvPinSetHint), error: error, working: model.trustWorking) { pin in
-                        error = nil
-                        first = pin
-                    }
-                    .id("first")
+                if offer.pin { pinPads } else { Text(say(.tvPinUnavailable)).multilineTextAlignment(.center).frame(maxWidth: 900) }
+                if withoutPin {
+                    Button(say(.tvStayNoPin)) { model.input(); asksWithoutPin = true }.disabled(model.trustWorking)
                 }
                 Button(say(.tvPinSkip)) { model.notNow() }.disabled(model.trustWorking)
             }
+        }
+        .tvNoPinAlert(isPresented: $asksWithoutPin) { model.stayWithoutPin() }
+    }
+
+    @ViewBuilder private var pinPads: some View {
+        Group {
+            if let held = first {
+                TvPinPad(title: say(.tvPinConfirmTitle), hint: nil, error: nil, working: model.trustWorking) { pin in
+                    first = nil
+                    guard pin == held else { error = say(.tvPinMismatch); return }
+                    model.stayWithPin(pin) { change in if change != .done { error = say(.trustFailed) } }
+                }
+                .id("confirm")
+            } else {
+                TvPinPad(title: say(.tvPinSetTitle), hint: say(.tvPinSetHint), error: error, working: model.trustWorking) { pin in
+                    error = nil
+                    first = pin
+                }
+                .id("first")
+            }
+        }
+    }
+}
+
+extension View {
+    /// The confirmation before a TV keeps an account without a PIN (owner 2026-11-26): the question, the warning — anyone
+    /// with the remote opens the account here, from any other profile too —, the choice, and Cancel as the default.
+    func tvNoPinAlert(isPresented: Binding<Bool>, onConfirm: @escaping () -> Void) -> some View {
+        alert(say(.tvStayNoPinTitle), isPresented: isPresented) {
+            Button(say(.tvStayNoPin)) { onConfirm() }
+            Button(say(.signinCancel), role: .cancel) {}
+        } message: {
+            Text(say(.tvStayNoPinWarning))
         }
     }
 }

@@ -63,7 +63,9 @@ interface DeviceKeys {
      * The levels staying signed in can take on this device now, asked of the store itself (never a host's own probe): what
      * the offer after a sign-in and "Manage servers" offer (ADR 0123 decision 8). Empty where
      * nothing staying signed in needs can be kept: no offer. May reach the platform (D-Bus, cryptngc, the keyguard), so
-     * it is asked when an offer is made, not on every frame.
+     * it is asked when an offer is made, not on every frame. A TV's store answers [StaySignedIn.LOGIN] alone, kept on
+     * this device only and never in a backup, with no check at all: a TV has no sign-in of its own, and the level is
+     * staying signed in without a PIN, offered beside the PIN as a deliberate choice (owner 2026-11-26, ADR 0160).
      */
     val staySignedIn: Set<StaySignedIn>
 
@@ -99,7 +101,8 @@ interface PinFactors {
  * The form of the device the app runs on (ADR 0159 decision 2): what its plans offer. [TV] views and never authors — every
  * creating, editing, moving, sharing, uploading and deleting entry and every way to take content off the device
  * (download, export, send, keep offline) is removed in the core, the way rights remove functions —, starts at its
- * account picker and opens one account at a time behind its PIN (decision 4). [PHONE] and [DESKTOP] offer the same;
+ * account picker and opens one account at a time — behind its PIN, or without one where the person chose that (decision
+ * 4, ADR 0160 § Staying signed in without a PIN). [PHONE] and [DESKTOP] offer the same;
  * nothing tells them apart yet.
  */
 @Serializable
@@ -131,6 +134,8 @@ enum class StaySignedIn {
      * Linux: the Secret Service, unlocked by the login; Android: a Keystore key without user authentication; Apple: a
      * Keychain item without `.userPresence`): the web's level. The plain "Stay signed in". Offered beside
      * [PRESENCE], not only where it is missing: a device with a fingerprint reader must not force anyone to use it.
+     * On a TV it is staying signed in without a PIN (owner 2026-11-26): no sign-in to the TV authenticates anyone, so
+     * whoever holds the remote opens the account — offered there only beside the PIN, after a warning that says so.
      */
     LOGIN,
 }
@@ -146,7 +151,7 @@ enum class StaySignedIn {
 fun trustChanges(method: TrustedDevice.Method?, level: StaySignedIn?, levels: List<StaySignedIn>): List<StaySignedIn?> = when (method) {
     null -> levels + listOf(null)
     TrustedDevice.Method.DEVICE_KEY -> levels.filter { it != level } + listOf(null)
-    // a TV's PIN is its only way to stay (ADR 0160 decision 1): its own settings change the PIN, nothing here
+    // a TV's PIN (ADR 0160 decision 1): its own settings change it or drop it for staying without one, nothing here
     TrustedDevice.Method.DEVICE_PIN -> emptyList()
     TrustedDevice.Method.DEVICE -> levels
 }

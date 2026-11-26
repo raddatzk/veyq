@@ -194,7 +194,12 @@ class SessionModel<A : Connection, T : Any>(
         val connection: String,
         val levels: List<StaySignedIn>,
         val linked: Boolean = false,
-        /** A TV's offer (ADR 0160 decision 1): its one way to stay is a PIN, asked twice ([stayWithPin]); [levels] is empty. */
+        /**
+         * A TV's offer (ADR 0160 decision 1): the PIN, asked twice ([stayWithPin]), the recommended way to stay. Beside it
+         * a TV's [levels] is [StaySignedIn.LOGIN] alone where its store keeps that level — staying signed in without a
+         * PIN (owner 2026-11-26, ADR 0160 § Staying signed in without a PIN), a deliberate step the platform confirms with
+         * `tv_stay_no_pin_warning` before it calls [stay]; never the default, never offered first.
+         */
         val pin: Boolean = false,
     )
 
@@ -272,7 +277,8 @@ class SessionModel<A : Connection, T : Any>(
 
         /**
          * A TV's account picker (ADR 0159 decision 4): each account kept on it under the name it was given here, the most
-         * recently used first; picking one asks its PIN ([pick]); *Add someone* is the QR sign-in ([addServer]). [error]: why
+         * recently used first; picking one asks its PIN, or opens it where it is kept without one ([pick]); *Add someone* is
+         * the QR sign-in ([addServer]). [error]: why
          * the picker shows again (a wrap gone, the tenth wrong PIN). No account is open while it shows.
          */
         @Serializable @SerialName("Picker")
@@ -562,8 +568,9 @@ class SessionModel<A : Connection, T : Any>(
     private fun linkedOffer(account: A): Offer? {
         if (signInElsewhere) return null
         if (door.trustedBy(account)?.method == TrustedDevice.Method.DEVICE_KEY) return null
-        // a TV's one level: its PIN, where its store has the hardware factor; else nothing is kept (ADR 0160 decision 1)
-        if (tv) return Offer(account.key, emptyList(), linked = true, pin = door.offersPin())
+        // a TV's PIN, where its store has the hardware factor (ADR 0160 decision 1), and beside it the login level where its
+        // store keeps one — staying without a PIN, chosen deliberately (owner 2026-11-26); neither: nothing is kept
+        if (tv) return Offer(account.key, listOf(StaySignedIn.LOGIN).filter { it in door.staySignedIn() }, linked = true, pin = door.offersPin())
         return Offer(account.key, StaySignedIn.entries.filter { it in door.staySignedIn() }, linked = true)
     }
 
@@ -777,9 +784,15 @@ class SessionModel<A : Connection, T : Any>(
 
     private val tv: Boolean get() = door.form == DeviceForm.TV
 
-    /** The picker's tiles: every account this TV keeps behind a PIN, the most recently used first. */
-    private fun tiles(): List<PickerTile> = door.trusted().filter { it.method == TrustedDevice.Method.DEVICE_PIN }
+    /**
+     * The picker's tiles: every account this TV keeps — behind a PIN, or without one (a DEVICE_KEY record, owner
+     * 2026-11-26) —, the most recently used first.
+     */
+    private fun tiles(): List<PickerTile> = door.trusted().filter { it.keptOnTv }
         .map { PickerTile(it.key, it.pickerLabel, io.ktor.http.Url(it.server).host) }
+
+    private val TrustedDevice.keptOnTv: Boolean
+        get() = method == TrustedDevice.Method.DEVICE_PIN || method == TrustedDevice.Method.DEVICE_KEY
 
     private fun showPicker(error: Msg? = null) {
         val tiles = tiles()
@@ -791,12 +804,33 @@ class SessionModel<A : Connection, T : Any>(
         return null
     }
 
-    /** A TV's picker: the PIN unlock of the account [key] names ([unlockWithPin]); false where the picker shows no such tile. */
-    fun pick(key: String): Boolean {
-        if (current !is Gate.Picker) return false
-        val record = door.trusted().firstOrNull { it.key == key && it.method == TrustedDevice.Method.DEVICE_PIN } ?: return false
-        show(Gate.Unlock(record))
-        return true
+    /**
+     * A TV's picker: the account [key] names. One kept behind a PIN shows its PIN unlock ([unlockWithPin]) and returns
+     * null; one kept without a PIN (owner 2026-11-26) opens at once — a resume, whatever was open closed first, the gate an
+     * unlock at work meanwhile — and returns what opened. A kept session gone (refused, the wrap removed elsewhere) is the
+     * picker again without it, saying so; any other failure the picker with why. Null where the picker shows no such tile.
+     */
+    suspend fun pick(key: String): Opened<A, T>? {
+        if (current !is Gate.Picker) return null
+        val record = door.trusted().firstOrNull { it.key == key && it.keptOnTv } ?: return null
+        if (record.method == TrustedDevice.Method.DEVICE_PIN) {
+            show(Gate.Unlock(record))
+            return null
+        }
+        show(Gate.Unlock(record, working = true))
+        closeAll()
+        return try {
+            add(door.resume(record))
+            val (held, tenant) = connections.current!!
+            openTenant(held, tenant)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            when (val reason = reasonOf(e)) {
+                SignInFailure.Reason.DEVICE_NOT_TRUSTED, SignInFailure.Reason.SESSION_ENDED -> picker(Msg.TV_PIN_GONE)
+                else -> picker(words(reason))
+            }
+        }
     }
 
     /** From a PIN unlock back to the picker, nothing opened. */

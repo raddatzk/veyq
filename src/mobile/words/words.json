@@ -7309,5 +7309,44 @@
     "note": "a TV's settings: saves the account's name on this TV's picker (tv_picker_name)",
     "en": "Save name",
     "de": "Namen speichern"
+  },
+  "tv_stay_no_pin": {
+    "note": "a TV's deliberate third way after the QR sign-in, below the PIN pad, and in its settings for an account kept behind a PIN: the account stays on this TV with no PIN (owner 2026-11-26); always confirmed with tv_stay_no_pin_warning first",
+    "en": "Stay signed in without a PIN",
+    "de": "Ohne PIN angemeldet bleiben",
+    "apple_en": "Stay Signed In Without a PIN"
+  },
+  "tv_stay_no_pin_title": {
+    "note": "the confirmation's heading before a TV keeps an account without a PIN (tv_stay_no_pin)",
+    "en": "Stay signed in without a PIN?",
+    "de": "Ohne PIN angemeldet bleiben?"
+  },
+  "tv_stay_no_pin_warning": {
+    "note": "the confirmation's warning before a TV keeps an account without a PIN: nothing is asked when it opens; on Apple TV a profile is no lock either, since tvOS profiles switch from Control Center without a passcode (ADR 0159 decision 5)",
+    "en": "Anyone with the remote can open your account on this TV.",
+    "de": "Jeder mit der Fernbedienung kann dein Konto auf diesem Fernseher öffnen.",
+    "apple_en": "Anyone with the remote can open your account on this TV — from any other profile too, since profiles switch without a passcode.",
+    "apple_de": "Jeder mit der Fernbedienung kann dein Konto auf diesem Fernseher öffnen — auch aus jedem anderen Profil, denn Profile wechseln ohne Code."
+  },
+  "tv_pin_unavailable": {
+    "note": "the offer after a TV's QR sign-in where the TV has no hardware key for a PIN but can keep the account without one (tv_stay_no_pin)",
+    "en": "This TV can't protect your account with a PIN.",
+    "de": "Dieser Fernseher kann dein Konto nicht mit einer PIN schützen."
+  },
+  "tv_set_pin": {
+    "note": "a TV's settings, for an account kept without a PIN: choose a PIN for it from now on (ADR 0160)",
+    "en": "Set a PIN",
+    "de": "PIN festlegen",
+    "apple_en": "Set a PIN"
+  },
+  "tv_pin_saved": {
+    "note": "a TV's settings: an account kept without a PIN is kept behind the new PIN from now on",
+    "en": "PIN set.",
+    "de": "PIN festgelegt."
+  },
+  "tv_pin_removed": {
+    "note": "a TV's settings: the account stays on this TV without its PIN from now on (tv_stay_no_pin)",
+    "en": "PIN removed. You stay signed in on this TV without a PIN.",
+    "de": "PIN entfernt. Du bleibst auf diesem Fernseher ohne PIN angemeldet."
   }
 }

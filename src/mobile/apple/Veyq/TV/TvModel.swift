@@ -114,7 +114,10 @@ final class TvModel {
 
     // MARK: The picker and the PIN (ADR 0159 decision 4, ADR 0160)
 
-    func pick(_ account: String) { _ = session.pick(key: account) }
+    /// A tile picked: its PIN unlock, or — kept without a PIN (owner 2026-11-26) — the account opened (core's `pick`).
+    func pick(_ account: String) {
+        Task { if let opened = try? await session.pick(key: account) { await show(opened) } }
+    }
 
     func backToPicker() { session.backToPicker() }
 
@@ -147,6 +150,17 @@ final class TvModel {
 
     /// *Don't keep me signed in*, or OK where this TV cannot keep an account: the account is held for this run only.
     func notNow() { _ = session.notNow() }
+
+    /// *Stay signed in without a PIN*, confirmed after its warning (owner 2026-11-26): the account kept at the login level,
+    /// which a TV's store keeps bound to nothing but this device.
+    func stayWithoutPin() {
+        Task {
+            trustWorking = true
+            let change = (try? await session.stay(level: .login)) ?? nil
+            trustWorking = false
+            if change == .failed { said = say(.trustFailed) }
+        }
+    }
 
     // MARK: The QR sign-in (ADR 0059's *Sign in with a QR code*, the TV's only way in)
 
@@ -403,10 +417,49 @@ final class TvModel {
 
     var signedAccount: VeyqAccount? { session.signedTo?.account }
 
-    /// The open account's name on the picker (core's `TrustedDevice.pickerLabel`); nil where it is not kept by a PIN.
+    /// The open account's name on the picker (core's `TrustedDevice.pickerLabel`); nil where this TV does not keep it —
+    /// behind a PIN, or without one (owner 2026-11-26).
     var pickerLabel: String? {
-        guard let t = signedAccount?.trusted, t.method == .devicePin else { return nil }
+        guard let t = signedAccount?.trusted, t.method == .devicePin || t.method == .deviceKey else { return nil }
         return t.pickerLabel
+    }
+
+    /// How this TV keeps the open account: true behind a PIN, false without one, nil not at all (this run only).
+    var keptWithPin: Bool? {
+        switch signedAccount?.trusted?.method {
+        case .devicePin: true
+        case .deviceKey: false
+        default: nil
+        }
+    }
+
+    /// Whether this TV can keep an account behind a PIN (core's `ThisDevice.offersPin`).
+    var offersPin: Bool { device.offersPin }
+
+    /// The account kept on without its PIN (owner 2026-11-26): `old` asked first through the server's count (core's
+    /// `keepWithoutPin`); a wrap gone locks the TV.
+    func keepWithoutPin(old: String, done: @escaping (VeyqAccount.PinChange?) -> Void) {
+        guard let account = signedAccount else { return }
+        Task {
+            trustWorking = true
+            let change = (try? await account.keepWithoutPin(old: old)) ?? nil
+            trustWorking = false
+            if change?.outcome == .gone { lock() }
+            done(change)
+        }
+    }
+
+    /// The account, kept without a PIN, kept behind `pin` from now on (core's `trustWithPin`); `done` says whether it was.
+    func setPin(_ pin: String, done: @escaping (Bool) -> Void) {
+        guard let account = signedAccount else { return }
+        Task {
+            trustWorking = true
+            let outcome = try? await account.trustWithPin(pin: pin, label: nil)
+            trustWorking = false
+            let kept = outcome == .remembered
+            if !kept { said = say(.trustFailed) }
+            done(kept)
+        }
     }
 
     func renameOnPicker(_ label: String) { signedAccount?.renameOnPicker(label: label) }

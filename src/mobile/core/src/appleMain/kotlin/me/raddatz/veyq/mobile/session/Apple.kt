@@ -97,8 +97,17 @@ internal class ApplePinFactors(private val keychain: KeychainBridge, private val
  * under which the DEVICE_KEY wraps are AES-256-GCM sealed — one per level: the [StaySignedIn.PRESENCE] item behind
  * `.userPresence`, the [StaySignedIn.LOGIN] item without it but bound to the passcode (this device only, read without
  * asking while the device is unlocked).
+ *
+ * On a TV ([tv]), which has no passcode, the [StaySignedIn.LOGIN] item is bound to nothing: staying signed in without a
+ * PIN (owner 2026-11-26, ADR 0160), the TV's Keychain keeping it this device only and never in a backup
+ * (`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, `Veyq/TV/TvKeychain.swift`).
  */
-class AppleDeviceKeys(private val keychain: KeychainBridge, private val prompt: String, private val p: Primitives = LibsodiumPrimitives) : DeviceKeys {
+class AppleDeviceKeys(
+    private val keychain: KeychainBridge,
+    private val prompt: String,
+    private val p: Primitives = LibsodiumPrimitives,
+    private val tv: Boolean = false,
+) : DeviceKeys {
     override fun createBindKey(alias: String) {
         keychain.remove(alias)
         check(keychain.store(alias, p.randomBytes(64).toNSData(), protected = false, passcode = false)) { "bind key not stored" }
@@ -130,8 +139,9 @@ class AppleDeviceKeys(private val keychain: KeychainBridge, private val prompt: 
         if (!create) throw DeviceAuthFailed(cancelled = false, detail = "no $level unlock key")
         if (level !in staySignedIn) throw DeviceAuthFailed(cancelled = false, detail = "$level is not offered without a passcode")
         val key = p.randomBytes(32)
-        // the login item asks nothing, but is bound to the passcode: without one, no device sign-in authenticates
-        if (!keychain.store(unlockAccount(level), key.toNSData(), protected, passcode = !protected)) {
+        // the login item asks nothing, but is bound to the passcode: without one, no device sign-in authenticates — but on
+        // a TV, which has none, where it is the deliberate choice to stay without a PIN
+        if (!keychain.store(unlockAccount(level), key.toNSData(), protected, passcode = !protected && !tv)) {
             throw DeviceAuthFailed(cancelled = false, detail = "the $level unlock key was not stored")
         }
         key
@@ -180,10 +190,15 @@ class AppleDeviceKeys(private val keychain: KeychainBridge, private val prompt: 
     /**
      * Both levels where the device has a passcode, else none. `.userPresence` needs one; the login item could exist
      * without, but its guarantee is that the device's own sign-in authenticates, and without a passcode nothing does.
-     * A TV has none ([deviceOwnerAuthenticationAvailable]).
+     * A TV has none ([deviceOwnerAuthenticationAvailable]): there the login level alone, staying signed in without a PIN,
+     * which the TV offers only beside its PIN and after a warning (owner 2026-11-26, ADR 0160).
      */
     override val staySignedIn: Set<StaySignedIn>
-        get() = if (deviceOwnerAuthenticationAvailable()) setOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN) else emptySet()
+        get() = when {
+            tv -> setOf(StaySignedIn.LOGIN)
+            deviceOwnerAuthenticationAvailable() -> setOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN)
+            else -> emptySet()
+        }
 
     private companion object {
         /** The presence item, the one unlock key there was before the levels: its seals still open. */
@@ -272,7 +287,7 @@ object AppleSessions {
      */
     fun tvDevice(keychain: KeychainBridge, label: String, prompt: String, defaults: NSUserDefaults): ThisDevice =
         ThisDevice(
-            UserDefaultsStore(defaults), AppleDeviceKeys(keychain, prompt), label, LibsodiumPrimitives,
+            UserDefaultsStore(defaults), AppleDeviceKeys(keychain, prompt, tv = true), label, LibsodiumPrimitives,
             offlineRoot = null, backgroundRuns = false, form = DeviceForm.TV,
         )
 

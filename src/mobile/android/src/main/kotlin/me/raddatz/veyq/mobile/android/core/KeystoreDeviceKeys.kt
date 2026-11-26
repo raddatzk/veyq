@@ -43,9 +43,12 @@ import me.raddatz.veyq.mobile.session.StaySignedIn
  *    [StaySignedIn.LOGIN] one without user authentication, opened by the unlocked device itself;
  *  - one AES-256-GCM key without authentication that seals the small secrets (a refresh token) kept in preferences.
  *
- * [host] is the activity a prompt is shown over, set while one is resumed.
+ * [host] is the activity a prompt is shown over, set while one is resumed. On a TV ([tv]) the login level's key is
+ * staying signed in without a PIN (owner 2026-11-26, ADR 0160): the same Keystore key without user authentication —
+ * non-exportable, never in a backup (the Keystore is not backed up, and the app allows no backup) —, offered whatever the
+ * lock screen, since a TV's is the household's, not a person's.
  */
-class KeystoreDeviceKeys(context: Context, private val host: () -> Activity?) : DeviceKeys {
+class KeystoreDeviceKeys(context: Context, private val tv: Boolean = false, private val host: () -> Activity?) : DeviceKeys {
     private val keyStore = KeyStore.getInstance(STORE).apply { load(null) }
     private val prefs = context.getSharedPreferences("veyq.device-secrets", Context.MODE_PRIVATE)
     private val keyguard = context.getSystemService(KeyguardManager::class.java)
@@ -56,7 +59,12 @@ class KeystoreDeviceKeys(context: Context, private val host: () -> Activity?) : 
      * the Master Key would open for anyone holding the phone. The password trust stays offered there, as everywhere.
      */
     override val staySignedIn: Set<StaySignedIn>
-        get() = if (keyguard?.isDeviceSecure == true) setOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN) else emptySet()
+        get() = when {
+            // a TV: the login level alone, offered beside the PIN after a warning (its own lock screen authenticates no one person)
+            tv -> setOf(StaySignedIn.LOGIN)
+            keyguard?.isDeviceSecure == true -> setOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN)
+            else -> emptySet()
+        }
 
     private fun unlockAlias(level: StaySignedIn) = when (level) {
         StaySignedIn.PRESENCE -> UNLOCK

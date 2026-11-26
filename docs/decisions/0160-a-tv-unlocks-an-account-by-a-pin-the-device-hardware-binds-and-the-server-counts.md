@@ -1,8 +1,11 @@
 # ADR 0160 — A TV unlocks an account by a PIN the device's hardware binds and the server counts
 
-- Status: Accepted (owner 2026-11-25: one PIN per account per TV, a constant 10, the idle lock fixed)
+- Status: Accepted (owner 2026-11-25: one PIN per account per TV, a constant 10, the idle lock fixed); amended 2026-11-26
+  (owner: staying signed in on a TV without a PIN, a deliberate choice with a warning — § Staying signed in without a PIN)
 - Built: yes — contract, backend, the core and both TV clients; the PIN never ran end to end: the Google TV
-  emulator's Keystore is software and the tvOS Simulator has no Secure Enclave, so a real TV owes the pass (inbox #1360)
+  emulator's Keystore is software and the tvOS Simulator has no Secure Enclave, so a real TV owes the pass (inbox #1360).
+  The 2026-11-26 amendment is built in the core and both TV clients and held by `TvSessionModelTest`; its live pass on a
+  simulator and on a real TV is still owed
 - Date: 2026-11-25
 - Model: [en.account.key-model](../features/account/enablers/en.account.key-model.md)
 
@@ -40,7 +43,8 @@ the server.
 
 1. **A fourth level, `PIN`, beside presence and login — offered where the device has a non-exportable hardware key
    and the level is the device's way to keep an account.** On a TV it is the only level offered: the choice is a PIN or
-   no wrap at all (each start a new pairing). It is the store's answer (`DeviceKeys.pinFactors`, null where the store
+   no wrap at all (each start a new pairing). *Amended 2026-11-26:* beside the PIN, never before it, a TV now also offers
+   staying signed in without one — see § Staying signed in without a PIN. It is the store's answer (`DeviceKeys.pinFactors`, null where the store
    has no hardware key), as the other levels are, never a screen's probe. In code it is no `StaySignedIn` entry but the
    method `TrustedDevice.Method.DEVICE_PIN`: its key is per account, where a `StaySignedIn` level is one unlock key
    shared by every account at it, and its open is the server's (decision 3), not the store's. Six digits, digits only (a remote's number pad; the same length as ADR 0059's
@@ -121,6 +125,65 @@ the server.
   here; more mechanism for no further guarantee.
 - **Rejected — one PIN per TV, or per instance or tenant:** see decision 1. What an instance or tenant can set is a
   policy honest clients follow (the count is the exception, decision 3), and on a TV a PIN is already the only way to stay signed in, so a "TVs must use a PIN" policy would change nothing.
+  (Since 2026-11-26 the PIN is no longer the only way, § Staying signed in without a PIN; such a policy would still be
+  one honest clients follow, so the reasoning stands.)
+
+## Staying signed in without a PIN (owner 2026-11-26)
+
+The owner's decision of 2026-11-26 ("Ja, als bewusste Wahl mit Warnsatz umsetzen"): a TV offers a **third choice after
+the QR sign-in — stay signed in on this TV without a PIN** — as a deliberate choice with a warning that says plainly what
+it means. It narrows the owner's rule of 2026-11-11 (no level that authenticates nobody) for a TV, and only as the
+person's explicit choice.
+
+**Why.** A household TV is often in a room where everyone with the remote is someone the account holder would let in
+anyway, and a PIN typed with a remote at every start is friction that pushes people to *Don't keep me signed in* — a new
+phone pairing at every start — or away from the TV. The owner chose to let the person decide, told what it costs.
+
+**What is built.**
+- **No new level, no new method:** it is the `DEVICE_KEY` wrap at `StaySignedIn.LOGIN`, the desktops' "Stay signed in".
+  A TV's store offers that level alone (`DeviceKeys.staySignedIn` = `{LOGIN}` on a TV: Android's `KeystoreDeviceKeys(tv =
+  true)`, Apple's `AppleDeviceKeys(tv = true)`), its unlock key bound to nothing but this device: on Android a Keystore
+  AES-256-GCM key without user authentication (non-exportable; the Keystore is not backed up and the app allows no
+  backup), on tvOS a Keychain item `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` without a passcode binding
+  (`TvKeychain` refuses any protected or passcode-bound item and keeps every item this device only, never in a backup).
+- **The offer** (`SessionModel.Offer`): on a TV `pin` as before and `levels = [LOGIN]` where the store keeps it. Both TV
+  clients draw the PIN pad first and focused, then *Stay signed in without a PIN*, then *Don't keep me signed in*. The
+  no-PIN choice is never taken at once: it opens a confirmation carrying the warning (`tv_stay_no_pin_warning`) whose
+  Cancel is the default — tvOS an alert (the HIG's way to confirm a choice with a consequence), Android TV a step of its
+  own with Cancel focused (Leanback's guided step). Where the TV has no hardware factor for a PIN but keeps the login
+  level, the offer says it cannot protect the account with a PIN (`tv_pin_unavailable`) and offers the no-PIN choice
+  and the skip.
+- **The picker** lists accounts kept without a PIN beside those behind one, unmarked (neither platform's guidance asks
+  for a mark, and the person chose it); picking one opens it at once — a resume (`SessionModel.pick`), whatever was
+  open closed first, one account at a time as before. A TV still resumes nothing at start: every start, *Lock*, a return
+  from the background and the idle lock return to the picker (decision 6 applies unchanged; the lock binds nothing for
+  such an account, it only closes it).
+- **The TV's settings:** an account behind a PIN can drop it (*Stay signed in without a PIN*: the warning first, then the
+  current PIN through the server's count — whoever finds the account open must not take its PIN away unasked;
+  `VeyqAccount.keepWithoutPin`); an account kept without one gets one by *Set a PIN* where the TV keeps PINs
+  (`trustWithPin`, which asks nothing old: it adds a check). The picker's name travels with the account through both.
+
+**The warning, as the apps say it.** "Anyone with the remote can open your account on this TV." On Apple TV it goes on:
+"— from any other profile too, since profiles switch without a passcode." tvOS profiles switch from Control Center
+without a passcode (Context above), so a profile is no lock: with the `runs-as-current-user` entitlement (ADR 0159
+decision 5, still the owner's signing step) the account is listed only in its own profile, but anyone can switch to that
+profile; without it, every profile shares the app's data. Google TV profiles are unverified (ADR 0159 decision 5), so
+the Android sentence claims nothing about them beyond "anyone with the remote".
+
+**The residual, stated as it is.** Such an account authenticates **nobody**: whoever holds the remote — a guest, a
+child, a burglar — opens it, reads everything the account reads (still only viewing: a TV authors nothing and takes
+nothing off the device, ADR 0159 decisions 2–3) and can report content as the account. A thief who carries the TV away
+opens it too, until the account holder removes the device from another device's list ([ADR 0058](0058-revoke-never-takes-key-material.md)):
+that removes its wrap and ends its session, so the next pick finds the account gone (held by `TvSessionModelTest`'s
+played refusal, not run against a server). The server count of decision 3 does not apply: there is nothing to count.
+Operator-blindness is untouched — the operator holds the wrap, never the TV's key; the operator together with someone
+who runs code on the TV opens it, as at any login level. What the PIN gave, this choice gives up, and the confirmation
+says so before it is taken.
+
+**Rejected — the no-PIN choice as the default, or offered first:** the PIN stays the recommended way; the owner's
+words are "a deliberate choice". **Rejected — a new `StaySignedIn` entry or `TrustedDevice.Method`:** the LOGIN level's
+mechanism is exactly this one (a key that opens without asking); a new entry would add a branch to every store and every
+client's exhaustive drawing (Linux, Windows) for no different construction.
 
 ## Decision log (cr-tv-app, 2026-11-25)
 

@@ -36,7 +36,7 @@ object AndroidDevice {
     /** The device's keys in the Keystore: its wraps, its unlock keys, its sealed secrets. */
     @Synchronized
     fun keys(context: Context): KeystoreDeviceKeys =
-        keys ?: KeystoreDeviceKeys(context.applicationContext) { host?.get() }.also { keys = it }
+        keys ?: KeystoreDeviceKeys(context.applicationContext, tv = tv(context)) { host?.get() }.also { keys = it }
 
     @Synchronized
     fun of(context: Context): ThisDevice = device ?: tv(context).let { tv ->

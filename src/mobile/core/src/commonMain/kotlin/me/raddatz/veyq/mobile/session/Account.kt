@@ -853,7 +853,8 @@ class VeyqAccount private constructor(
             // a key the seal created for a level nothing ends up using goes again, whatever stopped the enrolment
             val id = try { addWrap(AddWrapRequest.Method.DEVICE_KEY, sealed, iv) } catch (e: Exception) { releaseUnlockKeys(); throw e }
                 ?: return TrustOutcome.NOT_OFFERED.also { releaseUnlockKeys() }
-            TrustedDevice(server, email, userId, TrustedDevice.Method.DEVICE_KEY, id, alias, level).also {
+            // a TV's picker name stays with the account through a change of how it is kept (null elsewhere)
+            TrustedDevice(server, email, userId, TrustedDevice.Method.DEVICE_KEY, id, alias, level, label = previous?.label).also {
                 device.keepWrap(it.key, ThisDevice.KeptWrap(id, b64(sealed), b64(iv)))
                 try {
                     device.keys.putSecret(it.refreshAlias, refresh)
@@ -975,20 +976,43 @@ class VeyqAccount private constructor(
      */
     suspend fun changePin(old: String, new: String): PinChange {
         val record = trusted?.takeIf { it.method == TrustedDevice.Method.DEVICE_PIN } ?: return PinChange(PinChange.Outcome.FAILED)
-        val factor = device.keys.pinFactors?.factor(record.alias) ?: return PinChange(PinChange.Outcome.FAILED)
-        val verifier = try { suite.pinVerifier(factor, old) } finally { factor.fill(0) }
-        when (val answer = askShare(server, http, record.wrapId, verifier)) {
-            is ShareAnswer.Released -> answer.share.fill(0)
-            is ShareAnswer.Wrong -> return PinChange(PinChange.Outcome.WRONG, answer.attemptsLeft)
-            ShareAnswer.Gone -> { forget(record); return PinChange(PinChange.Outcome.GONE) }
-        }
+        checkPin(record, old)?.let { return it }
         return if (trustWithPin(new, record.label) == TrustOutcome.REMEMBERED) PinChange(PinChange.Outcome.CHANGED)
         else PinChange(PinChange.Outcome.FAILED)
     }
 
-    /** The picker's name for this account on this TV changed (ADR 0159 decision 4); nothing where it keeps no PIN trust. */
+    /**
+     * A TV's account kept on without its PIN from now on (owner 2026-11-26, ADR 0160 § Staying signed in without a PIN):
+     * [old] asked first through the server's count, as a change of PIN asks it — whoever finds the account open must not
+     * take its PIN away unasked —, then the DEVICE_PIN wrap replaced by a DEVICE_KEY one at [StaySignedIn.LOGIN], the
+     * picker's name kept. The way back is [trustWithPin], which asks nothing old: it adds a check.
+     */
+    suspend fun keepWithoutPin(old: String): PinChange {
+        val record = trusted?.takeIf { it.method == TrustedDevice.Method.DEVICE_PIN } ?: return PinChange(PinChange.Outcome.FAILED)
+        checkPin(record, old)?.let { return it }
+        return if (trustThisDevice(null, StaySignedIn.LOGIN) == TrustOutcome.REMEMBERED) PinChange(PinChange.Outcome.CHANGED)
+        else PinChange(PinChange.Outcome.FAILED)
+    }
+
+    /** [pin] checked through the server's count (ADR 0160 decision 3): null where it matched, else what it came to. */
+    private suspend fun checkPin(record: TrustedDevice, pin: String): PinChange? {
+        val factor = device.keys.pinFactors?.factor(record.alias) ?: return PinChange(PinChange.Outcome.FAILED)
+        val verifier = try { suite.pinVerifier(factor, pin) } finally { factor.fill(0) }
+        return when (val answer = askShare(server, http, record.wrapId, verifier)) {
+            is ShareAnswer.Released -> { answer.share.fill(0); null }
+            is ShareAnswer.Wrong -> PinChange(PinChange.Outcome.WRONG, answer.attemptsLeft)
+            ShareAnswer.Gone -> { forget(record); PinChange(PinChange.Outcome.GONE) }
+        }
+    }
+
+    /**
+     * The picker's name for this account on this TV changed (ADR 0159 decision 4); nothing where the TV does not keep it —
+     * behind a PIN or, chosen deliberately, without one (owner 2026-11-26).
+     */
     fun renameOnPicker(label: String) {
-        val record = trusted?.takeIf { it.method == TrustedDevice.Method.DEVICE_PIN } ?: return
+        val record = trusted?.takeIf {
+            it.method == TrustedDevice.Method.DEVICE_PIN || (it.method == TrustedDevice.Method.DEVICE_KEY && device.form == DeviceForm.TV)
+        } ?: return
         val renamed = record.copy(label = label.trim().ifEmpty { null })
         device.remember(renamed)
         trusted = renamed

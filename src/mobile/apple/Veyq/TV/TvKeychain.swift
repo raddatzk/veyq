@@ -5,9 +5,11 @@ import VeyqCore
 
 /// The Keychain for core's `AppleDeviceKeys` on a TV (ADR 0159, ADR 0160): generic-password items of this app, on this
 /// device only, never in a backup — the iOS app's `KeychainStore` without LocalAuthentication, which tvOS has not. A TV
-/// has no passcode, so a protected or passcode-bound item is refused (core offers neither level there: its
-/// `staySignedIn` is empty on tvOS); what it keeps is its refresh tokens and bind keys, readable after the first unlock,
-/// and the PIN level's Secure Enclave keys.
+/// has no passcode, so a protected or passcode-bound item is refused (core's `AppleDeviceKeys` asks for neither on a
+/// TV); what it keeps is its refresh tokens and bind keys, readable after the first unlock, the PIN level's Secure
+/// Enclave keys, and — where someone chose to stay signed in without a PIN (owner 2026-11-26, ADR 0160) — the login
+/// level's unlock key, bound to nothing but this device: every item here is
+/// `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`, so none is synced or restored onto another device.
 ///
 /// **The PIN's hardware factor** (ADR 0160 decision 2): per account a Secure Enclave P-256 key-agreement key; its ECDH
 /// agreement with [Self.point] — a fixed public point whose discrete log nobody knows — is the fixed-input function the

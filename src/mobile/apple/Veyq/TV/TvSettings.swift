@@ -3,15 +3,18 @@ import VeyqCore
 
 /// A TV's own settings (ADR 0159 decision 4, ADR 0160 decision 7), not the account page: *Lock*, *Add someone*, the
 /// account's name on the picker, *Change PIN*, *Remove from this TV*. A PIN's change asks the current PIN, then the new
-/// one twice; a wrong current PIN says the tries left, the tenth removes the account here (the TV locks).
+/// one twice; a wrong current PIN says the tries left, the tenth removes the account here (the TV locks). Owner
+/// 2026-11-26: an account behind a PIN can stay signed in without it — the warning's alert first, then the current PIN —,
+/// and one kept without a PIN gets one by *Set a PIN* (the new PIN twice) where this TV keeps PINs.
 struct TvSettings: View {
     @Bindable var model: TvModel
     @State private var name = ""
     @State private var changing: Step?
     @State private var said: String?
     @State private var asksRemove = false
+    @State private var asksWithoutPin = false
 
-    private enum Step { case old, new(String), again(String, String) }
+    private enum Step { case old, new(String), again(String, String), dropOld, setNew, setAgain(String) }
 
     var body: some View {
         if let step = changing {
@@ -37,8 +40,15 @@ struct TvSettings: View {
                         name = ""
                     }
                 }
-                Section {
-                    Button { model.input(); said = nil; changing = .old } label: { Label(say(.tvChangePin), systemImage: "number") }
+                if model.keptWithPin == true {
+                    Section {
+                        Button { model.input(); said = nil; changing = .old } label: { Label(say(.tvChangePin), systemImage: "number") }
+                        Button { model.input(); said = nil; asksWithoutPin = true } label: { Label(say(.tvStayNoPin), systemImage: "lock.open") }
+                    }
+                } else if model.keptWithPin == false && model.offersPin {
+                    Section {
+                        Button { model.input(); said = nil; changing = .setNew } label: { Label(say(.tvSetPin), systemImage: "number") }
+                    }
                 }
             }
             Section {
@@ -51,6 +61,7 @@ struct TvSettings: View {
             Button(say(.tvRemoveHere), role: .destructive) { model.removeHere() }
             Button(say(.signinCancel), role: .cancel) {}
         }
+        .tvNoPinAlert(isPresented: $asksWithoutPin) { changing = .dropOld }
     }
 
     @ViewBuilder private func pin(_ step: Step) -> some View {
@@ -73,20 +84,41 @@ struct TvSettings: View {
                     model.changePin(old: old, new: new) { change in answered(change) }
                 }
                 .id("again")
+            case .dropOld:
+                TvPinPad(title: say(.tvPinOldTitle), hint: nil, error: said, working: model.trustWorking) { pin in
+                    said = nil
+                    model.keepWithoutPin(old: pin) { change in answered(change, done: say(.tvPinRemoved), again: .dropOld) }
+                }
+                .id("dropOld")
+            case .setNew:
+                TvPinPad(title: say(.tvPinSetTitle), hint: say(.tvPinSetHint), error: said, working: model.trustWorking) { pin in
+                    said = nil
+                    changing = .setAgain(pin)
+                }
+                .id("setNew")
+            case let .setAgain(new):
+                TvPinPad(title: say(.tvPinConfirmTitle), hint: nil, error: nil, working: model.trustWorking) { pin in
+                    guard pin == new else { said = say(.tvPinMismatch); changing = .setNew; return }
+                    model.setPin(new) { kept in
+                        said = say(kept ? Msg.tvPinSaved : Msg.trustFailed)
+                        changing = nil
+                    }
+                }
+                .id("setAgain")
             }
         }
         .onExitCommand { changing = nil }
     }
 
-    private func answered(_ change: VeyqAccount.PinChange?) {
+    private func answered(_ change: VeyqAccount.PinChange?, done: String? = nil, again: Step = .old) {
         guard let change else { said = say(.trustFailed); changing = nil; return }
         switch change.outcome {
         case .changed:
-            said = say(.tvPinChanged)
+            said = done ?? say(.tvPinChanged)
             changing = nil
         case .wrong:
             said = change.attemptsLeft.map { say(.tvPinWrong, $0) } ?? say(.tvPinWrong, 0)
-            changing = .old
+            changing = again
         case .gone:
             // the account left this TV: the model locked it
             changing = nil

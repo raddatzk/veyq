@@ -613,6 +613,29 @@ exact time, the metadata a session refresh at each start already shows.
 
 **Closed by:** accepted; a hardware-counted PIN would close it, and neither tvOS nor Android gives an app one.
 
+## A TV kept without a PIN opens for anyone with the remote
+
+Beside the PIN, a TV offers to stay signed in **without** one, as a deliberate choice the person confirms after a
+warning ([ADR 0160](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0160-a-tv-unlocks-an-account-by-a-pin-the-device-hardware-binds-and-the-server-counts.md)
+§ Staying signed in without a PIN). The account's Master Key is then sealed under a key the TV keeps without any check
+— Android's Keystore without user authentication, an Apple TV Keychain item on this device only — so it authenticates
+nobody:
+
+- **Anyone with the remote** opens the account from the picker and reads what it reads (on a TV only viewing: nothing
+  is changed or taken off the TV).
+- **On Apple TV, another profile is no barrier:** tvOS profiles switch from Control Center without a passcode.
+- **A thief who carries the TV away** opens it too, until the account holder removes the TV from the device list on
+  another device, which removes its wrap and ends its session.
+- The server's ten-try count does not apply: there is no PIN to count. The idle lock and *Lock* close the account but
+  bind nothing.
+
+The operator is no better off than at any other level: it holds the wrap, never the TV's key.
+
+**Decided in:** [ADR 0160](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0160-a-tv-unlocks-an-account-by-a-pin-the-device-hardware-binds-and-the-server-counts.md)
+§ Staying signed in without a PIN (owner 2026-11-26).
+
+**Closed by:** accepted as the person's choice; the PIN is offered first and recommended.
+
 ## The desktop app: Flathub's runtime, Windows' trust, no auto-update
 
 The Linux and Windows apps are packaged for a release, which no release carries yet; these hold from the first one that

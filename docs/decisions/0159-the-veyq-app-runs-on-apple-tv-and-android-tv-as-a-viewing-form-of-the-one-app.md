@@ -53,7 +53,9 @@ household's TV. The unlock a TV needs is [ADR 0160](0160-a-tv-unlocks-an-account
      audio; any other file stays listed, offers no download, and says it opens on another device.
    - **Expenses** — a Pot read-only: its entries and balances as the member sees them, nothing recorded, edited,
      settled or downloaded. A household's money on a shared screen is the account's to show: the TV opens one account
-     at a time behind its own PIN (decision 4), so a Pot shows only to the person who unlocked it.
+     at a time behind its own PIN (decision 4), so a Pot shows only to the person who unlocked it — unless that person
+     chose to keep the account without a PIN, which the warning before it says opens it to anyone with the remote
+     (ADR 0160 § Staying signed in without a PIN, owner 2026-11-26).
    - **Search** (the platform's, not an application, [ADR 0125](0125-search-runs-in-the-client-over-what-it-can-open-across-every-space.md))
      — on the TV too (owner 2026-11-25): it only reads, and its index is held in memory for the session (the core's
      `SearchModel` writes nothing), so a TV's purgeable storage does not touch it. Each platform draws it with its own
@@ -64,8 +66,9 @@ household's TV. The unlock a TV needs is [ADR 0160](0160-a-tv-unlocks-an-account
 4. **A TV starts at an account picker, and opens one account at a time.** Every account remembered on it is a tile
    under a name the person gives it on this TV (by default the account's address — a profile name is a tenant's and
    sealed under its keys, and the picker shows before any key is open; kept on this device in the clear, the one plaintext the TV keeps beside its records — no avatar, no content). Picking one asks its PIN
-   ([ADR 0160](0160-a-tv-unlocks-an-account-by-a-pin-the-device-hardware-binds-and-the-server-counts.md)) and opens only
-   that account; *Lock* and the switcher return to the picker and drop the Master Key; *Add someone* runs the QR
+   ([ADR 0160](0160-a-tv-unlocks-an-account-by-a-pin-the-device-hardware-binds-and-the-server-counts.md)) — or, where the
+   person deliberately chose to stay signed in without one, asks nothing (owner 2026-11-26, ADR 0160 § Staying signed in
+   without a PIN) — and opens only that account; *Lock* and the switcher return to the picker and drop the Master Key; *Add someone* runs the QR
    sign-in. The phone's "one authentication resumes every account" does not hold on a TV.
 
 5. **Apple TV's own users separate the app's data per person, and the PIN still guards each account.** The `VeyqTV`

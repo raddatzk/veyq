@@ -162,7 +162,9 @@ A Gradle build of its own, run through its own wrapper.
   (`session/Account.kt`, `SessionModel.kt`: every sign-in enrols the password trust, `Gate.Signed.offer` offers staying
   signed in at each level the store has, `stay(level)`, `notNow()`, Manage's `stay(account, level)` and
   `trustWithPassword`), over the `DeviceKeys` interface (`session/DeviceTrust.kt`; `StaySignedIn` is a level, `PRESENCE`
-  or `LOGIN`, and `DeviceKeys.staySignedIn` the set a store offers). The stores: Android `KeystoreDeviceKeys`, Apple
+  or `LOGIN`, and `DeviceKeys.staySignedIn` the set a store offers; a TV's store offers `LOGIN` alone, bound to nothing
+  but the device — staying signed in without a PIN, offered beside the PIN (`Offer.levels`) after a warning, its record
+  opened at the picker's `pick` without a PIN, ADR 0160 § Staying signed in without a PIN). The stores: Android `KeystoreDeviceKeys`, Apple
   `AppleDeviceKeys` (`appleMain`) over `KeychainStore.swift`, Windows `WindowsDeviceKeys` (`mingwMain`, the cinterop
   `core/wincred/`: DPAPI and the Passport key storage provider), Linux `LinuxDeviceKeys` (`linuxMain`, the cinterop
   `core/secret/`: libsecret `dlopen`ed, never linked). `DeviceKeysContract` (`:testing`) is what every store meets,

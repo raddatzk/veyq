@@ -810,8 +810,10 @@ convenience wrap per device (ADR 0005 §9):
   LOGIN's ("remember me"). What a thief gets is what the level's authentication gives them: at LOGIN, the device's
   sign-in opens the Master Key.
 
-What each platform's store holds, as built 2026-11-11. Where a store offers neither level, the password trust stays
-(where a bind key can be kept), and staying signed in is not offered at all.
+What each platform's store holds, as built 2026-11-11 (the TV row 2026-11-26). Where a store offers neither level, the
+password trust stays (where a bind key can be kept), and staying signed in is not offered at all. The rule that LOGIN is
+not offered where the device's sign-in authenticates nobody (owner 2026-11-11) has one exception, a TV's, where the
+person chooses it knowing that (owner 2026-11-26).
 
 | Client | The bind key and the refresh token | PRESENCE | LOGIN | Neither level offered |
 |---|---|---|---|---|
@@ -820,6 +822,7 @@ What each platform's store holds, as built 2026-11-11. Where a store offers neit
 | Windows | DPAPI (the current user, no UI) protects the bytes the device store keeps; the HMAC runs in libsodium, so the bytes enter memory while in use. A domain's roaming profile carries DPAPI's master key to another PC, and the trust with it | The 32 bytes encrypted to an RSA-2048 key in the **Microsoft Passport key storage provider** (Windows Hello's container, TPM-backed where a TPM is), created as `AUTH_MANDATORY`: **Windows refuses the decryption without Hello**, a prompt the app cannot skip, not a dialog it shows. Creating that key asks for Hello too, so enrolment prompts | The unlock key under DPAPI | Never: LOGIN is always offered, PRESENCE only where Hello is set up |
 | Linux | Items of the Secret Service's default collection (schema `me.raddatz.veyq.DeviceKey`), which the desktop sign-in unlocks; HMAC and GCM in libsodium, the bytes in memory while in use. **Any process of the user's session reads them**: the Secret Service has no per-application access. **In the Flatpak** ([ADR 0139](../decisions/0139-the-desktop-apps-ship-as-a-flatpak-bundle-and-an-msix-built-in-checks-and-promoted-with-the-release.md) decision 3) the items live in the app's own keyring behind the Secret portal (`~/.var/app/<id>/data/keyrings`, measured on the Fedora VM 2026-11-13, none in the host's collection), opened by a secret the host's keyring holds for the portal, so another sandboxed app does not reach them; an unsandboxed process of the session still can, and the app itself may talk to the host's Secret Service (the name the manifest grants for the core's availability probe) | Not offered: the Secret Service has no presence check, and a fingerprint reader (fprintd, polkit) has no standard way to a key, so none is planned | The unlock key an item of that collection: the desktop sign-in is the authentication (owner 2026-11-11) | Without a Secret Service on the session bus, or without libsecret: then no bind key can be kept either, so every start signs in with the Secret Key |
 | Web | A non-extractable WebCrypto HMAC key in IndexedDB | — | A non-extractable WebCrypto key in IndexedDB, **no presence check at all** | Where WebCrypto or IndexedDB is missing, or the operator switched `core.remember-device.passwordless` (or its parent) off |
+| A TV (Android TV, Apple TV) | The phone's stores, without a lock: Android's Keystore, tvOS's Keychain items `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (this device only, never in a backup) | Not offered: a TV has no presence check. Its own level is the PIN, `DEVICE_PIN` ([ADR 0160](../decisions/0160-a-tv-unlocks-an-account-by-a-pin-the-device-hardware-binds-and-the-server-counts.md)): a hardware factor, the PIN and a server share, ten tries counted by the server | **Staying signed in without a PIN** (owner 2026-11-26, ADR 0160 § Staying signed in without a PIN): the unlock key bound to nothing but this device (Android a Keystore key without user authentication; tvOS a Keychain item without a passcode binding), so it **authenticates nobody** — anyone with the remote opens the account. Offered only beside the PIN, after a warning that says so | Never: a TV's store keeps the login level whatever its lock screen |
 
 What the rows rest on:
 - **The contract each store meets** (`DeviceKeysContract`, the same cases over every store): `./gradlew :core:jvmTest
@@ -858,6 +861,11 @@ gets no store. Each platform's directory is in ADR 0140 decision 3, under the pr
   server unreachable, which the app cannot tell from being offline, so it shows that space's kept content until it next
   reaches the server. The reading: a hold or a suspension stops the server making content available; a member's own
   device copy was already delivered to them, as a saved file would be.
+- **A TV kept without a PIN** (owner 2026-11-26): the account opens for whoever holds the remote — on Apple TV also
+  from another profile, since tvOS profiles switch without a passcode — and for a thief who carries the TV away, until
+  the account holder removes the device from another device's list. The idle lock and *Lock* close it but bind nothing.
+  The person is told this before choosing it; the PIN stays the recommended way ([ADR 0160](../decisions/0160-a-tv-unlocks-an-account-by-a-pin-the-device-hardware-binds-and-the-server-counts.md)
+  § Staying signed in without a PIN). Not yet run on a TV or a simulator: held by `TvSessionModelTest` only.
 - **Windows, a local account without a password:** the Windows sign-in authenticates nobody, so LOGIN opens the Master
   Key for anyone at the PC. The app does not ask whether the account has a password, so LOGIN is offered there too
   (not measured on such an account: the VM's has one).
