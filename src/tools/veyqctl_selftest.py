@@ -77,7 +77,7 @@ what prove it. Everything here runs against a mirror directory this file writes 
      only with `--push` — and refusing drift, uncommitted changes, an unverified or mis-versioned chart, a failed render
      and a downgrade with the repository untouched; a hand-written veyqctl.json confirmed by `check` when its pins
      are its running release's as signed, and refused by `upgrade` when not;
- 12. **`init`'s order and memory** (cr-veyqctl-server-path phases 1, 2b) — every program a command starts checked at
+ 12. **`init`'s order and memory** (ADR 0126 decision 6) — every program a command starts checked at
      once before its first question, the missing ones named and waited for (`test_programs_checked_first`); no
      question after the first step; every answer kept in the repository's veyq-setup.json and the flags that shape
      the files with it, so an interrupted run goes on asking nothing twice and a written checkout writes nothing again

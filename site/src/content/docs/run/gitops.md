@@ -330,6 +330,15 @@ changing nothing outside the repository. Against the real programs, without a se
 a checked-out commit, `sops` and `ssh-keygen` writing and reading the server's secrets, and the tree's sha256 equal to
 veyq-server's own `scripts/tree_hash.py`.
 
-Not yet run: the server path on a real server (veyq-server has no release yet), `tls production` on a real cluster, an
-`upgrade` of a live instance that Argo CD then applies (the next release's), `--secrets external-secrets` and
-`sealed-secrets` against a cluster that has them, and Flux.
+On a real server, the maintainer's instance was set up three times by `init` alone, from an empty repository on a
+freshly installed server against veyq-server's signed release: on 2026-11-11 in the morning (veyq 1.61, then `upgrade`
+to 1.66) and the afternoon (1.66), and on 2026-11-12 (1.84, from veyq-server v0.8), each time with Let's Encrypt
+staging and then `tls production`. Each run started over to try what the one before had found, fixed in between: the
+questions asked in plainer words and in a better order (the node name derived from the address, the sudo password
+right after its admin user, no ACME e-mail), the server's system checked against veyq-server's roles before anything
+leaves, an age key kept by an earlier run but deleted since asked for again, `tls production` judging each certificate
+by its ACME order, and the bootstrap handing `sops` the age key's file. (Read back from the commits between the runs;
+no log of them was kept.) Since then that instance has been upgraded by `upgrade`, one commit each, which Argo CD
+applied — 1.84 to 1.318 by 2026-11-26.
+
+Not yet run: `--secrets external-secrets` and `sealed-secrets` against a cluster that has them, and Flux.

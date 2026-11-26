@@ -461,8 +461,8 @@ class Host:
 
     def stack_matrix(self, commit: str) -> tuple[list[str], list[str]]:
         import yaml
-        # The lane's matrix is the pipeline's (publish.yml calls it); a commit without the file was snapshotted by
-        # `ci.yml`, under an identity no promotion accepts (cr-workflows-split-pipeline-callers, owner 2026-11-07).
+        # The lane's matrix is checks.yml's `stack` at the snapshot's commit; a commit without that file was snapshotted
+        # by `ci.yml`, under an identity no promotion accepts (cr-workflows-split-pipeline-callers, owner 2026-11-07).
         shown = self._run("git", "show", f"{commit}:{PIPELINE_WORKFLOW}", check=False)
         if shown.returncode != 0:
             raise Refused(f"{commit} has no {PIPELINE_WORKFLOW}: its snapshot was made before the workflow split, "
