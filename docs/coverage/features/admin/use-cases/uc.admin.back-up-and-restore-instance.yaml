@@ -338,3 +338,10 @@ gaps:
     repairs) and keeps a failed READ from reading as a wrong key; `src/cli/cli.test.ts` pins that the command
     reaches `getInstanceConfigSecret()` and prints its JSON. On the first run whose log shows admin-web's suites
     executed, both go under `the-server-owner-reads-the-config-secret-state`.
+  stack: >-
+    Lane L2's browser half (`tests/e2e/tests/upgrade/upgrade-in-place.spec.ts`, run by `scripts/run_stack_upgrade.py`
+    after `veyqctl upgrade` took an instance of a published release to the candidate in place) signs in as the owner
+    the starting release's own seeder wrote and opens the seeded Memory and Depot files, tagged
+    `a-predecessors-backup-upgrades-with-its-content-intact`, the criterion lanes L2 and L3 take over from the jar-level
+    proof (ADR 0091 decision 7). ADR 0040 admits `stack` refs only once a CI run's log shows the suite executed; on that
+    run the file becomes a ref on that criterion, and this gap goes.

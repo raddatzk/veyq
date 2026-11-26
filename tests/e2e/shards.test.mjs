@@ -6,11 +6,13 @@
 // runs in CI, a leg whose folder is gone runs nothing but the dependencies — and none of them makes a test red. So this
 // file lists the suite once whole and once per leg, with no stack booted, and holds:
 //   1. every feature spec lies in exactly one folder one level below `features/`, and none directly in `features/`;
-//   2. the projects are `setup`, `scenarios`, `instance` and one per domain folder — nothing else, so a new kind of
-//      project is a decision this file is told about — and every spec runs in exactly one of them;
+//   2. the projects are `setup`, `scenarios`, `instance`, lane L2's `upgrade` and one per domain folder — nothing else,
+//      so a new kind of project is a decision this file is told about — and every spec runs in exactly one of them;
 //   3. `checks.yml`'s matrix names exactly the domain folders, and its `--project` passes the leg's domain;
 //   4. every leg runs `setup`, `scenarios` and `instance` whole — the state its feature specs start from — and its own
-//      domain whole, and nothing of another domain.
+//      domain whole, and nothing of another domain, nor `upgrade`, which only lane L2 runs (`run_stack_upgrade.py`).
+// The `stack` job is read alone, up to the next job of checks.yml whatever that is (`jobSlice`), so a job added after it
+// — lane L2's — is never read as part of it.
 // The checks are a pure function over what the listing and the files say (`problems`), bitten below with a spec outside
 // a domain folder, a spec in two projects, a folder missing from the matrix and a matrix leg with no folder.
 // `pnpm run check` runs this file, and `checks.yml`'s frontend job runs that on every commit.
@@ -30,6 +32,18 @@ const CI = fileURLToPath(new URL('../../.github/workflows/checks.yml', import.me
 const CLI = fileURLToPath(new URL('./node_modules/@playwright/test/cli.js', import.meta.url))
 const WHOLE = ['setup', 'scenarios', 'instance']
 const INSTANCE = 'instance'
+// Projects no L1 leg runs: lane L2's browser half (playwright.config.ts says why it depends on nothing).
+const LANE_ONLY = ['upgrade']
+
+/** One job of a workflow's text: from its `  <name>:` line to the next job's, or to the end. */
+export function jobSlice(ci, name) {
+  const start = ci.indexOf(`\n  ${name}:\n`)
+  if (start < 0) return ''
+  const next = /\n  [A-Za-z0-9_-]+:\n/g
+  next.lastIndex = start + 1
+  const end = next.exec(ci)
+  return ci.slice(start, end ? end.index : ci.length)
+}
 
 /** Every `*.spec.ts` under `features/`, as its path below `features/` (`depot/depot-files.spec.ts`), and its folders. */
 function layout() {
@@ -51,8 +65,8 @@ function layout() {
 /** The domains `checks.yml`'s `stack` job runs, one per leg: its matrix `domain: [...]`, and whether it passes the leg's. */
 function ciLegs() {
   const ci = readFileSync(CI, 'utf8')
-  const stack = ci.slice(ci.indexOf('\n  stack:\n'), ci.indexOf('\n  upgrade-proof:\n'))
-  assert.ok(stack.length > 0, 'checks.yml has no `stack` job before `upgrade-proof` — this file reads it from there')
+  const stack = jobSlice(ci, 'stack')
+  assert.ok(stack.length > 0, 'checks.yml has no `stack` job — this file reads the legs from there')
   const matrix = /^\s+domain: \[([a-z0-9, -]+)\]$/m.exec(stack)
   assert.ok(matrix, "the stack job's matrix names no `domain: [...]`")
   assert.match(stack, /-- --project "\$\{DOMAIN\}"/, 'the stack job passes no `-- --project "${DOMAIN}"` to the orchestrator')
@@ -98,7 +112,7 @@ export function problems({ specs, folders, matrix, all, legs }) {
   }
   if (!folders.includes(INSTANCE)) found.push('features/ has no `instance/` folder, the dependency project every leg runs')
   // 2. The projects, and each spec in exactly one of them.
-  const expected = [...WHOLE, ...domains].sort()
+  const expected = [...WHOLE, ...LANE_ONLY, ...domains].sort()
   const projects = [...all.keys()].sort()
   for (const p of projects) if (!expected.includes(p)) found.push(`project \`${p}\` is neither a dependency project nor a domain folder`)
   for (const p of expected) if (!projects.includes(p)) found.push(`folder or project \`${p}\` lists no test`)
@@ -155,6 +169,7 @@ test('the checks name a spec outside a domain folder, a spec in two projects, a 
       ['instance', file('features/instance/instance-mail.spec.ts')],
       ['depot', file('features/depot/depot-files.spec.ts')],
       ['memories', file('features/memories/memory-banner.spec.ts')],
+      ['upgrade', file('upgrade/upgrade-in-place.spec.ts')],
     ]),
     legs: new Map(),
   })
@@ -187,4 +202,24 @@ test('the checks name a spec outside a domain folder, a spec in two projects, a 
   const found = problems(partial).join('\n')
   assert.match(found, /leg `depot` does not run `instance` whole/)
   assert.match(found, /leg `memories` also runs project `depot`/)
+
+  const gone = structuredClone(whole)
+  gone.all.delete('upgrade')
+  assert.match(problems(gone).join('\n'), /folder or project `upgrade` lists no test/)
+  const leaked = structuredClone(whole)
+  leaked.legs.get('depot').set('upgrade', file('upgrade/upgrade-in-place.spec.ts'))
+  assert.match(problems(leaked).join('\n'), /leg `depot` also runs project `upgrade`/)
+  const unknown = structuredClone(whole)
+  unknown.all.set('nightly', file('nightly/x.spec.ts'))
+  assert.match(problems(unknown).join('\n'), /project `nightly` is neither a dependency project nor a domain folder/)
+})
+
+test('the stack job is read alone, whatever job follows it', () => {
+  const ci = ['jobs:', '  stack:', '    strategy:', '      matrix:', '        domain: [depot, memories]',
+    '  stack-upgrade:', '    strategy:', '      matrix:', '        domain: [smuggled]', '  green:', '    needs: [stack]', ''].join('\n')
+  const stack = jobSlice(ci, 'stack')
+  assert.match(stack, /domain: \[depot, memories\]/)
+  assert.doesNotMatch(stack, /smuggled/, 'the slice read past the stack job into the one after it')
+  assert.match(jobSlice(ci, 'green'), /needs: \[stack\]/, 'the last job reaches the end of the file')
+  assert.equal(jobSlice(ci, 'absent'), '')
 })
