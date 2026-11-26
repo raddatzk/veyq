@@ -529,6 +529,7 @@ internal sealed class AccountSettingsPage : IDisposable
                 SettingsSection.Security => () => FlowSection(AccountFlow.Security),
                 SettingsSection.Profile => () => FlowSection(AccountFlow.Profile),
                 SettingsSection.Erase => () => FlowSection(AccountFlow.Erase),
+                SettingsSection.Terms => DrawTerms,
                 SettingsSection.SignOut => DrawSignOut,
             };
             draw();
@@ -668,6 +669,15 @@ internal sealed class AccountSettingsPage : IDisposable
     }
 
     /// <summary>A section that opens one of the account's flows: its rubric, what it is for, the button that opens it.</summary>
+    /// <summary>The open space's terms, read-only (uc.account.accept-terms): opened over the page.</summary>
+    private void DrawTerms()
+    {
+        _sections.Children.Add(Anchor("terms", Heading(Words.TermsSettingsTitle())));
+        var open = TextButton(Words.TermsSettingsTitle(), "settings-open:terms");
+        open.Click += (_, _) => TermsDialog.Open(_window);
+        _sections.Children.Add(Card("\uE8A5", Words.TermsSettingsTitle(), [Words.TermsReadonlyNote()], "settings-terms", open));
+    }
+
     private void FlowSection(AccountFlow f)
     {
         var id = AccountFlows.Id(f);

@@ -681,6 +681,12 @@ struct MarkdownText: View {
             .components(separatedBy: "\n\n")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
+            // a heading is its own line: the lines after it in the same block are the paragraph under it
+            .flatMap { block -> [String] in
+                guard block.hasPrefix("#"), let nl = block.firstIndex(of: "\n") else { return [block] }
+                let rest = block[block.index(after: nl)...].trimmingCharacters(in: .whitespacesAndNewlines)
+                return rest.isEmpty ? [String(block[..<nl])] : [String(block[..<nl]), rest]
+            }
             .map { block in
                 if block.hasPrefix("#") { return block }
                 return block.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in

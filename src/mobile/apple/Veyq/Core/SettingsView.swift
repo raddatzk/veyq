@@ -84,6 +84,8 @@ struct SettingsView: View {
     @State private var name = ""
     /// The account's flow open over the page (ADR 0148 decision 10), each a sheet of its own.
     @State private var flow: AccountFlow?
+    /// Settings' Terms page open over the page (core's `SettingsSection.TERMS`).
+    @State private var showingTerms = false
     @State private var askPassword = false
     @State private var password = ""
     @State private var trustSaid: String?
@@ -196,6 +198,17 @@ struct SettingsView: View {
         .sheet(item: $flow) { f in
             if let model = maps { AccountFlowSheet(flow: f, model: model) }
         }
+        .sheet(isPresented: $showingTerms) {
+            if let model = maps {
+                NavigationStack {
+                    TermsPageView(model: model)
+                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { showingTerms = false } } }
+                }
+                #if os(macOS)
+                .frame(minWidth: 520, minHeight: 480)
+                #endif
+            }
+        }
     }
 
     /// The page's sections (core's): the maps' consent where this tenant's map services were built, appearance on iOS.
@@ -252,6 +265,18 @@ struct SettingsView: View {
         case .security: if let model = maps { flowSection(.security, model) }
         case .profile: if let model = maps { flowSection(.profile, model) }
         case .erase: if let model = maps { flowSection(.erase, model) }
+        case .terms:
+            // the open space's terms and the operator section, read-only (uc.account.accept-terms)
+            if maps != nil {
+                Section {
+                    Button { showingTerms = true } label: { Label(say(.termsSettingsTitle), systemImage: "doc.text") }
+                        .accessibilityIdentifier("settings-terms")
+                } header: {
+                    Text(say(.termsSettingsTitle))
+                } footer: {
+                    Text(say(.termsReadonlyNote))
+                }
+            }
         case .signOut:
             Section {
                 Button(role: .destructive) { actions.signOutHere() } label: {

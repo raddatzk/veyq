@@ -13,6 +13,7 @@ use veyq::core_ui::manage::Manage;
 use veyq::core_ui::received::{Mode, ReceivedView};
 use veyq::core_ui::sign_in::{Offer, SignIn, Unlock};
 use veyq::core_ui::sign_in_entries::{Locked, Recover};
+use veyq::core_ui::terms::TermsGateView;
 use veyq::core_ui::theme::APP_ID;
 use veyq::core_ui::{dev_login, dev_scan, dev_settings, words};
 
@@ -41,6 +42,8 @@ struct Screens {
     locked: Rc<Locked>,
     recover: Rc<Recover>,
     offer: Offer,
+    /// The tenant's terms gate (uc.account.accept-terms), in place of the shell while it stands.
+    terms: TermsGateView,
     shell: Rc<Shell>,
     manage: Rc<Manage>,
     /// A received link's screen while one stands above everything else (ADR 0150 decision 4), and the face it covers —
@@ -119,6 +122,11 @@ impl Screens {
                     bridge::send(Call::SessionUnlock { password });
                 }
             }
+            // the tenant's terms gate stands in place of the shell, the offer behind it (uc.account.accept-terms)
+            Gate::Signed { terms: Some(terms), connection_key, .. } => {
+                self.terms.show(terms, connection_key);
+                self.face(&self.terms.page);
+            }
             // the offer to stay signed in stands over the shell until it is answered (ADR 0123 decision 8)
             Gate::Signed { offer: Some(offer), .. } => {
                 self.offer.show(&offer.levels, offer.linked);
@@ -181,6 +189,7 @@ fn activate(app: &adw::Application) {
         locked: Locked::new(),
         recover: Recover::new(),
         offer,
+        terms: TermsGateView::new(),
         shell,
         manage,
         received: RefCell::new(None),
@@ -346,6 +355,7 @@ fn open(app: &adw::Application, files: &[gio::File], _hint: &str) {
 /// unlock.
 fn trust_note(gate: &Gate) -> String {
     match gate {
+        Gate::Signed { terms: Some(t), .. } => format!(", terms: r{}", t.shown.revision),
         Gate::Signed { offer: Some(offer), .. } => format!(", offer: {:?}", offer.levels),
         Gate::Unlock { record, .. } => record.level.map(|l| format!(", level: {l:?}")).unwrap_or_default(),
         _ => String::new(),

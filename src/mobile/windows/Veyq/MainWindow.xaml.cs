@@ -23,6 +23,7 @@ public sealed partial class MainWindow : Window
     private LockedView? _locked;
     private RecoverView? _recover;
     private OfferView? _offer;
+    private TermsGateView? _terms;
     private ManageDialog? _manage;
     private ShellView? _shell;
     /// <summary>A received link's screen while one stands above the faces, and the face it covers (what the session's gate
@@ -198,6 +199,7 @@ public sealed partial class MainWindow : Window
     /// at its unlock.</summary>
     private static string TrustNote(Gate gate) => gate switch
     {
+        Gate.Signed { terms: { } terms } => $", terms: r{terms.shown.revision}",
         Gate.Signed { offer: { } offer } => $", offer: {string.Join(" ", offer.levels)}",
         Gate.Unlock { record.level: { } level } => $", level: {level}",
         _ => "",
@@ -239,6 +241,12 @@ public sealed partial class MainWindow : Window
                 {
                     Act.Send(new Call.SessionUnlock { password = password });
                 }
+                break;
+            // the tenant's terms gate stands in place of the shell, the offer behind it (uc.account.accept-terms)
+            case Gate.Signed { terms: { } terms } signedWithTerms:
+                _terms ??= new TermsGateView();
+                _terms.Show(terms, signedWithTerms.connectionKey);
+                Face(_terms.Page);
                 break;
             // the offer to stay signed in stands over the shell until it is answered (ADR 0123 decision 8)
             case Gate.Signed { offer: { } offer }:

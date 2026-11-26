@@ -739,15 +739,16 @@ internal fun PrimaryButton(label: String, modifier: Modifier = Modifier, enabled
  * a list's items with a bullet — the platform draws no Markdown of its own, and the text is shown, never followed.
  */
 @Composable
-private fun MarkdownText(markdown: String) {
+internal fun MarkdownText(markdown: String) {
     SelectionContainer {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             for (block in markdown.trim().split(Regex("\\n\\s*\\n"))) {
-                val line = block.trim()
-                when {
-                    line.startsWith("#") -> Text(line.trimStart('#').trim(), fontWeight = FontWeight.Bold)
-                    else -> Text(line.lines().joinToString("\n") { l -> l.trim().replace(Regex("^[-*] "), "• ") }.replace("**", ""))
-                }
+                // a heading is its own line: the lines after it in the same block are the paragraph under it
+                val lines = block.trim().lines()
+                val heading = lines.first().trim().takeIf { it.startsWith("#") }
+                heading?.let { Text(it.trimStart('#').trim(), fontWeight = FontWeight.Bold) }
+                val body = if (heading != null) lines.drop(1) else lines
+                if (body.any { it.isNotBlank() }) Text(body.joinToString("\n") { l -> l.trim().replace(Regex("^[-*] "), "• ") }.replace("**", ""))
             }
         }
     }

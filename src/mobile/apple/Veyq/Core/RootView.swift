@@ -12,6 +12,9 @@ struct RootView: View {
             // the models the guest's pages hold in its place)
             if let held = model.guests.screen {
                 GuestLinkView(model: model, held: held).id(ObjectIdentifier(held))
+            } else if let gate = model.terms {
+                // the tenant's terms gate (uc.account.accept-terms) stands in place of the shell, the offer behind it
+                TermsGateView(gate: gate, onAccept: model.acceptTerms, onSignOut: model.signOutAtTerms)
             } else {
                 screen
             }

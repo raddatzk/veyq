@@ -54,11 +54,22 @@ class SessionModel<A : Connection, T : Any>(
     private val recent: RecentUses,
     /** The share extension (ADR 0138): it resumes and unlocks, but never signs in — the app does. */
     private val signInElsewhere: Boolean = false,
+    /** The viewer's language (the platform's words'), in which the terms gate shows a tenant's terms ([Gate.Signed.terms]). */
+    private val language: () -> String = { "en" },
 ) {
     /** What the model does with an account, the platform's suite and HTTP client behind it. */
     interface Door<A : Connection, T : Any> {
         /** The process started: what a crash left half-done on this device is finished (an offline store's wipe). */
         fun started() {}
+
+        /**
+         * The terms of the tenant [session] opened (uc.account.accept-terms, [MemberTerms.read]), or null where they did not
+         * read — the gate then fails open, as the web's (ADR 0035 § The apps' gate).
+         */
+        suspend fun terms(session: T): MemberTerms.Read? = null
+
+        /** The member's acceptance of the pair [revision], [operatorRevision] in [session]'s tenant ([MemberTerms.accept]). */
+        suspend fun acceptTerms(session: T, revision: Int, operatorRevision: Int): MemberTerms.Answer = MemberTerms.Answer.FAILED
 
         /** The platform's suite: what a kit's read checks its Secret Key with ([KitImport], [EmergencyKit]). */
         val primitives: Primitives
@@ -288,10 +299,34 @@ class SessionModel<A : Connection, T : Any>(
          * Signed in, the shell over tenant [tenantId] of connection [connectionKey] — while [switching], still the one
          * shown, the switch to another under way. [offer] is the offer to stay signed in a sign-in left open, shown over
          * the shell until it is answered.
+         *
+         * [terms]: the tenant's terms gate (uc.account.accept-terms, ADR 0035 § The apps' gate) — the tenant has terms
+         * whose current pair this member has not accepted. While it stands a platform draws it **in place of** the shell
+         * (no list, no switcher): its two ways out are [acceptTerms] and the sign-out ([signOut]). The tenant stays open
+         * beneath it, as the web's scope stays entered beneath its `/terms` route; the offer waits behind it ([offer] is
+         * null until the terms are accepted).
          */
         @Serializable @SerialName("Signed")
-        data class Signed(val connectionKey: String, val tenantId: String, val switching: Boolean = false, val offer: Offer? = null) : Gate()
+        data class Signed(
+            val connectionKey: String,
+            val tenantId: String,
+            val switching: Boolean = false,
+            val offer: Offer? = null,
+            val terms: TermsGate? = null,
+        ) : Gate()
     }
+
+    /**
+     * The terms gate (the web's `TermsAcceptView`): the terms [shown] in the viewer's language, the accept under way
+     * ([working]), and why it shows again ([error]: the accept failed, `terms_accept_failed`; or the pair moved while it
+     * was shown, `terms_revision_changed`, and [shown] is the newer one).
+     */
+    @Serializable
+    data class TermsGate(
+        val shown: MemberTerms.TermsShown,
+        val working: Boolean = false,
+        @Serializable(with = MsgKey::class) val error: Msg? = null,
+    )
 
     /**
      * What a sign-in shows of the kit whose Secret Key the model holds: the Secret Key row reads "from your Emergency Kit"
@@ -958,9 +993,74 @@ class SessionModel<A : Connection, T : Any>(
         (current as? Gate.Signed)?.let { show(it.copy(offer = null)) }
     }
 
-    /** The shell's gate, with the offer standing. */
-    private fun signed(connectionKey: String, tenantId: String, switching: Boolean = false) =
-        Gate.Signed(connectionKey, tenantId, switching, offer)
+    /** The terms gate standing over the tenant [opened] holds, by that tenant's [spacesKey]; null where none stands. */
+    private var terms: Pair<String, TermsGate>? = null
+
+    /** The shell's gate, with the terms gate of that tenant standing, else the offer. */
+    private fun signed(connectionKey: String, tenantId: String, switching: Boolean = false): Gate.Signed {
+        val gate = terms?.takeIf { it.first == "$connectionKey#$tenantId" }?.second
+        return Gate.Signed(connectionKey, tenantId, switching, offer.takeIf { gate == null }, gate)
+    }
+
+    /** The terms gate over the open tenant set to [gate] (null: passed) and shown. */
+    private fun showTerms(o: Opened<A, T>, gate: TermsGate?) {
+        val key = spacesKey(o.account, o.tenant)
+        terms = gate?.let { key to it }
+        if (opened === o) show(signed(o.account.key, o.tenant.tenantId))
+    }
+
+    /** The tenant's terms read for [o]: the gate where they are stale, none where they are not or did not read (fail-open). */
+    private suspend fun readTerms(o: Opened<A, T>): TermsGate? {
+        val read = try {
+            door.terms(o.session)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+        return read?.takeIf { it.stale }?.let { TermsGate(it.shown(language())) }
+    }
+
+    /**
+     * The terms gate's *I agree* (uc.account.accept-terms step 3, the web's `TermsAcceptView.accept`): the pair it shows
+     * recorded by the server, and the shell shown. A pair that moved meanwhile (`409 terms_revision_changed`) is read anew
+     * and shown with `terms_revision_changed` — or the gate passes where the newer read says it is accepted already; any
+     * other failure keeps the gate with `terms_accept_failed`. True once the gate passed; false where none stands.
+     */
+    suspend fun acceptTerms(): Boolean {
+        val o = opened ?: return false
+        val gate = terms?.takeIf { it.first == spacesKey(o.account, o.tenant) }?.second ?: return false
+        if (gate.working) return false
+        showTerms(o, gate.copy(working = true, error = null))
+        val answer = try {
+            door.acceptTerms(o.session, gate.shown.revision, gate.shown.operatorRevision)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            MemberTerms.Answer.FAILED
+        }
+        if (opened !== o) return false // signed out or switched meanwhile: that gate is gone with its tenant
+        when (answer) {
+            MemberTerms.Answer.ACCEPTED -> showTerms(o, null)
+            MemberTerms.Answer.FAILED -> showTerms(o, gate.copy(working = false, error = Msg.TERMS_ACCEPT_FAILED))
+            MemberTerms.Answer.CHANGED -> {
+                val read = try {
+                    door.terms(o.session)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
+                if (opened !== o) return false
+                when {
+                    read == null -> showTerms(o, gate.copy(working = false, error = Msg.TERMS_ACCEPT_FAILED))
+                    !read.stale -> showTerms(o, null)
+                    else -> showTerms(o, TermsGate(read.shown(language()), error = Msg.TERMS_REVISION_CHANGED))
+                }
+            }
+        }
+        return terms == null
+    }
 
     /**
      * The switcher: another tenant of the same server is the same session at another domain; another server is its own.
@@ -1112,8 +1212,11 @@ class SessionModel<A : Connection, T : Any>(
 
     private suspend fun openTenant(account: A, tenant: TenantRef): Opened<A, T> {
         val o = Opened(account, tenant, door.open(account, tenant))
+        // the terms gate is decided before the shell is shown, so no list shows ahead of it (uc.account.accept-terms)
+        val gate = readTerms(o)
         door.opened(o.session)
         opened = o
+        terms = gate?.let { spacesKey(account, tenant) to it }
         show(signed(account.key, tenant.tenantId))
         return o
     }
@@ -1172,7 +1275,9 @@ class SessionModel<A : Connection, T : Any>(
             hidden: Hidden,
             recent: RecentUses,
             signInElsewhere: Boolean = false,
-        ): SessionModel<VeyqAccount, TenantSession> = SessionModel(AccountDoor(primitives, device, client), hidden, recent, signInElsewhere)
+            /** The platform's words' language: the terms gate's ([Gate.Signed.terms]). */
+            language: () -> String = { "en" },
+        ): SessionModel<VeyqAccount, TenantSession> = SessionModel(AccountDoor(primitives, device, client), hidden, recent, signInElsewhere, language)
     }
 }
 
@@ -1244,6 +1349,9 @@ class AccountDoor(
         session.account.offlinePins?.start(session, me.raddatz.veyq.mobile.AppKinds.pins)
     }
     override suspend fun spaces(session: TenantSession): List<SpaceRef> = session.spaces()
+    override suspend fun terms(session: TenantSession): MemberTerms.Read? = MemberTerms.read(session)
+    override suspend fun acceptTerms(session: TenantSession, revision: Int, operatorRevision: Int): MemberTerms.Answer =
+        MemberTerms.accept(session, revision, operatorRevision)
     override suspend fun signOut(account: VeyqAccount) = account.signOut()
     override suspend fun retire(account: VeyqAccount) = account.retire()
     override fun ends(account: VeyqAccount) = account.reach.mapNotNull { (it as? Reach.Ended)?.reason }

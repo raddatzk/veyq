@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Gavel
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Fingerprint
@@ -148,6 +149,9 @@ interface SettingsActions {
     fun openAddressChange() {}
     fun openKeyRotation() {}
     fun openErasure() {}
+
+    /** The open space's terms, read-only (core's `SettingsSection.TERMS`, uc.account.accept-terms). */
+    fun openTerms() {}
 }
 
 /** A step the page asks to be confirmed first, as the web's `SessionsPanel` does: what it says and what it does. */
@@ -284,6 +288,7 @@ fun SettingsScreen(
                 me.raddatz.veyq.mobile.search.SettingsSection.SECURITY -> security(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.PROFILE -> profile(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.ERASE -> erase(state, actions)
+                me.raddatz.veyq.mobile.search.SettingsSection.TERMS -> terms(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.SIGN_OUT -> signOut(state, actions)
             }
         }
@@ -374,6 +379,20 @@ private fun LazyListScope.profile(state: AccountSettings.State, actions: Setting
             leadingContent = { Icon(Icons.Outlined.AccountCircle, null) },
             colors = listColors(),
             modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openProfile).testTag("settings-profile"),
+        )
+    }
+}
+
+/** The open space's terms and the operator section, read-only (uc.account.accept-terms; the web's tenant section). */
+private fun LazyListScope.terms(state: AccountSettings.State, actions: SettingsActions) {
+    header(me.raddatz.veyq.mobile.search.SettingsSection.TERMS.id, { stringResource(R.string.terms_settings_title) })
+    item(key = "terms") {
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.terms_settings_title)) },
+            supportingContent = { Text(stringResource(R.string.terms_readonly_note)) },
+            leadingContent = { Icon(Icons.Outlined.Gavel, null) },
+            colors = listColors(),
+            modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openTerms).testTag("settings-terms"),
         )
     }
 }

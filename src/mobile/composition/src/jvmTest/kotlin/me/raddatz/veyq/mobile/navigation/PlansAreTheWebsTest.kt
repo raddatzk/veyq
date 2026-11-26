@@ -37,9 +37,22 @@ class PlansAreTheWebsTest {
                 SettingsSection.APPEARANCE, SettingsSection.MAPS, SettingsSection.STORAGE, SettingsSection.SESSIONS,
                 SettingsSection.DEVICE, SettingsSection.SAVED_KEYS, SettingsSection.ACCOUNT, SettingsSection.EMAIL,
                 SettingsSection.PASSWORD, SettingsSection.ADD_DEVICE, SettingsSection.SECURITY, SettingsSection.PROFILE,
-                SettingsSection.ERASE, SettingsSection.SIGN_OUT,
+                SettingsSection.ERASE, SettingsSection.TERMS, SettingsSection.SIGN_OUT,
             ),
             all,
         )
+    }
+
+    /**
+     * The tenant's terms are a section of the web's tenant category, after the personal ones (`sections.ts`' `key: 'tenant'`):
+     * the apps' page is over one tenant, so its one tenant section follows the personal ones there too (uc.account.accept-terms).
+     */
+    @Test
+    fun theTermsAreTheWebsTenantSectionAfterThePersonalOnes() {
+        val text = read("features/settings/sections.ts")
+        val tenant = text.substring(text.indexOf("key: 'tenant'"), text.indexOf("key: 'groups'"))
+        assertTrue(Regex("""\bid:\s*'terms'""").containsMatchIn(tenant), "the web's tenant category offers its terms")
+        val all = SettingsSection.offered(SettingsSection.Gates(addDevice = false, storage = false, maps = false, appearance = false))
+        assertEquals(listOf(SettingsSection.TERMS, SettingsSection.SIGN_OUT), all.takeLast(2), "the terms after the personal sections, Sign out last")
     }
 }

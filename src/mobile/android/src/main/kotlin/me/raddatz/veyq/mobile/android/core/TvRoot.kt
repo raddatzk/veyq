@@ -90,6 +90,7 @@ internal fun TvTheme(content: @Composable () -> Unit) {
 internal fun TvRoot(model: AppModel) {
     val screen by model.screen.collectAsStateWithLifecycle()
     val offer by model.offer.collectAsStateWithLifecycle()
+    val terms by model.terms.collectAsStateWithLifecycle()
     val link by model.link.collectAsStateWithLifecycle()
     TvTheme {
         // a dialog the phone draws for touch is drawn for the remote below (the report, [TvReportDialog])
@@ -102,7 +103,8 @@ internal fun TvRoot(model: AppModel) {
                     is Screen.Unlock -> if (s.asksPin) TvPinUnlock(s, model) else StartingScreen()
                     // a TV's sign-in is its QR code only (`SignInPlan.tvEntries`): the locked sign-in and the reset are not reached
                     is Screen.Locked, is Screen.Recover -> StartingScreen()
-                    is Screen.Signed -> offer?.let { TvOffer(it, model) } ?: TvShell(s, model)
+                    is Screen.Signed -> terms?.let { TermsGateScreen(it, onAccept = model::acceptTerms, onSignOut = model::signOutAtTerms) }
+                        ?: offer?.let { TvOffer(it, model) } ?: TvShell(s, model)
                 }
                 link?.let { DeviceLinkScreen(it, onAgain = model::linkAgain, onClose = model::closeLink, tv = true) }
             }

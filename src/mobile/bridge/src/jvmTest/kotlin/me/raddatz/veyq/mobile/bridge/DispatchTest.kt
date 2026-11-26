@@ -82,6 +82,46 @@ class DispatchTest {
         override fun staySignedIn() = emptySet<StaySignedIn>() // no offer: the way in alone
         override fun declined(account: Acc) = false
         override fun setDeclined(account: Acc, declined: Boolean) {}
+
+        /** The tenant's terms as read (null: the read fails, no gate), and each pair accepted. */
+        var terms: me.raddatz.veyq.mobile.session.MemberTerms.Read? = null
+        val accepted = mutableListOf<Pair<Int, Int>>()
+        override suspend fun terms(session: String) = terms
+        override suspend fun acceptTerms(session: String, revision: Int, operatorRevision: Int): me.raddatz.veyq.mobile.session.MemberTerms.Answer {
+            accepted += revision to operatorRevision
+            terms = terms?.let { me.raddatz.veyq.mobile.session.MemberTerms.Read(it.revision, it.operatorRevision, true, it.terms, it.section, it.record, it.origin) }
+            return me.raddatz.veyq.mobile.session.MemberTerms.Answer.ACCEPTED
+        }
+    }
+
+    /**
+     * The terms gate (uc.account.accept-terms) crosses inside the session's gate, the terms in the host's language, and
+     * `Session.AcceptTerms` passes it: the shell's gate without it after, the pair shown the pair accepted, a second accept
+     * refused. Bitten by a dispatch that answers Done without asking the session (red: nothing accepted, the gate stands).
+     */
+    @Test
+    fun theTermsGateCrossesInTheSessionsGateAndSessionAcceptTermsPassesIt() = runBlocking {
+        val door = Door().apply {
+            terms = me.raddatz.veyq.mobile.session.MemberTerms.Read(
+                2, 1, false, mapOf("en" to "## Rules", "de" to "## Regeln"), mapOf("en" to "## Operator"), mapOf("en" to "### Record"), "https://a.example",
+            )
+        }
+        val b = Bridge {
+            val hidden = Hidden({}, emptySet())
+            Composition(SessionModel(door, hidden, RecentUses({}, emptyList()), language = { "de" }), hidden, language = "de") { null }
+        }
+        val gate = b.watching(Watched.Session)
+        assertEquals(Answer.Done, b.ask(Call.SessionStart))
+        assertEquals(Answer.Done, b.ask(Call.SessionSignIn("a.example", "p@a.example", "right", "A3-SECRET")))
+        val held = gate.until { ((it as Update.Session).gate as? Gate.Signed)?.terms }
+        assertEquals("## Regeln", held.shown.terms)
+        assertEquals("https://a.example/privacy#guest-write-record", held.shown.privacyUrl)
+        assertEquals(Answer.Done, b.ask(Call.SessionAcceptTerms))
+        gate.until { ((it as Update.Session).gate as? Gate.Signed)?.takeIf { g -> g.terms == null } }
+        assertEquals(listOf(2 to 1), door.accepted)
+        assertEquals(Answer.Refused(Answer.Why.NOT_OFFERED), b.ask(Call.SessionAcceptTerms))
+        assertEquals(listOf(2 to 1), door.accepted)
+        b.shutdown()
     }
 
     private fun bridge() = Bridge {

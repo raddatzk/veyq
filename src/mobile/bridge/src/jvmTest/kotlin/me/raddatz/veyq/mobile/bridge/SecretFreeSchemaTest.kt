@@ -66,6 +66,7 @@ class SecretFreeSchemaTest {
     /** The outward fields that carry the address of a public page, no key in it, each with why. */
     private val publicAddresses = mapOf(
         "me.raddatz.veyq.mobile.bridge.ReportShown.privacyUrl" to "the server's privacy notice at its passage on a reporter's contact: a public page, no fragment key",
+        "me.raddatz.veyq.mobile.session.MemberTerms.TermsShown.privacyUrl" to "the server's privacy notice at the guest-write record's passage, the terms' pointer: a public page, no fragment key",
         "SvgPage.documentUrl" to "the fixed address an SVG's page is served at from memory, under `.invalid`: no host, no key, nothing of the file",
         "SvgPage.pictureUrl" to "the fixed address an SVG's bytes are served at from memory, under `.invalid`: no host, no key, nothing of the file",
     )

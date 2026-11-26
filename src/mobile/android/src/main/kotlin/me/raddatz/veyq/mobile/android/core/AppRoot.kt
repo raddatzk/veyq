@@ -61,8 +61,13 @@ fun AppRoot(model: AppModel) {
     val settingsAt by model.settingsAt.collectAsStateWithLifecycle()
     val accountFlow by model.accountFlow.collectAsStateWithLifecycle()
     val ended by model.ended.collectAsStateWithLifecycle()
+    val terms by model.terms.collectAsStateWithLifecycle()
+    val termsPage by model.termsPage.collectAsStateWithLifecycle()
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        when (val s = screen) {
+        // the tenant's terms gate (uc.account.accept-terms) stands in place of the shell, the offer behind it
+        val gate = terms
+        if (gate != null) TermsGateScreen(gate, onAccept = model::acceptTerms, onSignOut = model::signOutAtTerms)
+        else when (val s = screen) {
             Screen.Starting -> StartingScreen()
             is Screen.SignIn -> UnderTray(model) {
                 SignInScreen(
@@ -90,6 +95,8 @@ fun AppRoot(model: AppModel) {
         link?.let { DeviceLinkScreen(it, onAgain = model::linkAgain, onClose = model::closeLink) }
         // one of the account's flows (ADR 0148), over Settings or one's own person page: a dialog of its own
         if (screen is Screen.Signed) accountFlow?.let { AccountFlowDialog(it, model) }
+        // Settings' Terms (core's `SettingsSection.TERMS`), over the page
+        if (terms == null) termsPage?.let { TermsPageDialog(it, onClose = model::closeTerms) }
         // the account was erased here: the sign-in says so once (the web's `explainEnding('erased')`)
         ended?.let { msg ->
             androidx.compose.material3.AlertDialog(

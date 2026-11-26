@@ -426,6 +426,7 @@ impl Page {
                 SettingsSection::Security => ("security", vec![self.security()]),
                 SettingsSection::Profile => ("profile", vec![self.profile()]),
                 SettingsSection::Erase => ("erase", vec![self.erase()]),
+                SettingsSection::Terms => ("terms", vec![self.terms()]),
                 SettingsSection::SignOut => ("sign-out", vec![self.sign_out()]),
             };
             for (i, g) in drawn.into_iter().flatten().enumerate() {
@@ -494,6 +495,22 @@ impl Page {
 
     fn window_or_dialog(&self) -> gtk::Widget {
         self.dialog.root().map(|r| r.upcast::<gtk::Widget>()).unwrap_or_else(|| self.dialog.clone().upcast())
+    }
+
+    /// The open space's terms, read-only (uc.account.accept-terms): a subpage of the dialog, as GNOME Settings' are.
+    fn terms(self: &Rc<Self>) -> Option<adw::PreferencesGroup> {
+        let group = adw::PreferencesGroup::builder().title(words::terms_settings_title()).description(words::terms_readonly_note()).build();
+        let row = adw::ActionRow::builder().title(words::terms_settings_title()).activatable(true).build();
+        row.set_widget_name("settings-terms-open");
+        row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+        let weak = Rc::downgrade(self);
+        row.connect_activated(move |_| {
+            if let Some(p) = weak.upgrade() {
+                p.dialog.push_subpage(&crate::core_ui::terms::page());
+            }
+        });
+        group.add(&row);
+        Some(group)
     }
 
     /// *Your profile* (the web's rubric): one's own profile in the space open now, the same model as one's own page's.

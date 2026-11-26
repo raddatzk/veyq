@@ -6454,6 +6454,66 @@
     "en": "Accept and continue",
     "de": "Akzeptieren und fortfahren"
   },
+  "terms_gate_title": {
+    "note": "the member's terms gate (uc.account.accept-terms, SessionModel.Gate.Signed.terms): shown in place of the shell until the tenant's current terms are agreed to",
+    "en": "Please review the terms",
+    "de": "Bitte sieh dir die Bedingungen an"
+  },
+  "terms_gate_intro": {
+    "en": "Before you continue, please read and agree to this space’s terms.",
+    "de": "Bevor du fortfährst, lies bitte die Bedingungen dieses Bereichs und stimme ihnen zu."
+  },
+  "terms_accept": {
+    "en": "I agree",
+    "de": "Ich stimme zu"
+  },
+  "terms_accept_failed": {
+    "en": "Couldn’t record your agreement. Please try again.",
+    "de": "Deine Zustimmung konnte nicht gespeichert werden. Bitte versuch es erneut."
+  },
+  "terms_revision_changed": {
+    "en": "The terms just changed — please review the updated revision and agree again.",
+    "de": "Die Bedingungen haben sich gerade geändert — bitte sieh dir die aktualisierte Fassung an und stimme erneut zu."
+  },
+  "terms_settings_title": {
+    "note": "Settings' section of the tenant's terms (SettingsSection.TERMS): read-only in the apps",
+    "en": "Terms",
+    "de": "Nutzungsbedingungen"
+  },
+  "terms_loading": {
+    "en": "Loading terms…",
+    "de": "Bedingungen werden geladen…"
+  },
+  "terms_load_failed": {
+    "en": "Couldn’t load the terms.",
+    "de": "Bedingungen konnten nicht geladen werden."
+  },
+  "terms_none_set": {
+    "en": "No terms have been set yet.",
+    "de": "Es wurden noch keine Bedingungen festgelegt."
+  },
+  "terms_readonly_note": {
+    "note": "the apps show a space's terms read-only for everyone; the web's editor is the owner's (uc.admin.tenant-terms)",
+    "en": "Only the space owner can change these terms, in the browser.",
+    "de": "Nur wer den Bereich besitzt, kann diese Bedingungen ändern, im Browser."
+  },
+  "terms_operator_section_label": {
+    "en": "Operator section",
+    "de": "Abschnitt der Betreiberseite"
+  },
+  "terms_operator_section_note": {
+    "en": "veyq adds this section after the terms of every space on this server, filled in with what its operator set. It cannot be changed or removed here.",
+    "de": "veyq fügt diesen Abschnitt auf diesem Server nach den Nutzungsbedingungen jedes Bereichs an, ausgefüllt mit den Angaben der Betreiberseite. Er kann hier weder geändert noch entfernt werden."
+  },
+  "terms_record_link": {
+    "note": "the operator section's pointer to the guest-write record's information, the server's privacy notice (ADR 0035 decision 8): opened in the browser",
+    "en": "Read it in the privacy notice",
+    "de": "In der Datenschutzerklärung lesen"
+  },
+  "search_words_terms": {
+    "en": "terms of use, conditions, rules, operator",
+    "de": "Nutzungsbedingungen, Bedingungen, AGB, Regeln, Betreiber"
+  },
   "share_note_title": {
     "en": "Please read this note",
     "de": "Bitte lies diesen Hinweis"

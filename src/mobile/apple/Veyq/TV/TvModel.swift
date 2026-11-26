@@ -17,6 +17,11 @@ final class TvModel {
     private(set) var gate: SessionModelGate = SessionModelGate.Starting.shared
     /// The offer after a QR sign-in (core's `Gate.Signed.offer`): the PIN asked; nil once answered.
     private(set) var offer: SessionModelOffer?
+    /// The tenant's terms gate (core's `Gate.Signed.terms`, uc.account.accept-terms), drawn in place of the shell.
+    private(set) var terms: SessionModelTermsGate?
+
+    /// The terms gate's "I Agree" (core's `acceptTerms`).
+    func acceptTerms() { Task { _ = try? await session.acceptTerms() } }
     private(set) var trustWorking = false
     /// What a change of this TV's trust left to say (a PIN that could not be kept).
     var said: String?
@@ -98,10 +103,12 @@ final class TvModel {
         gate = session.current
         if let g = gate as? SessionModelGate.Signed {
             offer = g.offer
+            terms = g.terms
             // an account opened: the idle time starts here
             if !(was is SessionModelGate.Signed) { idle.opened() }
         } else {
             offer = nil
+            terms = nil
             closeTenant()
         }
     }

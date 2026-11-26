@@ -301,7 +301,15 @@ object AppleSessions {
         hidden: me.raddatz.veyq.mobile.navigation.Hidden,
         recent: me.raddatz.veyq.mobile.navigation.RecentUses,
         signInElsewhere: Boolean,
-    ): SessionModel<VeyqAccount, TenantSession> = SessionModel.accounts(LibsodiumPrimitives, device, client, hidden, recent, signInElsewhere)
+    ): SessionModel<VeyqAccount, TenantSession> =
+        SessionModel.accounts(LibsodiumPrimitives, device, client, hidden, recent, signInElsewhere, language = ::appLanguage)
+
+    /**
+     * The language the app's words are shown in (the bundle's localization chosen for this person, the per-app language
+     * included): the terms gate's and Settings' Terms page's ([MemberTerms.TermsShown]).
+     */
+    fun appLanguage(): String =
+        (platform.Foundation.NSBundle.mainBundle.preferredLocalizations.firstOrNull() as? String)?.takeIf { it.isNotEmpty() } ?: "en"
 
     /** The cover of node [nodeId] as the tenant's trees hold it, as the platform's data (core's `NodeCover`), or null. */
     @Throws(Exception::class)

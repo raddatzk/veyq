@@ -163,6 +163,19 @@ internal sealed class Call {
     @Serializable @SerialName("Session.BackToSignIn") data object SessionBackToSignIn : Call()
 
     /**
+     * The terms gate's *I agree* (`SessionModel.acceptTerms`, uc.account.accept-terms): the pair `Gate.Signed.terms` shows,
+     * recorded. [Answer.Done] once the gate passed; [Answer.Why.NOT_OFFERED] where it still stands (the gate says why: a
+     * failure, or a moved pair shown anew) or none stood. Its other way out is [SessionSignOut].
+     */
+    @Serializable @SerialName("Session.AcceptTerms") data object SessionAcceptTerms : Call()
+
+    /**
+     * Settings' Terms section (`SettingsSection.TERMS`): the open tenant's terms in the host's language, read-only
+     * (`MemberTerms.page`). [Answer.Terms]; its `shown` null where they did not read; refused without a tenant.
+     */
+    @Serializable @SerialName("Settings.Terms") data object SettingsTerms : Call()
+
+    /**
      * "Manage servers" opened: [Watched.Manage] delivers every server with its trust from now on, each tenant's spaces as
      * they read; [ManageClose] ends it (null again).
      */
@@ -1984,6 +1997,9 @@ internal sealed class Answer {
 
     /** The locked sign-in's entries in their order ([Call.LockedPlan]). */
     @Serializable @SerialName("LockedPlan") data class LockedPlan(val entries: List<me.raddatz.veyq.mobile.session.LockedEntry>) : Answer()
+
+    /** [Call.SettingsTerms]: the open tenant's terms as Settings shows them; null where they did not read. */
+    @Serializable @SerialName("Terms") data class Terms(val shown: me.raddatz.veyq.mobile.session.MemberTerms.TermsShown?) : Answer()
 
     /** *Reset your password*'s entries in their order ([Call.RecoverPlan]). */
     @Serializable @SerialName("RecoverPlan") data class RecoverPlan(val entries: List<me.raddatz.veyq.mobile.session.RecoverEntry>) : Answer()

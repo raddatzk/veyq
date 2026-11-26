@@ -175,6 +175,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** The way in (core's `SessionModel`): the start, the sign-in, the unlock, the switcher, the sign-out. */
     private val session = me.raddatz.veyq.mobile.session.SessionModel.accounts(
         BouncyCastlePrimitives, device, { block -> Network.client(block) }, hidden, recent,
+        language = { appLanguage() },
     )
 
     /** The shell over the current tenant (core's `ShellModel`): its lists, where the person is, the actions on a node. */
@@ -218,6 +219,40 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /** The offer to stay signed in a sign-in left open (core's `Gate.Signed.offer`), drawn over the shell; null once answered. */
     val offer: StateFlow<me.raddatz.veyq.mobile.session.SessionModel.Offer?> = _offer.asStateFlow()
+
+    private val _terms = MutableStateFlow<me.raddatz.veyq.mobile.session.SessionModel.TermsGate?>(null)
+
+    /** The tenant's terms gate (core's `Gate.Signed.terms`, uc.account.accept-terms), drawn in place of the shell; null once agreed to. */
+    val terms: StateFlow<me.raddatz.veyq.mobile.session.SessionModel.TermsGate?> = _terms.asStateFlow()
+
+    /** The terms gate's *I agree* (core's `acceptTerms`): the gate says how it went. */
+    fun acceptTerms() {
+        viewModelScope.launch { session.acceptTerms() }
+    }
+
+    /** The terms gate's *Sign out*: the account shown signs out here, as the drawer's sign-out does. */
+    fun signOutAtTerms() {
+        session.signedTo?.account?.let(::signOut)
+    }
+
+    private val _termsPage = MutableStateFlow<TermsPage?>(null)
+
+    /** Settings' Terms page while it is open (core's `MemberTerms.page`); null when closed. */
+    internal val termsPage: StateFlow<TermsPage?> = _termsPage.asStateFlow()
+
+    /** Settings' Terms: the open tenant's terms read in the app's language. */
+    fun openTerms() {
+        val t = tenantSession ?: return
+        _termsPage.value = TermsPage(loading = true)
+        viewModelScope.launch {
+            val shown = me.raddatz.veyq.mobile.session.MemberTerms.page(t, appLanguage())
+            if (_termsPage.value != null) _termsPage.value = TermsPage(loading = false, shown = shown)
+        }
+    }
+
+    fun closeTerms() {
+        _termsPage.value = null
+    }
 
     // ---- the music (ADR 0142): declared above the gate's collector in `init`, which may stop it at once ----
 
@@ -334,8 +369,10 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             tenantSession?.close()
         }
         _offer.value = (g as? me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed)?.offer
+        _terms.value = (g as? me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed)?.terms
+        if (g !is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed) _termsPage.value = null
         trustLog("gate ${g::class.simpleName}" + when (g) {
-            is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed -> ", offer: ${g.offer?.levels}"
+            is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed -> ", offer: ${g.offer?.levels}, terms: ${g.terms?.let { "r${it.shown.revision}" } ?: "none"}"
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Unlock -> ", ${g.record.method}, level: ${g.record.unlockLevel}"
             else -> ""
         })
@@ -893,6 +930,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         override fun linkScan() = scanSignInCode()
         override fun renameFamily(familyId: String, label: String) = onSettings { it.renameFamily(familyId, label); null }
         override fun openProfile() = this@AppModel.openProfile()
+        override fun openTerms() = this@AppModel.openTerms()
         override fun openPasswordChange() = this@AppModel.openPasswordChange()
         override fun openAddressChange() = this@AppModel.openAddressChange()
         override fun openKeyRotation() = this@AppModel.openKeyRotation()

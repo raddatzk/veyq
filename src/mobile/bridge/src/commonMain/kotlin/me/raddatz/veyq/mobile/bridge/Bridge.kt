@@ -879,7 +879,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             }
             Call.SessionSignInKitClear -> Answer.Done.also { session.clearKit() }
             is Call.SessionSignInLocked, Call.SessionSignOutEverywhere, Call.SessionLockedBack, is Call.SessionForgotPassword,
-            is Call.SessionRequestRecovery, Call.SessionBackToSignIn, Call.LockedPlan, is Call.RecoverPlan -> signInEntries(call, session)
+            is Call.SessionRequestRecovery, Call.SessionBackToSignIn, Call.LockedPlan, is Call.RecoverPlan,
+            Call.SessionAcceptTerms, Call.SettingsTerms -> signInEntries(call, session)
             is Call.SessionForgetDevice -> {
                 val account = session.accounts.firstOrNull { it.key == call.connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
                 session.forgetDevice(account)
@@ -2696,6 +2697,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         is Call.SessionRequestRecovery -> Answer.Done.also { session.requestRecovery(call.server, call.email) }
         Call.SessionBackToSignIn -> Answer.Done.also { session.backToSignIn() }
         Call.LockedPlan -> Answer.LockedPlan(me.raddatz.veyq.mobile.session.LockedPlan.entries())
+        // the terms gate (uc.account.accept-terms) and Settings' Terms section: the way in's too, dispatched here for the size
+        Call.SessionAcceptTerms -> if (session.acceptTerms()) Answer.Done else Answer.Refused(Answer.Why.NOT_OFFERED)
+        Call.SettingsTerms -> tenant.value?.models?.session?.let { Answer.Terms(me.raddatz.veyq.mobile.session.MemberTerms.page(it, parts.await().language)) } ?: noTenant
         is Call.RecoverPlan -> Answer.RecoverPlan(me.raddatz.veyq.mobile.session.RecoverPlan.entries(call.sent))
         else -> error("not a sign-in entry's call: $call")
     }
@@ -3810,7 +3814,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 backgroundRuns = false,
             )
             Composition(
-                SessionModel.accounts(primitives, device, client, hidden, recent), hidden, files, pictures = pictures,
+                SessionModel.accounts(primitives, device, client, hidden, recent, language = { config.language }), hidden, files, pictures = pictures,
                 settings = { session, account, separator -> AccountSettings.of(session, account, separator) }, tiers = tiers, audio = audio,
                 bannerPictures = bannerPictures, language = config.language, webp = webp, words = words,
                 trustedLink = { account, role, decode ->

@@ -273,6 +273,7 @@ final class AppModel {
     private func gateChanged() {
         if !(session.current is SessionModelGate.Signed) {
             offer = nil
+            terms = nil
             // locked or gone: the open dialogs and the tenant's tree go — a person's index with it (ADR 0144 decision 12)
             eachHolding { $0.locked() }
             closeSearch()
@@ -281,7 +282,7 @@ final class AppModel {
             tenantSession?.close()
         }
         switch session.current {
-        case let g as SessionModelGate.Signed: trustLog("gate Signed, offer: \(g.offer.map { "\($0.levels)" } ?? "none")")
+        case let g as SessionModelGate.Signed: trustLog("gate Signed, offer: \(g.offer.map { "\($0.levels)" } ?? "none"), terms: \(g.terms.map { "r\($0.shown.revision)" } ?? "none")")
         case let g as SessionModelGate.Unlock: trustLog("gate Unlock, \(g.record.method), level: \(g.record.unlockLevel.map { "\($0)" } ?? "none")")
         default: trustLog("gate \(type(of: session.current))")
         }
@@ -302,6 +303,7 @@ final class AppModel {
         case let g as SessionModelGate.Signed:
             switching = g.switching
             offer = g.offer
+            terms = g.terms
             if shellModel != nil, shellModel?.tenant === session.signedTo?.session { applyShell(start: false); screen = .signed }
         default:
             screen = .starting
@@ -500,6 +502,25 @@ final class AppModel {
 
     /// The offer to stay signed in a sign-in left open (core's `Gate.Signed.offer`), a sheet over the shell; nil once answered.
     private(set) var offer: SessionModelOffer?
+
+    /// The tenant's terms gate (core's `Gate.Signed.terms`, uc.account.accept-terms), drawn in place of the shell; nil once
+    /// agreed to.
+    private(set) var terms: SessionModelTermsGate?
+
+    /// The terms gate's "I Agree" (core's `acceptTerms`): the gate says how it went.
+    func acceptTerms() { Task { _ = try? await session.acceptTerms() } }
+
+    /// The terms gate's "Sign Out": the account shown signs out here, as Settings' does.
+    func signOutAtTerms() {
+        if let account = session.signedTo?.account as? VeyqAccount { signOut(account) }
+    }
+
+    /// Settings' Terms page: the open tenant's terms in the app's language (core's `MemberTerms.page`), nil where they did
+    /// not read or no tenant is open.
+    func termsPage() async -> MemberTerms.TermsShown? {
+        guard let t = tenantSession else { return nil }
+        return try? await MemberTerms.shared.page(tenant: t, language: AppleSessions.shared.appLanguage())
+    }
     /// A change of this device's trust is under way (the offer's answer, Manage's): its controls wait.
     private(set) var trustWorking = false
     /// "Manage servers"' line under a server after a change it refused (a wrong password), by the account's key.

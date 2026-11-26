@@ -27,7 +27,9 @@ struct TvRoot: View {
         case let g as SessionModelGate.Unlock:
             if g.asksPin { TvPinUnlock(model: model, gate: g) } else { TvStarting() }
         case is SessionModelGate.Signed:
-            if let offer = model.offer { TvOffer(model: model, offer: offer) } else { TvShell(model: model) }
+            if let gate = model.terms {
+                TvTermsGate(model: model, gate: gate)
+            } else if let offer = model.offer { TvOffer(model: model, offer: offer) } else { TvShell(model: model) }
         // a TV's sign-in is its QR code only (`SignInPlan.tvEntries`): the locked sign-in, the reset and the share
         // extension's gate are never reached here
         default: TvStarting()

@@ -14,8 +14,9 @@ import me.raddatz.veyq.mobile.words.Msg
  * cr-apps-structure-from-core-plans' Q3): appearance, maps, sessions, password, add a device, security, profile, erase —
  * `SettingsOrderIsTheWebsTest` reads it there — with the app-only sections beside their kin: offline storage after maps,
  * this device and saved keys after sessions, the account and its address (the apps' own) where the web's password is;
- * Sign out ends the list, as it ends the apps' page. The web's sections the apps do not offer (trust reset, moderation,
- * the tenant's) arrive with those sections.
+ * then the tenant's terms (the one tenant section the apps offer so far, read-only); Sign out ends the list, as it ends
+ * the apps' page. The web's sections the apps do not offer (trust reset, moderation, the tenant's others) arrive with those
+ * sections.
  */
 @me.raddatz.veyq.mobile.navigation.Plan
 @Serializable
@@ -33,6 +34,13 @@ enum class SettingsSection(val id: String, val word: Msg, val keywords: Msg) {
     SECURITY("security", Msg.ROTATION_TITLE, Msg.SEARCH_WORDS_SECURITY),
     PROFILE("profile", Msg.PROFILE_TITLE, Msg.SEARCH_WORDS_PROFILE),
     ERASE("erase", Msg.ERASURE_TITLE, Msg.SEARCH_WORDS_ERASE),
+    /**
+     * The open tenant's terms, read-only (uc.account.accept-terms; the web's tenant section `terms`, member-readable): the
+     * space's own text and the operator section after it ([me.raddatz.veyq.mobile.session.MemberTerms.page]). The web lists
+     * it under the tenant's sections, after the personal ones; the apps' page is over one tenant, so it comes after them
+     * here, before Sign out.
+     */
+    TERMS("terms", Msg.TERMS_SETTINGS_TITLE, Msg.SEARCH_WORDS_TERMS),
     /** Signing out on this device (the apps' page ends with it; the web's is its account menu's). */
     SIGN_OUT("sign-out", Msg.DRAWER_SIGN_OUT, Msg.SEARCH_WORDS_SIGN_OUT),
     ;
@@ -52,7 +60,7 @@ enum class SettingsSection(val id: String, val word: Msg, val keywords: Msg) {
                 STORAGE -> gates.storage
                 MAPS -> gates.maps
                 APPEARANCE -> gates.appearance
-                SESSIONS, DEVICE, SAVED_KEYS, ACCOUNT, EMAIL, PASSWORD, SECURITY, PROFILE, ERASE, SIGN_OUT -> true
+                SESSIONS, DEVICE, SAVED_KEYS, ACCOUNT, EMAIL, PASSWORD, SECURITY, PROFILE, ERASE, TERMS, SIGN_OUT -> true
             }
         }
 
