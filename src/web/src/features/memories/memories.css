@@ -126,8 +126,9 @@
   cursor: pointer;
   white-space: nowrap;
 }
-.bucket-action-button:hover:not(:disabled) { background: var(--app-control-bg); }
-.bucket-action-button:disabled { opacity: 0.45; cursor: default; }
+.bucket-action-button:hover:not(:disabled, [aria-disabled='true']) { background: var(--app-control-bg); }
+.bucket-action-button:disabled,
+.bucket-action-button[aria-disabled='true'] { opacity: 0.45; cursor: default; }
 .bucket-action-button .bucket-action-label { font-size: 0.85rem; }
 /* Destructive actions carry the danger convention (ui-web-styleguide, as .asset-bucket-danger-button):
    danger text + line at rest, danger-soft fill on hover — never just a hover tint. */
@@ -802,7 +803,15 @@ a.lightbox-icon-button,
 
 .media-lightbox-date-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+/* A selection's shift (uc.memory.buckets): what the save offers and how far it got, said under the choices. */
+.media-lightbox-date-note {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 0.85rem;
 }
 
 .media-lightbox-error {

@@ -135,6 +135,38 @@ describe('VeyqDateField', () => {
     wrapper.unmount()
   })
 
+  // Inbox #865: in the lightbox the calendar opened on a segment's focus hung over Save while the time was typed.
+  it('opens the calendar on a segment\'s focus, and from its button alone where it is told to', async () => {
+    const panel = () => document.querySelector('.veyq-date-panel')
+    const focusFirst = async () => {
+      const first = segments()[0]!
+      first.focus()
+      first.dispatchEvent(new FocusEvent('focusin', { bubbles: true }))
+      await flushPromises()
+    }
+    const plain = mount(VeyqDateField, { props: { modelValue: '2026-05-03T09:05', granularity: 'minute' }, attachTo: document.body, global: { plugins: [realI18n()] } })
+    await flushPromises()
+    await focusFirst()
+    expect(panel()).not.toBeNull() // the default: focus opens it
+    plain.unmount()
+    await flushPromises()
+
+    const buttonOnly = mount(VeyqDateField, {
+      props: { modelValue: '2026-05-03T09:05', granularity: 'minute', calendarFromButtonOnly: true },
+      attachTo: document.body,
+      global: { plugins: [realI18n()] },
+    })
+    await flushPromises()
+    await focusFirst()
+    expect(panel()).toBeNull()
+    const trigger = document.querySelector<HTMLElement>('.veyq-date-field__trigger')!
+    trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+    trigger.click()
+    await flushPromises()
+    expect(panel()).not.toBeNull()
+    buttonOnly.unmount()
+  })
+
   it('reads a click its label forwards to the calendar button as the first segment, and a click inside as its own', async () => {
     const { wrapper } = host('2026-05-12')
     await flushPromises()

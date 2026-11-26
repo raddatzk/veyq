@@ -7,7 +7,8 @@
 // local wall-clock time as `YYYY-MM-DDTHH:mm` (the value form of a native `datetime-local`, no zone), with hour and
 // minute segments after the day, in the language's clock (24 hours in German, AM/PM in English); a day picked in the
 // calendar keeps the time. The calendar opens from its button and, as before, when the field
-// gets focus; it steps by month, its week starts on the catalog's first day, and days outside `minDate`/`maxDate`
+// gets focus - unless `calendarFromButtonOnly`, for a field with controls right below it that the calendar would cover
+// while the segments are typed (the lightbox's capture time over its Save, inbox #865); it steps by month, its week starts on the catalog's first day, and days outside `minDate`/`maxDate`
 // (ISO too) cannot be picked or typed. `inputId` names the field for a `<label for>`. Sheets reach it by
 // `veyq-date-field`, a segment by `veyq-date-field__segment` and its calendar by `veyq-date-panel` (styled below).
 import { computed, onMounted, ref } from 'vue'
@@ -43,6 +44,8 @@ const props = defineProps<{
   minDate?: string
   maxDate?: string
   granularity?: 'day' | 'minute'
+  /** The calendar opens from its button alone, never on a segment's focus. */
+  calendarFromButtonOnly?: boolean
 }>()
 
 const { t, locale } = useI18n()
@@ -130,10 +133,11 @@ function keepOpenFromField(event: Event) {
 function inFieldOrPanel(node: Node | null): boolean {
   return !!node && (!!field.value?.$el?.contains(node) || !!document.querySelector('.veyq-date-panel')?.contains(node))
 }
-/** Focus on a segment opens the calendar; focus on the button leaves it to the button's own click. */
+/** Focus on a segment opens the calendar (unless `calendarFromButtonOnly`); focus on the button leaves it to the button's
+ *  own click. */
 function onFieldFocus(event: FocusEvent) {
   if (!inFieldOrPanel(event.relatedTarget as Node | null)) dayOnEntry = model.value
-  if ((event.target as Element | null)?.closest('.veyq-date-field__segment')) open.value = true
+  if (!props.calendarFromButtonOnly && (event.target as Element | null)?.closest('.veyq-date-field__segment')) open.value = true
 }
 function onFieldBlur(event: FocusEvent) {
   if (inFieldOrPanel(event.relatedTarget as Node | null)) return
