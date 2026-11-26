@@ -21,7 +21,9 @@ whatever its age — a quiet `release/<old>.x` branch's HEAD stays publishable.
     python3 scripts/staging_retention.py --owner <owner> --repository <owner>/<repo> --days 30 --image veyq …
 
 **Its limits.** The deletion is GitHub's REST API under the workflow's `GITHUB_TOKEN`, which GitHub documents as a
-public preview that needs the repository to hold the package's Admin role — a run's to show. It reads children with
+public preview that needs the repository to hold the package's Admin role — shown by its first run (Publish run
+45179033821, 2026-11-23). The API deletes a version and has no call that removes one tag from it, so a version goes
+whole. It reads children with
 `docker buildx imagetools inspect --raw`, so an index it cannot read is not deleted (red). The selection is
 `select()`'s, which `staging_retention_selftest.py` holds; the API's paging and words are not.
 """

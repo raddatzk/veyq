@@ -312,8 +312,8 @@ for subject, want in (
     (f"https://github.com/{REPO}/.github/workflows/publish.yml@refs/heads/main", True),
     (f"https://github.com/{REPO}/.github/workflows/publish.yml@refs/heads/release/0.x", True),
     (f"https://github.com/{REPO}/.github/workflows/release.yml@refs/heads/main", False),
-    # The workflow that signed snapshots before the split, and the pipeline publish.yml calls (cr-workflows-split-
-    # pipeline-callers): neither is the file that holds `snapshot`, so neither is a snapshot's identity.
+    # The workflow that signed snapshots before the split, and the reusable pipeline publish.yml called for a few hours
+    # on 2026-11-07 (cr-workflows-split-pipeline-callers): neither holds `snapshot`, so neither is a snapshot's identity.
     (f"https://github.com/{REPO}/.github/workflows/ci.yml@refs/heads/main", False),
     (f"https://github.com/{REPO}/.github/workflows/pipeline.yml@refs/heads/main", False),
     (f"https://github.com/{REPO}/.github/workflows/checks.yml@refs/heads/main", False),

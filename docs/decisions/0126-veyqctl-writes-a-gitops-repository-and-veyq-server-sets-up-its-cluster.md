@@ -1,7 +1,7 @@
 # ADR 0126 — `veyqctl` writes a GitOps repository, and `veyq-server` sets up the cluster it runs on
 
 - Status: Accepted
-- Built: partly (decision 6: veyq-server's template and `init`'s server path are built; its first release and a run on a real server are not — cr-veyqctl-server-path)
+- Built: yes — decision 6 too: veyq-server is released (v0.5, v0.8, signed), and `init`'s server path set up the maintainer's instance from an empty repository on a fresh server (2026-11-11, twice, and 2026-11-12), `tls production` included; upgraded by `veyqctl upgrade` since
 - Date: 2026-11-10
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 
@@ -28,7 +28,10 @@ v1.0, 2026-11-10). Two forces:
 **1. Two halves, two repositories.** The **server half** — the Ansible roles and the cluster's own applications — is
 a repository of its own, **`veyq-server`**, released on its own schedule. The **veyq half** — veyq's Argo CD
 Application, its values, and what the chart expects and does not create (the namespace, the backup claim, the
-secrets) — is `veyqctl`'s, released with veyq. Neither ships the other's files.
+secrets) — is `veyqctl`'s, released with veyq. Neither ships the other's files. Two lines of the server half name
+veyq by design: its Argo CD AppProject admits veyq's chart (the Application `veyqctl` writes joins that project), and
+its Renovate leaves `gitops/apps/veyq/` alone (veyqctl's pins). The template ships no instance value either — no host,
+user, key, domain or URL; those are the operator's answers.
 
 **2. `veyqctl` gains a GitOps target, and the target is the instance's, never an argument.** Beside Compose, `veyqctl`
 manages an instance whose desired state is a Git repository that Argo CD syncs. Which target an instance has is read
@@ -127,7 +130,8 @@ committed with the files they produced. They are no secret (generated values go 
 repository), and they are what set the repository up — so `init` in a checkout that has them asks nothing again: an
 interrupted run goes on, and a lost server is set up again exactly as before from the repository and the age key.
 `veyq-setup.json` is the one record of the answers: what `init` writes for each half (veyq's `veyqctl.json` and
-values, the server half's Copier answers) is produced from it.
+values, the server half's Copier answers) is produced from it. A generated value is never a Copier answer, so
+`copier update` never sees a secret.
 
 **`init` can be run again at any point and continues where it stopped.** Which steps are done — the host key trusted,
 pushed, bootstrapped — is this machine's, not the repository's: it is written to a progress file the moment a step is

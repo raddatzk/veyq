@@ -95,7 +95,8 @@ sees the earlier one's tag.
    is a branch tip (`scripts/staging_retention.py`, selftested; on from its first run, owner 2026-11-07). A staging
    index is the image and its attestation manifest; a snapshot's own index names those two, so for a commit with a
    snapshot the staging index goes alone, and for one without it goes with its children. The deletion is GitHub's
-   package API under the workflow's token — a public preview, proven by its first run.
+   package API under the workflow's token — a public preview, which has no untag call (so whole versions go); its first
+   run deleted green (Publish run 45179033821, 2026-11-23).
 6. **The image carries `<major>.<minor>`, never `-SNAPSHOT`**: a release is the snapshot's bytes, so the two carry
    one name, and a snapshot reports the release it may become. Whether a digest *is* a release is the release
    signature's fact. Images published before this carry `<major>.<minor>-SNAPSHOT`.
@@ -337,8 +338,9 @@ check is logged and retried with a back-off, and blocks nothing.
   are a procedure, written in [`infra/README.md`](../../infra/README.md) § Cutting a release, and no train has left.
 - **`veyq-server`** ([ADR 0126](../decisions/0126-veyqctl-writes-a-gitops-repository-and-veyq-server-sets-up-its-cluster.md)
   decision 6): a repository of its own that sets up the server and cluster beneath a GitOps instance, rendered by
-  Copier from a verified release, which `init` offers in an empty repository. Built: the template and its checks in
-  `github.com/raddatzk/veyq-server` (cr-veyq-server-template), and `init`'s server path, self-tested against
-  stand-ins (cr-veyqctl-server-path phase 3). Not yet: veyq-server's first release, and a run on a real server.
+  Copier from a verified release, which `init` offers in an empty repository. Built and in use: the template, its
+  checks and its signed releases in `github.com/raddatzk/veyq-server` (v0.5, v0.8), and `init`'s server path, which
+  set up the maintainer's instance from an empty repository on a fresh server (2026-11-11 and 2026-11-12; the Run
+  page's *How far this is proven*).
 - **L3's archive holding the major entry** (ADR 0085 decision 10, inbox #461): the major entry's backup in the
   archive lane L3 restores.

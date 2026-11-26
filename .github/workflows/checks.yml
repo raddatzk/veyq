@@ -920,7 +920,8 @@ jobs:
           # keeps the staged images as long.
           retention-days: 30
 
-  # A pull request's image build: `build`'s matrix and steps (YAML aliases, so the two cannot drift), without its
+  # A pull request's image build: `build`'s matrix and steps (YAML aliases, so the two cannot drift; aliases only,
+  # never merge keys `<<:`, which GitHub does not document), without its
   # `packages: write` — every registry write of those steps is gated on `kind == 'stage'`, which a pull request never
   # is, and the token could not write anyway. It builds every image, runs the tools image's self-test inside it, and
   # keeps everything in the runner.
