@@ -14,7 +14,8 @@
 // **Paging goes round** (owner 2026-11-26): past the last item comes the first and before the first the last - the
 // buttons, the arrow keys and the slideshow alike; only a single item has nowhere to go. The position ("3 of 42") says
 // where the viewer is, so a step round the end needs no notice of its own.
-// **Slideshow** (same CR): the toolbar's play control advances every 5 s through the items in their grid order
+// **Slideshow** (same CR): the toolbar's play control advances every 5 s through the items in their grid order - or, with
+// the shuffle toggle beside it pressed (inbox #862), in shuffled rounds -
 // (`createVisibilityPoller`); a video shows its poster for one interval, never auto-played; it goes round past the last
 // item until it is paused - it pauses on any key, pointer or wheel (the zoom and the details panel included), a hidden tab and `suspendKeys`. While it
 // runs no EXIF read and no place backfill happen — pausing on an item runs them.
@@ -184,15 +185,66 @@ const hasPreview = (it: MediaItem | undefined): it is MediaItem => !!it && !it.b
  *  Round the ends too: on the last item the first is read ahead, so the step round shows it at once. */
 function prefetchNeighbours() {
   if (!canPage.value) return
-  for (const at of new Set([around(current.value, 1), around(current.value, -1)])) {
+  const ahead = [around(current.value, 1), around(current.value, -1)]
+  if (shuffled.value) ahead.unshift(upcomingInRound()) // the one the shuffled slideshow shows next
+  for (const at of new Set(ahead)) {
     const neighbour = props.items[at]
     if (hasPreview(neighbour)) previews.prefetch(neighbour)
   }
 }
 
+// --- shuffle (inbox #862) ------------------------------------------------------------------------------------------------
+// A toggle beside play / pause orders the SLIDESHOW at random; paging by hand stays in the grid order, and the position
+// keeps saying the grid's. The order is a ROUND: every item once, in a shuffled order, then a fresh round - never one item
+// three times and another not at all. The round turned on starts after the shown item (it was just seen); a later round
+// never opens with the item the last one ended on. Held by media id, so an item removed meanwhile is skipped. It lasts
+// while the lightbox is open and is stored nowhere. `Math.random` is enough: the order is no secret.
+const shuffled = ref(false)
+let round: string[] = []
+/** Fisher-Yates over a copy. */
+function shuffledCopy<T>(xs: readonly T[]): T[] {
+  const out = xs.slice()
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
+}
+/** A new round of every item but `leaving` at its head; `leaving` itself only where `withLeaving` (a later round). */
+function newRound(leaving: string | undefined, withLeaving: boolean): string[] {
+  const ids = props.items.map((it) => it.mediaId)
+  const next = shuffledCopy(withLeaving ? ids : ids.filter((id) => id !== leaving))
+  if (next.length > 1 && next[0] === leaving) {
+    const j = 1 + Math.floor(Math.random() * (next.length - 1))
+    ;[next[0], next[j]] = [next[j], next[0]]
+  }
+  return next
+}
+/** The index the shuffled slideshow shows next (the round's head), refilling the round when it ran out. */
+function upcomingInRound(): number {
+  const shown = item.value?.mediaId
+  for (let refills = 0; refills < 2; refills++) {
+    while (round.length > 0) {
+      const at = props.items.findIndex((it) => it.mediaId === round[0])
+      if (at >= 0 && round[0] !== shown) return at
+      round.shift() // removed meanwhile, or the item on screen
+    }
+    round = newRound(shown, true)
+  }
+  return around(current.value, 1) // unreachable while two items are left: a fresh round always holds another
+}
+function toggleShuffle() {
+  shuffled.value = !shuffled.value
+  round = shuffled.value ? newRound(item.value?.mediaId, false) : []
+  if (shuffled.value) prefetchNeighbours() // the round's first, ahead of the next tick
+}
+
 async function slideshowTick(signal: AbortSignal) {
   if (!canPage.value) return stopSlideshow() // the others were removed under it: nothing left to go to
-  current.value = around(current.value, 1)
+  if (shuffled.value) {
+    current.value = upcomingInRound()
+    round.shift()
+  } else current.value = around(current.value, 1)
   await nextTick() // the item's watchers ran: its preview load started (the neighbours' read ahead), its details were held back
   if (signal.aborted) return
   await previewLoad
@@ -216,7 +268,9 @@ const toggleSlideshow = () => (playing.value ? stopSlideshow() : startSlideshow(
 // slideshow run together. While they are drawn, a narrow screen gives them a row of their own under the title and the
 // actions (`has-music`, memories.css), which no longer fit one row beside them.
 const musicShown = computed(() => audioPlayer().nowPlaying.value !== null)
-const isSlideshowToggle = (target: EventTarget | null) => target instanceof Element && !!target.closest('[data-slideshow-toggle], [data-audio-controls]')
+// The shuffle toggle neither: it orders the slideshow, so pressing it while one runs keeps it running.
+const isSlideshowToggle = (target: EventTarget | null) =>
+  target instanceof Element && !!target.closest('[data-slideshow-toggle], [data-slideshow-shuffle], [data-audio-controls]')
 /** Any pointer or wheel in the lightbox pauses — the zoom's gestures and the details panel included; the toggle is its own. */
 function pauseOnInteraction(event: Event) {
   if (playing.value && !isSlideshowToggle(event.target)) stopSlideshow()
@@ -748,6 +802,20 @@ onBeforeUnmount(() => {
           @click="toggleSlideshow"
         >
           <VeyqIcon :name="playing ? 'pause' : 'play'" />
+        </button>
+        <!-- With two items a shuffled round is the grid order or its reverse: offered from three on. -->
+        <button
+          v-if="items.length > 2"
+          class="veyq-icon-button lightbox-icon-button"
+          :class="{ 'lightbox-icon-button-pressed': shuffled }"
+          type="button"
+          data-slideshow-shuffle
+          :aria-label="t('media.slideshowShuffle')"
+          :title="t('media.slideshowShuffle')"
+          :aria-pressed="shuffled"
+          @click="toggleShuffle"
+        >
+          <VeyqIcon name="shuffle" />
         </button>
         <button
           v-if="!item?.blocked"
