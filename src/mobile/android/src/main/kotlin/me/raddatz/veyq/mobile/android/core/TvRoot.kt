@@ -260,7 +260,11 @@ private fun TvOffer(offer: SessionModel.Offer, model: AppModel) {
         if (withoutPin) OutlinedButton(onClick = { confirming = true }, enabled = !working, modifier = Modifier.testTag("tv-stay-no-pin")) {
             Text(stringResource(R.string.tv_stay_no_pin))
         }
-        OutlinedButton(onClick = { model.answerOffer(null) }, enabled = !working, modifier = Modifier.testTag("tv-pin-skip")) {
+        // where no PIN pad takes the focus, the choice that keeps nothing does (a remote has no pointer to start from;
+        // focused nothing until a press, measured in the Android TV emulator pass 2026-11-26) — also after Cancel
+        val skip = remember { FocusRequester() }
+        if (!offer.pin) LaunchedEffect(Unit) { runCatching { skip.requestFocus() } }
+        OutlinedButton(onClick = { model.answerOffer(null) }, enabled = !working, modifier = Modifier.focusRequester(skip).testTag("tv-pin-skip")) {
             Text(stringResource(R.string.tv_pin_skip))
         }
     }
