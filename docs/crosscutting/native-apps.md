@@ -122,6 +122,19 @@ language; the desktops have no row); "Add a device" where the instance has `core
 2026-11-13 against the dev backend on Android, iOS, macOS, Linux (the Fedora VM, inside the Flatpak's sandbox) and
 Windows (the VM), the desktops in English/light and German/dark: this device renamed, a second session of the account signed out from
 the list, "Sign out" taken — on macOS a session's own menu not driven (§ Open).
+**A space's terms, on all four apps** ([ADR 0035](../decisions/0035-server-terms-of-service.md) § The apps' gate,
+built 2026-11-26; uc.account.accept-terms): the core reads the tenant's terms at each open of a tenant, before the shell
+shows (`session/MemberTerms`), and while the current pair is not accepted `Gate.Signed.terms` holds the member at the
+gate, drawn in place of the shell — the space's text, the operator section, the record's pointer to the privacy notice,
+*I agree* and *Sign out* (a TV's *Remove from this TV*) — with the offer to stay signed in behind it; a moved pair is
+shown anew, a failed accept said, a read that fails shows none (fail-open, as the web's). Settings' **Terms**
+(`SettingsSection.TERMS`, found by the search) shows them read-only. The bridge carries `Session.AcceptTerms` and
+`Settings.Terms`. Held by `TermsGateTest`, `MemberTermsTest`, `PlansAreTheWebsTest`, `DispatchTest` (each bitten) and
+live by `TermsLiveTest` (a throwaway with a member: the owner's new revision gating both, a moved pair told apart, the
+gate passed). Passed as a throwaway on Android (an API 36 emulator: the gate, *I agree* into the shell, Settings' page,
+*Sign out* to the unlock) and Linux (Broadway: the gate, the offer only after *I agree*, the search's Terms result and
+Settings' subpage); Windows built with its tests on the VM (`run.py build`), Apple built (macOS, iOS and tvOS), their
+passes open (§ Open).
 **The account's own flows, on all four apps** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md), built 2026-11-19): the web's flows ported into the core and
 held to the shared vectors (`secret_key_proof`, `auth_attestation`, `rotation_stage`, `verification`, `fingerprint`'s
 digits and chain code, `safety_code`, on the JVM and libsodium) — the rename of any device a row names
@@ -670,10 +683,14 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   iPad (a flow's kit scanned with the real camera, the breach notice too), Touch ID and Windows Hello for real, a real
   mailbox, a safety code scanned with real cameras (#912).
 - Not in the apps yet (the owner 2026-11-26: every app is to do what the web does — these are gaps, closed one by one):
-  joining a tenant from an invite, inviting, members and roles, groups and leaving a space, accepting and reading a
-  tenant's terms, finishing a recovery (the apps ask for the reset link; the web finishes it), the trust reset,
+  joining a tenant from an invite, inviting, members and roles, groups and leaving a space, editing a tenant's terms
+  (its owner's; the apps hold the gate and show them, below), finishing a recovery (the apps ask for the reset link; the web finishes it), the trust reset,
   *Who's who* (#967), the moderation key (#965), the task queue's jobs (#966), and an in-app choice of appearance and language (the apps follow the system's; the desktops
   have no per-app language of their own).
+- A space's terms (ADR 0035 § The apps' gate, built 2026-11-26): the macOS pass (the debug app started from the agent's
+  shell drew no window the background tools reached — the coordinator's), the tvOS gate and an Android TV pass (no TV
+  emulator ran), a German pass on any app, the Windows pass (the VM resolves one throwaway name, `tw-win.localhost`, which
+another throwaway held), and the owner's iPhone and iPad.
 - **On macOS a session's menu in Settings was never driven** ("Weitere" → "Dieses Gerät abmelden" on another session:
   the background tools open no menu) — the owner's click (inbox #916); **and its rename alert shows the current name
   only the first time** — later openings were empty (the binding set before presenting; AppKit's alert keeps its field);

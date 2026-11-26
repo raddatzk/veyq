@@ -17,6 +17,8 @@ import me.raddatz.veyq.mobile.sharing.ShareResolve
  * terms are an operational gate, never a confidentiality control (ADR 0035 § The apps' gate, our reading).
  * The terms are public operational content: nothing here is sealed, nothing is a key.
  */
+// Not `TenantTerms`: the generated model of that name made Swift see this object as `TenantTerms_`, and a nested `Shown`
+// renamed the bridge's other `Shown` types in Rust and C# (their names are a type's last part unless it is taken twice).
 object MemberTerms {
     /** The record's passage in the instance privacy notice (the web's `PRIVACY_ANCHOR.guestWriteRecord`). */
     const val RECORD_ANCHOR = "guest-write-record"

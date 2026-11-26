@@ -33,6 +33,16 @@ gate asks whether a row for the current pair exists. No entry until accepted. **
 question of them
 ([uc.sharing.share-accept](../../sharing/use-cases/uc.sharing.share-accept.md)).
 
+## In the apps
+
+Every app holds a member at the same gate ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) § The apps'
+gate): the Kotlin core reads the tenant's terms at each open of a tenant, before the shell shows, and while the current
+pair is not accepted the platform draws the gate in place of the shell — the space's terms, the operator section and the
+record's pointer, **I agree** and **Sign out** (a TV's *Remove from this TV*); the offer to stay signed in waits behind it.
+A moved pair is read anew and shown again, a failed accept says so, a read that fails shows no gate (fail-open, as the
+web's). Settings' **Terms** shows the space's terms and the operator section read-only at any time; editing them is the
+owner's, in the browser.
+
 ## Main flow
 
 1. A member with a session navigates into the tenant shell.

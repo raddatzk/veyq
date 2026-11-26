@@ -77,4 +77,4 @@ holds only **public** keys and ciphertext, never the password and never a conten
 
 **Terms gate** — an *operational* gate that sits on a **session**, above unlock ([ADR 0035](../../decisions/0035-server-terms-of-service.md)):
 
-- ★ [Accept the tenant's terms](use-cases/uc.account.accept-terms.md) — **built (web, cr-0114)** (a hard member gate on a stale `accepted_terms_revision`; server-side, re-accept on a bump; the space owner sets the revision in [uc.admin.tenant-terms](../admin/use-cases/uc.admin.tenant-terms.md))
+- ★ [Accept the tenant's terms](use-cases/uc.account.accept-terms.md) — **built (web, cr-0114; the apps 2026-11-26, ADR 0035 § The apps' gate)** (a hard member gate on a stale `accepted_terms_revision`; server-side, re-accept on a bump; the space owner sets the revision in [uc.admin.tenant-terms](../admin/use-cases/uc.admin.tenant-terms.md))

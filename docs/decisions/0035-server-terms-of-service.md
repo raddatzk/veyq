@@ -1,7 +1,7 @@
 # ADR 0035 — Terms: a space's own terms behind a gate, the operator's fixed section and privacy notice beside them
 
 - Status: Accepted
-- Built: partly (not built: decision 5's pre-auth login-page surface of a space's terms)
+- Built: partly (not built: decision 5's pre-auth login-page surface of a space's terms); the apps' gate built 2026-11-26
 - Date: 2026-07-10
 - Model: [Moderation](../features/moderation/_index.md)
 
@@ -201,6 +201,37 @@ Adopt a tenant-terms model, operator-blind, with a **two-tier acceptance gate**.
    guest objecting to the record names the identity whose rows are erased by a **guest id** its own view shows to copy
    (Art. 21(1) with 12(2)), the share identity's random id; an objection erases the rows so far and does not stop later
    writes from being recorded, and the notice says so.
+
+## The apps' gate (2026-11-26)
+
+The member gate of decision 2 holds in every app as on the web: a member who uses only an app reads and accepts a
+space's new terms there (owner 2026-11-26; [ADR 0161](0161-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md):
+the rule in the Kotlin core, each platform drawing it).
+
+1. **The rule is the core's** (`session/MemberTerms`, `SessionModel`): the tenant's terms read through the generated
+   client (`getTenantTerms`) at **each open of a tenant** — the start, an unlock, a switch, a sign-in, an account followed
+   in another's place — and **before the shell is shown**, so no list is drawn ahead of the gate. Terms set and the
+   current pair not accepted, the session's `Gate.Signed` carries the gate (`terms`): the space's text, the operator
+   section and the record's pointer in the app's language, the other where one is empty. The tenant stays open beneath it,
+   as the web's scope stays entered beneath `/terms`; the offer to stay signed in waits behind it.
+2. **Its two ways out are the web's**: *I agree* (`acceptTenantTerms` with the pair shown; a `409 terms_revision_changed`
+   reads the terms anew and shows the newer pair with why — or lets the member in where the newer read says the pair is
+   accepted already, as on another device; any other failure keeps the gate and says so) and *Sign out*. Declining
+   records nothing. A TV's *Sign out* is its *Remove from this TV*, the one sign-out it has. The bridge carries the
+   accept as `Session.AcceptTerms` and Settings' read as `Settings.Terms`.
+3. **The terms are readable at any time**: Settings' Terms (`SettingsSection.TERMS`, after the personal sections as the
+   web's tenant category is) shows the space's terms and the operator section read-only, for owner and member alike;
+   editing them stays the owner's, in the browser ([uc.admin.tenant-terms](../features/admin/use-cases/uc.admin.tenant-terms.md)).
+   The record's pointer opens the server's privacy notice in the browser; a TV shows it as a QR code and its address.
+4. **Fail-open, as the web's — our reading, not a reviewed answer.** A terms read that fails (offline, a `5xx`) shows no
+   gate. A space's terms bind a member only by their consent: until a member agrees to a new revision the revision they
+   agreed to goes on binding them, so a member let in by a failed read is bound by no terms they did not accept, and the
+   space owner loses only the earlier binding of the new text — a contractual cost, not an unlawful state. The duties the
+   law puts on the operator do not ride the gate: the operator section (DSA Art. 14) is public at `/operator-terms` and
+   in the phone and desktop apps' Settings, the privacy notice at `/privacy`. A fail-closed gate would lock a member out of their own
+   encrypted data on a network blip, a harm the safe side would cause rather than avoid; so the web's choice stands.
+   An app left open sees a revision saved meanwhile at its next open of that tenant, where the web sees it at the next
+   scope entry: a new revision binds no one before they agree, so the later moment changes what is shown, never what binds.
 
 ## Consequences
 
