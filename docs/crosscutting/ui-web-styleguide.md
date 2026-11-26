@@ -376,6 +376,10 @@ and reached only through `shared/state/useToast` (and `useUndo` for the undo tim
 
 A validation error and a load error stay inline, beside the form or in the panel they belong to.
 
+A toast is no layer of the keyboard: Escape closes one only while the focus is in it (Tab or the region's F8). The
+Escape that closes a lightbox, a dialog or a menu leaves every toast, an Undo included, standing (`VeyqToaster`;
+inbox #864 — the library's own listener took the Undo of a capture-time shift along with the lightbox).
+
 ## Long lists
 
 Every view over a list of media — the gallery, the trash, the contributors' view, a guest's share (which is the

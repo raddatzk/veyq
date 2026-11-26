@@ -981,7 +981,14 @@ onBeforeUnmount(() => {
 
         <form v-if="isEditingCapturedAt" class="media-lightbox-date-form" @submit.prevent="saveCapturedAt">
           <label for="captured-at-input">{{ t('media.captured') }}</label>
-          <VeyqDateField v-model="capturedAtInput" input-id="captured-at-input" granularity="minute" :disabled="savingCapturedAt" />
+          <!-- The calendar from its button only: opened on focus it hung over Save while the time was typed (inbox #865). -->
+          <VeyqDateField
+            v-model="capturedAtInput"
+            input-id="captured-at-input"
+            granularity="minute"
+            calendar-from-button-only
+            :disabled="savingCapturedAt"
+          />
           <!-- A medium of a selection: only it, or every selected one by the same offset (uc.memory.buckets). -->
           <template v-if="shiftOffer">
             <p class="media-lightbox-date-note">{{ t('media.shift.selected', { count: shiftOffer.count }) }}</p>

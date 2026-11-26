@@ -70,7 +70,8 @@ component that cites "behaviour changed on purpose" means one of them:
   every date field (the owner's choice; the share and drop-box expiry and the moderation deadlines showed a fixed
   `yy-mm-dd` before). Pasting a whole date as text is gone. The calendar stays: its button opens it, and so does the
   field's focus, on every date field, as the library's did (its open-on-focus was the default everywhere, not only
-  on the Memory date). It steps by month; a distant year is typed into its segment. Days outside the bounds are
+  on the Memory date). One field takes it from its button alone (`calendarFromButtonOnly`, 2026-11-26): the
+  lightbox's capture time, where the calendar a focus opened hung over Save while the time was typed (inbox #865). It steps by month; a distant year is typed into its segment. Days outside the bounds are
   disabled, and a typed one is refused: leaving the field restores the day it held. The model (`YYYY-MM-DD`) stays.
 - **A breadcrumb entry with a `url` is a real link**; a plain click runs its command in place of the link's default,
   a modified click follows it.

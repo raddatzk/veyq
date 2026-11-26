@@ -3,6 +3,10 @@
 // top-right, for success acknowledgements and errors, and the undo one, bottom-centre, whose card carries a
 // "Rückgängig" action. Each region is a live region a screen reader reads; a toast pauses while the pointer is on it.
 // What to show comes through `toast.ts`; the timeout/restore live in useUndo/useToast at each call site.
+//
+// Escape closes a toast only while the focus is in a toast region (reached by Tab or the region's F8 hotkey). Reka listens
+// for Escape on the whole window, so without this the Escape that closes a lightbox or a dialog took every toast along -
+// an Undo bar included, whose action was then gone (inbox #864). The topmost layer owns the key; a toast is no layer.
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ToastClose, ToastProvider, ToastRoot, ToastTitle, ToastViewport } from 'reka-ui'
@@ -20,6 +24,10 @@ const ICON: Record<QueuedToast['severity'], VeyqIconName> = { success: 'check', 
 function onOpen(toast: QueuedToast, open: boolean) {
   if (!open) dropToast(toast.id)
 }
+/** An Escape meant for another layer leaves the toasts alone. */
+function keepUnlessFocused(event: KeyboardEvent) {
+  if (!(event.target instanceof Element && event.target.closest('.veyq-toaster'))) event.preventDefault()
+}
 function runUndo(toast: QueuedToast) {
   toast.onUndo?.()
   dropToast(toast.id)
@@ -34,6 +42,7 @@ function runUndo(toast: QueuedToast) {
       :duration="toast.life ?? Infinity"
       :class="['veyq-toast', `veyq-toast--${toast.severity}`]"
       @update:open="(open) => onOpen(toast, open)"
+      @escape-key-down="keepUnlessFocused"
     >
       <div class="veyq-toast__content">
         <VeyqIcon :name="ICON[toast.severity]" class="veyq-toast__icon" />
@@ -52,6 +61,7 @@ function runUndo(toast: QueuedToast) {
       :duration="toast.life ?? Infinity"
       class="veyq-undo-toast-root"
       @update:open="(open) => onOpen(toast, open)"
+      @escape-key-down="keepUnlessFocused"
     >
       <div class="veyq-undo-toast">
         <ToastTitle class="veyq-undo-toast__text">{{ toast.summary }}</ToastTitle>
