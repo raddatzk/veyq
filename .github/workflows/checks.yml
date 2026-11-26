@@ -279,7 +279,7 @@ jobs:
       # switches itself to the pinned version.
       - name: Install pnpm
         if: runner.environment == 'github-hosted'
-        run: npm install -g pnpm@12.22.0
+        run: npm install -g pnpm@12.23.0
 
       # The OpenAPI generator JAR (ADR 0057 §6), restored to the storageDir both openapitools.json name, so the install's
       # `generate:api` reads it from the cache instead of asking Maven Central in every job: several jobs start at once,
@@ -481,7 +481,7 @@ jobs:
       # switches itself to the pinned version.
       - name: Install pnpm
         if: runner.environment == 'github-hosted'
-        run: npm install -g pnpm@12.22.0
+        run: npm install -g pnpm@12.23.0
 
       # Build the runnable fast-jar ONCE; the orchestrator boots it again per e2e file, because every suite
       # cold-births its own Server Owner and asserts setupRequired===true, and an instance has one.
@@ -588,7 +588,7 @@ jobs:
       # switches itself to the pinned version.
       - name: Install pnpm
         if: runner.environment == 'github-hosted'
-        run: npm install -g pnpm@12.22.0
+        run: npm install -g pnpm@12.23.0
 
       - name: Build backend fast-jar
         working-directory: src/backend
@@ -1010,7 +1010,7 @@ jobs:
       # switches itself to the pinned version.
       - name: Install pnpm
         if: runner.environment == 'github-hosted'
-        run: npm install -g pnpm@12.22.0
+        run: npm install -g pnpm@12.23.0
 
       # The OpenAPI generator JAR, cached and verified as `frontend`'s says.
       - name: Restore the OpenAPI generator JAR
@@ -1248,7 +1248,7 @@ jobs:
       # switches itself to the pinned version.
       - name: Install pnpm
         if: steps.predecessor.outputs.ref != '' && runner.environment == 'github-hosted'
-        run: npm install -g pnpm@12.22.0
+        run: npm install -g pnpm@12.23.0
       - name: Build the candidate's fast-jar
         if: steps.predecessor.outputs.ref != ''
         working-directory: src/backend
