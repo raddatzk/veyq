@@ -2,10 +2,11 @@
 """The docs site's older versions: which exist, building each once, and putting them beside the current docs.
 
 ADR 0087 decision 6: the root of https://veyq.app/ is `main`'s docs; every older major's docs are the site built from
-that major's **newest release tag** with `VEYQ_SITE_VERSION=<major>`, served under `/v<major>/`. "Newest" is
-[run_web_e2e.major_entry]'s derivation — every `v*` tag by version order, a fix release on `release/<old>.x`
-included — so the docs of a major are those of the release its operators run, and that release is also the one the
-next major is entered from.
+that major's **newest release tag** with `VEYQ_SITE_VERSION=<major>`, served under `/v<major>/`. "Newest" is the
+order `run_web_e2e.major_entry` gives the major entry — every `v<major>.<minor>` tag, by minor as a number, a fix
+release on `release/<old>.x` included — so the docs of a major are those of the release its operators run, and that
+release is also the one the next major is entered from. Written here rather than imported: `run_web_e2e.py` needs
+PyYAML, which site.yml's runner does not install (an import that failed inside `$(…)` would have named no version).
 
 A version is built **once per tag** and kept on the branch `site-versions` (`v<major>/` beside `versions.json`, which
 maps each major to the tag it was built from); a later deploy reuses it. Built soon after its tag, with the toolchain
@@ -31,14 +32,18 @@ import pathlib
 import shutil
 import subprocess
 import sys
+import re
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ROOT / "scripts"))
-
-from run_web_e2e import RELEASE_TAG, major_entry  # noqa: E402 - the one derivation of a major's newest release
-
 INDEX = "versions.json"
+RELEASE_TAG = re.compile(r"^v(\d+)\.(\d+)$")  # run_web_e2e.RELEASE_TAG
+
+
+def newest(major: int, tags: list[str]) -> str | None:
+    """The newest `v<major>.<minor>` among `tags` by minor as a number; None without one."""
+    found = sorted((int(m.group(2)), tag) for tag in tags if (m := RELEASE_TAG.match(tag)) and int(m.group(1)) == major)
+    return found[-1][1] if found else None
 
 
 def git(*args: str, cwd: pathlib.Path = ROOT) -> str:
@@ -55,7 +60,7 @@ def release_tags(root: pathlib.Path = ROOT) -> list[str]:
 
 def older(current: int, tags: list[str]) -> dict[int, str]:
     """Every major below `current` that has a release, mapped to its newest release tag."""
-    found = {major: major_entry(major + 1, tags) for major in range(1, current)}
+    found = {major: newest(major, tags) for major in range(1, current)}
     return {major: tag for major, tag in found.items() if tag is not None}
 
 
