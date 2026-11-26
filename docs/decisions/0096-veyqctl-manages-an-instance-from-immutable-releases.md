@@ -134,8 +134,8 @@ decision 2), so it holds the rule an app holds:
   socket (root on the host) beside a recipe that is otherwise read-only, non-root and capability-free, and it has no
   Kubernetes form.
 - **Rejected — step through every intermediate release.** Within a major Flyway applies every missing migration in
-  order whatever the starting release, and L3 restores every archived backup of the major into the candidate, so a
-  skip is a tested path; stepping would only multiply downloads, backups and restarts.
+  order whatever the starting release, and L3 restores the oldest archived release of each schema state of the major
+  into the candidate (ADR 0091 decision 6, amended 2026-11-26), so a skip is a tested path; stepping would only multiply downloads, backups and restarts.
 - **Rejected — any release straight into a newer major.** One run fewer, but no lane covers the data path from an
   arbitrary older release across a major's removals; entering through the major entry costs one upgrade
   and keeps every path tested.

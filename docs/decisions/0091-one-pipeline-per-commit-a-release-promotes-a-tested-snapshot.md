@@ -252,6 +252,47 @@ several, or one on another tag is refused (`scripts/promote.py` check 1). A save
    (ADR 0085 decision 10), the only release [ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) §5
    enters a new major from. Before the first release the archive is empty, L2 upgrades from the previous snapshot, and
    both inform and gate nothing, as ADR 0057 §7 says for the upgrade proof.
+   - **Amended 2026-11-26 (owner: compatibility is between releases, and L3 restores per schema state; the rest
+     decided in refinement, inbox #453 and #461): what L2 and L3 write and read, where the archive comes from, and
+     which backups L3 restores.** An operator only ever runs a release (ADR 0096) and may upgrade from any release of
+     the major, so what must hold is release → candidate, never commit → commit. Every commit is still tested, because
+     every commit on `main` may become the next release (decision 5); what a lane starts from is a release.
+     1. **The write half is the starting release's own; the read half is the candidate's.** Both lanes write with the
+        API upgrade seeder of the starting release's tree (`upgrade.a-seed.e2e.test.ts`, the pair the jar-level proof
+        runs, present unchanged in every release since v0.2480) against that release's own signed images, and read
+        with the candidate's reader (`upgrade.b-read.e2e.test.ts`) against the candidate, the versioned record
+        (`upgradeRecord.ts`) between them. One Playwright spec of the candidate's then opens the seeded content in a
+        browser. Not a new browser write half, and not decision 3's split of the scenarios: a browser write half
+        would exist only from the next release on, so every release before it would be written by today's test code
+        against an older interface — the half that breaks would be the test's, not the product's. The seeder uses
+        nothing only the e2e profile serves and makes three requests on the per-IP budget of 60 a minute (measured
+        2026-11-26 by a static trace of the suites against the rate-limit annotations), so it runs on the production
+        recipe unchanged.
+     2. **L2 upgrades with the starting release's `veyqctl`**, the tool its operator has installed — which is also the
+        lane ADR 0096's minor promise (decision 9) was missing. It runs from the newest release and, in a leg of its
+        own, from the major entry, crossing the major in place as an operator would. After the read it rolls back to
+        the backup the upgrade took and reads again with the starting release's own reader, so the recovery the
+        upgrade names on a failure has been run.
+     3. **The archive is written by a workflow of its own after the promotion, not taken from L1.** It installs the
+        published release, writes with that release's seeder, takes `veyqctl backup` with its object pool and its
+        kept-apart key, and publishes the result as an OCI artifact beside the release's images, signed keylessly
+        under that workflow's identity, which L3 verifies. One path for every release, including the ones released
+        before it: none of those has a capture (L1 never takes one, and the jar-level proof's are kept seven days),
+        so each is written once by the same workflow, dispatched with its tag. Every release is archived, not only
+        the ones L3 restores, so the selection below can change without a backup missing.
+     4. **L3 restores one backup per schema state, not one per release.** A release's schema state is its highest
+        migration, read from its own `scripts/applied_migrations.sha256`. Within the candidate's major L3 restores the
+        oldest release of each state, plus the major entry — derived from the tags and their pin files, never listed.
+        Flyway runs the same migrations in the same order from any release of a state, so the state, not the
+        release, is what the database path depends on: on 2026-11-26 the eighteen releases fell into four states
+        plus the entry. The cost grows with a major's migrations, not its releases, and resets with each major, where
+        only the entry carries over. **Its limit:** a release that writes a new data format without a migration is
+        covered only at the edges of its state — the oldest release by L3, the newest by L2. A format first written
+        by a release in the middle of a state and changed again before the state ends is never restored. A data
+        format version of its own would close that; it is not decided.
+     5. **When.** L2 as L1: amd64 on a pull request, both architectures on a push. L3 on a push, both
+        architectures, its backups spread over as many legs as decision 1's budget needs; not on a pull request, which
+        keeps L2. A backup the selection names that is not archived is red — a defect, never a skip.
 
 7. **The jar-level upgrade proof retires when L2 and L3 gate.** They prove the same data path on the artifact that
    ships; ADR 0057 §7 then names them. The API end-to-end suites stay: fast, fresh per file, and where a wire defect is

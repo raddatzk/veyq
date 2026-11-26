@@ -330,8 +330,11 @@ check is logged and retried with a back-off, and blocks nothing.
   can move, and an input it cannot compare (a predecessor, a backup list) is refused rather than rerun — the rerun comes
   with lanes L2 and L3. Retention — the 20 newest unpromoted snapshots per major and every promoted one, a scheduled
   job deleting the rest with their `snapshot-` tags — is not built: until it is, every snapshot stays in GHCR.
-- **Lanes L2 and L3 and the backup archive** (ADR 0091 decisions 3 and 6): the previous release upgraded in place
-  with `veyqctl upgrade`, and every archived backup of the major, with its object pool, restored into the candidate.
+- **Lanes L2 and L3 and the backup archive** (ADR 0091 decisions 3 and 6, amended 2026-11-26): the newest release and
+  the major entry upgraded in place by their own `veyqctl upgrade`, then rolled back; one archived backup per schema
+  state of the major, with its object pool, restored into the candidate. Each starting release is written by its own
+  API seeder and read by the candidate's reader. The archive is written per release by a workflow of its own after the
+  promotion; none of the releases before it has one yet.
   When they gate, the jar-level upgrade proof retires (decision 7; replaces ADR 0057 § 7).
 - **The window of majors a client speaks** ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md)
   decision 5). The yearly train, its release order and the previous major's release branch (decisions 2, 3 and 10)
