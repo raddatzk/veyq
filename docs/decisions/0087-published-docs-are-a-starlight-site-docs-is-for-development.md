@@ -1,7 +1,8 @@
 # ADR 0087 — Published documentation is a Starlight site; `docs/` is for development only
 
 - Status: Accepted
-- Built: yes (decision 1's publish: the first deploy to GitHub Pages ran on 2026-11-05, `site.yml` run 42055478631, at https://veyq.app/)
+- Built: partly (decision 1's publish: the first deploy to GitHub Pages ran on 2026-11-05, `site.yml` run 42055478631,
+  at https://veyq.app/; not built: decision 6's versions — none is due before a major 2 is released, inbox #868)
 - Date: 2026-10-15
 
 ## Context
@@ -75,9 +76,32 @@ copy (the drift the wiki's source guard was built after), and it lives only on G
 5. **`docs/` holds only what development needs.** A use-case's bilingual section becomes `## User impact`: one
    English line saying why the feature exists for the user. The numbered flows with their error paths stay the
    use-case's substance. User-facing prose lives only on the site.
-6. **No versioned docs before V1.** The site shows `main`. From V1, versions are built **from release tags**, one
-   build per version, never as copied folders; the version granularity is decided then, against
-   [ADR 0085](0085-one-major-moved-on-a-yearly-train.md).
+6. **One version per major, the first when major 2 is released.** Until then the site shows `main` and nothing
+   else. Not one per minor: inside a major every release upgrades in place, what it adds is additive, and a change an
+   operator must act on is major-level ([ADR 0085](0085-one-major-moved-on-a-yearly-train.md) decision 2 and
+   § Consequences), so `main`'s docs hold for every release of the current major, and where a page describes a
+   release an operator does not run yet, the answer is the in-place upgrade. Major 1 had 17 releases in its first 16
+   days (`git tag -l 'v1.*'`, 2026-11-26), each differing from the last by additions only. A major differs by
+   removals, and an instance may stay on the previous major for a year (ADR 0085 decision 10) — its operator needs
+   that major's runbook, which `main`'s then no longer is.
+   - **A version** is the Use, Run and Security areas built from the commit of its major's **newest release** — by
+     the same tag order as ADR 0085 decision 10's major entry, so a fix release on `release/<old>.x` moves it — and
+     served under `/<major>/`. The project website (decision 7) is `main`'s alone.
+   - **Built once, kept with its release, never rebuilt and never copied:** the build is made from the release's
+     commit by that commit's pipeline (the promotion builds nothing, [ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md))
+     and kept as one of the release's assets, signed with it. The deploy puts `main` at the root and each older
+     major's asset under its path. Rebuilding an old tree is ruled out: a year on, its lockfile would meet the
+     deprecated-package gate, which is not relaxed for it (§ Consequences). The link check runs on the root build,
+     which has no `base`; a version's build has one, which blinds `errorOnInconsistentLocale` (`site/astro.config.mjs`),
+     so a version's links count as checked by the root build of its own commit, not by its own build.
+   - **The majors kept** are those inside the client window (ADR 0085 decision 5): an app still talks to an N−2
+     server, so its operator still gets its docs. A major that leaves the window leaves the deploy.
+   - **The clients keep linking the root.** A major-1 instance's links were compiled before a major 2 existed and
+     cannot change, so the site catches a reader of an older major rather than the link: every root page names the
+     older versions, and every page of a version says which major it documents and links the current one.
+   - **Due with the train's step 1** ([`infra/README.md`](../../infra/README.md) § Cutting a release): the site
+     builds under a base and every release carries its build before the old major's last release (step 2) is cut,
+     because that release is the one the old major's version is built from.
 7. **The site's root is the project website.** `/` and one page per further language (`/de/`) are plain Astro
    pages, not Starlight ones; the Use area starts at `/start/`. The website says what veyq is — a platform, not one
    application —, which applications are built, why it is needed, and links into the three areas.

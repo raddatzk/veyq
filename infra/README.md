@@ -327,6 +327,10 @@ the same steps on its own date:
    adapter of every older major in the window, proved by a CI job against that major's server image, before
    `VERSION` moves. Major 2's train is the first to need one (major 1's adapter); none is built before it (ADR 0085
    § Consequences). The web client and admin-web otherwise ship in the server's image and need nothing here.
+   **The docs site, too, is versioned from major 2's train on** ([ADR 0087](../docs/decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md)
+   decision 6): before step 2, the site builds under a `/<major>/` base and every release carries its build as an
+   asset, so the old major's last release brings the docs the site keeps under `/<old>/`. None is built before it
+   (inbox #868).
 2. **The old major's last release, on the commit before the bump:** promote that commit's snapshot from `main`.
 3. **The release branch, cut from that release's tag.** Its own history counts on from it, so its first fix is
    `<old>.<n+1>`. The train ends every branch cut before it, so those get no more releases.
