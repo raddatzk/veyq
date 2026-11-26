@@ -52,6 +52,8 @@ internal sealed class LightboxView : IDisposable
     private readonly AppBarButton _previous;
     private readonly AppBarButton _next;
     private readonly AppBarButton _slideshow;
+    /// <summary>The slideshow's shuffle (the web's, from three media on): a toggle whose state is the core's (LightboxShown.shuffled).</summary>
+    private readonly AppBarToggleButton _shuffle;
     private readonly AppBarButton _details;
     private readonly AppBarButton _save;
     private readonly AppBarButton _trash;
@@ -108,6 +110,11 @@ internal sealed class LightboxView : IDisposable
         _previous = Button(Symbol.Previous, Words.MemoryPrevious(), "lightbox-previous", () => Step(-1));
         _next = Button(Symbol.Next, Words.MemoryNext(), "lightbox-next", () => Step(1));
         _slideshow = Button(Symbol.Play, Words.MemorySlideshowStart(), "lightbox-slideshow", Slideshow);
+        _shuffle = new AppBarToggleButton { Icon = new SymbolIcon(Symbol.Shuffle), Label = Words.MemorySlideshowShuffle(), Visibility = Visibility.Collapsed };
+        AutomationProperties.SetAutomationId(_shuffle, "lightbox-shuffle");
+        ToolTipService.SetToolTip(_shuffle, _shuffle.Label);
+        // a press only (Click, never Checked: a drawn state sets it); pressing it keeps a running slideshow running
+        _shuffle.Click += (_, _) => { if (_id is { } lightbox) Act.Send(new Call.LightboxShuffle { lightbox = lightbox, on = _shuffle.IsChecked == true }); };
         _details = Button(Symbol.Help, Words.MemoryDetails(), "lightbox-details", ShowDetails);
         _details.Icon = new FontIcon { Glyph = "\uE946" };
         _save = Button(Symbol.Download, Words.MemoryDownload(), "lightbox-save", Save);
@@ -121,7 +128,9 @@ internal sealed class LightboxView : IDisposable
         foreach (var b in new[] { back, _previous, _next }) _bar.PrimaryCommands.Add(b);
         _bar.PrimaryCommands.Add(new AppBarSeparator());
         _bar.PrimaryCommands.Add(_mark);
-        foreach (var b in new[] { _slideshow, _details, _save, _report, _trash }) _bar.PrimaryCommands.Add(b);
+        _bar.PrimaryCommands.Add(_slideshow);
+        _bar.PrimaryCommands.Add(_shuffle);
+        foreach (var b in new[] { _details, _save, _report, _trash }) _bar.PrimaryCommands.Add(b);
         var heading = new StackPanel { Margin = new Thickness(12, 0, 12, 0), VerticalAlignment = VerticalAlignment.Center };
         AutomationProperties.SetAutomationId(_title, "lightbox-position");
         AutomationProperties.SetAutomationId(_subtitle, "lightbox-name");
@@ -210,7 +219,7 @@ internal sealed class LightboxView : IDisposable
         if (l.shown is { } s)
         {
             // the state comes again as the music's position moves: said in the log when the rest changed
-            var line = $"lightbox shown: {s.index + 1} of {s.count}, {s.row?.mediaId ?? "-"}, playing {s.playing}, slideshow {s.slideshow?.ToString() ?? "-"}, save {s.downloadName is not null}, trash {s.canTrash}, mark {(s.canMark ? s.marked ? "marked" : "offered" : "-")}, report {s.canReport}, music {(s.music is { } m ? m.playing ? "playing" : "paused" : "-")}";
+            var line = $"lightbox shown: {s.index + 1} of {s.count}, {s.row?.mediaId ?? "-"}, playing {s.playing}, slideshow {s.slideshow?.ToString() ?? "-"}, shuffled {s.shuffled}, save {s.downloadName is not null}, trash {s.canTrash}, mark {(s.canMark ? s.marked ? "marked" : "offered" : "-")}, report {s.canReport}, music {(s.music is { } m ? m.playing ? "playing" : "paused" : "-")}";
             if (line != _logged) Log.Write(_logged = line);
         }
         _shown = l.shown;
@@ -252,12 +261,11 @@ internal sealed class LightboxView : IDisposable
     private static bool Held(VirtualKey key) =>
         Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
 
-    /// <summary>Pages by <paramref name="by"/> (−1 back, 1 on) where there is a medium there.</summary>
+    /// <summary>Pages by <paramref name="by"/> (−1 back, 1 on), round the ends (the core's previous / next), where there is anywhere to page.</summary>
     private void Step(int by)
     {
-        if (_id is not { } lightbox || _shown is not { } s) return;
-        var to = s.index + by;
-        if (to >= 0 && to < s.count) Act.Send(new Call.LightboxGo { lightbox = lightbox, index = to });
+        if (_id is not { } lightbox || _shown is not { canPage: true }) return;
+        Act.Send(new Call.LightboxStep { lightbox = lightbox, forward = by > 0 });
     }
 
     private void Slideshow()
@@ -325,10 +333,13 @@ internal sealed class LightboxView : IDisposable
         var name = row.name ?? Words.MemoryUnnamed(s.index + 1);
         _title.Text = s.position is { } p ? Said.Notice(p) : "";
         _subtitle.Text = name;
-        _previous.IsEnabled = s.index > 0;
-        _next.IsEnabled = s.index + 1 < s.count;
+        // paging goes round the ends: only a single medium has nowhere to page
+        _previous.IsEnabled = s.canPage;
+        _next.IsEnabled = s.canPage;
         var playing = s.slideshow == SlideshowState.Playing;
-        _slideshow.Visibility = s.count > 1 ? Visibility.Visible : Visibility.Collapsed;
+        _slideshow.Visibility = s.canPage ? Visibility.Visible : Visibility.Collapsed;
+        _shuffle.Visibility = s.canShuffle ? Visibility.Visible : Visibility.Collapsed;
+        _shuffle.IsChecked = s.shuffled;
         _slideshow.Icon = new SymbolIcon(playing ? Symbol.Pause : Symbol.Play);
         _slideshow.Label = playing ? Words.MemorySlideshowPause() : Words.MemorySlideshowStart();
         ToolTipService.SetToolTip(_slideshow, _slideshow.Label);

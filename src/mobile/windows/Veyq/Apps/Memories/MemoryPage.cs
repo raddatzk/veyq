@@ -70,7 +70,14 @@ internal sealed class MemoryPage : IDisposable
     private readonly Grid _root = new();
     private readonly ScrollViewer _scroll;
     private readonly StackPanel _column = new() { Spacing = 12, Padding = new Thickness(Margin, 4, Margin, Margin * 2) };
-    private readonly TextBlock _count = new() { Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"] };
+    private readonly TextBlock _count = new() { Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"], VerticalAlignment = VerticalAlignment.Center };
+    /// <summary>The count's line, the grid's sort beside it.</summary>
+    private readonly Grid _countRow = new();
+    /// <summary>The grid's direction (the web's newest/oldest toggle, inbox #1344): File Explorer's Sort — a DropDownButton
+    /// whose menu holds the two orders as radio items; drawn where the grid holds media. Stored nowhere.</summary>
+    private readonly DropDownButton _sort = new() { HorizontalAlignment = HorizontalAlignment.Right, Visibility = Visibility.Collapsed };
+    private readonly RadioMenuFlyoutItem _sortNewest = new() { Text = Words.MemorySortNewest(), GroupName = "gallery-sort", Icon = new FontIcon { Glyph = "\uE74B" } };
+    private readonly RadioMenuFlyoutItem _sortOldest = new() { Text = Words.MemorySortOldest(), GroupName = "gallery-sort", Icon = new FontIcon { Glyph = "\uE74A" } };
     private readonly StackPanel _chapters = new() { Spacing = 4, Visibility = Visibility.Collapsed };
     private readonly ListView _chapterList = new() { SelectionMode = ListViewSelectionMode.None, IsItemClickEnabled = true };
     private readonly ContentControl _status = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
@@ -183,7 +190,17 @@ internal sealed class MemoryPage : IDisposable
         _column.Children.Add(_bucketsSlot);
         _column.Children.Add(_filterSlot);
         AutomationProperties.SetAutomationId(_count, "memory-count");
-        _column.Children.Add(_count);
+        AutomationProperties.SetAutomationId(_sort, "gallery-sort");
+        var sortMenu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedRight };
+        sortMenu.Items.Add(_sortNewest);
+        sortMenu.Items.Add(_sortOldest);
+        _sort.Flyout = sortMenu;
+        // a choice only (Click: a drawn state sets IsChecked without one)
+        _sortNewest.Click += (_, _) => { if (_id is { } gallery) Act.Send(new Call.GallerySort { gallery = gallery, oldestFirst = false }); };
+        _sortOldest.Click += (_, _) => { if (_id is { } gallery) Act.Send(new Call.GallerySort { gallery = gallery, oldestFirst = true }); };
+        _countRow.Children.Add(_count);
+        _countRow.Children.Add(_sort);
+        _column.Children.Add(_countRow);
         var heading = new TextBlock { Text = Words.MemoryChapters(), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] };
         AutomationProperties.SetHeadingLevel(heading, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
         _chapters.Children.Add(heading);
@@ -360,7 +377,7 @@ internal sealed class MemoryPage : IDisposable
         _musicSlot.Visibility = music ? Visibility.Visible : Visibility.Collapsed;
         var other = music || map || buckets;
         var photos = other ? Visibility.Collapsed : Visibility.Visible;
-        _count.Visibility = photos;
+        _countRow.Visibility = photos;
         _filterSlot.Visibility = !other && _filter is not null ? Visibility.Visible : Visibility.Collapsed;
         _status.Visibility = photos;
         _grid.Visibility = photos;
@@ -888,6 +905,14 @@ internal sealed class MemoryPage : IDisposable
     {
         var s = _shown;
         _count.Text = s is null ? "" : Said.Notice(s.count);
+        // the sort: where the grid holds media, its words and its checked item the order shown
+        _sort.Visibility = s?.rows is { Count: > 0 } ? Visibility.Visible : Visibility.Collapsed;
+        var oldest = s?.oldestFirst == true;
+        _sortNewest.IsChecked = !oldest;
+        _sortOldest.IsChecked = oldest;
+        var sortWords = oldest ? Words.MemorySortOldest() : Words.MemorySortNewest();
+        _sort.Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { new FontIcon { Glyph = "\uE8CB", FontSize = 14 }, new TextBlock { Text = sortWords } } };
+        AutomationProperties.SetName(_sort, sortWords);
         _status.Content = s switch
         {
             null or { rows: null, failure: null } => new ProgressRing { IsActive = true, Margin = new Thickness(24), HorizontalAlignment = HorizontalAlignment.Center },
