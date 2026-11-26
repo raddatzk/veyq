@@ -1240,6 +1240,9 @@ internal sealed class Call {
     /** The gallery read anew now (a desktop's Refresh, F5 / Ctrl+R). */
     @Serializable @SerialName("Gallery.Reload") data class GalleryReload(val gallery: Long) : Call()
 
+    /** The grid turned oldest first ([oldestFirst]) or newest first (`GalleryModel.sort`, the web's toggle; [GalleryShown.oldestFirst]). */
+    @Serializable @SerialName("Gallery.Sort") data class GallerySort(val gallery: Long, val oldestFirst: Boolean) : Call()
+
     /**
      * Medium [mediaId]'s tile: the grid's tier, whole ([Answer.Bytes], beside the JSON; ADR 0137 decision 1) for the host to
      * decode and cache by the row's [GalleryRow.tile]; refused `NO_BYTES` where the row draws its icon or it did not read.
@@ -1307,6 +1310,15 @@ internal sealed class Call {
 
     /** Paged to row [index] by the person (`go`): the slideshow pauses, a video playing on the page left is closed. */
     @Serializable @SerialName("Lightbox.Go") data class LightboxGo(val lightbox: Long, val index: Int) : Call()
+
+    /**
+     * Paged to the next medium ([forward]) or the previous one by the person (`next` / `previous`): round the ends — the
+     * first after the last, the last before the first ([LightboxShown.canPage]); the slideshow pauses, as [LightboxGo].
+     */
+    @Serializable @SerialName("Lightbox.Step") data class LightboxStep(val lightbox: Long, val forward: Boolean) : Call()
+
+    /** The slideshow shuffled ([on]) or back in the grid's order (`shuffle`; offered where [LightboxShown.canShuffle]). */
+    @Serializable @SerialName("Lightbox.Shuffle") data class LightboxShuffle(val lightbox: Long, val on: Boolean) : Call()
 
     /** Medium [mediaId]'s picture in the lightbox: its preview, else its original, whole ([Answer.Bytes]); refused `NO_BYTES`. */
     @Serializable @SerialName("Lightbox.Picture") data class LightboxPicture(val lightbox: Long, val mediaId: String) : Call()
@@ -2835,6 +2847,8 @@ internal class GalleryShown(
      * chapter's id with the line under its name (*Waiting to send*, or why it is held). Such a chapter opens as any other.
      */
     val chaptersUnsent: List<ChapterUnsent> = emptyList(),
+    /** The grid's direction (`GalleryModel.State.oldestFirst`; [Call.GallerySort]): false, newest first. */
+    val oldestFirst: Boolean = false,
 )
 
 /** A chapter of a [GalleryShown] made offline and not sent yet: its [node] id and the line under its name ([said]). */
@@ -3073,6 +3087,12 @@ internal class LightboxShown(
     val marked: Boolean = false,
     /** Whether *Report* is offered for the current photo or video ([Call.LightboxReport]); the server may still take none. */
     val canReport: Boolean = false,
+    /** Whether there is anywhere to page ([Call.LightboxStep]; `Lightbox.State.canPage`: another medium, round the ends). */
+    val canPage: Boolean = false,
+    /** Whether the slideshow's shuffle is offered ([Call.LightboxShuffle]; `Lightbox.State.canShuffle`: from three media on). */
+    val canShuffle: Boolean = false,
+    /** Whether the slideshow runs shuffled (`Lightbox.State.shuffled`): the toggle drawn pressed. */
+    val shuffled: Boolean = false,
 )
 
 /** The marks' mode of a gallery's filter (`GalleryFilter.Mode`). */
@@ -3482,7 +3502,7 @@ internal class GridTile(val mediaId: String, val left: Double, val width: Double
 
 /** Where a lightbox's slideshow stands (`Lightbox.Slideshow`; its own name: the generated hosts take a type's last name part). */
 @Serializable
-internal enum class SlideshowState { PLAYING, PAUSED, ENDED }
+internal enum class SlideshowState { PLAYING, PAUSED }
 
 /**
  * One row of a medium's details (`MediaDetails.Row`, shown by `MediaDetails.shown`): its [label], and its value — in words

@@ -282,11 +282,11 @@ class GalleryModelTest {
         door.lists.value = Any()
         runCurrent()
         assertEquals("a", box.current.row?.mediaId)
-        // the last went too: the one before it
+        // the last went too: the first (the advance goes round, as paging does; the web's since 2026-11-26)
         door.items = listOf(item("d", at = 4), item("c", at = 3))
         door.lists.value = Any()
         runCurrent()
-        assertEquals("c", box.current.row?.mediaId)
+        assertEquals("d", box.current.row?.mediaId)
         door.items = emptyList()
         door.lists.value = Any()
         runCurrent()

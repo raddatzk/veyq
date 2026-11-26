@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.random.Random
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import me.raddatz.veyq.mobile.audio.MusicPlayer
@@ -1451,10 +1452,19 @@ class GalleryModel(
  * the lightbox pages away, stops, closes or its gallery does; the details ([details]); the original saved ([save]); the
  * medium deleted as its gallery deletes ([trash]).
  *
+ * **Paging goes round its ends, as the web's** (owner 2026-11-26, `MediaLightbox.vue`): past the last medium comes the
+ * first and before the first the last ([next], [previous]); only a single medium has nowhere to page ([State.canPage]).
+ * A removed last medium gives way to the first.
+ *
  * **The slideshow is the web's** (`MediaLightbox.vue`, [SLIDESHOW_MS]): the model runs its clock, no view keeps a timer.
- * Started where a next medium exists, it steps on every interval through the media in the grid's order — a video shows its
- * poster for one interval and is never played by it —, ends ON the last medium, and pauses on any [go] or [play] (the
- * web pauses on any key, pointer or wheel; a platform whose view is touched pauses it with [slideshow] off).
+ * Started where another medium exists, it steps on every interval through the media in the grid's order — a video shows its
+ * poster for one interval and is never played by it —, goes round past the last medium until it is paused, and pauses on
+ * any [go], [next], [previous] or [play] (the web pauses on any key, pointer or wheel; a platform whose view is touched
+ * pauses it with [slideshow] off). **Shuffled** ([shuffle], the web's toggle beside play / pause, inbox #862; offered from
+ * three media on, [State.canShuffle]) it runs in ROUNDS: every medium once in a shuffled order, then a fresh round, which
+ * never opens with the medium the last one ended on; turned on, the round starts after the shown medium. It orders the
+ * slideshow only — paging by hand keeps the grid's order —, a medium removed meanwhile is skipped, turning it is no
+ * interaction that pauses, and it lasts while the lightbox is open, stored nowhere.
  * Zoom is the platform's; the model knows nothing of it.
  *
  * **The music** (ADR 0142 decisions 5 and 13): while the account's player holds a queue, [State.music] is what the compact
@@ -1488,8 +1498,10 @@ class Lightbox internal constructor(
         val reader: RangeReader? = null,
         /** The last save of an original started here (it outlives the lightbox). */
         val save: FileSave? = null,
-        /** The slideshow: running, paused, ended on the last medium; null before it first started. */
+        /** The slideshow: running or paused; null before it first started. */
         val slideshow: Slideshow? = null,
+        /** The slideshow runs in shuffled rounds ([shuffle]); paging by hand keeps the grid's order. */
+        val shuffled: Boolean = false,
         val closed: Boolean = false,
         /** What the account's player plays (any node's queue), for the compact controls; null: they are not shown. */
         val music: me.raddatz.veyq.mobile.audio.NowPlaying? = null,
@@ -1497,6 +1509,10 @@ class Lightbox internal constructor(
         val count: Int get() = rows.size
         val row: GalleryModel.Row? get() = rows.getOrNull(index)
         val playing: Boolean get() = reader != null
+        /** Whether there is anywhere to page — another medium; paging goes round the ends (the web's `canPage`). */
+        val canPage: Boolean get() = rows.size > 1
+        /** Whether the shuffle is offered: from three media on — with two, a shuffled round is the grid's order or its reverse. */
+        val canShuffle: Boolean get() = rows.size > 2
     }
 
     /** The Memory or chapter whose gallery it pages (a window of its own is titled by it and reopened by its ids). */
@@ -1554,8 +1570,8 @@ class Lightbox internal constructor(
         fun stop() = job.cancel()
     }
 
-    /** Where the slideshow stands (the web's `slideshowState`, which a screen reader is told). */
-    enum class Slideshow { PLAYING, PAUSED, ENDED }
+    /** Where the slideshow stands (the web's `slideshowState`, which a screen reader is told); it ends nowhere, it goes round. */
+    enum class Slideshow { PLAYING, PAUSED }
 
     /** Calls [listener] with the state now and with each change after (on a background thread). */
     fun watch(listener: (State) -> Unit): Watch = Watch(scope.launch { state.collect { listener(it) } })
@@ -1572,7 +1588,9 @@ class Lightbox internal constructor(
             val index = when {
                 rows.isEmpty() -> -1
                 kept >= 0 -> kept
-                else -> s.index.coerceIn(0, rows.size - 1)
+                // the one now at its place; past the end, the first (the advance goes round, as paging does)
+                s.index in rows.indices -> s.index
+                else -> 0
             }
             val same = kept >= 0
             if (!same) stale = s.reader
@@ -1587,6 +1605,18 @@ class Lightbox internal constructor(
     fun go(index: Int) {
         pause()
         step(index)
+    }
+
+    /** Paged to the next medium by the person, the first after the last (as [go]). */
+    fun next() {
+        pause()
+        current.let { if (it.canPage) step(around(it.index, 1, it.count)) }
+    }
+
+    /** Paged to the previous medium by the person, the last before the first (as [go]). */
+    fun previous() {
+        pause()
+        current.let { if (it.canPage) step(around(it.index, -1, it.count)) }
     }
 
     private fun step(index: Int) {
@@ -1608,23 +1638,25 @@ class Lightbox internal constructor(
     private var ticking: Job? = null
 
     /**
-     * The slideshow started ([on]) where a next medium exists — a video playing stops first — or paused. It steps every
-     * [SLIDESHOW_MS] and ends on the last medium.
+     * The slideshow started ([on]) where another medium exists — a video playing stops first — or paused. It steps every
+     * [SLIDESHOW_MS], round past the last medium (or through the shuffle's rounds), until it is paused.
      */
     fun slideshow(on: Boolean) {
         if (!on) return pause()
         val s = current
-        if (s.closed || s.slideshow == Slideshow.PLAYING || s.index >= s.count - 1) return
+        if (s.closed || s.slideshow == Slideshow.PLAYING || !s.canPage) return
         stop()
         _state.update { it.copy(slideshow = Slideshow.PLAYING) }
         ticking = scope.launch {
             while (true) {
                 delay(SLIDESHOW_MS)
                 val now = current
-                if (now.index >= now.count - 1) return@launch end()
-                step(now.index + 1)
-                // it stops ON the last medium
-                if (current.index >= current.count - 1) return@launch end()
+                // the others were removed under it: nothing left to go to
+                if (!now.canPage) return@launch pause()
+                if (now.shuffled) {
+                    step(upcomingInRound())
+                    if (round.isNotEmpty()) round.removeAt(0)
+                } else step(around(now.index, 1, now.count))
             }
         }
     }
@@ -1636,9 +1668,55 @@ class Lightbox internal constructor(
         _state.update { it.copy(slideshow = Slideshow.PAUSED) }
     }
 
-    private fun end() {
-        ticking = null
-        _state.update { it.copy(slideshow = Slideshow.ENDED) }
+    // ---- the shuffle (the web's, inbox #862) ----
+
+    /** Where a round's order comes from; a test sets its own. The order is no secret, so no secure source is needed. */
+    internal var random: Random = Random.Default
+
+    /** The round's media by id, its head shown next; an id no longer among the rows is skipped. */
+    private val round = mutableListOf<String>()
+
+    /**
+     * The slideshow shuffled ([on]; offered from three media on, [State.canShuffle]) or back in the grid's order. Turned
+     * on, its first round holds every medium but the shown one. A running slideshow keeps running.
+     */
+    fun shuffle(on: Boolean) {
+        val s = current
+        if (s.closed || on == s.shuffled || (on && !s.canShuffle)) return
+        round.clear()
+        if (on) round += newRound(s.row?.mediaId, withLeaving = false)
+        _state.update { it.copy(shuffled = on) }
+    }
+
+    /** A new round, in a shuffled order: every medium but [leaving], or (a later round, [withLeaving]) every one, never [leaving] at its head. */
+    private fun newRound(leaving: String?, withLeaving: Boolean): List<String> {
+        val ids = current.rows.map { it.mediaId }
+        val next = (if (withLeaving) ids else ids.filter { it != leaving }).toMutableList()
+        // Fisher-Yates, as the web's
+        for (i in next.size - 1 downTo 1) {
+            val j = random.nextInt(i + 1)
+            next[i] = next[j].also { next[j] = next[i] }
+        }
+        if (next.size > 1 && next[0] == leaving) {
+            val j = 1 + random.nextInt(next.size - 1)
+            next[0] = next[j].also { next[j] = next[0] }
+        }
+        return next
+    }
+
+    /** The row the shuffled slideshow shows next (the round's head), the round refilled where it ran out. */
+    private fun upcomingInRound(): Int {
+        val s = current
+        val shown = s.row?.mediaId
+        repeat(2) {
+            while (round.isNotEmpty()) {
+                val at = s.rows.indexOfFirst { it.mediaId == round[0] }
+                if (at >= 0 && round[0] != shown) return at
+                round.removeAt(0) // removed meanwhile, or the medium on screen
+            }
+            round += newRound(shown, withLeaving = true)
+        }
+        return around(s.index, 1, s.count) // unreachable while two media are left: a fresh round always holds another
     }
 
     /** Medium [mediaId]'s picture in the lightbox (its preview, else its original), whole; null where it shows none. */
@@ -1728,6 +1806,9 @@ class Lightbox internal constructor(
     }
 
     companion object {
+        /** The row [step] places away from [at] among [count], going round past either end. */
+        private fun around(at: Int, step: Int, count: Int): Int = ((at + step) % count + count) % count
+
         /** The slideshow's step (the web's `SLIDESHOW_INTERVAL_MS`, `MediaLightbox.vue`; `LightboxSlideshowPinTest` holds it there). */
         const val SLIDESHOW_MS = 5_000L
     }

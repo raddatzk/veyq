@@ -384,8 +384,9 @@ class GalleryActionsTest {
         g.close()
     }
 
+    // The web's `advances every 5 s through the items and goes round past the last` (MediaLightbox.test.ts, owner 2026-11-26).
     @Test
-    fun theSlideshowStepsEveryIntervalNeverPlaysAVideoAndStopsOnTheLast() = runTest {
+    fun theSlideshowStepsEveryIntervalNeverPlaysAVideoAndGoesRoundPastTheLast() = runTest {
         val g = open(Door(three()))
         val box = g.lightbox(0)
         box.slideshow(true)
@@ -399,11 +400,142 @@ class GalleryActionsTest {
         assertEquals(Lightbox.Slideshow.PLAYING, box.current.slideshow, "a video holds one interval")
         advanceTimeBy(Lightbox.SLIDESHOW_MS)
         assertEquals(2, box.current.index)
-        assertEquals(Lightbox.Slideshow.ENDED, box.current.slideshow, "it stops on the last medium")
+        assertEquals(Lightbox.Slideshow.PLAYING, box.current.slideshow, "the last medium ends nothing")
+        advanceTimeBy(Lightbox.SLIDESHOW_MS)
+        assertEquals(0, box.current.index, "round past the last to the first")
+        advanceTimeBy(Lightbox.SLIDESHOW_MS)
+        assertEquals(1, box.current.index, "and on, until it is paused")
+        box.slideshow(false)
         advanceTimeBy(Lightbox.SLIDESHOW_MS * 3)
-        assertEquals(2, box.current.index)
+        assertEquals(1, box.current.index)
+        assertEquals(Lightbox.Slideshow.PAUSED, box.current.slideshow)
+    }
+
+    // The web's `pages prev/next through the grid order … and goes round at the ends` and `a single item has nowhere to page`.
+    @Test
+    fun pagingGoesRoundTheEndsAndASingleMediumHasNowhereToPage() = runTest {
+        val g = open(Door(three()))
+        val box = g.lightbox(0)
+        assertTrue(box.current.canPage)
+        box.previous()
+        assertEquals(2, box.current.index, "before the first, the last")
+        box.next()
+        assertEquals(0, box.current.index, "past the last, the first")
+        box.next()
+        assertEquals(1, box.current.index, "in the grid's order")
         box.slideshow(true)
-        assertEquals(Lightbox.Slideshow.ENDED, box.current.slideshow, "nothing after the last to show")
+        box.next()
+        assertEquals(Lightbox.Slideshow.PAUSED, box.current.slideshow, "paging by hand pauses, as go does")
+        val one = open(Door(listOf(item("a", 30))))
+        val single = one.lightbox(0)
+        assertFalse(single.current.canPage)
+        assertFalse(single.current.canShuffle)
+        single.next()
+        single.previous()
+        assertEquals(0, single.current.index, "nowhere to page")
+        single.slideshow(true)
+        assertNull(single.current.slideshow, "no slideshow over a single medium")
+    }
+
+    // The web's `removing the shown last item shows the first (the advance goes round, as paging does)`.
+    @Test
+    fun removingTheShownLastMediumShowsTheFirst() = runTest {
+        val door = Door(three())
+        val g = open(door)
+        val box = g.lightbox(2)
+        assertEquals("c", box.current.row?.mediaId)
+        assertEquals(Notice(Msg.MEMORY_MOVED_TO_TRASH), box.trash())
+        runCurrent()
+        assertEquals("a", box.current.row?.mediaId, "the first, not the one before it")
+        assertEquals(0, box.current.index)
+    }
+
+    // The web's shuffle (#862): `is offered from three items on, as a pressed toggle that does not pause a running slideshow`
+    // and `shows each item once per round in a shuffled order, and the next round never opens with the last one`.
+    @Test
+    fun theShuffledSlideshowShowsEachMediumOncePerRoundAndNeverOpensARoundWithTheLast() = runTest {
+        val ids = ('a'..'f').mapIndexed { i, c -> item("$c", 100L - i) }
+        val g = open(Door(ids))
+        val box = g.lightbox(0)
+        box.random = kotlin.random.Random(7)
+        assertTrue(box.current.canShuffle)
+        box.slideshow(true)
+        advanceTimeBy(1) // each step lands inside a sample's interval
+        box.shuffle(true)
+        assertTrue(box.current.shuffled)
+        assertEquals(Lightbox.Slideshow.PLAYING, box.current.slideshow, "turning it is no interaction that pauses")
+        val seen = mutableListOf<String>()
+        repeat(5 + 6 * 40) {
+            advanceTimeBy(Lightbox.SLIDESHOW_MS)
+            seen += box.current.row!!.mediaId
+        }
+        // the first round holds every medium but the shown one ("a"), each once
+        assertEquals(setOf("b", "c", "d", "e", "f"), seen.take(5).toSet())
+        assertEquals(5, seen.take(5).size)
+        val rounds = seen.drop(5).chunked(6)
+        var last = seen[4]
+        val orders = mutableSetOf<List<String>>()
+        for (r in rounds) {
+            assertEquals(ids.map { it.mediaId }.toSet(), r.toSet(), "every medium once per round: $r")
+            assertTrue(r.first() != last, "a round never opens with the medium the last one ended on")
+            last = r.last()
+            orders += r
+        }
+        assertTrue(orders.size > 1, "shuffled anew for each round")
+        box.shuffle(false)
+        assertFalse(box.current.shuffled)
+        val at = box.current.index
+        advanceTimeBy(Lightbox.SLIDESHOW_MS)
+        assertEquals((at + 1) % 6, box.current.index, "off again, the grid's order")
+    }
+
+    // The web's `orders the slideshow only: by hand it pages in the grid order` and its two-item rule.
+    @Test
+    fun theShuffleOrdersTheSlideshowOnlyAndIsOfferedFromThreeMediaOn() = runTest {
+        val two = open(Door(listOf(item("a", 30), item("c", 10))))
+        val pair = two.lightbox(0)
+        assertFalse(pair.current.canShuffle)
+        pair.shuffle(true)
+        assertFalse(pair.current.shuffled, "with two, not offered")
+        val g = open(Door(three() + item("d", 5)))
+        val box = g.lightbox(1)
+        box.shuffle(true)
+        box.next()
+        assertEquals(2, box.current.index, "by hand, the grid's order")
+        box.previous()
+        box.previous()
+        assertEquals(0, box.current.index)
+        assertTrue(box.current.shuffled, "paging by hand leaves the shuffle on")
+    }
+
+    // The web's `skips an item removed meanwhile`.
+    @Test
+    fun theShuffledSlideshowSkipsAMediumRemovedMeanwhile() = runTest {
+        val door = Door(('a'..'e').mapIndexed { i, c -> item("$c", 100L - i) })
+        val g = open(door)
+        val box = g.lightbox(0)
+        box.random = kotlin.random.Random(3)
+        box.shuffle(true)
+        // the round's order, read from a twin with the same seed
+        val twin = open(Door(door.items)).lightbox(0).also { it.random = kotlin.random.Random(3) }
+        twin.shuffle(true)
+        twin.slideshow(true)
+        advanceTimeBy(Lightbox.SLIDESHOW_MS + 1)
+        val head = twin.current.row!!.mediaId
+        twin.slideshow(false)
+        g.trash(head)
+        runCurrent()
+        assertTrue(box.current.rows.none { it.mediaId == head })
+        box.slideshow(true)
+        advanceTimeBy(1)
+        val seen = mutableListOf<String>()
+        repeat(3) {
+            advanceTimeBy(Lightbox.SLIDESHOW_MS)
+            seen += box.current.row!!.mediaId
+        }
+        assertTrue(head !in seen, "the removed one is skipped")
+        assertEquals(3, seen.toSet().size, "the rest of the round, each once: $seen")
+        assertTrue("a" !in seen, "the shown one is not in the first round")
     }
 
     @Test

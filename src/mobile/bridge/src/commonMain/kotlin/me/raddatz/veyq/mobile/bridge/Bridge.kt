@@ -1380,6 +1380,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.Done
             } ?: noGallery
             is Call.GalleryReload -> galleries[call.gallery]?.reload().done(Answer.Why.NO_SUCH_GALLERY)
+            is Call.GallerySort -> galleries[call.gallery]?.sort(call.oldestFirst).done(Answer.Why.NO_SUCH_GALLERY)
             is Call.GalleryTile -> galleries[call.gallery]?.let { g ->
                 val bytes = g.tile(call.mediaId) ?: return Answer.Refused(Answer.Why.NO_BYTES)
                 payload(bytes)
@@ -1431,6 +1432,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.Done
             } ?: noLightbox
             is Call.LightboxGo -> lightboxes[call.lightbox]?.model?.go(call.index).done(Answer.Why.NO_SUCH_LIGHTBOX)
+            is Call.LightboxStep -> lightboxes[call.lightbox]?.model?.let { if (call.forward) it.next() else it.previous() }.done(Answer.Why.NO_SUCH_LIGHTBOX)
+            is Call.LightboxShuffle -> lightboxes[call.lightbox]?.model?.shuffle(call.on).done(Answer.Why.NO_SUCH_LIGHTBOX)
             is Call.LightboxPicture -> lightboxes[call.lightbox]?.let { held ->
                 val bytes = held.model.picture(call.mediaId) ?: return Answer.Refused(Answer.Why.NO_BYTES)
                 payload(bytes)
@@ -3311,6 +3314,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             )
         },
         searchOpened = s.searchOpened,
+        oldestFirst = s.oldestFirst,
         chaptersUnsent = s.chapters.mapNotNull { c -> s.chapterSaid[c.nodeId]?.let { ChapterUnsent(c.nodeId, it) } },
     )
 
@@ -3479,6 +3483,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             marked = row?.let { held.page.current.marks[it.mediaId]?.mine } == true,
             // a photo's or a video's report (ADR 0149 decision 6), not a blocked one's; the server may still take none
             canReport = row != null && !row.blocked && held.page.current.offline == null,
+            canPage = s.canPage,
+            canShuffle = s.canShuffle,
+            shuffled = s.shuffled,
         )
     }
 

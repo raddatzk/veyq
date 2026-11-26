@@ -319,6 +319,18 @@ class MemoriesDispatchTest {
         assertEquals(Msg.MEMORY_BLOCKED to null, bad.said to bad.tile)
         assertTrue(shown.rows.all { it.canDelete })
 
+        // a local function each: the test's one body is near the JVM's method size limit
+        suspend fun sortTurns() {
+            // the grid's direction (Gallery.Sort, the core's `sort`): oldest first, then back
+            assertEquals(Answer.Done, b.ask(Call.GallerySort(g, oldestFirst = true)))
+            val oldest = page.until { u -> (u as Update.Gallery).shown?.takeIf { it.oldestFirst } }
+            assertEquals(shown.rows.map { it.mediaId }.toSet(), oldest.rows!!.map { it.mediaId }.toSet())
+            assertTrue(oldest.rows.map { it.mediaId } != shown.rows.map { it.mediaId }, "turned")
+            assertEquals(Answer.Done, b.ask(Call.GallerySort(g, oldestFirst = false)))
+            page.until { u -> (u as Update.Gallery).shown?.takeIf { !it.oldestFirst && it.rows?.map { r -> r.mediaId } == shown.rows.map { r -> r.mediaId } } }
+        }
+        sortTurns()
+
         // a tile is the grid's tier, beside the JSON; a video without a poster has none; a chapter's cover by its row
         val (tileAnswer, tile) = b.askWithPayload(Call.GalleryTile(g, "a"))
         assertEquals(Answer.Bytes(null), tileAnswer)
@@ -456,6 +468,24 @@ class MemoriesDispatchTest {
         box.until { u -> (u as Update.Lightbox).shown?.takeIf { it.slideshow == SlideshowState.PLAYING } }
         assertEquals(Answer.Done, b.ask(Call.LightboxSlideshow(l, false)))
         box.until { u -> (u as Update.Lightbox).shown?.takeIf { it.slideshow == SlideshowState.PAUSED } }
+
+        suspend fun pagesRound() {
+            // paging goes round the ends (Lightbox.Step, the core's next / previous); the shuffle is the core's state
+            assertEquals(Answer.Done, b.ask(Call.LightboxGo(l, rows.size - 1)))
+            assertEquals(Answer.Done, b.ask(Call.LightboxStep(l, forward = true)))
+            val round = box.until { u -> (u as Update.Lightbox).shown?.takeIf { it.index == 0 } }
+            assertTrue(round.canPage, "past the last, the first")
+            assertEquals(rows.size > 2, round.canShuffle)
+            assertEquals(Answer.Done, b.ask(Call.LightboxStep(l, forward = false)))
+            box.until { u -> (u as Update.Lightbox).shown?.takeIf { it.index == rows.size - 1 } }
+            if (round.canShuffle) {
+                assertEquals(Answer.Done, b.ask(Call.LightboxShuffle(l, true)))
+                box.until { u -> (u as Update.Lightbox).shown?.takeIf { it.shuffled } }
+                assertEquals(Answer.Done, b.ask(Call.LightboxShuffle(l, false)))
+                box.until { u -> (u as Update.Lightbox).shown?.takeIf { !it.shuffled } }
+            }
+        }
+        pagesRound()
 
         // the original saved by the path the dialog gave, watched as a file's save; a blocked one has none to save
         assertEquals(Answer.Done, b.ask(Call.LightboxGo(l, clipAt)))
