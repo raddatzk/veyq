@@ -372,7 +372,7 @@ class VeyqAccount private constructor(
                 tokens.access = pair.accessToken
                 tokens.refresh = pair.refreshToken
                 val kept = trusted
-                if (kept?.method == TrustedDevice.Method.DEVICE_KEY && pair.refreshToken != null) device.keepRefresh(kept.refreshAlias, pair.refreshToken)
+                if (kept?.keepsRefresh == true && pair.refreshToken != null) device.keepRefresh(kept.refreshAlias, pair.refreshToken)
             } else if (seed != null) {
                 val login = LoginApi(server, http)
                 val challenge = login.requestLoginChallenge(LoginChallengeRequest(email)).takeIf { it.success }?.body() ?: return@withLock false
@@ -1385,7 +1385,7 @@ class VeyqAccount private constructor(
                 tokens.access = pair.accessToken
                 tokens.refresh = pair.refreshToken
                 val kept = trusted
-                if (kept?.method == TrustedDevice.Method.DEVICE_KEY && pair.refreshToken != null) {
+                if (kept?.keepsRefresh == true && pair.refreshToken != null) {
                     device.keepRefresh(kept.refreshAlias, pair.refreshToken)
                 }
             }

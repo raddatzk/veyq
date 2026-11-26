@@ -204,6 +204,16 @@ data class TrustedDevice(
     @PlatformApi
     @HiddenFromObjC
     val refreshAlias: String get() = "$alias.refresh"
+
+    /**
+     * Whether this device keeps the account's refresh token, so every rotation an open session makes is kept too: a
+     * remembered account's (DEVICE_KEY) and a TV's PIN account's (DEVICE_PIN, ADR 0160). Kept only at the sign-in, a PIN
+     * account's token went stale at the open session's first refresh, and its next PIN unlock was refused and forgot the
+     * account (tvOS pass 2026-11-26).
+     */
+    @PlatformApi
+    @HiddenFromObjC
+    val keepsRefresh: Boolean get() = method == Method.DEVICE_KEY || method == Method.DEVICE_PIN
 }
 
 /**
