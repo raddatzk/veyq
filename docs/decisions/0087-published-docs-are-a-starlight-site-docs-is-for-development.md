@@ -86,7 +86,8 @@ copy (the drift the wiki's source guard was built after), and it lives only on G
    that major's runbook, which `main`'s then no longer is.
    - **A version** is the Use, Run and Security areas built from the commit of its major's **newest release** — by
      the same tag order as ADR 0085 decision 10's major entry, so a fix release on `release/<old>.x` moves it — and
-     served under `/<major>/`. The project website (decision 7) is `main`'s alone.
+     served under `/v<major>/` (`/v1/`, `/v2/`, …), spelled as the release tags are, so no page path can be
+     mistaken for one. The project website (decision 7) is `main`'s alone.
    - **Built once, kept with its release, never rebuilt and never copied:** the build is made from the release's
      commit by that commit's pipeline (the promotion builds nothing, [ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md))
      and kept as one of the release's assets, signed with it. The deploy puts `main` at the root and each older
