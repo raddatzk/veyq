@@ -29,7 +29,7 @@ first picked, dropped or shared **file** that is a download (by its content: `PK
 ordinary upload. Only a member who may create a folder there, never a guest (ADR 0082 decision 7). The screen reads the
 first four bytes, the end of the file and the central directory — never the whole file.
 
-**The phones offer no import for now (owner 2026-11-19).** The import is switched on for the desktops (macOS, Linux,
+**The phones offer no import (owner 2026-11-19; kept 2026-11-26 — a deliberate difference, not an open item).** The import is switched on for the desktops (macOS, Linux,
 Windows); on Android and iOS/iPadOS a veyq download is uploaded as the file it is. The core's screen is built and tested
 on every target; each phone platform's entry stays off behind one flag (`ShellModel.depotUploadsImporting` where a
 platform offers it, `depotUploads` where not; `DepotUploads.importOffered` underneath), so switching it on is that flag and the platform's dialog. An import runs while the app is open, as on the web, where closing the tab stops one;
@@ -102,10 +102,9 @@ copy.
 - **The server learns nothing new**: no endpoint, field or vector changes; the backend is unchanged.
 - **Two readers answer to one file.** A refusal one client adds without a case is a drift the other does not see; a case
   added to `generate.py` reaches both.
-- **The phones upload a veyq download as a file** until the owner switches their entry on; a person imports it on a
-  desktop app or on the web. Android's and iOS/iPadOS's dialogs are not built (owner 2026-11-19), so their passes —
-  a ZIP picked by *Upload files*, the unpacked download by *Upload folder*, a ZIP shared from Mail into a folder — wait
-  with them.
+- **The phones upload a veyq download as a file**; a person imports it on a desktop app or on the web. Android's and
+  iOS/iPadOS's dialogs are not built and are not owed (owner 2026-11-19, kept 2026-11-26): no list of open items
+  carries the phones' import, and their passes do not exist.
 - **One known difference from the web: *Cancel* during a run.** The apps' *Cancel* (and Escape, and closing the dialog)
   stops a running import and trashes what it made (`ImportDialog.cancel`); the web disables *Cancel* and the dialog's
   close while a run goes (`ImportSubtreeDialog.vue`), so there a run ends only by finishing or failing. Left as built

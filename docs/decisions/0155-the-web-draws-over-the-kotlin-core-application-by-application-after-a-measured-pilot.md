@@ -273,6 +273,14 @@ Measured before the decision (2026-11-20):
     - **Later moves of an application already moved** (inbox #1270, the owner 2026-11-24) report their ratio to the
       TypeScript they delete and their growth of the guest path as a slice does. Until 2026-11-25 they were gated as a
       slice, at most R = 3.0 on the guest path; that rule went with R.
+11. **A move is taken on demand, no longer as a goal of its own** (the owner, 2026-11-26). Where the web's TypeScript
+    already does the work and every app already has it, it stays where it is. A move is taken when it brings the apps a
+    function the web on `main` has and they lack, or fixes a defect in more than one client — then the core's one copy
+    is usually cheaper than four native ones. The moves still open stay listed in the inbox, marked *on demand* (#1152,
+    #1161, #1240, #1271, #1300, #1302, #1303, #1320–#1322, #1340, #1342, #1343, #1345, #1401–#1403), so none is
+    forgotten; #1301 and #1344 are gaps of the apps against the web, marked *parity*, not moves: closing an app's
+    gap against the web first asks whether one of them covers it, and takes it if it does. Decisions 7–10 still bind
+    every move that is taken.
 
 ## Consequences
 

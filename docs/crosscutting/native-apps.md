@@ -701,9 +701,9 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
 **Expenses**: reading a receipt's text on the device (#549); what [expenses.md](../apps/expenses.md) keeps out of the
 first cut.
 
-**Depot**: a READ_WRITE guest's own name as uploader; a download's import on the phones (not built, owner 2026-11-19),
-its macOS click pass and a drop from Files or Explorer ([ADR 0152](../decisions/0152-the-apps-import-a-download-as-the-web-does-the-webs-reader-and-walk-in-the-core-each-kinds-import-its-applications-recognised-by-every-depot-upload.md)'s
-Consequences, inbox #985); multi-select and dragging a node onto a folder to move
+**Depot**: a READ_WRITE guest's own name as uploader; a download's import: its macOS click pass and a drop from Files or Explorer
+([ADR 0152](../decisions/0152-the-apps-import-a-download-as-the-web-does-the-webs-reader-and-walk-in-the-core-each-kinds-import-its-applications-recognised-by-every-depot-upload.md)'s
+Consequences, inbox #985; the phones do not import, by the owner's decision); multi-select and dragging a node onto a folder to move
 it (inbox #421); Send a copy and "Open with" on the desktops (not offered, see Built); a PDF's text on a Windows device
 without WebView2's runtime (drawn by `Windows.Data.Pdf`, which has no text API). Built 2026-11-18 (inbox #955): on
 Linux an overlay of its own over poppler's rendered pages (`src/mobile/linux/src/core_ui/pdf_text.rs`, the core UI's
