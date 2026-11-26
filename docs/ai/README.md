@@ -268,6 +268,11 @@ A refined CR nails **decisions, not keystrokes**:
   The same holds for a core feature over application nodes: name the registry hook that carries each kind's answer
   (cr-select-nodes said "capabilities decide per node", and core may not call an application's capability function -
   the implementer had to add `LevelRow.selection`).
+  And a decision that computes from what a control shows names the control's granularity: cr-memory-capture-time-shift
+  took the offset as "new time minus old, in ms" over a minute-granular editor, so a photo taken at 10:03:27 and set
+  to 11:15 would have moved the selection by a value the member never saw; the implementer took it against the minute shown.
+  A write planned over a reactive list says when it reads that list and who else patches it: the same CR's "with the
+  revision it read" left open whether the run re-reads the items a live poll patches in place between question and choice.
 - **Run the locator here — from two angles, and read the output as a list.** Handing one over unrun is the
   estimate wearing a command's clothes. And the first command you reach for is a paraphrase of what you already
   believe, so it fails silently wherever that belief is wrong: cr-0171's refine measured "246 scalars" with a

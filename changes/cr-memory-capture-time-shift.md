@@ -1,7 +1,7 @@
 ---
 id: cr-memory-capture-time-shift
 title: A selection's capture time is corrected through one of its media — the rest follow by the same offset
-status: planned
+status: done
 satisfies: ["uc.memory.buckets"]
 adrs: ["0077", "0034", "0012"]
 invariants:
@@ -110,3 +110,41 @@ Single phase (web + docs), committed in two commits if convenient: the `editMeta
   reported to the owner. The `editMeta` gate gap folded in; the listing-order jump filed as inbox #863.
 - 2026-11-25 (refine): `uc.memory.buckets` and `en.memory.buckets` said capture time is edited by "any key-holder";
   the code is a `WRITE` member — the docs were corrected in this refine.
+- 2026-11-26 (implement): the offset is taken against the anchor's effective time **as the minute-granular editor
+  showed it** (floored to the minute), and applied to every selected medium, the anchor included, so seconds are kept
+  and the offset written out is the one the member saw. The CR's "in ms" over the raw time would have shifted by
+  seconds nobody saw. Recorded in uc.memory.buckets step 3.
+- 2026-11-26 (implement): the selection is read **once, when Save is pressed** (a copy of each item, `ShiftRead`): the
+  live poll patches listed items in place, so a run that re-read them could shift onto a peer's tier that arrived
+  between the question and the choice. Bitten by its own test.
+- 2026-11-26 (implement): the run and its Undo live in the detail (`useCaptureTimeShift`), not the lightbox: the Undo
+  bar outlives a closed lightbox. Two new refusal reasons, `changed` (MetaConflictError) and `unreadable`.
+- 2026-11-26 (implement): decision 5 confirmed against the code — the auto date reconcile runs at the gallery's list
+  refreshes (`useMediaGalleryLive` `onSettle`, one at a time), never on a meta write; the shift adds no settle call.
+- 2026-11-26 (implement): two findings from the browser pass on the release candidate, not fixed here, filed as inbox
+  #864 (Escape that closes the lightbox also dismisses the Undo bar) and #865 (the date field's calendar covers the
+  lightbox's Save).
+
+## Retrospective
+
+- **Planning — the offset was specified at a granularity the control does not have.** Decision 1 said "new time minus
+  the anchor's effective time, in ms"; the editor is minute-granular, so a photo taken at 10:03:27 would have moved the
+  selection by +1 h 11 min 33 s while the member saw 10:03 → 11:15. Root cause: the refine reasoned about the stored
+  value, not the control the input arrives through. Fix: harvested as one sentence in `docs/ai/README.md`'s refinement
+  checklist (name the control's granularity when a decision computes from what it shows).
+- **Planning — "with the override it was read with" did not say when "read" is.** The live poll patches listed items in
+  place, shared with the lightbox's list, so a run that re-read them at the choice could have sealed the shift onto a
+  peer's tier that arrived between the question and the choice. Found while writing the conflict test, fixed by reading
+  once at Save (`ShiftRead`), bitten. The trap now sits as a comment at both lines.
+- **Execution — the live substrate was not the one planned.** The brief's machine hint (the owner's dev backend serves
+  the pass) did not hold: that backend answered 500 on every route (a neighbour's contract change hot-reloaded into it,
+  `ClassNotFoundException: PinUnlockRequest`). Rather than restart a backend compiling another session's half-done
+  tree, the pass ran on the L1 release candidate (`run_stack_e2e.py --keep`), which is what ships. The first L1 run was
+  red on two real-browser facts no unit test sees (a tile's box drawn over its checkbox; the calendar over Save) — the
+  spec now does what a person does, and #865 records the second. Process: the commit after that run died on a 1Password
+  signing error, so the last commits (spec fix, harvest, inbox rows, this retrospective, the CR's deletion) were left
+  for the owner's session, as the brief says.
+- **Next time:** a refine that adds a write over a reactive list names who else patches that list and when the write
+  reads it; and a brief's live-pass hint names a fallback substrate (the L1 stack with `--keep`) for when the shared dev
+  backend is down.
+

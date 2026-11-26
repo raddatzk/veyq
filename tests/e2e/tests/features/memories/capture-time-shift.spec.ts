@@ -55,6 +55,8 @@ async function readGallery(page: Page): Promise<{ name: string; taken: string; c
     })
     await page.keyboard.press('Escape')
     await expect(lightbox).toBeHidden()
+    // The Escape was the lightbox's: the Undo bar stays (inbox #864).
+    await expect(toast(page, 'Capture time shifted for 3 items')).toBeVisible()
   }
   return shown
 }
@@ -98,7 +100,8 @@ test(
     // The Contributions tab: all three are the owner's own, in its primary bucket. Select them, open the middle one.
     await page.getByRole('tab', { name: 'Contributions' }).click()
     const panel = page.locator('.veyq-bucket-organizer')
-    for (const n of [1, 2, 3]) await panel.getByRole('checkbox', { name: `Open item ${n}`, exact: true }).check()
+    // A tile's box is drawn over its checkbox: a person clicks the box, its label.
+    for (const n of [1, 2, 3]) await panel.getByRole('checkbox', { name: `Open item ${n}`, exact: true }).locator('xpath=..').click()
     await expect(panel.getByText('3 of 3 selected', { exact: true })).toBeVisible()
     await panel.getByRole('button', { name: 'Open item 2', exact: true }).click()
     const lightbox = page.getByRole('dialog', { name: memoryName })
@@ -109,6 +112,8 @@ test(
     await lightbox.getByRole('button', { name: 'Edit capture time' }).click()
     await lightbox.getByRole('spinbutton', { name: 'Day' }).focus()
     await page.keyboard.press('ArrowUp')
+    // Here the calendar opens from its button only, so it never covers Save while the time is typed (inbox #865).
+    await expect(page.locator('.veyq-date-panel')).toBeHidden()
     await lightbox.getByRole('button', { name: 'Save', exact: true }).click()
     await expect(lightbox.getByText('3 items are selected.', { exact: true })).toBeVisible()
     await lightbox.getByRole('button', { name: 'All 3, shifted by +1 d', exact: true }).click()
@@ -117,6 +122,8 @@ test(
     await expect(toast(page, 'Capture time shifted for 3 items')).toBeVisible()
     await page.keyboard.press('Escape')
     await expect(lightbox).toBeHidden()
+    // The Escape was the lightbox's: the Undo bar stays (inbox #864).
+    await expect(toast(page, 'Capture time shifted for 3 items')).toBeVisible()
 
     // A new document: what the server holds, opened afresh.
     await page.reload()
