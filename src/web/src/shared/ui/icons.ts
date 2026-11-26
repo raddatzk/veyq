@@ -80,6 +80,7 @@ export const VEYQ_ICON_NAMES = [
   'send',
   'share-alt',
   'shield',
+  'shuffle',
   'sign-in',
   'sign-out',
   'sliders-h',

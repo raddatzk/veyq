@@ -52,7 +52,12 @@
    resets the zoom and drops the original; while zoomed the arrow keys pan instead of navigating, and Escape un-zooms
    before it closes. **Slideshow:** a play / pause control in the lightbox's toolbar advances every 5 s through the grid order, a
    video showing its poster for one interval (no autoplay), and goes round past the last item to the first until it is
-   paused (owner 2026-11-26); any key, pointer or wheel in the
+   paused (owner 2026-11-26). **Shuffle** (inbox #862, offered from three items on): a pressed toggle beside play / pause
+   makes the slideshow run in shuffled ROUNDS - every item once per round, a fresh shuffle for the next, which never opens
+   with the item the last round ended on; turned on, the round starts after the shown item. It orders the slideshow only:
+   paging by hand stays in the grid order, the position keeps saying the grid's, and the round's next item is read ahead
+   like a neighbour; an item removed meanwhile is skipped. It lasts while the lightbox is open and is stored nowhere;
+   pressing it is no interaction that pauses. Any other key, pointer or wheel in the
    lightbox (so any zoom or details interaction) pauses it, a hidden tab and a dialog over the lightbox too; the state is
    announced to a screen reader. A slow preview is waited for, never skipped. The next preview is read ahead like any
    neighbour (item 3) and stays held while the lightbox is open; while it runs, no EXIF read and no place-name backfill happen - they start when the

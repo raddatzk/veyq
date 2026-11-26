@@ -6,7 +6,9 @@
 // MediaGrid filtered to the active bucket with a per-tile checkbox (top-left) + 3-dot (top-right), and a selection
 // bar with a select-all toggle + visible Move/Delete. Delete is a straight soft-delete to trash with a local undo
 // bar (no confirm modal), and names every medium the server refused to trash (inbox #427) or, on Undo, to restore
-// (#429). The primary bucket is VIRTUAL until the first sub-bucket or upload materializes it (the
+// (#429). The selection also reaches the lightbox (`openLightbox`'s `selected`): there a correction of one selected
+// medium's capture time may shift every other one by the same offset, and "Shift capture time" opens it on the first
+// selected medium with the editor open (uc.memory.buckets § Correct a selection's capture time); the detail runs it. The primary bucket is VIRTUAL until the first sub-bucket or upload materializes it (the
 // server's lazy ensurePrimaryBucket). Names are sealed under K_node — the client unseals; the server never sees one.
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -16,6 +18,7 @@ import VeyqMenu from '../../../shared/ui/VeyqMenu.vue'
 import type { VeyqMenuItem } from '../../../shared/ui/menu'
 import VeyqDialog from '../../../shared/ui/VeyqDialog.vue'
 import VeyqIcon from '../../../shared/ui/VeyqIcon.vue'
+import VeyqTooltip from '../../../shared/ui/VeyqTooltip.vue'
 import MediaGrid from './MediaGrid.vue'
 import MediaTile from './MediaTile.vue'
 import { galleryDisplayAspectRatio } from '../mediaGridLayout'
@@ -42,7 +45,9 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   changed: [] // a bucket/media mutation landed — the parent should reload media (ownerKey/bucketId change)
-  openLightbox: [{ items: MediaItem[]; index: number }]
+  /** Open the lightbox on `items` at `index`, with the selection (a capture-time shift reaches it) and, from "Shift
+   *  capture time", the capture-time editor open. */
+  openLightbox: [{ items: MediaItem[]; index: number; selected: string[]; editCapturedAt?: boolean; numbers?: Record<string, number> }]
   uploadBucket: [string | null] // open the upload scoped to this bucket (null = your primary)
   /** The tiles its grid mounts, nearest first: the parent gallery reads their thumbnails (ADR 0105 decision 2). */
   window: [ids: string[]]
@@ -54,11 +59,15 @@ const toast = useToast()
 // its buckets door — the scope's buckets and its members' display names, the tree's ancestor keys. A member's only; the
 // detail mounts this where the rights AND the source say so, and outside a detail, or on a source without the door, it
 // throws rather than reach for the member's API itself.
+const view = useMemoryView()
 const buckets = (() => {
-  const door = useMemoryView().source.buckets
+  const door = view.source.buckets
   if (!door) throw new Error('MemoryBuckets mounted without a buckets door')
   return door
 })()
+// A capture time is a medium's meta: corrected where the rights allow editing it and the source carries the door, as the
+// lightbox's editor is offered.
+const canEditCapturedAt = computed(() => view.rights.value.editMeta && !!view.source.mediaMeta)
 const SELF_PRIMARY = '__veyq_self_primary__'
 
 type BucketVM = {
@@ -450,7 +459,21 @@ function onDrop(event: DragEvent) {
   emit('uploadBucket', activeBucket.value.virtual ? null : activeBucket.value.id)
 }
 
-function openTile(index: number) { emit('openLightbox', { items: filteredMedia.value, index }) }
+function openTile(index: number) { emit('openLightbox', { items: filteredMedia.value, index, selected: [...selected.value] }) }
+/** "Shift capture time": the lightbox over the selected media alone, in grid order, its capture-time editor open on each
+ *  one paged to — the member pages to the medium whose right time they know. Each keeps its grid number, the name of a
+ *  medium with no sealed file name. */
+function shiftSelected() {
+  const chosen = filteredMedia.value.flatMap((m, i) => (selected.value.has(m.mediaId) ? [{ m, n: i + 1 }] : []))
+  if (chosen.length < 2 || !canEditCapturedAt.value) return
+  emit('openLightbox', {
+    items: chosen.map((c) => c.m),
+    index: 0,
+    selected: chosen.map((c) => c.m.mediaId),
+    editCapturedAt: true,
+    numbers: Object.fromEntries(chosen.map((c) => [c.m.mediaId, c.n])),
+  })
+}
 </script>
 
 <template>
@@ -496,18 +519,26 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
             </template>
           </VeyqSelect>
           <!-- Bucket actions — shown only where they apply (was the 3-dot menu). -->
-          <button v-if="activeBucket" type="button" class="bucket-action-button" :title="t('memory.buckets.upload')" :aria-label="t('memory.buckets.upload')" @click="uploadToActive">
-            <VeyqIcon name="upload" />
-          </button>
-          <button v-if="canCreateSub" type="button" class="bucket-action-button" :title="t('memory.buckets.createBucket')" :aria-label="t('memory.buckets.createBucket')" @click="openCreate">
-            <VeyqIcon name="folder-plus" />
-          </button>
-          <button v-if="canRenameBucket" type="button" class="bucket-action-button" :title="t('memory.buckets.rename')" :aria-label="t('memory.buckets.rename')" @click="openRename">
-            <VeyqIcon name="pencil" />
-          </button>
-          <button v-if="canDeleteBucket" type="button" class="bucket-action-button bucket-action-danger" :title="t('memory.buckets.delete')" :aria-label="t('memory.buckets.delete')" @click="openDeleteBucket">
-            <VeyqIcon name="trash" />
-          </button>
+          <VeyqTooltip v-if="activeBucket" :text="t('memory.buckets.upload')">
+            <button type="button" class="bucket-action-button" :aria-label="t('memory.buckets.upload')" @click="uploadToActive">
+              <VeyqIcon name="upload" />
+            </button>
+          </VeyqTooltip>
+          <VeyqTooltip v-if="canCreateSub" :text="t('memory.buckets.createBucket')">
+            <button type="button" class="bucket-action-button" :aria-label="t('memory.buckets.createBucket')" @click="openCreate">
+              <VeyqIcon name="folder-plus" />
+            </button>
+          </VeyqTooltip>
+          <VeyqTooltip v-if="canRenameBucket" :text="t('memory.buckets.rename')">
+            <button type="button" class="bucket-action-button" :aria-label="t('memory.buckets.rename')" @click="openRename">
+              <VeyqIcon name="pencil" />
+            </button>
+          </VeyqTooltip>
+          <VeyqTooltip v-if="canDeleteBucket" :text="t('memory.buckets.delete')">
+            <button type="button" class="bucket-action-button bucket-action-danger" :aria-label="t('memory.buckets.delete')" @click="openDeleteBucket">
+              <VeyqIcon name="trash" />
+            </button>
+          </VeyqTooltip>
         </div>
 
         <!-- Media selection bar — visible actions, active only with a selection. Shown for every bucket (cr-0122). -->
@@ -516,12 +547,42 @@ function openTile(index: number) { emit('openLightbox', { items: filteredMedia.v
           <button type="button" class="veyq-text-button" @click="toggleSelectAll">
             {{ allSelected ? t('memory.buckets.deselectAll') : t('memory.buckets.selectAllVisible') }}
           </button>
-          <button type="button" class="bucket-action-button" :disabled="!selected.size || !moveTargets.length" :title="t('memory.buckets.moveTitle')" @click="openMove">
-            <VeyqIcon name="arrow-right-arrow-left" /><span class="bucket-action-label">{{ t('memory.buckets.move') }}</span>
-          </button>
-          <button type="button" class="bucket-action-button bucket-action-danger" :disabled="!selected.size" :title="t('memory.buckets.deleteMediaAction')" @click="deleteSelected">
-            <VeyqIcon name="trash" /><span class="bucket-action-label">{{ t('memory.buckets.delete') }}</span>
-          </button>
+          <!-- Every action of the selection in sight, as icons like the bucket's own above: their words the name and the
+               tooltip (owner 2026-11-26). Inactive through aria-disabled, not disabled: a disabled button hears no pointer,
+               so with nothing selected its tooltip never said what it does. Each handler refuses on its own. -->
+          <VeyqTooltip :text="t('memory.buckets.moveTitle')">
+            <button
+              type="button"
+              class="bucket-action-button bucket-move-button"
+              :aria-disabled="!selected.size || !moveTargets.length || undefined"
+              :aria-label="t('memory.buckets.moveTitle')"
+              @click="openMove"
+            >
+              <VeyqIcon name="arrow-right-arrow-left" />
+            </button>
+          </VeyqTooltip>
+          <VeyqTooltip v-if="canEditCapturedAt" :text="t('memory.buckets.shiftCapturedAt')">
+            <button
+              type="button"
+              class="bucket-action-button bucket-shift-button"
+              :aria-disabled="selected.size < 2 || undefined"
+              :aria-label="t('memory.buckets.shiftCapturedAt')"
+              @click="shiftSelected"
+            >
+              <VeyqIcon name="clock" />
+            </button>
+          </VeyqTooltip>
+          <VeyqTooltip :text="t('memory.buckets.deleteSelection')">
+            <button
+              type="button"
+              class="bucket-action-button bucket-action-danger bucket-delete-button"
+              :aria-disabled="!selected.size || undefined"
+              :aria-label="t('memory.buckets.deleteSelection')"
+              @click="deleteSelected"
+            >
+              <VeyqIcon name="trash" />
+            </button>
+          </VeyqTooltip>
         </div>
       </div>
 

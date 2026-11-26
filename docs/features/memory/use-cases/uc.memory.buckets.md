@@ -48,6 +48,44 @@ One's own bucket reads **"Deine Beiträge"**.
    item uses the **same lightbox**. The owner's delete/trash and Chapter curation are untouched.
 5. Nothing is written — this slice is a **read-side grouping**.
 
+## Correct a selection's capture time
+
+A camera whose clock was wrong (a time zone never switched, a reset battery) is wrong by the **same offset** on every
+photo it took. So a selection is corrected through **one** of its media, and the rest follow by that medium's offset
+(owner 2026-11-25):
+
+1. In the Beiträge tab the member selects the media, then opens **any one of them** in the lightbox and corrects its
+   capture time in the existing editor (or uses **"Shift capture time"**, the clock among the selection bar's icons —
+   from two selected on — which opens the lightbox over the selected media alone, in the grid's order, the editor open on each one paged
+   to, so the member pages to the medium whose right time they know; owner 2026-11-26).
+2. While that medium is part of a selection of two or more, the save offers two choices: **only this one**, or **all
+   N selected, shifted by the same offset** — the offset written out (*"+1 h 12 min"*), and how many of them have no
+   capture time and stay as they are.
+3. The offset is the new time minus the medium's **effective** capture time before the edit (the override where one is
+   set, else the original) **as the editor showed it**: the editor is minute-granular, so a photo taken at 10:03:27
+   shows 10:03, and set to 11:15 it moves everything by exactly +1 h 12 min — itself to 11:15:27, its seconds kept.
+   Every selected medium with a capture time, the edited one included, gets its effective time plus that offset as its
+   `capturedAtOverride`; a medium whose shifted time lands back on its own original drops the override, as a reset
+   does. Their order among each other is kept.
+4. Each medium is written as the lightbox writes one — its own `updateMediaMeta` with the revision it read
+   ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)), a few at a time, the save counting
+   how many are done; there is no bulk write and no new server state. An **Undo** bar, as a selection's trash has,
+   restores each written medium's override as it was (or none), by the same write; a medium the shift could not write
+   is not touched by it. The Memory's automatic date follows at the gallery's next refresh, as after any correction —
+   not once per medium.
+
+- **A medium with no capture time** (no EXIF or container time and no file date) cannot be shifted: it stays as it
+  is, and the save says how many did. The lightbox still sets one an absolute time, one medium at a time.
+- **The medium opened has no capture time** → there is no offset, so the save offers only "this one".
+- **A peer changed a selected medium's capture time meanwhile** → that medium is not shifted (its offset was computed
+  against a time it no longer has) — also when the peer's change reached this grid between the question and the
+  choice, because every write starts from the medium as the shift read it; it is named, with every other medium the
+  server refused, one line per reason, as a selection's trash names its refusals (inbox #427). A peer's unrelated write
+  (a place name) merges as it does today. An Undo after such a change refuses the same way.
+- **A corrected medium moves to the grid's end** until the Beiträge grid sorts by capture time (inbox #867); the
+  Gallery tab sorts by it and shows the shifted order at once.
+- **Reset to original** stays per medium: it is not an offset.
+
 ## Alternate / exception flows
 
 - **Only your own contributions** → the picker shows just **"Deine Beiträge"**; a Memory nobody else touched can
@@ -92,7 +130,8 @@ One's own bucket reads **"Deine Beiträge"**.
 - **Membership is server-enforced (cr-0123).** Create / rename / delete a sub-bucket + move media are gated to
   **scope membership** — **any member** may organize **any owner-root's** sub-buckets (yours *or* a
   contributor's), but **never a primary** and **never across owners** (a move stays within one owner-root);
-  **delete media** + **edit capture time** stay any key-holder.
+  **delete media** stays any key-holder; **edit capture time** is a member's with a write grant (`updateMediaMeta`
+  checks `WRITE`; no guest route writes a medium's metadata), one medium or a shifted selection alike.
 
 ## User impact
 

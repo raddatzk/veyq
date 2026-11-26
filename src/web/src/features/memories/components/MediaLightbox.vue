@@ -6,7 +6,9 @@
 // fetched as ciphertext and decrypted on device; the decrypted preview becomes an object URL that is **revoked** on
 // navigation / close / unmount.
 // The detail panel (cr-0064) shows the lazily-loaded EXIF tier and lets the user **correct the capture time**
-// (cr-0065, sealed under K_node).
+// (cr-0065, sealed under K_node). Opened from the organizer's selection (`captureTimeShift`, uc.memory.buckets § Correct
+// a selection's capture time), the save of a selected medium offers only it, or every selected medium shifted by its
+// offset (`../captureTimeShift.ts` plans it, the detail's `../useCaptureTimeShift.ts` writes it and holds its Undo).
 // **Zoom** (cr-lightbox-zoom-slideshow, uc.memory.gallery 3a): double-click/tap, pinch, ctrl+wheel and `+`/`-`/`0` on a
 // photo (`shared/ui/usePanZoom.ts`, a drag or the arrow keys pan while zoomed); past the preview's resolution the ORIGINAL replaces it in
 // place where `../lightboxZoom.ts` allows - fetched as ciphertext through the source's `originalLoader`, decrypted here, its
@@ -15,7 +17,8 @@
 // buttons, the arrow keys, a swipe on a touch screen (`shared/ui/useSwipe.ts`, inbox #863; not while a photo is zoomed,
 // where a drag pans) and the slideshow alike; only a single item has nowhere to go. The position ("3 of 42") says
 // where the viewer is, so a step round the end needs no notice of its own.
-// **Slideshow** (same CR): the toolbar's play control advances every 5 s through the items in their grid order
+// **Slideshow** (same CR): the toolbar's play control advances every 5 s through the items in their grid order - or, with
+// the shuffle toggle beside it pressed (inbox #862), in shuffled rounds -
 // (`createVisibilityPoller`); a video shows its poster for one interval, never auto-played; it goes round past the last
 // item until it is paused - it pauses on any key, pointer or wheel (the zoom and the details panel included), a hidden tab and `suspendKeys`. While it
 // runs no EXIF read and no place backfill happen — pausing on an item runs them.
@@ -43,6 +46,8 @@ import {
   type MediaMeta,
   type MediaMetaWrite,
 } from '../media'
+import { offsetParts, planCaptureTimeShift, type ShiftPlan } from '../captureTimeShift'
+import type { CaptureTimeShift, ShiftRead } from '../useCaptureTimeShift'
 import { MetaConflictError, MetaUnreadableError, staleMetaOf, type SealedMetaState } from '../../../core/node/sealedMetaWrite'
 import { downloadOriginal, originalDownloadName } from '../download'
 import type { OpenedBlobMeta } from '../../../core/blob/meta'
@@ -98,6 +103,11 @@ const props = defineProps<{
   suspendKeys?: boolean // pause the global Escape/arrow handler while a modal (a cover or banner dialog) is open over it
   /** Offer "Report" for the shown item (`report` event; core's dialog, uc.moderation.report): its host decides. */
   canReport?: boolean
+  /** The organizer's selection this opened from, and the run of a shift over it; absent, a save corrects one medium. The
+   *  host hands it only where it hands `mediaMeta`. */
+  captureTimeShift?: CaptureTimeShift
+  /** Open with the shown medium's capture-time editor open (the organizer's "Shift capture time"). */
+  startEditing?: boolean
 }>()
 const emit = defineEmits<{
   /** Closed — on the item shown last (null: none left), whose grid tile takes the focus back (ADR 0105 decision 5). */
@@ -147,6 +157,10 @@ const savingCapturedAt = ref(false)
 // Why the last capture-time save did not land: it failed, a peer corrected the time meanwhile (the editor re-opened
 // on theirs, ADR 0077), or the tier does not open and is never rebuilt from empty. Null = no message.
 const capturedAtError = ref<'failed' | 'conflict' | 'unreadable' | null>(null)
+// The save's two choices while the shown medium is part of a selection: the planned shift and how many are selected; and
+// how far a running shift got. Null = a plain save.
+const shiftOffer = ref<{ plan: ShiftPlan; read: ShiftRead[]; afterMs: number | null; count: number } | null>(null)
+const shiftProgress = ref<{ done: number; total: number } | null>(null)
 
 const item = computed(() => props.items[current.value])
 // Paging goes round (see the header): any item has a previous and a next one as long as there is another item.
@@ -186,15 +200,66 @@ const hasPreview = (it: MediaItem | undefined): it is MediaItem => !!it && !it.b
  *  Round the ends too: on the last item the first is read ahead, so the step round shows it at once. */
 function prefetchNeighbours() {
   if (!canPage.value) return
-  for (const at of new Set([around(current.value, 1), around(current.value, -1)])) {
+  const ahead = [around(current.value, 1), around(current.value, -1)]
+  if (shuffled.value) ahead.unshift(upcomingInRound()) // the one the shuffled slideshow shows next
+  for (const at of new Set(ahead)) {
     const neighbour = props.items[at]
     if (hasPreview(neighbour)) previews.prefetch(neighbour)
   }
 }
 
+// --- shuffle (inbox #862) ------------------------------------------------------------------------------------------------
+// A toggle beside play / pause orders the SLIDESHOW at random; paging by hand stays in the grid order, and the position
+// keeps saying the grid's. The order is a ROUND: every item once, in a shuffled order, then a fresh round - never one item
+// three times and another not at all. The round turned on starts after the shown item (it was just seen); a later round
+// never opens with the item the last one ended on. Held by media id, so an item removed meanwhile is skipped. It lasts
+// while the lightbox is open and is stored nowhere. `Math.random` is enough: the order is no secret.
+const shuffled = ref(false)
+let round: string[] = []
+/** Fisher-Yates over a copy. */
+function shuffledCopy<T>(xs: readonly T[]): T[] {
+  const out = xs.slice()
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
+}
+/** A new round of every item but `leaving` at its head; `leaving` itself only where `withLeaving` (a later round). */
+function newRound(leaving: string | undefined, withLeaving: boolean): string[] {
+  const ids = props.items.map((it) => it.mediaId)
+  const next = shuffledCopy(withLeaving ? ids : ids.filter((id) => id !== leaving))
+  if (next.length > 1 && next[0] === leaving) {
+    const j = 1 + Math.floor(Math.random() * (next.length - 1))
+    ;[next[0], next[j]] = [next[j], next[0]]
+  }
+  return next
+}
+/** The index the shuffled slideshow shows next (the round's head), refilling the round when it ran out. */
+function upcomingInRound(): number {
+  const shown = item.value?.mediaId
+  for (let refills = 0; refills < 2; refills++) {
+    while (round.length > 0) {
+      const at = props.items.findIndex((it) => it.mediaId === round[0])
+      if (at >= 0 && round[0] !== shown) return at
+      round.shift() // removed meanwhile, or the item on screen
+    }
+    round = newRound(shown, true)
+  }
+  return around(current.value, 1) // unreachable while two items are left: a fresh round always holds another
+}
+function toggleShuffle() {
+  shuffled.value = !shuffled.value
+  round = shuffled.value ? newRound(item.value?.mediaId, false) : []
+  if (shuffled.value) prefetchNeighbours() // the round's first, ahead of the next tick
+}
+
 async function slideshowTick(signal: AbortSignal) {
   if (!canPage.value) return stopSlideshow() // the others were removed under it: nothing left to go to
-  current.value = around(current.value, 1)
+  if (shuffled.value) {
+    current.value = upcomingInRound()
+    round.shift()
+  } else current.value = around(current.value, 1)
   await nextTick() // the item's watchers ran: its preview load started (the neighbours' read ahead), its details were held back
   if (signal.aborted) return
   await previewLoad
@@ -218,7 +283,9 @@ const toggleSlideshow = () => (playing.value ? stopSlideshow() : startSlideshow(
 // slideshow run together. While they are drawn, a narrow screen gives them a row of their own under the title and the
 // actions (`has-music`, memories.css), which no longer fit one row beside them.
 const musicShown = computed(() => audioPlayer().nowPlaying.value !== null)
-const isSlideshowToggle = (target: EventTarget | null) => target instanceof Element && !!target.closest('[data-slideshow-toggle], [data-audio-controls]')
+// The shuffle toggle neither: it orders the slideshow, so pressing it while one runs keeps it running.
+const isSlideshowToggle = (target: EventTarget | null) =>
+  target instanceof Element && !!target.closest('[data-slideshow-toggle], [data-slideshow-shuffle], [data-audio-controls]')
 /** Any pointer or wheel in the lightbox pauses — the zoom's gestures and the details panel included; the toggle is its own. */
 function pauseOnInteraction(event: Event) {
   if (playing.value && !isSlideshowToggle(event.target)) stopSlideshow()
@@ -363,6 +430,7 @@ async function loadDetails() {
   exif.value = null
   isEditingCapturedAt.value = false // close the editor when the item changes
   capturedAtError.value = null
+  shiftOffer.value = null
   const target = item.value
   if (!target) return
   captured.value = metaOf(target)
@@ -405,8 +473,13 @@ function datetimeLocalToMs(value: string): number | null {
 function startCapturedAtEdit() {
   capturedAtInput.value = msToDatetimeLocal(effectiveCaptured.value)
   capturedAtError.value = null
+  shiftOffer.value = null
   isEditingCapturedAt.value = true
 }
+// The organizer's "Shift capture time" opens over its selection with the editor open, and keeps it open on every medium
+// paged to (`loadDetails` above closes it first): the member pages to the medium whose right time they know.
+if (props.startEditing && canEditCapturedAt.value) startCapturedAtEdit()
+watch(() => item.value?.mediaId, () => { if (props.startEditing && canEditCapturedAt.value) startCapturedAtEdit() })
 
 /** A write landed (or a conflict handed back the current tier): show it, and let the grid patch its item — the
  *  item's `wrappedMeta` + `metaRevision` are the base of the next write from here. */
@@ -448,8 +521,73 @@ async function persistCapturedAt(overrideMs: number | null) {
     if (item.value === target) savingCapturedAt.value = false
   }
 }
-/** Save the edited date as the override (empty input clears it). */
-const saveCapturedAt = () => persistCapturedAt(datetimeLocalToMs(capturedAtInput.value))
+/** The selected media in this lightbox's list, while the shown one is among two or more of them; else null. */
+const shiftSelection = computed(() => {
+  const shift = props.captureTimeShift
+  const shown = item.value
+  if (!shift || !shown || !shift.selected.has(shown.mediaId)) return null
+  const selected = props.items.filter((m) => shift.selected.has(m.mediaId))
+  return selected.length >= 2 ? selected : null
+})
+/** Save the edited date as the override (empty input clears it) — or, for a medium of a selection whose time it moves,
+ *  first offer the choice: only this one, or every selected one by the same offset. */
+function saveCapturedAt() {
+  const afterMs = datetimeLocalToMs(capturedAtInput.value)
+  const selection = shiftSelection.value
+  // Read once, here: the plan's times and each write's base are the same reading of every medium (a live poll patches the
+  // listed items in place, so the run must not read them again).
+  const read = selection?.map((m) => ({ item: { ...m }, position: props.captureTimeShift?.numbers?.[m.mediaId] ?? props.items.indexOf(m) + 1 })) ?? []
+  const plan = selection
+    ? planCaptureTimeShift({ before: captured.value, afterMs }, read.map(({ item }) => ({ mediaId: item.mediaId, meta: metaOf(item) })))
+    : null
+  if (plan && selection) shiftOffer.value = { plan, read, afterMs, count: selection.length }
+  else void persistCapturedAt(afterMs)
+}
+// An edit of the field after the offer was made: the offer was for another time.
+watch(capturedAtInput, () => { if (!savingCapturedAt.value) shiftOffer.value = null })
+/** "Only this one": the single correction, exactly as typed. */
+function saveOnlyThis() {
+  const offer = shiftOffer.value
+  shiftOffer.value = null
+  if (offer) void persistCapturedAt(offer.afterMs)
+}
+/** "All N, shifted by …": the detail writes each selected medium (the grid patched as each lands) and names what it
+ *  could not; the panel then shows the shown medium as it is now. */
+async function saveShifted() {
+  const offer = shiftOffer.value
+  const target = item.value
+  const shift = props.captureTimeShift
+  if (!offer || !target || !shift || savingCapturedAt.value) return
+  savingCapturedAt.value = true
+  shiftProgress.value = { done: 0, total: offer.plan.steps.filter((s) => s.action !== 'skip-undated').length }
+  try {
+    await shift.run(offer.plan, offer.read, (done, total) => { shiftProgress.value = { done, total } })
+  } finally {
+    shiftOffer.value = null
+    shiftProgress.value = null
+    savingCapturedAt.value = false
+    if (item.value === target) {
+      captured.value = metaOf(target)
+      isEditingCapturedAt.value = false
+    }
+  }
+}
+/** The offer's offset written out: "+1 h 12 min". */
+const shiftOffsetLabel = computed(() => {
+  const offer = shiftOffer.value
+  if (!offer) return ''
+  const p = offsetParts(offer.plan.offsetMs)
+  const parts = [
+    p.days ? t('media.shift.days', { n: p.days }) : '',
+    p.hours ? t('media.shift.hours', { n: p.hours }) : '',
+    p.minutes ? t('media.shift.minutes', { n: p.minutes }) : '',
+  ].filter(Boolean)
+  return `${p.sign}${parts.join(' ')}`
+})
+function cancelCapturedAtEdit() {
+  shiftOffer.value = null
+  isEditingCapturedAt.value = false
+}
 /** Reset back to the extracted original (removes the override). */
 const resetCapturedAt = () => persistCapturedAt(null)
 
@@ -764,6 +902,20 @@ onBeforeUnmount(() => {
         >
           <VeyqIcon :name="playing ? 'pause' : 'play'" />
         </button>
+        <!-- With two items a shuffled round is the grid order or its reverse: offered from three on. -->
+        <button
+          v-if="items.length > 2"
+          class="veyq-icon-button lightbox-icon-button"
+          :class="{ 'lightbox-icon-button-pressed': shuffled }"
+          type="button"
+          data-slideshow-shuffle
+          :aria-label="t('media.slideshowShuffle')"
+          :title="t('media.slideshowShuffle')"
+          :aria-pressed="shuffled"
+          @click="toggleShuffle"
+        >
+          <VeyqIcon name="shuffle" />
+        </button>
         <button
           v-if="!item?.blocked"
           class="veyq-icon-button lightbox-icon-button"
@@ -918,8 +1070,40 @@ onBeforeUnmount(() => {
 
         <form v-if="isEditingCapturedAt" class="media-lightbox-date-form" @submit.prevent="saveCapturedAt">
           <label for="captured-at-input">{{ t('media.captured') }}</label>
-          <VeyqDateField v-model="capturedAtInput" input-id="captured-at-input" granularity="minute" :disabled="savingCapturedAt" />
-          <div class="media-lightbox-date-actions">
+          <!-- The calendar from its button only: opened on focus it hung over Save while the time was typed (inbox #865). -->
+          <VeyqDateField
+            v-model="capturedAtInput"
+            input-id="captured-at-input"
+            granularity="minute"
+            calendar-from-button-only
+            :disabled="savingCapturedAt"
+          />
+          <!-- A medium of a selection: only it, or every selected one by the same offset (uc.memory.buckets). -->
+          <template v-if="shiftOffer">
+            <p class="media-lightbox-date-note">{{ t('media.shift.selected', { count: shiftOffer.count }) }}</p>
+            <div class="media-lightbox-date-actions" data-testid="capture-time-shift-offer">
+              <button class="veyq-text-button lightbox-text-button" type="button" :disabled="savingCapturedAt" @click="saveOnlyThis">
+                {{ t('media.shift.onlyThis') }}
+              </button>
+              <button
+                class="veyq-text-button lightbox-text-button"
+                type="button"
+                data-testid="capture-time-shift-all"
+                :disabled="savingCapturedAt"
+                @click="saveShifted"
+              >
+                {{ t('media.shift.all', { count: shiftOffer.count, offset: shiftOffsetLabel }) }}
+              </button>
+              <button class="veyq-text-button lightbox-text-button" type="button" :disabled="savingCapturedAt" @click="cancelCapturedAtEdit">
+                {{ t('common.cancel') }}
+              </button>
+            </div>
+            <p v-if="shiftOffer.plan.undated" class="media-lightbox-date-note">
+              {{ t('media.shift.undated', { count: shiftOffer.plan.undated }, shiftOffer.plan.undated) }}
+            </p>
+            <p v-if="shiftProgress" class="media-lightbox-date-note" role="status">{{ t('media.shift.progress', shiftProgress) }}</p>
+          </template>
+          <div v-else class="media-lightbox-date-actions">
             <button class="veyq-text-button lightbox-text-button" type="submit" :disabled="savingCapturedAt">
               {{ t('common.save') }}
             </button>
@@ -927,7 +1111,7 @@ onBeforeUnmount(() => {
               class="veyq-text-button lightbox-text-button"
               type="button"
               :disabled="savingCapturedAt"
-              @click="isEditingCapturedAt = false"
+              @click="cancelCapturedAtEdit"
             >
               {{ t('common.cancel') }}
             </button>

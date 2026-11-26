@@ -45,7 +45,10 @@ acceptanceCriteria:
       interval and never plays it, waits for a preview still loading, and goes round past the last item; any key, pointer or
       wheel in the lightbox, a hidden tab and a dialog over it pause it, the toggle's own press excepted; the state is
       announced (aria-live). One preview is fetched ahead and dropped when it is not shown. While it runs no EXIF read and
-      no place-name backfill happen; pausing on an item runs both (cr-lightbox-zoom-slideshow).
+      no place-name backfill happen; pausing on an item runs both (cr-lightbox-zoom-slideshow). From three items on a
+      shuffle toggle runs it in shuffled rounds - every item once per round, the next round never opening with the item
+      the last ended on - while paging by hand keeps the grid order; the round's next item is read ahead, an item removed
+      meanwhile skipped, and pressing the toggle does not pause it (#862).
     coverage:
       web:
         unit:

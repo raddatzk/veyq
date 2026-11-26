@@ -155,6 +155,31 @@ describe('MemoryDetail follows rights', () => {
     expect(updateNode).toHaveBeenCalled()
   })
 
+  // The lightbox's capture-time editor writes a medium's meta: offered only with editMeta, as the track-label editor beside
+  // it is (cr-memory-capture-time-shift). While a scope is pending deletion or the application is off, editMeta is false and
+  // the server refuses the write, so the editor must not be offered. Lever: hand the lightbox `source.mediaMeta` unchecked.
+  it('the lightbox offers the capture-time editor only with editMeta', async () => {
+    const memoryKey = v1.randomBytes(32)
+    await seedDated(memoryKey)
+    const editorIn = async (rights: MemoryRights) => {
+      const w = mount(MemoryDetail, {
+        props: { source: memberMemorySource({ scopeId: () => SCOPE_ID }), node: node(), scopeId: SCOPE_ID, memoryKey, rights },
+        global: { plugins: [realI18n()] },
+      })
+      await flushPromises()
+      await flushPromises()
+      await w.find('.media-tile-open').trigger('click')
+      await flushPromises()
+      expect(w.find('.media-lightbox').exists(), 'control: the lightbox opened').toBe(true)
+      const offered = w.find(`.media-lightbox [aria-label="${t('media.editCapturedAt')}"]`).exists()
+      w.unmount()
+      return offered
+    }
+    expect(await editorIn({ ...memberMemoryRights(), editMeta: false }), 'editMeta off').toBe(false)
+    expect(await editorIn(memberMemoryRights({ readonly: true })), 'a pending deletion').toBe(false)
+    expect(await editorIn(memberMemoryRights()), 'control: a member with editMeta').toBe(true)
+  })
+
   // The cover is core's (inbox #411, ADR 0110 decision 10): core's header shows it and opens core's dialog from it, where core's
   // cover right grants it (`coverRights`). The Memory draws no cover control of its own and writes no cover; the lightbox offers
   // no way in.
