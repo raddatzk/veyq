@@ -189,6 +189,9 @@ inbox #453 is deleted. Coverage rows for `uc.admin.install-and-upgrade-instance`
   the criterion ADR 0091 decision 7 has L2 and L3 take over, whose text still says "restored onto the candidate" (L3's
   shape, not L2's). Recommendation: add a criterion `an-upgrade-in-place-keeps-every-item` to install-and-upgrade-instance
   in refinement and move the tag; until then the tag is the closest true one and its `gaps.stack` says why it is there.
+  **Resolved 2026-11-27 in the conversation, as recommended:** the criterion is in
+  `uc.admin.install-and-upgrade-instance`'s coverage, the spec carries it, and the `gaps.stack` entry moved with it
+  (`validate_stack_criterion_tags.py` bitten with a misspelled tag: red, restored green).
 
 ### Technical observations
 

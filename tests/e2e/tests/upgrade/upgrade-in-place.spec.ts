@@ -41,7 +41,7 @@ test.afterAll(async () => {
 
 test(
   'after an upgrade in place the seeded owner signs in on a new device and opens the seeded Memory and Depot files',
-  { tag: '@uc.admin.back-up-and-restore-instance:a-predecessors-backup-upgrades-with-its-content-intact' },
+  { tag: '@uc.admin.install-and-upgrade-instance:an-upgrade-in-place-keeps-every-item' },
   async () => {
     const { page } = device
     const origin = `https://${stack().domain}`

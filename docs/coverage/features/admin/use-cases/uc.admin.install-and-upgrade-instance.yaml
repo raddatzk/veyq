@@ -76,6 +76,21 @@ acceptanceCriteria:
       refused, with nothing stopped, unless that release is still in `releases/` and the capture verifies against
       the live store; then the database is emptied, the release started once, and the capture restored with the
       check only — the store is never written.
+  - id: an-upgrade-in-place-keeps-every-item
+    # ADR 0091 decision 6, amended 2026-11-26. Lane L2 (`scripts/run_stack_upgrade.py`): the starting release's own
+    # seeder writes the record's items, that release's `veyqctl upgrade` takes the instance to the candidate, the
+    # candidate's `upgrade.b-read.e2e.test.ts` opens every item byte for byte and the browser spec opens the Memory and
+    # the Depot files. Green locally from v1.318 and v0.2480 (2026-11-27); a stack ref once a CI log shows it ran.
+    text: >-
+      An instance upgraded in place with `veyqctl upgrade` — from the newest release, or from the last release of the
+      previous major — opens every item it held before: the config-secret key first, then each Memory, photo and file
+      byte for byte, and in a browser for its owner signed in on a new device.
 gaps:
   backend: "Not a backend use-case: the instance is managed from the host by `veyqctl`, a Python operator tool, and on Kubernetes backed up by the chart's gate (`src/tools/instance_backup.py gate`, held by `src/tools/instance_backup_selftest.py` and `scripts/chart_meta_check.py`) — neither a coverage surface (ADR 0040)."
   web: "No client surface: the operator works at the shell with `veyqctl`; the Server Owner's console is unchanged by this use-case."
+  stack: >-
+    Lane L2's browser half (`tests/e2e/tests/upgrade/upgrade-in-place.spec.ts`, run by `scripts/run_stack_upgrade.py`
+    after `veyqctl upgrade` took an instance of a published release to the candidate in place) signs in as the owner
+    the starting release's own seeder wrote and opens the seeded Memory and Depot files, tagged
+    `an-upgrade-in-place-keeps-every-item`. ADR 0040 admits `stack` refs only once a CI run's log shows the suite executed; on that
+    run the file becomes a ref on that criterion, and this gap goes.
