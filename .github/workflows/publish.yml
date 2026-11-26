@@ -65,7 +65,9 @@ jobs:
   checks-run:
     name: Find the publishable commit and its green Checks run
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 120 of it are the schedule's wait for a Checks run still going (`--wait-minutes` below); a dispatch never waits and
+    # takes seconds. A whole number: validate_pipeline_shape.py reads no expression as a budget.
+    timeout-minutes: 130
     permissions:
       contents: read
       actions: read # the Checks runs and their jobs, through the API
@@ -86,17 +88,22 @@ jobs:
           # the commit's `snapshot-` tag is read from this checkout: the whole history and every tag.
           fetch-depth: 0
 
-      # Starts at HEAD (`$GITHUB_SHA`, the one place this file reads it) and writes the commit it resolved.
+      # Starts at HEAD (`$GITHUB_SHA`, the one place this file reads it) and writes the commit it resolved. The weekly
+      # schedule waits for that commit's Checks run while it is still queued or running: GitHub starts a schedule late
+      # and at no fixed hour (2026-11-23: 12:56, not 03:17, minutes after a merge — refused, so no snapshot and no draft
+      # that week). A dispatch refuses at once: the owner is there to run it again.
       - name: Find the publishable commit and its green Checks run
         id: checks-run
         env:
           GH_TOKEN: ${{ github.token }}
+          WAIT_MINUTES: ${{ github.event_name == 'schedule' && '120' || '0' }}
         run: |
           set -euo pipefail
           python3 -m venv "${RUNNER_TEMP}/publish-venv"
           "${RUNNER_TEMP}/publish-venv/bin/pip" install --quiet --require-hashes --only-binary :all: -r scripts/requirements-release.txt
           "${RUNNER_TEMP}/publish-venv/bin/python" scripts/snapshot.py checks-run \
-            --repository "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA" --branch "$GITHUB_REF_NAME"
+            --repository "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA" --branch "$GITHUB_REF_NAME" \
+            --wait-minutes "$WAIT_MINUTES"
 
   snapshot:
     name: Publish the snapshot (the images, the chart, their signatures and the lanes' attestations)
@@ -380,7 +387,7 @@ jobs:
   # and it never publishes (`draft: true` is the payload's, checked before the write). It runs no third-party code:
   # the script is the standard library and `gh`.
   # Also on a run that publishes nothing because the commit already carries its unreleased snapshot: a dispatch then
-  # refreshes the draft after a note was corrected in its pull request (cr-release-draft-from-publish phase 5). Either way the tag
+  # refreshes the draft after a note was corrected in its pull request (ADR 0091 decision 5, refined 2026-11-23). Either way the tag
   # must exist first — after a green `snapshot-tag`, or because `kind` is `none` — and the script refuses unless
   # `snapshot-<version>` names the commit.
   release-draft:

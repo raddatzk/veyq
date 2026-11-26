@@ -31,7 +31,7 @@ in a run line, where a body would be shell).
 
 **draft** — `publish.yml`'s `release-draft` job runs it after the snapshot is tagged, and on a run that publishes
 nothing because the commit already carries its unreleased snapshot (a dispatch after a note was corrected in its pull
-request, cr-release-draft-from-publish phase 5); on `main` only. It refuses unless the tag `snapshot-<version>` exists in the
+request, ADR 0091 decision 5, refined 2026-11-23); on `main` only. It refuses unless the tag `snapshot-<version>` exists in the
 checkout and names the commit, so a draft never names a snapshot that is not there. It decides and writes no release
 itself: the job's own lines do the one `gh api` write (create or edit a draft), where
 `scripts/validate_release_identity.py` sees it. It reads:
@@ -52,8 +52,8 @@ It writes `<out>/plan.json` (`action`: create | update | leave | none, `draft_id
 (the release's `tag_name`, `name`, `body`, `draft: true` — never `draft: false`: publishing stays `release.yml`'s).
 
 **No lede.** Past notes opened with one sentence summing the release up. Summing several pull requests up is a
-judgement; the owner adds it while reading the draft when wanted (cr-release-draft-from-publish, decision open to the
-owner's override).
+judgement; the owner adds it while reading the draft when wanted (ADR 0091 decision 5; v1.312 and v1.318 went out
+without one).
 
 **What a green selftest does not prove** (`scripts/release_notes_selftest.py`): that GitHub's `commits/<sha>/pulls`
 returns a squash-merged pull request for its merge commit, and that a draft's body comes back from the API unchanged.

@@ -11,7 +11,8 @@ run it; the writes themselves — `imagetools create`, `cosign`, `helm push`, th
         --commit <sha> --run <url> --results <dir> --out <dir>
     python3 scripts/snapshot.py check-unpublished --registry ghcr.io/<owner> --version <v> --commit <sha> \\
         --digests <dir> --image veyq --image veyq-admin --image veyq-tools --chart charts/veyq
-    python3 scripts/snapshot.py checks-run --repository <owner>/<repo> --commit <HEAD sha> --branch <branch>
+    python3 scripts/snapshot.py checks-run --repository <owner>/<repo> --commit <HEAD sha> --branch <branch> \
+        [--wait-minutes <n>]
     python3 scripts/snapshot.py staged --registry ghcr.io/<owner> --commit <sha> --digests <dir> --results <dir>
 
 **checks-run** — which run a snapshot is made from (ADR 0091 decision 5, amended 2026-11-07: Publish runs no pipeline,
@@ -26,7 +27,8 @@ commits. A C that already carries a `snapshot-` tag, or the `v<major>.<minor>` t
 newest such run, refused, red and named, unless it is completed and `success`, and in its latest attempt the gate job
 (`Pipeline green`) and one lane L1 leg per architecture and domain of the commit's own `stack` matrix concluded
 `success`. A run cancelled by hand, still running, or red is refused with that reason; Publish never starts Checks
-itself (owner 2026-11-07). Writes `kind`, `commit` (C — every later name of the publish is C's), `run_id`, `run_url`,
+itself (owner 2026-11-07). With `--wait-minutes n` (the weekly schedule's, `await_completion`) a run still queued or
+running is re-read every minute for up to n minutes first, and judged once it completed. Writes `kind`, `commit` (C — every later name of the publish is C's), `run_id`, `run_url`,
 `attempt` and `version` (C's tree release, `release_assets.tree_release`) to `$GITHUB_OUTPUT`, and `draft_version`: the
 version whose release draft the run writes — `version` for a new snapshot; for `kind=none` the version of C's existing
 `snapshot-` tag while C carries no `v` tag (a dispatch refreshes the draft after a pull request's note was corrected),
@@ -71,6 +73,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import time
 
 # The attestation every stack lane writes, per architecture; the promotion verifies it by this type. A name, not a URL
 # anything fetches. `scripts/validate_release_identity.py` holds `publish.yml`'s attest step to it.
@@ -317,7 +320,7 @@ SNAPSHOT_TAG = re.compile(r"^snapshot-([0-9]+\.[0-9]+)$")
 def unreleased_snapshot(published: str) -> str:
     """The version of the one `snapshot-` tag among a published commit's tags, while no `v` tag says it was released —
     the snapshot whose release draft a run that publishes nothing still refreshes (a note corrected in its pull request
-    after the snapshot; cr-release-draft-from-publish phase 5). Empty for a released commit, and for anything not exactly one tag."""
+    after the snapshot; ADR 0091 decision 5, refined 2026-11-23). Empty for a released commit, and for anything not exactly one tag."""
     tags = published.split()
     if any(RELEASE_TAG.match(t) for t in tags):
         return ""
@@ -358,6 +361,22 @@ def publishable(head: str, branch: str, chain: list[str], tags_of, runs_of, file
         skipped.append(commit)
     raise Refused(f"no push run of {CHECKS_WORKFLOW} on {branch} for {head} or any of the {len(skipped) - 1} docs-only "
                   f"commits before it (the walk stops at {bound}) — re-run Checks on a commit, or push")
+
+
+def await_completion(run: dict, fetch, wait_seconds: int, poll: int = 60, sleep=None, clock=None) -> dict:
+    """`run` re-read through `fetch(run_id)` every `poll` seconds until it has completed, for at most `wait_seconds`;
+    what it is then goes to `checks_verdict`, which still refuses a run not completed. 0 waits not at all (a dispatch:
+    the owner is there to run it again). The weekly schedule waits, because GitHub starts it late and at no fixed time:
+    on 2026-11-23 it ran at 12:56, not 03:17, minutes after a merge, and refused HEAD's `pending` Checks run (Publish run
+    45179033821) — no snapshot and no draft for the week unless someone dispatched (cr-release-draft-from-publish)."""
+    sleep, clock = sleep or time.sleep, clock or time.monotonic
+    deadline = clock() + wait_seconds
+    while run.get("status") != "completed" and clock() < deadline:
+        print(f"Checks run {run.get('id')} ({run.get('html_url')}) is `{run.get('status')}`: waiting for it, at most "
+              f"{max(0, round((deadline - clock()) / 60))} more minute(s)", flush=True)
+        sleep(max(1, min(poll, deadline - clock())))
+        run = fetch(run.get("id"))
+    return run
 
 
 def checks_verdict(run: dict, jobs: list[dict], archs: list[str], domains: list[str]) -> dict:
@@ -440,7 +459,8 @@ def changed_files(root: pathlib.Path, commit: str) -> list[str] | None:
     return [p for p in _git_out(root, "diff", "--name-only", "--no-renames", "-z", f"{commit}^1", commit).split("\0") if p]
 
 
-def checks_run(repository: str, head: str, branch: str, root: pathlib.Path, bound: int = WALK_BOUND) -> dict:
+def checks_run(repository: str, head: str, branch: str, root: pathlib.Path, bound: int = WALK_BOUND,
+               wait_seconds: int = 0) -> dict:
     sys.path.insert(0, str(root / "scripts"))
     import release_assets
     if not COMMIT.match(head):
@@ -470,7 +490,8 @@ def checks_run(repository: str, head: str, branch: str, root: pathlib.Path, boun
                 "draft_version": unreleased_snapshot(found["published"])}
     # The matrix is HEAD's checks.yml, and C's: the walk accepts no commit that changes it (it is no ignored path).
     archs, domains = stack_matrix(root)
-    run = found["run"]
+    run = await_completion(found["run"], lambda run_id: _gh_json(f"repos/{repository}/actions/runs/{run_id}"),
+                           wait_seconds)
     jobs: list[dict] = []
     page = 1
     while True:
@@ -534,6 +555,7 @@ def main() -> int:
     k.add_argument("--repository", required=True)
     k.add_argument("--commit", required=True)
     k.add_argument("--branch", required=True)
+    k.add_argument("--wait-minutes", type=int, default=0)
     s = sub.add_parser("staged")
     s.add_argument("--registry", required=True)
     s.add_argument("--commit", required=True)
@@ -558,7 +580,7 @@ def main() -> int:
                 print(f"{args.lane} {arch}: {len(predicate['shards'])} shard(s), asset set {predicate['inputs']['assetSet']}")
         elif args.command == "checks-run":
             root = pathlib.Path(__file__).resolve().parent.parent
-            found = checks_run(args.repository, args.commit, args.branch, root)
+            found = checks_run(args.repository, args.commit, args.branch, root, wait_seconds=60 * args.wait_minutes)
             if os.environ.get("GITHUB_OUTPUT"):
                 with open(os.environ["GITHUB_OUTPUT"], "a") as handle:
                     handle.write("".join(f"{k}={v}\n" for k, v in found.items()))

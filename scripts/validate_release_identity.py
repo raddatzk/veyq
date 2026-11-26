@@ -444,7 +444,7 @@ DRAFT_WRITE = re.compile(r'^\s*gh api --method (?:POST "repos/\$\{GITHUB_REPOSIT
 DRAFT_GUARD = re.compile(r'if \[\[ "\$\(jq -r \.draft "\$payload"\)" != "true" \]\]; then\s*\n[^\n]*\n\s*exit 1')
 # The draft job's whole gate, pinned: on `main`, for a version `checks-run` named, and only once the snapshot's tag
 # exists — after a green `snapshot-tag`, or because the commit already carried its snapshot (`kind == 'none'`, the one
-# case `snapshot-tag` is skipped with the tag there; a dispatch refreshes the draft then, cr-release-draft-from-publish phase 5).
+# case `snapshot-tag` is skipped with the tag there; a dispatch refreshes the draft then, ADR 0091 decision 5, refined 2026-11-23).
 # Assertion 16 accepts this disjunction for `snapshot-tag` here and nowhere else; release_notes.py refuses unless
 # `snapshot-<version>` names the commit.
 DRAFT_IF = ("!cancelled() && github.ref_name == 'main' && needs.checks-run.outputs.draft_version != '' && "
@@ -1366,6 +1366,20 @@ if workflow_doc:
                           for s in job_steps(publish_doc, CHECKS_RUN_JOB)):
         fail(f"{rel_of(WORKFLOW)}: `{CHECKS_RUN_JOB}` does not run `{SNAPSHOT_SCRIPT} checks-run` on this commit and "
              f"branch — nothing finds the publishable commit's green Checks run before the snapshot signs")
+    # The weekly schedule waits for a Checks run still going; a dispatch never does (`snapshot.await_completion`): the
+    # step passes `--wait-minutes "$WAIT_MINUTES"`, that variable is 120 on a schedule and 0 otherwise, and the job's
+    # budget outlasts the wait. Without it a late schedule a few minutes after a merge refused, and the week had no
+    # snapshot and no draft (2026-11-23, run 45179033821).
+    waiting = [s for s in job_steps(publish_doc, CHECKS_RUN_JOB) if f"{SNAPSHOT_SCRIPT} checks-run" in str(s.get("run") or "")]
+    wait_expr = " ".join(str(((waiting[0].get("env") or {}) if waiting else {}).get("WAIT_MINUTES") or "").split())
+    budget = finder.get("timeout-minutes")
+    if finder and (not waiting or '--wait-minutes "$WAIT_MINUTES"' not in str(waiting[0].get("run") or "")
+                   or wait_expr != "${{ github.event_name == 'schedule' && '120' || '0' }}"
+                   or not isinstance(budget, int) or budget <= 120):
+        fail(f"{rel_of(WORKFLOW)}: `{CHECKS_RUN_JOB}` does not wait for a Checks run still going on the schedule alone "
+             f"(`--wait-minutes \"$WAIT_MINUTES\"`, `WAIT_MINUTES` = `${{{{ github.event_name == 'schedule' && '120' "
+             f"|| '0' }}}}`, a budget above 120 minutes; it is `{wait_expr}`, budget {budget}) — a late schedule refuses a "
+             f"Checks run minutes from done, and the week gets no snapshot and no draft")
     if str((finder.get("outputs") or {}).get("kind") or "").replace(" ", "") != "${{steps.checks-run.outputs.kind}}":
         fail(f"{rel_of(WORKFLOW)}: `{CHECKS_RUN_JOB}`'s `kind` output is not its `checks-run` step's — the gate every "
              f"write of the snapshot answers to would come from somewhere else")
