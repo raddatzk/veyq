@@ -35,7 +35,9 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         Title = Words.AppName();
-        // the title bar's and the taskbar's icon: the exe's own (ApplicationIcon) is not the window's in WinUI 3
+        // the title bar's and the taskbar's icon: the exe's own (ApplicationIcon) is not the window's in WinUI 3. The ARM64
+        // test VM's taskbar shows the system's blank window for every emulated x86/x64 program, Windows' own charmap
+        // too, this one with its icon in both the exe and the window (inbox #1413) - not a defect here
         AppWindow.SetIcon(Path.Combine(AppContext.BaseDirectory, "veyq.ico"));
         Root.RequestedTheme = DebugEnv.Theme;
         // a screen that can show a secret keeps this window out of capture while it shows (ScreenSecrets)
