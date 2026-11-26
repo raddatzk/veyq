@@ -149,8 +149,9 @@ phone pairing at every start — or away from the TV. The owner chose to let the
 - **The offer** (`SessionModel.Offer`): on a TV `pin` as before and `levels = [LOGIN]` where the store keeps it. Both TV
   clients draw the PIN pad first and focused, then *Stay signed in without a PIN*, then *Don't keep me signed in*. The
   no-PIN choice is never taken at once: it opens a confirmation carrying the warning (`tv_stay_no_pin_warning`) whose
-  Cancel is the default — tvOS an alert (the HIG's way to confirm a choice with a consequence), Android TV a step of its
-  own with Cancel focused (Leanback's guided step). Where the TV has no hardware factor for a PIN but keeps the login
+  Cancel is focused — on both a page of its own with Cancel first and focused, Back (Menu on tvOS) cancelling (Android
+  TV: Leanback's guided step). Not a tvOS alert: tvOS focuses an alert's first button, never its cancel one, so a second
+  press of the remote took the choice (measured in the tvOS simulator pass 2026-11-26). Where the TV has no hardware factor for a PIN but keeps the login
   level, the offer says it cannot protect the account with a PIN (`tv_pin_unavailable`) and offers the no-PIN choice
   and the skip.
 - **The picker** lists accounts kept without a PIN beside those behind one, unmarked (neither platform's guidance asks

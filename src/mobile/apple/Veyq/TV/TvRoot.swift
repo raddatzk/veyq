@@ -245,13 +245,44 @@ private struct TvOffer: View {
 
 extension View {
     /// The confirmation before a TV keeps an account without a PIN (owner 2026-11-26): the question, the warning — anyone
-    /// with the remote opens the account here, from any other profile too —, the choice, and Cancel as the default.
+    /// with the remote opens the account here, from any other profile too —, Cancel first and focused, then the choice.
+    /// A page of its own, never `.alert`: tvOS focuses an alert's first button, which is never the cancel one, so a second
+    /// press of the remote took the choice (tvOS pass 2026-11-26). Menu cancels.
     func tvNoPinAlert(isPresented: Binding<Bool>, onConfirm: @escaping () -> Void) -> some View {
-        alert(say(.tvStayNoPinTitle), isPresented: isPresented) {
-            Button(say(.tvStayNoPin)) { onConfirm() }
-            Button(say(.signinCancel), role: .cancel) {}
-        } message: {
-            Text(say(.tvStayNoPinWarning))
+        fullScreenCover(isPresented: isPresented) {
+            TvNoPinConfirm(
+                onCancel: { isPresented.wrappedValue = false },
+                onConfirm: { isPresented.wrappedValue = false; onConfirm() },
+            )
+        }
+    }
+}
+
+private struct TvNoPinConfirm: View {
+    let onCancel: () -> Void
+    let onConfirm: () -> Void
+    private enum Choice { case cancel, confirm }
+    @FocusState private var focused: Choice?
+
+    var body: some View {
+        ZStack {
+            Role.bg.ignoresSafeArea()
+            page
+        }
+        .tint(Role.accent)
+        .defaultFocus($focused, .cancel)
+        .onAppear { focused = .cancel }
+        .onExitCommand { onCancel() }
+    }
+
+    private var page: some View {
+        TvPage {
+            Text(say(.tvStayNoPinTitle)).font(.title2)
+            Text(say(.tvStayNoPinWarning)).multilineTextAlignment(.center).foregroundStyle(.secondary)
+            HStack(spacing: 30) {
+                Button(say(.signinCancel)) { onCancel() }.focused($focused, equals: .cancel)
+                Button(say(.tvStayNoPin)) { onConfirm() }.focused($focused, equals: .confirm)
+            }
         }
     }
 }
