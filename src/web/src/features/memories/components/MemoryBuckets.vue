@@ -28,6 +28,7 @@ import { guestDisplayName } from '../../../core/sharing/guestIdentity'
 import { refusalsByReason, sealedMediaName } from '../mediaRefusal'
 import { useToast } from '../../../shared/state/useToast'
 import { useUndo } from '../../../shared/state/useUndo'
+import { account } from '../../../app/account'
 
 const props = defineProps<{
   scopeId: string
@@ -118,6 +119,9 @@ function labelFor(b: BucketItem, key: Uint8Array | null, members: Map<string, st
 
 // The buckets a medium named while the list lacked them, each re-read for once (`liveCounts`' watch below).
 const listRequestedFor = new Set<string>()
+// The buckets that held a live medium while this tab was open. Only such a bucket's 0 means its media were deleted here
+// or elsewhere; a 0 before the gallery's pages have arrived means nothing yet.
+const heldMedia = new Set<string>()
 
 /** Read the bucket list. `quiet`: a re-read in the background keeps the grid on screen instead of the spinner. */
 async function loadBuckets(quiet = false) {
@@ -146,7 +150,7 @@ async function loadBuckets(quiet = false) {
   }
 }
 
-watch(() => [props.nodeId, props.memoryKey] as const, () => { selected.value = new Set(); listRequestedFor.clear(); void loadBuckets() }, { immediate: true })
+watch(() => [props.nodeId, props.memoryKey] as const, () => { selected.value = new Set(); listRequestedFor.clear(); heldMedia.clear(); void loadBuckets() }, { immediate: true })
 
 // --- the virtual own-primary + the flattened hierarchy ----------------------
 
@@ -175,8 +179,20 @@ watch(liveCounts, (counts) => {
   void loadBuckets(true)
 })
 
+watch(liveCounts, (counts) => { for (const [id, n] of counts) if (n > 0) heldMedia.add(id) }, { immediate: true })
+
+/** Another uploader whose every medium was deleted is no contributor any more and leaves the picker, as the server leaves
+ *  them out of the list (`MediaStore.listBuckets`): a primary not your own, emptied while on screen, with no sub-bucket a
+ *  member curates under it. A restore brings the medium back and the uploader with it. */
+function leftTheList(b: BucketVM, parents: ReadonlySet<string | null>): boolean {
+  const own = account.userId ? `user:${account.userId}` : null
+  return b.isPrimary && b.mediaCount === 0 && b.ownerKey !== own && !parents.has(b.id) && heldMedia.has(b.id)
+}
+
 const bucketsWithSelf = computed<BucketVM[]>(() => {
-  const list = rawBuckets.value.map((b) => ({ ...b, mediaCount: liveCounts.value.get(b.id) ?? 0 }))
+  const counted = rawBuckets.value.map((b) => ({ ...b, mediaCount: liveCounts.value.get(b.id) ?? 0 }))
+  const parents = new Set(counted.map((b) => b.parentBucketId))
+  const list = counted.filter((b) => !leftTheList(b, parents))
   if (list.some((b) => b.isPrimary && b.ownerKey.startsWith('user:'))) return list
   // no materialized own primary yet → synthesize a virtual one so you can create sub-buckets / upload
   return [
