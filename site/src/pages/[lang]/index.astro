@@ -1,8 +1,11 @@
 ---
 // The project website in every language but the default, one page per entry of `languages`. Its content:
 // components/website/.
+// In a version build (ADR 0087 decision 6) there is no website: the page leads on into that version's docs.
 import Home from '../../components/website/Home.astro';
+import ToDocs from '../../components/website/ToDocs.astro';
 import { defaultLang, languages, type Lang } from '../../components/website/strings';
+import { VEYQ_SITE_VERSION } from 'astro:env/server';
 
 export function getStaticPaths() {
   return languages.filter((l) => l.code !== defaultLang).map((l) => ({ params: { lang: l.code } }));
@@ -11,4 +14,4 @@ export function getStaticPaths() {
 const lang = Astro.params.lang as Lang;
 ---
 
-<Home lang={lang} />
+{VEYQ_SITE_VERSION ? <ToDocs lang={lang} /> : <Home lang={lang} />}

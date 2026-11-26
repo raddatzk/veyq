@@ -52,10 +52,12 @@ installs is a second pin, and two Dockerfiles plus every workflow job naming it 
 **Its limits — what a green run does NOT prove.**
   - **Spellings it does not parse.** An install reached through `npx`, `pnpm dlx`, `yarn`, a shell variable or alias, a
     nested `sh -c '…'` string, a heredoc `RUN`, or a third-party `uses:` action that installs on its own is
-    invisible; so is one in a script a step calls. Two tracked scripts run pnpm's install: the gate, and
+    invisible; so is one in a script a step calls. Three tracked scripts run pnpm's install: the gate;
     `run_web_e2e.py --upgrade`, which installs a PREDECESSOR's lockfile in a worktree of that older commit - one the
     gate passed when it was the candidate, deliberately not gated again (a package deprecated since would turn the
-    upgrade proof red for a reason that is not the upgrade; its `prepare_predecessor` says so).
+    upgrade proof red for a reason that is not the upgrade; its `prepare_predecessor` says so); and
+    `site_versions.py sync`, which installs an older major's release tag's `site/` lockfile to build that version of
+    the docs, ungated for the same reason (ADR 0087 decision 6).
   - **Published, not built.** Premise (b)'s second form lets an image build install the lockfile before the gate's
     verdict, and a dispatch's build pushes its per-arch staging tags (`build-<sha>-<arch>`) in that window; what it
     holds is that no job that turns them into a release name runs without the gate. A registry write in the build

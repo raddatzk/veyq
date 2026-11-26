@@ -5,25 +5,40 @@ name: Site
 # link check has not seen, and site/'s lockfile is installed exactly once per run. That one install is therefore
 # the one that asks the registry (scripts/validate_pnpm_installs_gated.py § 3, per lockfile).
 #
-# Prerequisite, once, in the repository settings: Pages → Build and deployment → Source "GitHub Actions". There is
-# no remote yet, so the first deploy is unproven until the first push.
+# Versions (ADR 0087 decision 6): the root is `main`'s docs; every older major's docs are served beside it under
+# `/v<major>/`, built from that major's newest release tag. `versions` builds each one ONCE per tag and keeps it on the
+# branch `site-versions` (scripts/site_versions.py); `assemble` puts those builds beside the root build `check` made,
+# and `deploy` publishes the whole. While only one major has a release, there is nothing to build and the site is the
+# root build alone. A version that fails to build keeps the build it had: `versions` is red, the deploy still runs.
+#
+# Prerequisite, once, in the repository settings: Pages → Build and deployment → Source "GitHub Actions".
 on:
   push:
     branches:
       - main
     paths:
       - "site/**"
+      - "VERSION"
       - "contracts/platform/capabilities.json"
       - "scripts/pnpm_install_no_deprecated.py"
+      - "scripts/site_versions.py"
+      - "scripts/site_version_check.py"
       - ".github/workflows/site.yml"
   pull_request:
     branches:
       - main
     paths:
       - "site/**"
+      - "VERSION"
       - "contracts/platform/capabilities.json"
       - "scripts/pnpm_install_no_deprecated.py"
+      - "scripts/site_versions.py"
+      - "scripts/site_version_check.py"
       - ".github/workflows/site.yml"
+  # A fix release on `release/<old>.x` moves that major's newest tag, and release.yml publishes it with the
+  # GITHUB_TOKEN, which starts no workflow: the weekly run (the day after Publish's) is what picks the new tag up.
+  schedule:
+    - cron: "17 4 * * 2"
   workflow_dispatch:
 
 permissions:
@@ -33,10 +48,13 @@ jobs:
   check:
     name: Site checks
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
+      # Every tag's name, for the older versions the root build's header names (scripts/site_versions.py older).
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-tags: true
 
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -55,21 +73,135 @@ jobs:
       - name: Install dependencies
         run: python3 scripts/pnpm_install_no_deprecated.py --package-dir site
 
-      # astro check + astro build; the build fails on a broken internal link (starlight-links-validator).
+      - name: Test the version scripts
+        run: |
+          python3 scripts/site_versions.py --selftest
+          python3 scripts/site_version_check.py --selftest
+
+      # astro check + astro build; the build fails on a broken internal link (starlight-links-validator). The root
+      # build names the older versions the deploy serves beside it.
       - name: Run site checks
         working-directory: site
-        run: pnpm run check
+        run: |
+          VEYQ_SITE_OLDER="$(python3 ../scripts/site_versions.py older)"
+          export VEYQ_SITE_OLDER
+          echo "older versions: ${VEYQ_SITE_OLDER:-none}"
+          pnpm run check
 
-      - name: Keep the built site for Pages
+      # This commit built as the version it becomes once a newer major exists: every link inside `/v<major>/`, every
+      # page marked as that version. Proved on every commit, so the release a version is later built from carries a
+      # site that builds as one — not found out at the train.
+      - name: Build this commit as a version
+        working-directory: site
+        run: |
+          major="$(cat ../VERSION)"
+          VEYQ_SITE_VERSION="$major" pnpm exec astro build --outDir dist-version
+          python3 ../scripts/site_version_check.py dist-version --base "/v${major}/"
+
+      - name: Keep the root build for the deploy
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site-root
+          path: site/dist
+          retention-days: 1
+          if-no-files-found: error
+
+  versions:
+    name: Build the older versions
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The one job that writes: the branch `site-versions`, and nothing else.
+    permissions:
+      contents: write
+    concurrency:
+      group: site-versions
+      cancel-in-progress: false
+    steps:
+      # The whole history and every tag: a version is built in a worktree of its release tag.
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+
+      - name: Install pnpm
+        if: runner.environment == 'github-hosted'
+        run: npm install -g pnpm@12.23.0
+
+      - name: Check out the kept versions
+        run: |
+          if git ls-remote --exit-code --heads origin site-versions >/dev/null; then
+            git fetch --depth=1 origin site-versions
+            git worktree add -B site-versions site-versions-cache FETCH_HEAD
+          else
+            git worktree add --orphan -b site-versions site-versions-cache
+          fi
+
+      # Builds only what the branch lacks (a major's newest tag it has not built yet); a failed build keeps the old one.
+      - name: Build what is missing
+        id: sync
+        run: python3 scripts/site_versions.py sync --cache site-versions-cache
+
+      - name: Keep the new builds
+        if: always() && steps.sync.conclusion != 'skipped'
+        run: |
+          cache=site-versions-cache
+          git -C "$cache" add --all
+          if git -C "$cache" diff --cached --quiet; then
+            echo "site-versions: nothing new"
+            exit 0
+          fi
+          git -C "$cache" -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "site-versions: $(tr -d '\n ' < "$cache/versions.json")"
+          git -C "$cache" push origin HEAD:refs/heads/site-versions
+
+  assemble:
+    name: Put the versions beside the root build
+    needs: [check, versions]
+    # Runs when `versions` was red too: the versions then are the ones the branch already held.
+    if: always() && needs.check.result == 'success' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-tags: true
+
+      - name: Fetch the root build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: site-root
+          path: site/dist
+
+      - name: Check out the kept versions
+        run: |
+          if git ls-remote --exit-code --heads origin site-versions >/dev/null; then
+            git fetch --depth=1 origin site-versions
+            git worktree add --detach site-versions-cache FETCH_HEAD
+          else
+            mkdir site-versions-cache
+          fi
+
+      - name: Assemble
+        run: python3 scripts/site_versions.py assemble --cache site-versions-cache --dist site/dist
+
+      - name: Keep the site for Pages
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site/dist
 
   deploy:
     name: Deploy to GitHub Pages
-    needs: check
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: assemble
+    if: always() && needs.assemble.result == 'success'
     runs-on: ubuntu-latest
     # Most of a deploy is GitHub Pages' own `syncing_files`, which this job only polls: 0.1-0.2 min until 2026-11-08,
     # then 1.8 and 3.1 min, and on 2026-11-10 4.9 min — Pages reported success two seconds before a 5-minute budget
