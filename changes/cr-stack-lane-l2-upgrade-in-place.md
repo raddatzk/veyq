@@ -161,4 +161,59 @@ inbox #453 is deleted. Coverage rows for `uc.admin.install-and-upgrade-instance`
 
 ## Retrospective
 
-(filled by the implementer)
+### Decision log (implementer, 2026-11-27)
+
+- **The run's override file is the overlay without its release-check test double** (`run_stack_upgrade.override`, derived
+  from the overlay, never written twice): the double stamps the app with `VEYQ_E2E_RELEASE_STAMP`, a fixed release, which
+  an upgrade changes; without it each image reports its own stamp. Everything else of the overlay is kept.
+- **The app's truststore is written by the candidate image's `keytool`** (`--app`), not the starting release's: that image
+  is pulled only by `veyqctl` after it verified it, and the pebble stage runs before the install.
+- **Operator values are given only where the starting template assigns them** (`OPERATOR_VALUES`): v0.2480's
+  `env.example` requires `VEYQ_ACME_EMAIL`, today's does not (measured: both releases' `env.example`).
+- **A leg with no starting release still records**: the candidate's asset set and `predecessor: null`, so `predicates
+  --lane L2` expects every matrix leg (the guard holds `--shard` to the matrix) and a promotion can tell "had none" from
+  "lost". A promotion compares the per-leg TAGS it resolves now (`run_stack_upgrade.py --leg X --resolve` in a worktree of
+  the snapshot's commit); the digests are recorded, not compared — a tag names an immutable release.
+- **The suite trees are mounted read-write** at `/suite` in the browser service (vite writes `node_modules/.vite-temp`,
+  vitest `node_modules/.vitest-cache`; measured: both refuse a read-only mount), as a host vitest run writes them.
+- **On a host that is not Linux, pnpm installs add the container's native packages** (`--os/--cpu/--libc current` plus
+  `linux`/`<docker arch>`/`glibc`): the start tree through `prepare_predecessor(install_args=…)`, the candidate's root
+  through the `candidate tree` stage. A CI runner needs neither.
+- **`validate_release_identity.py` changed** (assertions 10, 11's installer count, 13, and the cosign equality now also
+  over checks.yml): it assumed one lane, one `predicates` call and one cosign installer.
+
+### Handed back
+
+- **Which criterion the browser spec carries.** No criterion of `uc.admin.install-and-upgrade-instance` says "content
+  survives an upgrade in place"; the spec is tagged `@uc.admin.back-up-and-restore-instance:a-predecessors-backup-upgrades-with-its-content-intact`,
+  the criterion ADR 0091 decision 7 has L2 and L3 take over, whose text still says "restored onto the candidate" (L3's
+  shape, not L2's). Recommendation: add a criterion `an-upgrade-in-place-keeps-every-item` to install-and-upgrade-instance
+  in refinement and move the tag; until then the tag is the closest true one and its `gaps.stack` says why it is there.
+
+### Technical observations
+
+- Phase 1 was green on its first run against both releases: the refine's static substrate (seeder byte-identical,
+  `--unsigned-local` and `rollback` in every released `veyqctl`, no e2e-only bean) held. Its one open question (Node
+  name resolution and TLS inside a container on the stack's networks) needed nothing: Docker's DNS answers the overlay's
+  `veyq.test` alias and `admin`, `NODE_EXTRA_CA_CERTS` trusts Pebble's root.
+- v0.2480's `veyqctl` has no `-v`; it prints its `cosign verify-blob`/`verify` lines itself, so both legs' install.log
+  show the release identity. Both legs 197 s locally (arm64, load 15–54), well inside 15 min.
+- The asset-set hash does not depend on the local image names (`veyq:e2e-l2` and `veyq:candidate-arm64` hash alike), so a
+  skipped leg's record matches the others'.
+- The Flyway bite went red after 10.8 s, not at the 300 s wait: the app exits, `up --wait` fails at once. The cause line
+  reuses `flyway_cause`, whose words say "restored schema" (the jar proof's); the summary's "migrations changed" line
+  compares against the checkout's pin file, so a bite image built from another tree shows "none" there.
+- A red upgrade leaves the instance as `veyqctl` leaves it; the lane does not then run the rollback `veyqctl` names. That
+  would prove the recovery on the failing path too — a candidate for L2's next step, not decided here.
+- `scripts/run_pipeline.py` has no self-test (the CR named one); `--dry-run` and `validate_pipeline_shape.py` stood in.
+
+### Process observations
+
+- The CR's phase-3 done-whens (a PR run, a push run, a dispatched Publish's `cosign verify-attestation`) cannot be met by an
+  implementer barred from pushing; the brief said so up front, which saved a hand-back. Writing such done-whens as
+  "locally: …; observed in CI after the owner's push: …" in the CR would say it once, where it binds.
+- Phase boundaries leaked twice: the record hand-over flags landed in phase 2's commit (one file, both phases), and the
+  `shards.test.mjs` re-anchoring (phase 3's) with the spec it guards (phase 2). Neither is wrong to ship together.
+- My misses: a loop variable (`verdict`) shadowed the summary function and cost a 4-minute run; the `cp`-is-interactive
+  trap of the memory notes bit a bite restore once (caught by re-running the test); the first release download went to
+  `/private/tmp/claude-501/l2` instead of the scratchpad (deleted).

@@ -84,7 +84,8 @@ sees the earlier one's tag.
    the chart as `<major>.<minor>-SNAPSHOT` (its `appVersion` is the image tag its values default to), signs the three
    images and the chart keylessly, and attaches each lane's result as a signed in-toto attestation per architecture
    (`https://veyq.app/attestations/stack-lane/v1`: lane, architecture, outcome, shards, the Checks run, the digests, and the inputs —
-   the asset set; a predecessor and backups once lanes L2 and L3 exist) to the app and admin images. No GitHub Release.
+   the asset set; for lane L2 the release each leg upgraded from, with its two digests; the backups once lane L3
+   exists) to the app and admin images. No GitHub Release.
 4. `snapshot-tag`, a job that holds `contents: write` and nothing else, sets the git tag `snapshot-<major>.<minor>` on
    the commit, so GitHub's release page offers the snapshots that can be promoted. Never `v…`. It creates the tag
    through the REST API (`git/refs`), as `release.yml` creates `v<major>.<minor>`, never by `git push`: GitHub refuses a
@@ -326,16 +327,18 @@ check is logged and retried with a back-off, and blocks nothing.
 ## Decided, not built
 
 - **The rerun of moved lanes, and retention** ([ADR 0091](../decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
-  decision 5). A promotion compares each lane's recorded inputs with the current ones; while L1 is the only lane none
-  can move, and an input it cannot compare (a predecessor, a backup list) is refused rather than rerun — the rerun comes
-  with lanes L2 and L3. Retention — the 20 newest unpromoted snapshots per major and every promoted one, a scheduled
+  decision 5). A promotion compares each lane's recorded inputs with the current ones: L1's cannot move; L2's
+  predecessor per leg is resolved again from the snapshot's commit and every tag, and one that moved — a release
+  published since — is refused, naming both, rather than rerun; an input it cannot compare (L3's backup list) is
+  refused too. Retention — the 20 newest unpromoted snapshots per major and every promoted one, a scheduled
   job deleting the rest with their `snapshot-` tags — is not built: until it is, every snapshot stays in GHCR.
-- **Lanes L2 and L3 and the backup archive** (ADR 0091 decisions 3 and 6, amended 2026-11-26): the newest release and
-  the major entry upgraded in place by their own `veyqctl upgrade`, then rolled back; one archived backup per schema
-  state of the major, with its object pool, restored into the candidate. Each starting release is written by its own
-  API seeder and read by the candidate's reader. The archive is written per release by a workflow of its own after the
-  promotion; none of the releases before it has one yet.
-  When they gate, the jar-level upgrade proof retires (decision 7; replaces ADR 0057 § 7).
+- **Lane L3 and the backup archive** (ADR 0091 decisions 3 and 6, amended 2026-11-26): one archived backup per schema
+  state of the major, with its object pool, restored into the candidate, each written by its starting release's own API
+  seeder and read by the candidate's reader. The archive is written per release by a workflow of its own after the
+  promotion; none of the releases before it has one yet. Lane L2 — the newest release and the major entry installed
+  from their signed releases, upgraded in place by their own `veyqctl upgrade` and rolled back — is built
+  (`scripts/run_stack_upgrade.py`, checks.yml's `stack-upgrade`). When L2 and L3 both gate, the jar-level upgrade proof
+  retires (decision 7; replaces ADR 0057 § 7).
 - **The window of majors a client speaks** ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md)
   decision 5). The yearly train, its release order and the previous major's release branch (decisions 2, 3 and 10)
   are a procedure, written in [`infra/README.md`](../../infra/README.md) § Cutting a release, and no train has left.

@@ -1,7 +1,7 @@
 # ADR 0096 — `veyqctl` manages an instance from immutable releases
 
 - Status: Accepted
-- Built: yes (not built: decision 9's lane proof that an older `veyqctl` of a major upgrades to its newest release)
+- Built: yes
 - Date: 2026-10-16
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 - Replaced in part: decision 8 by ADR 0126
@@ -119,10 +119,11 @@ decision 2), so it holds the rule an app holds:
   decision 3). A local, unsigned candidate passes the signature check only by an explicit flag, refused unless both
   images are local references, so the way past the signatures cannot be pointed at a registry.
 - **Each Run page keeps what the tool runs**, so an operator can do any step by hand.
-- **Decision 9's minor promise has no lane yet.** The self-test holds the gate, the guard holds `MAJOR` to
-  `VERSION` and the stamp to its one line, but that an older `veyqctl` of a major still upgrades to the major's newest
-  release is proved only by an upgrade lane run by the previous release's `veyqctl`. It belongs with the heavy lanes at
-  the end of V1.
+- **Decision 9's minor promise is proved by lane L2.** The self-test holds the gate, the guard holds `MAJOR` to
+  `VERSION` and the stamp to its one line; that an older `veyqctl` of a major still upgrades to the candidate — and rolls
+  it back — is what lane L2 runs on every commit, with the newest release's own `veyqctl` (and the major entry's across
+  the major), [ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md) decision 6. Its limit:
+  only those two releases' `veyqctl` are run; an older one of the major is not.
 - **The backup archive must hold the major entry**, since decision 5 enters a new major from it alone; which backups
   lane L3 restores is ADR 0091 decision 6's.
 - **Rejected — keep the recipe in the image and add `garage.toml`.** Closes the gap, keeps an unusual shape, and still

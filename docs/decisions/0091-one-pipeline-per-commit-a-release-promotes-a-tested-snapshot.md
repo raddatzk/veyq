@@ -1,8 +1,11 @@
 # ADR 0091 — One pipeline per commit, every stage on a budget; a release promotes a tested snapshot
 
 - Status: Accepted
-- Built: partly (not built: decision 3's lanes L2 and L3, decision 5's rerun of moved lanes — a promotion refuses an
-  input it cannot compare instead — and the snapshot retention job, decision 6, decision 7; decision 5's snapshot —
+- Built: partly (not built: decision 3's lane L3, decision 5's rerun of moved lanes — a promotion refuses an input it
+  cannot compare, and lane L2's predecessor when it moved, instead — and the snapshot retention job, decision 6's
+  archive and L3, decision 7; lane L2 is built as decision 6's amendment of 2026-11-26 decides it —
+  `scripts/run_stack_upgrade.py`, checks.yml's `stack-upgrade`, attested per leg with the release it upgraded from and
+  required by the promotion (cr-stack-lane-l2-upgrade-in-place); decision 5's snapshot —
   weekly and by dispatch since its amendment of 2026-11-07, per green push before — its attestations, its `snapshot-`
   tag, the staging retention (first run 2026-11-23) and the promotion `release.yml` are built, and since its amendment of 2026-11-22 the release draft Publish writes — v1.312
   and v1.318 were released from such drafts)

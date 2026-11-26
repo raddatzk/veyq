@@ -292,7 +292,12 @@ instance, from the object pool (`--objects-from`, [Restore](/run/backup-and-rest
 Under Helm: the previous chart and images by their digests, the database emptied, then the restore Job with the check
 only ([Restore under Helm](/run/backup-and-restore/#restore-under-helm)).
 
-**How far this is proven:** `veyqctl rollback` ran once, live (2026-10-17): an instance upgraded from one local release
-to the next was rolled back in place, its config-secret state read `OK`, its store check passed, and every object the
-rows require was in the store as indexed; no browser opened its Memory afterwards. `src/tools/veyqctl_selftest.py` holds
-its order and its refusals.
+**How far this is proven:** lane L2 (`scripts/run_stack_upgrade.py`, [How veyq is tested](/security/how-veyq-is-tested/))
+is built to run on every change to veyq, and ran green from v1.318 and from v0.2480 on a developer machine
+(2026-11-27); its first run on GitHub is still to come. It does what this page says with the operator's own tool: it installs the newest
+release — and, in a second leg, the last release of the previous major — from its published files with that release's
+own `veyqctl`, every signature checked, writes content into it with that release's own test code, runs that `veyqctl`'s
+`upgrade` to the version under test, reads every item back (the config-secret key first, then each Memory, photo and
+file byte for byte, and in a browser the owner signs in on a new device), then runs that `veyqctl`'s `rollback` to the
+backup the upgrade took and reads everything again with the older release's own reader. `src/tools/veyqctl_selftest.py`
+holds the order and the refusals.
