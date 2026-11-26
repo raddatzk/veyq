@@ -80,21 +80,26 @@ manifests, the image signatures, the predicates and the tag each name it.
      false`, the disabled upgrade proof) or on one event alone (`if: github.event_name == '<event>'`, the two image
      builds), whose `skipped` it may accept alongside `success`; and `snapshot` is gated on `checks-run`'s verdict,
      which publishes only a Checks run whose gate concluded `success` (scripts/snapshot.py, selftested).
- 10. **The snapshot waits on lane L1** (ADR 0090 decision 2). Assertion 9 holds the snapshot to the jobs the file
-     has, and cannot see one that is gone; so the job that runs `scripts/run_stack_e2e.py` — found by what it runs,
-     never by its name — must exist, need `build`, run on every architecture the build matrix publishes, and be in
-     the gate's `needs:` with `needs.<lane>.result == 'success'` among its `&&` terms.
- 13. **Each lane's result is attested by the snapshot, never by the lane** (ADR 0091 decision 5). The lane's job
-     records each green leg (`scripts/snapshot.py lane-result`, gated like every write) and holds no `id-token`; the
-     `snapshot` job assembles the predicates once (`scripts/snapshot.py predicates`) with `--arch` and `--shard` equal
-     to the lane matrix's `arch` and `domain`, read from the file, and runs `cosign attest --type "$PREDICATE_TYPE"`
-     with that variable set to `scripts/snapshot.py`'s `PREDICATE_TYPE`, after the predicates and after every image
-     signature.
+ 10. **The snapshot waits on lanes L1 and L2** (ADR 0090 decision 2, ADR 0091 decision 3). Assertion 9 holds the
+     snapshot to the jobs the file has, and cannot see one that is gone; so the job of each lane — found by the
+     orchestrator it runs (`LANE_ORCHESTRATORS`: `scripts/run_stack_e2e.py`, `scripts/run_stack_upgrade.py`), never by
+     its name — must exist, need `build`, run on every architecture the build matrix publishes, and be in the gate's
+     `needs:` with `needs.<lane>.result == 'success'` among its `&&` terms; and lane L2's job is named as
+     `scripts/snapshot.py` reads it (`UPGRADE_JOB_NAME`), as L1's is.
+ 13. **Each lane's result is attested by the snapshot, never by the lane** (ADR 0091 decision 5). Each lane's job
+     records each green leg (`scripts/snapshot.py lane-result --lane <its lane>`, gated like every write; lane L2's with
+     `--predecessor`, no other lane's) and holds no `id-token`; the `snapshot` job assembles each lane's predicates once
+     (`scripts/snapshot.py predicates --lane <lane>`) with `--arch` and `--shard` equal to that lane's matrix `arch`
+     and its leg key (L1's `domain`, L2's `leg`), read from the file, and runs `cosign attest --type
+     "$PREDICATE_TYPE"` with that variable set to `scripts/snapshot.py`'s `PREDICATE_TYPE`, after the predicates and
+     after every image signature.
  11. **(Retired here.)** A release's one immutable GitHub Release, created last (ADR 0096 decision 3), left this
      pipeline with the release kind: a release is a promotion of a snapshot in a workflow of its own, and assertion
      14 holds it there. What stays of it here: **the
      cosign that signs is the line operators verify with** (inbox #474): exactly one `sigstore/cosign-installer` step
-     in the file, in the `snapshot` job before every step that runs `cosign`, with `cosign-release` an exact
+     in the file outside the stack lanes' jobs, in the `snapshot` job before every step that runs `cosign` (lane L2's
+     installer is a cosign that verifies, through the starting release's `veyqctl`, held to the same version as
+     release.yml's), with `cosign-release` an exact
      `v<major>.<minor>.<patch>` no older than `src/tools/veyqctl.py`'s `COSIGN_MIN_VERSION` — never the installer's
      default, which lags — and no `cosign` line anywhere passes the deprecated flag that chose the bundle format
      (cosign 3 writes the Sigstore bundle by default, and only its `=false` spelling still writes the legacy one).
@@ -452,8 +457,9 @@ DRAFT_IF = ("!cancelled() && github.ref_name == 'main' && needs.checks-run.outpu
 REFUSE_STEP, TAG_STEP = "assert-snapshot-unpublished", "snapshot-tag"
 STAGED_STEP = "assert-staged"  # publish.yml's check that the bytes are the Checks run's (scripts/snapshot.py staged)
 BUILD_JOB, LOCAL_BUILD_JOB = "build", "build-local"
-# Lane L1's orchestrator: assertion 10 finds the lane's job by running it, never by the job's name.
-LANE_ORCHESTRATOR = "scripts/run_stack_e2e.py"
+# The stack lanes' orchestrators: assertion 10 finds each lane's job by what it runs, never by the job's name, and
+# assertion 13 reads its legs from the matrix key named here (lane L1's domains, lane L2's starting releases).
+LANE_ORCHESTRATORS = {"L1": ("scripts/run_stack_e2e.py", "domain"), "L2": ("scripts/run_stack_upgrade.py", "leg")}
 # The snapshot's decisions (assertion 13): a lane leg's record, the predicates, the write-once refusal.
 SNAPSHOT_SCRIPT = "scripts/snapshot.py"
 CHART_DIR = repo_layout.CHART_DIR
@@ -1504,6 +1510,11 @@ if workflow_doc:
             != snapshot_script.LANE_JOB_NAME:
         fail(f"{rel_of(CHECKS)}'s lane job is named `{stack_name}`, scripts/snapshot.py reads "
              f"`{snapshot_script.LANE_JOB_NAME}` — the publish would find no lane leg in a green run")
+    upgrade_name = str(((checks_doc.get("jobs") or {}).get(snapshot_script.UPGRADE_JOB) or {}).get("name") or "")
+    if upgrade_name.replace("${{ matrix.arch }}", "{arch}").replace("${{ matrix.leg }}", "{leg}") \
+            != snapshot_script.UPGRADE_JOB_NAME:
+        fail(f"{rel_of(CHECKS)}'s lane L2 job `{snapshot_script.UPGRADE_JOB}` is named `{upgrade_name}`, "
+             f"scripts/snapshot.py reads `{snapshot_script.UPGRADE_JOB_NAME}` — the publish would find no L2 leg")
     build_images = [str(i) for i in (((build.get("strategy") or {}).get("matrix") or {}).get("image") or [])]
     if tuple(build_images) != snapshot_script.BUILD_IMAGES:
         fail(f"{rel_of(CHECKS)} stages {build_images}, scripts/snapshot.py expects {list(snapshot_script.BUILD_IMAGES)}")
@@ -1513,33 +1524,38 @@ if workflow_doc:
     # stage that installs the candidate as a Server Owner does (ADR 0090 decision 2), so its job is found by what it
     # runs — the orchestrator — never by its name, and must exist, follow the build, cover every architecture the
     # build publishes, and be waited on with `success`.
-    lane_jobs = sorted(
-        str(name) for name, job in jobs.items()
-        if isinstance(job, dict) and any(LANE_ORCHESTRATOR in str(s.get("run") or "") for s in job_steps(workflow_doc, name))
-    )
-    if not lane_jobs:
-        fail(
-            f"no job of {WORKFLOW.relative_to(ROOT)} runs `{LANE_ORCHESTRATOR}` — lane L1 is gone, and the `{PUBLISH_JOB}` "
-            f"job would publish images no stack ever booted from their own release (ADR 0090 decision 2)"
+    lane_jobs: dict[str, str] = {}  # job -> lane
+    for lane_id, (orchestrator, _) in LANE_ORCHESTRATORS.items():
+        found_jobs = sorted(
+            str(name) for name, job in jobs.items()
+            if isinstance(job, dict) and any(orchestrator in str(s.get("run") or "") for s in job_steps(workflow_doc, name))
         )
+        if not found_jobs:
+            fail(
+                f"no job of {WORKFLOW.relative_to(ROOT)} runs `{orchestrator}` — lane {lane_id} is gone, and the "
+                f"`{PUBLISH_JOB}` job would publish images no stack ever booted from a release (ADR 0090 decision 2, "
+                f"ADR 0091 decision 3)"
+            )
+        lane_jobs.update({name: lane_id for name in found_jobs})
     build_archs = {str(a) for a in (((jobs.get(BUILD_JOB) or {}).get("strategy") or {}).get("matrix") or {}).get("arch") or []}
-    for lane in lane_jobs:
+    for lane, lane_id in sorted(lane_jobs.items()):
         lane_job = jobs[lane]
         raw = lane_job.get("needs") or []
         lane_needs = [raw] if isinstance(raw, str) else [str(n) for n in raw]
         if BUILD_JOB not in lane_needs:
-            fail(f"lane L1's job `{lane}` does not need `{BUILD_JOB}` — on a publishing run it installs the images that "
-                 f"job pushed, so it must run after it (ADR 0090 decision 2)")
+            fail(f"lane {lane_id}'s job `{lane}` does not need `{BUILD_JOB}` — on a publishing run it installs the images "
+                 f"that job pushed, so it must run after it (ADR 0090 decision 2)")
         if lane not in publish_needs or f"needs.{lane}.result == 'success'" not in {
                 " ".join(t.split()) for t in publish_if.split("&&")}:
-            fail(f"the `{GATE_JOB}` job does not wait on lane L1 (`{lane}`) with `needs.{lane}.result == 'success'` "
-                 f"— the snapshot would be published on bytes the lane never installed (ADR 0090 decision 2)")
+            fail(f"the `{GATE_JOB}` job does not wait on lane {lane_id} (`{lane}`) with `needs.{lane}.result == "
+                 f"'success'` — the snapshot would be published on bytes the lane never installed (ADR 0090 decision 2)")
         lane_archs = {str(a) for a in (((lane_job.get("strategy") or {}).get("matrix") or {}).get("arch") or [])}
         if not build_archs:
-            fail(f"the `{BUILD_JOB}` job's matrix names no `arch` — lane L1's architectures cannot be held to it")
+            fail(f"the `{BUILD_JOB}` job's matrix names no `arch` — lane {lane_id}'s architectures cannot be held to it")
         elif not build_archs <= lane_archs:
-            fail(f"lane L1's job `{lane}` runs on {sorted(lane_archs)}, the `{BUILD_JOB}` publishes {sorted(build_archs)} "
-                 f"— what is published for an architecture must have passed on it (ADR 0091 decision 4)")
+            fail(f"lane {lane_id}'s job `{lane}` runs on {sorted(lane_archs)}, the `{BUILD_JOB}` publishes "
+                 f"{sorted(build_archs)} — what is published for an architecture must have passed on it (ADR 0091 "
+                 f"decision 4)")
 
     # ---- 13. each lane's result is attested, per architecture, by the publish and never by the lane --------------
     # ADR 0091 decision 5: every snapshot is published with each lane's result as a signed attestation
@@ -1562,24 +1578,32 @@ if workflow_doc:
                         fail(f"job `{job_name}`: cannot parse `{line.strip()[:80]}`: {e}")
         return found
 
-    for lane in lane_jobs:
+    for lane, lane_id in sorted(lane_jobs.items()):
         matrix = ((jobs[lane].get("strategy") or {}).get("matrix") or {})
         lane_archs = sorted(str(a) for a in matrix.get("arch") or [])
-        lane_shards = sorted(str(d) for d in matrix.get("domain") or [])
+        lane_shards = sorted(str(d) for d in matrix.get(LANE_ORCHESTRATORS[lane_id][1]) or [])
         if "id-token" in (jobs[lane].get("permissions") or {}):
-            fail(f"lane L1's job `{lane}` holds `id-token` — a leg runs the commit's test code and signs nothing; the "
-                 f"`{PUBLISH_JOB}` job attests its result")
-        records = [(i, s) for i, s, argv in argv_lines(lane, f"{SNAPSHOT_SCRIPT} lane-result")]
+            fail(f"lane {lane_id}'s job `{lane}` holds `id-token` — a leg runs the commit's test code and signs nothing; "
+                 f"the `{PUBLISH_JOB}` job attests its result")
+        records = [(i, s, argv) for i, s, argv in argv_lines(lane, f"{SNAPSHOT_SCRIPT} lane-result")]
         if not records:
-            fail(f"lane L1's job `{lane}` records no result (`{SNAPSHOT_SCRIPT} lane-result`) — the snapshot would carry "
-                 f"no attestation of what the lane ran (ADR 0091 decision 5)")
-        for _, step in records:
+            fail(f"lane {lane_id}'s job `{lane}` records no result (`{SNAPSHOT_SCRIPT} lane-result`) — the snapshot would "
+                 f"carry no attestation of what the lane ran (ADR 0091 decision 5)")
+        for _, step, argv in records:
             if not gated_on(step.get("if"), STAGES):
-                fail(f"lane L1's job `{lane}` records its result when `{STAGES}` is not true — a pull request pulled "
-                     f"no digest to record")
-        assembled = argv_lines(PUBLISH_JOB, f"{SNAPSHOT_SCRIPT} predicates")
+                fail(f"lane {lane_id}'s job `{lane}` records its result when `{STAGES}` is not true — a pull request "
+                     f"pulled no digest to record")
+            if flag_values(argv, "--lane") != [lane_id]:
+                fail(f"lane {lane_id}'s job `{lane}` records its result as lane {flag_values(argv, '--lane')}")
+            if (lane_id in snapshot_script.PREDECESSOR_LANES) != bool(flag_values(argv, "--predecessor")):
+                fail(f"lane {lane_id}'s job `{lane}` records {'no' if lane_id in snapshot_script.PREDECESSOR_LANES else 'a'} "
+                     f"`--predecessor` — lane L2's record names the release it started from, and only L2's (ADR 0091 "
+                     f"decision 5)")
+        assembled = [(i, step, argv) for i, step, argv in argv_lines(PUBLISH_JOB, f"{SNAPSHOT_SCRIPT} predicates")
+                     if flag_values(argv, "--lane") == [lane_id]]
         if len(assembled) != 1:
-            fail(f"the `{PUBLISH_JOB}` job runs `{SNAPSHOT_SCRIPT} predicates` {len(assembled)} time(s), not once")
+            fail(f"the `{PUBLISH_JOB}` job runs `{SNAPSHOT_SCRIPT} predicates --lane {lane_id}` {len(assembled)} "
+                 f"time(s), not once")
             continue
         assembled_at, assembled_step, argv = assembled[0]
         if str((assembled_step.get("env") or {}).get("RUN_URL") or "").replace(" ", "") \
@@ -1611,9 +1635,11 @@ if workflow_doc:
 
     # The cosign that signs is the line operators verify with (inbox #474): one installer, before every `cosign`, at an
     # exact version no older than the floor `veyqctl` refuses below — the installer's default lags (v4.1.2: v3.0.6).
+    # A stack lane's own installer is the cosign that VERIFIES a published release (lane L2, through the starting
+    # release's veyqctl), not one that signs: held to this one's version below, with release.yml's.
     installers = [
         (job_name, index, step)
-        for job_name in sorted(jobs)
+        for job_name in sorted(jobs) if job_name not in lane_jobs
         for index, step in enumerate(job_steps(workflow_doc, job_name))
         if str(step.get("uses") or "").split("@", 1)[0] == COSIGN_INSTALLER
     ]
@@ -2347,8 +2373,7 @@ else:
 
     # The pins it shares with the pipeline's runs: one cosign (publish.yml's `snapshot`), one Helm (checks.yml's
     # `chart` and publish.yml's chart packaging carry it each, a caller's env not reaching a called workflow).
-    ci_installer = [s for job in (workflow_doc.get("jobs") or {}) for s in job_steps(workflow_doc, job)
-                    if str(s.get("uses") or "").startswith(COSIGN_INSTALLER)]
+    ci_installer = [s for s in job_steps(workflow_doc, PUBLISH_JOB) if str(s.get("uses") or "").startswith(COSIGN_INSTALLER)]
     ci_cosign = str(((ci_installer[0].get("with") or {}) if ci_installer else {}).get("cosign-release") or "")
     for job in rjobs:
         steps = rsteps(job)
@@ -2361,6 +2386,15 @@ else:
             if str((steps[i].get("with") or {}).get("cosign-release")) != ci_cosign:
                 fail(f"{RELEASE_WORKFLOW}: job `{job}` installs cosign {(steps[i].get('with') or {}).get('cosign-release')}, "
                      f"`{rel_of(WORKFLOW)}` signs with {ci_cosign} — one cosign signs veyq (inbox #474)")
+    # And the one lane L2 verifies the starting release with (checks.yml's `stack-upgrade`, through that release's
+    # veyqctl): the same cosign, so a bundle the publish wrote is read by the version that wrote it.
+    checks_full = yaml.safe_load(CHECKS.read_text()) or {}
+    for job in (checks_full.get("jobs") or {}):
+        for step in job_steps(checks_full, job):
+            if str(step.get("uses") or "").startswith(COSIGN_INSTALLER) \
+                    and str((step.get("with") or {}).get("cosign-release")) != ci_cosign:
+                fail(f"{rel_of(CHECKS)}: job `{job}` installs cosign {(step.get('with') or {}).get('cosign-release')}, "
+                     f"`{rel_of(WORKFLOW)}` signs with {ci_cosign} — one cosign signs and verifies veyq (inbox #474)")
     helm_pins = {}
     for path in (CHECKS, WORKFLOW, ROOT / RELEASE_WORKFLOW):
         env = (yaml.safe_load(path.read_text()) or {}).get("env") or {} if path.is_file() else {}

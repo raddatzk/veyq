@@ -28,10 +28,21 @@ COMMIT = "c" * 40
 SET = "sha256:" + "a" * 64
 ARCHS = ["amd64", "arm64"]
 SHARDS = ["account", "memories"]
+LEGS = ["major-entry", "newest"]
+# What lane L2's legs upgraded from, as attested, and as the promotion resolves them now (the World's `resolved`).
+STARTED = {"newest": {"tag": "v0.10", "images": {"veyq": "sha256:" + "5" * 64, "veyq-admin": "sha256:" + "6" * 64}},
+           "major-entry": None}
 
 
 def h(n: int) -> str:
     return "sha256:" + f"{n:064x}"
+
+
+def upgrade(started=None, **predicate) -> dict:
+    """The fields of a lane L2 predicate (its lane, legs and per-leg predecessors) over an L1 one's."""
+    return {"lane": "L2", "shards": LEGS,
+            "inputs": {"assetSet": SET, "predecessor": copy.deepcopy(STARTED if started is None else started),
+                       "backups": None}, **predicate}
 
 
 class World:
@@ -52,6 +63,8 @@ class World:
         self.tools = {"release": "0.12", "majorEntry": None}
         self.entry = None
         self.matrix = (ARCHS, SHARDS)
+        self.legs = (ARCHS, LEGS)
+        self.resolved = {"newest": "v0.10", "major-entry": None}
         n = 100
         for image in promote.IMAGES:
             per_arch = {}
@@ -72,6 +85,7 @@ class World:
                 lines = []
                 for arch in ARCHS:
                     lines.append(self.envelope(image, d, arch, promote.digest_of(per_arch[arch])))
+                    lines.append(self.envelope(image, d, arch, promote.digest_of(per_arch[arch]), **upgrade()))
                 self.atts[f"{REG}/{image}@{d}"] = "\n".join(lines)
 
     @staticmethod
@@ -116,7 +130,9 @@ class World:
     def attestations(self, ref, identity):
         return self.atts.get(ref, "")
 
-    def stack_matrix(self, commit): return self.matrix
+    def lane_matrices(self, commit): return {"L1": self.matrix, "L2": self.legs}
+    def predecessors(self, commit, legs):
+        return {leg: self.resolved.get(leg) for leg in legs}
     def produce_asset_set(self, commit, unscheduled):
         if unscheduled and self.produced == "REFUSE":
             raise promote.Refused("the release files cannot be produced: --unscheduled marks a release that changes "
@@ -249,7 +265,7 @@ refuses("a chart released without its images", w, "the chart is another publish'
 # ---- 7. attestations ---------------------------------------------------------------------------------------------
 w = World(); w.atts[f"{REG}/veyq@{w.digest('veyq')}"] = ""
 refuses("no attestation", w, "no L1 attestation for amd64")
-w = World(); w.matrix = (ARCHS + ["riscv64"], SHARDS)
+w = World(); w.matrix = (ARCHS + ["riscv64"], SHARDS); w.legs = (ARCHS + ["riscv64"], LEGS)
 refuses("an architecture the lane runs but nothing attests", w, "no L1 attestation for riscv64")
 w = World(); w.matrix = (ARCHS, SHARDS + ["depot"])
 refuses("a shard the attestation misses", w, "its shards are")
@@ -257,13 +273,15 @@ w = World(); w.matrix = ([], SHARDS)
 refuses("a stack matrix with no architecture", w, "names no architecture")
 
 
-def forge(world: World, image: str, **predicate) -> None:
+def forge(world: World, image: str, lane2: dict | None = None, **predicate) -> None:
+    """`image`'s attestations with the L1 one forged by `predicate` and the L2 one by `lane2` (unforged when None)."""
     d = world.digest(image)
     lines = []
     for arch in ARCHS:
         per_arch = promote.digest_of(next(v for k, v in world.registry.items()
                                           if k.startswith(f"{REG}/{image}@") and f'"arch": "{arch}"' in v))
         lines.append(world.envelope(image, d, arch, per_arch, **predicate))
+        lines.append(world.envelope(image, d, arch, per_arch, **upgrade(**(lane2 or {}))))
     world.atts[f"{REG}/{image}@{d}"] = "\n".join(lines)
 
 
@@ -286,12 +304,31 @@ refuses("an attestation about another index", w, "its subject is another digest"
 w = World()
 d = w.digest("veyq")
 w.atts[f"{REG}/veyq@{d}"] = "\n".join(
-    w.envelope("veyq", d, arch, h(999)) for arch in ARCHS)  # names a build the index does not hold
+    w.envelope("veyq", d, arch, h(999), **predicate) for arch in ARCHS
+    for predicate in ({}, upgrade()))  # names a build the index does not hold
 w.registry[f"{REG}/veyq@{h(999)}"] = json.dumps({"manifests": [{"digest": h(998)}]})
 refuses("an index holding builds no lane attested", w, "that no attested build stands for")
 w = World()
 forge(w, "veyq-admin", inputs={"assetSet": "sha256:" + "b" * 64, "predecessor": None, "backups": None})
 refuses("two asset sets across the lanes", w, "2 different asset sets")
+# Lane L2: attested on both images, every leg, and the releases its legs upgraded from are the ones resolved now.
+w = World(); forge(w, "veyq", lane2={"lane": "L9"})
+refuses("no L2 attestation", w, "no L2 attestation for amd64")
+w = World(); w.legs = (ARCHS, LEGS + ["oldest"])
+refuses("an L2 leg the attestation misses", w, "its shards are")
+w = World(); w.resolved = {"newest": "v0.11", "major-entry": None}
+refuses("a newest release published since the lane ran", w, "a release published since moved what the lane must start from")
+w = World(); w.resolved = {"newest": "v0.10", "major-entry": "v0.9"}
+refuses("a major entry that appeared since the lane ran", w, '"major-entry": "v0.9"')
+w = World(); forge(w, "veyq-admin", lane2={"inputs": {"assetSet": SET, "predecessor": "v0.10", "backups": None}})
+refuses("an L2 predecessor that is no mapping per leg", w, "it records no predecessor per leg")
+w = World(); forge(w, "veyq", inputs={"assetSet": SET, "predecessor": copy.deepcopy(STARTED), "backups": None})
+refuses("an L1 attestation that names a predecessor", w, "the rerun of a lane whose inputs moved is not built")
+w = World(); forge(w, "veyq", lane2={"inputs": {"assetSet": SET, "predecessor": copy.deepcopy(STARTED),
+                                                 "backups": ["x"]}})
+refuses("an L2 attestation with a backup list", w, "it records inputs this promotion cannot compare yet (backups)")
+w = World(); w.legs = (["amd64"], LEGS)
+refuses("lane L2 on fewer architectures than L1", w, "lane L2 runs on ['amd64']")
 w = World(); w.atts[f"{REG}/veyq@{w.digest('veyq')}"] = "not json\n{\"payload\": \"%%%\"}"
 refuses("an attestation output of an unknown shape", w, "no L1 attestation for amd64")
 

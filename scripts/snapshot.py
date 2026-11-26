@@ -25,8 +25,8 @@ commit without a run that changes another path is refused, named; so is a walk t
 commits. A C that already carries a `snapshot-` tag, or the `v<major>.<minor>` tag of its release, publishes nothing
 (`kind=none`, a notice). Otherwise C's run is its
 newest such run, refused, red and named, unless it is completed and `success`, and in its latest attempt the gate job
-(`Pipeline green`) and one lane L1 leg per architecture and domain of the commit's own `stack` matrix concluded
-`success`. A run cancelled by hand, still running, or red is refused with that reason; Publish never starts Checks
+(`Pipeline green`), one lane L1 leg per architecture and domain of the commit's own `stack` matrix, and one lane L2 leg
+per architecture and leg of its `stack-upgrade` matrix concluded `success`. A run cancelled by hand, still running, or red is refused with that reason; Publish never starts Checks
 itself (owner 2026-11-07). With `--wait-minutes n` (the weekly schedule's, `await_completion`) a run still queued or
 running is re-read every minute for up to n minutes first, and judged once it completed. Writes `kind`, `commit` (C — every later name of the publish is C's), `run_id`, `run_url`,
 `attempt` and `version` (C's tree release, `release_assets.tree_release`) to `$GITHUB_OUTPUT`, and `draft_version`: the
@@ -38,16 +38,19 @@ else empty.
 digest artifact from that run, every lane record names exactly those digests for its architecture, and every
 `build-<commit>-<arch>` staging tag still resolves to its digest (a re-staged or moved tag is refused).
 
-**lane-result** — one leg's record, written only after the leg is green: the lane, its architecture and shard (the
-domain of the suite), the commit, the asset set it installed (`release_assets.py --asset-set`) and the per-arch image
-digests it pulled. A leg runs the commit's test code and holds no signing token; it hands this file over as an
+**lane-result** — one leg's record, written only after the leg is green: the lane, its architecture and shard (lane
+L1's domain of the suite, lane L2's leg), the commit, the asset set it installed (`release_assets.py --asset-set`) and
+the per-arch image digests it pulled; lane L2's also its `predecessor` (`--predecessor FILE`, which
+`run_stack_upgrade.py --predecessor-out` writes): the release it upgraded from with the app and admin digests its
+verified manifest named, or `null` for a leg that had none to start from — required of L2, refused of every other lane. A leg runs the commit's test code and holds no signing token; it hands this file over as an
 artifact, and the `snapshot` job signs.
 
-**predicates** — one in-toto predicate per lane and architecture (`PREDICATE_TYPE`), from every leg's record. Refused
-unless every expected (architecture, shard) leg is there and none else, each `passed`, of this commit and lane, with
-ONE asset set across all legs and one image digest per image within an architecture. Its `inputs` are what decides
-whether the result still holds at a promotion: `assetSet`, and `predecessor` and `backups`, which lane L1 has none of
-(`null`; lanes L2 and L3 are inbox #453 and #461).
+**predicates** — one in-toto predicate per lane and architecture (`PREDICATE_TYPE`), from the records of that lane in
+the results directory. Refused unless every expected (architecture, shard) leg is there and none else, each `passed`, of
+this commit and lane, with ONE asset set across all legs and one image digest per image within an architecture. Its
+`inputs` are what decides whether the result still holds at a promotion: `assetSet`; `predecessor`, for lane L2 the
+release each leg upgraded from (`{leg: {tag, images} | null}`, one per leg across the architectures, else refused),
+`null` for every other lane; and `backups`, `null` until lane L3 (inbox #461).
 
 **check-unpublished** — a snapshot is written once per commit and never replaced. Per image, `<version>-SNAPSHOT` and
 `sha-<commit>` must be absent or name exactly the manifests this run's build pushed (a re-run of a half-done publish
@@ -81,6 +84,9 @@ PREDICATE_TYPE = "https://veyq.app/attestations/stack-lane/v1"
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 LANES = ("L1", "L2", "L3")
+# The lanes whose legs start from a release, and so record it (ADR 0091 decision 5's "the predecessor digest for L2").
+PREDECESSOR_LANES = ("L2",)
+RELEASE_TAG = re.compile(r"^v[0-9]+\.[0-9]+$")
 INDEX_TYPES = ("application/vnd.oci.image.index.v1+json", "application/vnd.docker.distribution.manifest.list.v2+json")
 NOT_FOUND = re.compile(r"not.found|MANIFEST_UNKNOWN|\b404\b", re.IGNORECASE)
 
@@ -91,9 +97,30 @@ class Refused(Exception):
 
 # ---- lane results and predicates ----------------------------------------------------------------------------
 
-def lane_result(lane: str, arch: str, shard: str, commit: str, asset_set: str, images: dict[str, str]) -> dict:
+def check_predecessor(predecessor: object, where: str) -> dict | None:
+    """Lane L2's predecessor as a record carries it: None (the leg had none to start from, and installed nothing), or
+    the starting release's tag and the app and admin digests its verified manifest named."""
+    if predecessor is None:
+        return None
+    if not isinstance(predecessor, dict) or not RELEASE_TAG.match(str(predecessor.get("tag"))):
+        raise Refused(f"{where}'s predecessor {predecessor!r} names no release tag (`v<major>.<minor>`)")
+    images = predecessor.get("images")
+    if not isinstance(images, dict) or sorted(images) != sorted(LANE_IMAGES) \
+            or not all(isinstance(d, str) and DIGEST.match(d) for d in images.values()):
+        raise Refused(f"{where}'s predecessor {predecessor.get('tag')} names {images!r}, not one digest of each of "
+                      f"{', '.join(LANE_IMAGES)}")
+    return {"tag": predecessor["tag"], "images": dict(sorted(images.items()))}
+
+
+def lane_result(lane: str, arch: str, shard: str, commit: str, asset_set: str, images: dict[str, str],
+                predecessor: object = None, has_predecessor: bool = False) -> dict:
+    """One green leg's record. Lane L2's carries its `predecessor` (`has_predecessor`): the release it upgraded from,
+    or None for a leg with no release to start from; no other lane has one."""
     if lane not in LANES:
         raise Refused(f"`{lane}` is not a lane ({', '.join(LANES)})")
+    if has_predecessor != (lane in PREDECESSOR_LANES):
+        raise Refused(f"lane {lane} records {'a' if has_predecessor else 'no'} predecessor; only "
+                      f"{', '.join(PREDECESSOR_LANES)} records one, and always")
     if not COMMIT.match(commit):
         raise Refused(f"`{commit}` is not a full commit hash")
     if not DIGEST.match(asset_set):
@@ -103,8 +130,11 @@ def lane_result(lane: str, arch: str, shard: str, commit: str, asset_set: str, i
     for name, digest in images.items():
         if not DIGEST.match(digest):
             raise Refused(f"the {name} digest `{digest}` is not `sha256:<64 hex>`")
-    return {"lane": lane, "arch": arch, "shard": shard, "outcome": "passed", "commit": commit,
-            "assetSet": asset_set, "images": dict(sorted(images.items()))}
+    record = {"lane": lane, "arch": arch, "shard": shard, "outcome": "passed", "commit": commit,
+              "assetSet": asset_set, "images": dict(sorted(images.items()))}
+    if has_predecessor:
+        record["predecessor"] = check_predecessor(predecessor, f"the {arch}/{shard} leg")
+    return record
 
 
 def predicates(results: list[dict], lane: str, archs: list[str], shards: list[str], commit: str,
@@ -131,6 +161,21 @@ def predicates(results: list[dict], lane: str, archs: list[str], shards: list[st
     if missing:
         raise Refused("no record for " + ", ".join(f"{a}/{s}" for a, s in missing)
                       + " — a leg that left none did not pass")
+    predecessors: dict[str, dict | None] | None = None
+    if lane in PREDECESSOR_LANES:
+        predecessors = {}
+        for shard in shards:
+            each = {json.dumps(check_predecessor(seen[(a, shard)].get("predecessor"), f"the {a}/{shard} record"),
+                               sort_keys=True) for a in archs}
+            if any("predecessor" not in seen[(a, shard)] for a in archs):
+                raise Refused(f"a {shard} record of lane {lane} carries no predecessor (not even none)")
+            if len(each) != 1:
+                raise Refused(f"the {shard} legs started from different predecessors: {sorted(each)}")
+            predecessors[shard] = json.loads(each.pop())
+    else:
+        carrying = sorted(f"{a}/{sh}" for (a, sh), r in seen.items() if r.get("predecessor") is not None)
+        if carrying:
+            raise Refused(f"lane {lane} has no predecessor, and the {', '.join(carrying)} record(s) name one")
     asset_sets = {r["assetSet"] for r in seen.values()}
     if len(asset_sets) != 1:
         raise Refused(f"the legs installed {len(asset_sets)} different asset sets ({', '.join(sorted(asset_sets))})")
@@ -144,7 +189,7 @@ def predicates(results: list[dict], lane: str, archs: list[str], shards: list[st
         out[arch] = {
             "lane": lane, "arch": arch, "outcome": "passed", "commit": commit, "run": run,
             "shards": sorted(shards), "images": legs[0]["images"],
-            "inputs": {"assetSet": asset_set, "predecessor": None, "backups": None},
+            "inputs": {"assetSet": asset_set, "predecessor": predecessors, "backups": None},
         }
     return out
 
@@ -227,6 +272,8 @@ def check_unpublished(registry: str, version: str, commit: str, digests: pathlib
 CHECKS_WORKFLOW = ".github/workflows/checks.yml"
 GATE_JOB_NAME = "Pipeline green"  # checks.yml's `green` job; validate_release_identity.py holds the name to it
 LANE_JOB_NAME = "Stack lane L1 ({arch}, {domain})"  # checks.yml's `stack` job's name, per leg
+UPGRADE_JOB_NAME = "Stack lane L2 ({arch}, {leg})"  # checks.yml's `stack-upgrade` job's name, per leg
+UPGRADE_JOB = "stack-upgrade"
 BUILD_IMAGES = ("veyq", "veyq-admin", "veyq-tools")  # checks.yml's build matrix; validate_release_identity.py holds it
 LANE_IMAGES = ("veyq", "veyq-admin")  # what lane L1 installs, and so what each lane record names
 
@@ -379,11 +426,13 @@ def await_completion(run: dict, fetch, wait_seconds: int, poll: int = 60, sleep=
     return run
 
 
-def checks_verdict(run: dict, jobs: list[dict], archs: list[str], domains: list[str]) -> dict:
+def checks_verdict(run: dict, jobs: list[dict], archs: list[str], domains: list[str], legs: list[str]) -> dict:
     """Whether a snapshot may be made from `run` (pick_run's), given its latest attempt's jobs (`filter=latest`);
-    refused, naming why not."""
+    refused, naming why not. Every lane L1 leg (`domains`) and every lane L2 leg (`legs`) of each architecture."""
     if not archs or not domains:
         raise Refused("the commit's `stack` matrix names no architecture or no domain, so no lane result can be checked")
+    if not legs:
+        raise Refused(f"the commit's `{UPGRADE_JOB}` matrix names no leg, so lane L2 cannot be checked")
     where = f"Checks run {run.get('id')} (attempt {run.get('run_attempt')}, {run.get('html_url')})"
     if run.get("status") != "completed":
         raise Refused(f"{where} is `{run.get('status')}`, not completed — publish again once it has finished")
@@ -396,7 +445,8 @@ def checks_verdict(run: dict, jobs: list[dict], archs: list[str], domains: list[
     attempts = {int(j.get("run_attempt") or 0) for j in jobs}
     if attempts and attempts != {int(run.get("run_attempt") or 0)}:
         raise Refused(f"{where}: its jobs are of attempts {sorted(attempts)}, not only its latest — read the latest")
-    wanted = [GATE_JOB_NAME] + [LANE_JOB_NAME.format(arch=a, domain=d) for a in archs for d in domains]
+    wanted = ([GATE_JOB_NAME] + [LANE_JOB_NAME.format(arch=a, domain=d) for a in archs for d in domains]
+              + [UPGRADE_JOB_NAME.format(arch=a, leg=leg) for a in archs for leg in legs])
     for name in wanted:
         found = by_name.get(name) or []
         if len(found) != 1 or found[0].get("conclusion") != "success":
@@ -442,6 +492,14 @@ def stack_matrix(root: pathlib.Path) -> tuple[list[str], list[str]]:
     doc = yaml.safe_load((root / CHECKS_WORKFLOW).read_text()) or {}
     matrix = (((doc.get("jobs") or {}).get("stack") or {}).get("strategy") or {}).get("matrix") or {}
     return sorted(map(str, matrix.get("arch") or [])), sorted(map(str, matrix.get("domain") or []))
+
+
+def upgrade_legs(root: pathlib.Path) -> list[str]:
+    """Lane L2's legs in the checked-out commit's checks.yml (`stack-upgrade`'s matrix `leg`)."""
+    import yaml
+    doc = yaml.safe_load((root / CHECKS_WORKFLOW).read_text()) or {}
+    matrix = (((doc.get("jobs") or {}).get(UPGRADE_JOB) or {}).get("strategy") or {}).get("matrix") or {}
+    return sorted(map(str, matrix.get("leg") or []))
 
 
 def _git_out(root: pathlib.Path, *args: str) -> str:
@@ -500,7 +558,7 @@ def checks_run(repository: str, head: str, branch: str, root: pathlib.Path, boun
         if len(chunk.get("jobs") or []) < 100:
             break
         page += 1
-    verdict = checks_verdict(run, jobs, archs, domains)
+    verdict = checks_verdict(run, jobs, archs, domains, upgrade_legs(root))
     version = release_assets.tree_release(root, commit)
     print(f"publishing {version} of {commit} from {verdict['run_url']} (attempt {verdict['attempt']})")
     return {"kind": "snapshot", "commit": commit, **verdict, "version": version, "draft_version": version}
@@ -535,6 +593,8 @@ def main() -> int:
     r.add_argument("--commit", required=True)
     r.add_argument("--asset-set", required=True)
     r.add_argument("--image", action="append", default=[], metavar="NAME=DIGEST")
+    r.add_argument("--predecessor", type=pathlib.Path, default=None, metavar="FILE",
+                   help="lane L2: the JSON `run_stack_upgrade.py --predecessor-out` wrote (the release, or null)")
     r.add_argument("--out", required=True, type=pathlib.Path)
     p = sub.add_parser("predicates")
     p.add_argument("--lane", required=True)
@@ -567,12 +627,16 @@ def main() -> int:
             images = dict(item.split("=", 1) for item in args.image if "=" in item)
             if len(images) != len(args.image):
                 raise Refused(f"--image takes NAME=DIGEST, got {args.image}")
-            record = lane_result(args.lane, args.arch, args.shard, args.commit, args.asset_set, images)
+            predecessor = json.loads(args.predecessor.read_text()) if args.predecessor is not None else None
+            record = lane_result(args.lane, args.arch, args.shard, args.commit, args.asset_set, images, predecessor,
+                                 has_predecessor=args.predecessor is not None)
             args.out.parent.mkdir(parents=True, exist_ok=True)
             args.out.write_text(json.dumps(record, indent=2) + "\n")
             print(f"{args.out}: {args.lane} {args.arch}/{args.shard} passed")
         elif args.command == "predicates":
-            records = [json.loads(path.read_text()) for path in sorted(args.results.rglob("*.json"))]
+            # Every lane's records arrive in one directory; each lane's predicate reads its own.
+            records = [r for r in (json.loads(path.read_text()) for path in sorted(args.results.rglob("*.json")))
+                       if r.get("lane") == args.lane]
             out = predicates(records, args.lane, args.arch, args.shard, args.commit, args.run)
             args.out.mkdir(parents=True, exist_ok=True)
             for arch, predicate in out.items():
