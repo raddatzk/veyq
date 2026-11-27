@@ -18,7 +18,8 @@ use gtk::glib;
 use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::CaptureTimeShown, wire::CurationSaid, wire::FactsSave,
     wire::MemberShown, wire::ParticipantShown, wire::ParticipantsShown, wire::PeopleShown, wire::Update, wire::Watched};
 use crate::core_ui::home::glib_escape;
-use crate::core_ui::{avatars, words};
+use crate::core_ui::{avatars, said, words};
+use crate::bridge::wire::{Notice, ShiftStep};
 
 /// The avatar's size in the people line and the step between two overlapping ones.
 const FACE: i32 = 24;
@@ -630,6 +631,176 @@ impl TimeDialog {
         });
         dialog.present(Some(window));
     }
+}
+
+// --- a selection's capture time (uc.memory.buckets § Correct a selection's capture time) ----------------------------
+
+/// A selection's capture-time shift (`Buckets.Shift`, core's `SelectionShift`) as an `AdwDialog`: the anchor's day and
+/// minute picked as the editor picks them, Continue, then *All N, shifted by …* or *Only this one* with how many stay
+/// undated, the progress, what it came to and its Undo. Every state the core's (`Watched.CaptureTimeShift`); [closed]
+/// runs once the dialog is gone.
+pub fn open_shift(shift: i64, window: &gtk::Window, closed: impl Fn() + 'static) {
+    let dialog = adw::Dialog::builder().title(words::memory_shift_action()).content_width(420).build();
+    dialog.set_widget_name("shift-dialog");
+    let bar = adw::HeaderBar::builder().show_end_title_buttons(false).show_start_title_buttons(false).build();
+    let cancel = gtk::Button::builder().label(words::entry_cancel()).build();
+    bar.pack_start(&cancel);
+    let next = gtk::Button::builder().label(words::memory_shift_next()).build();
+    next.add_css_class("suggested-action");
+    next.set_widget_name("shift-next");
+    let close = gtk::Button::builder().label(words::memory_close()).visible(false).build();
+    close.set_widget_name("shift-close");
+    bar.pack_end(&next);
+    bar.pack_end(&close);
+    let intro = gtk::Label::builder().wrap(true).xalign(0.0).build();
+    let calendar = gtk::Calendar::builder().halign(gtk::Align::Center).build();
+    let hour = gtk::SpinButton::with_range(0.0, 23.0, 1.0);
+    let minute = gtk::SpinButton::with_range(0.0, 59.0, 1.0);
+    for spin in [&hour, &minute] {
+        spin.set_wrap(true);
+        spin.set_valign(gtk::Align::Center);
+    }
+    hour.update_property(&[gtk::accessible::Property::Label(&words::memory_field_captured())]);
+    let time = gtk::Box::builder().spacing(6).halign(gtk::Align::Center).build();
+    time.append(&hour);
+    time.append(&gtk::Label::new(Some(":")));
+    time.append(&minute);
+    let edit = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(12).build();
+    edit.append(&intro);
+    edit.append(&calendar);
+    edit.append(&time);
+    let all = gtk::Button::builder().build();
+    all.add_css_class("suggested-action");
+    all.add_css_class("pill");
+    all.set_widget_name("shift-all");
+    let only = gtk::Button::builder().label(words::memory_shift_only_this()).build();
+    only.add_css_class("pill");
+    only.set_widget_name("shift-only");
+    let undated = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
+    undated.add_css_class("dim-label");
+    let choose = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(12).build();
+    choose.append(&all);
+    choose.append(&only);
+    choose.append(&undated);
+    let progress = gtk::Label::builder().xalign(0.0).build();
+    let run = gtk::Box::builder().spacing(12).build();
+    run.append(&adw::Spinner::new());
+    run.append(&progress);
+    let done = gtk::Label::builder().wrap(true).xalign(0.0).build();
+    done.set_widget_name("shift-done");
+    let refused = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
+    refused.add_css_class("error");
+    let undo = gtk::Button::builder().label(words::trash_undo()).halign(gtk::Align::Start).visible(false).build();
+    undo.set_widget_name("shift-undo");
+    let finished = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(12).build();
+    finished.append(&done);
+    finished.append(&refused);
+    finished.append(&undo);
+    let stack = gtk::Stack::builder().vhomogeneous(false).margin_top(12).margin_bottom(18).margin_start(12).margin_end(12).build();
+    stack.add_named(&edit, Some("edit"));
+    stack.add_named(&choose, Some("choose"));
+    stack.add_named(&run, Some("run"));
+    stack.add_named(&finished, Some("done"));
+    let view = adw::ToolbarView::new();
+    view.add_top_bar(&bar);
+    view.set_content(Some(&stack));
+    dialog.set_child(Some(&view));
+
+    let step: Rc<Cell<Option<ShiftStep>>> = Rc::new(Cell::new(None));
+    let d = dialog.downgrade();
+    let at_step = step.clone();
+    cancel.connect_clicked(move |_| {
+        if at_step.get() == Some(ShiftStep::Choose) {
+            bridge::send(Call::CaptureTimeShiftBack { shift });
+        } else if let Some(d) = d.upgrade() {
+            d.close();
+        }
+    });
+    let d = dialog.downgrade();
+    close.connect_clicked(move |_| {
+        if let Some(d) = d.upgrade() {
+            d.close();
+        }
+    });
+    let (c, h, m) = (calendar.downgrade(), hour.downgrade(), minute.downgrade());
+    next.connect_clicked(move |_| {
+        let (Some(c), Some(h), Some(m)) = (c.upgrade(), h.upgrade(), m.upgrade()) else { return };
+        let day = c.date();
+        let Some(epoch_ms) = local_epoch_ms(day.year(), day.month(), day.day_of_month(), h.value_as_int(), m.value_as_int()) else { return };
+        eprintln!("veyq: shift: time proposed");
+        bridge::send(Call::CaptureTimeShiftPropose { shift, epoch_ms });
+    });
+    all.connect_clicked(move |_| bridge::send(Call::CaptureTimeShiftAll { shift }));
+    only.connect_clicked(move |_| bridge::send(Call::CaptureTimeShiftOnly { shift }));
+    undo.connect_clicked(move |_| bridge::send(Call::CaptureTimeShiftUndo { shift }));
+
+    let Some((watch, updates)) = bridge::watch(&Watched::CaptureTimeShift { shift }) else { return };
+    let watch = Rc::new(RefCell::new(Some(watch)));
+    let held = watch.clone();
+    dialog.connect_closed(move |_| {
+        held.borrow_mut().take();
+        bridge::send(Call::CaptureTimeShiftClose { shift });
+        closed();
+    });
+    let (d, stack, cancel, next, close) = (dialog.downgrade(), stack.downgrade(), cancel.downgrade(), next.downgrade(), close.downgrade());
+    let (intro, all, undated, progress, done, refused, undo) =
+        (intro.downgrade(), all.downgrade(), undated.downgrade(), progress.downgrade(), done.downgrade(), refused.downgrade(), undo.downgrade());
+    let (calendar, hour, minute) = (calendar.downgrade(), hour.downgrade(), minute.downgrade());
+    glib::spawn_future_local(async move {
+        let mut first = true;
+        while let Ok(update) = updates.recv().await {
+            let Ok(Update::CaptureTimeShift { shown, .. }) = update else { continue };
+            let (Some(d), Some(stack)) = (d.upgrade(), stack.upgrade()) else { return };
+            let Some(s) = shown else {
+                d.close();
+                return;
+            };
+            eprintln!("veyq: shift shown: {:?}, undoable {}, refused {}", s.step, s.undoable, s.refused.len());
+            if first && let (Some(c), Some(h), Some(m)) = (calendar.upgrade(), hour.upgrade(), minute.upgrade()) {
+                show_time(&c, &h, &m, Some(s.anchor_at_ms));
+                first = false;
+            }
+            if s.closed {
+                d.close();
+                return;
+            }
+            step.set(Some(s.step));
+            let set = |l: &glib::WeakRef<gtk::Label>, n: Option<&Notice>| {
+                if let Some(l) = l.upgrade() {
+                    l.set_visible(n.is_some());
+                    l.set_label(&n.map(said::notice).unwrap_or_default());
+                }
+            };
+            set(&intro, Some(&s.intro));
+            set(&undated, s.undated.as_ref());
+            set(&progress, s.progress.as_ref());
+            set(&done, s.done.as_ref());
+            if let Some(l) = refused.upgrade() {
+                l.set_visible(!s.refused.is_empty());
+                l.set_label(&s.refused.iter().map(said::notice).collect::<Vec<_>>().join("\n"));
+            }
+            if let (Some(b), Some(n)) = (all.upgrade(), s.all.as_ref()) {
+                b.set_label(&said::notice(n));
+            }
+            if let Some(b) = undo.upgrade() {
+                b.set_visible(s.undoable);
+            }
+            stack.set_visible_child_name(match s.step {
+                ShiftStep::Edit => "edit",
+                ShiftStep::Choose => "choose",
+                ShiftStep::Run => "run",
+                ShiftStep::Done => "done",
+            });
+            let editing = matches!(s.step, ShiftStep::Edit | ShiftStep::Choose);
+            if let (Some(c), Some(n), Some(x)) = (cancel.upgrade(), next.upgrade(), close.upgrade()) {
+                c.set_visible(editing);
+                n.set_visible(s.step == ShiftStep::Edit);
+                x.set_visible(s.step == ShiftStep::Done);
+            }
+            d.set_can_close(s.step != ShiftStep::Run);
+        }
+    });
+    dialog.present(Some(window));
 }
 
 #[cfg(test)]

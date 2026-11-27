@@ -48,5 +48,7 @@ pub fn fake() -> SettingsShown {
         // the sections as the core sends them for this state (`SettingsSection.offered`: a desktop, devices linked, no
         // store, no map services), in the wire's own form, as the harness fakes no core
         sections: serde_json::from_str(FAKE_SECTIONS).expect("the wire's sections"),
+        kit: None,
+        kit_news: None,
     }
 }

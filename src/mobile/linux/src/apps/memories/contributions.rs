@@ -37,6 +37,11 @@ struct Inner {
     create: gtk::Button,
     rename: gtk::Button,
     delete: gtk::Button,
+    /// *Select*: a press on a tile then toggles it (`Buckets.Toggle`), the selection's bar under the picker.
+    select: gtk::ToggleButton,
+    selection: gtk::ActionBar,
+    picked_label: gtk::Label,
+    shift: gtk::Button,
     status: gtk::Label,
     spinner: adw::Spinner,
     media: gtk::FlowBox,
@@ -64,10 +69,23 @@ impl ContributionsView {
         create.set_visible(false);
         let rename = action(words::memory_buckets_rename(), "document-edit-symbolic");
         let delete = action(words::memory_buckets_delete(), "user-trash-symbolic");
+        let select = gtk::ToggleButton::builder().icon_name("selection-mode-symbolic").tooltip_text(words::select_action()).visible(false).build();
+        select.add_css_class("flat");
+        select.set_widget_name("contributions-select");
+        select.update_property(&[gtk::accessible::Property::Label(&words::select_action())]);
         let actions = gtk::Box::builder().spacing(6).build();
         for b in [&create, &rename, &delete] {
             actions.append(b);
         }
+        actions.append(&select);
+        let picked_label = gtk::Label::new(None);
+        let shift = gtk::Button::builder().label(words::memory_shift_action()).sensitive(false).build();
+        shift.add_css_class("suggested-action");
+        shift.set_widget_name("contributions-shift");
+        let selection = gtk::ActionBar::builder().revealed(false).build();
+        selection.set_widget_name("contributions-selection");
+        selection.pack_start(&picked_label);
+        selection.pack_end(&shift);
         let rows = adw::PreferencesGroup::builder().title(words::memory_buckets_title()).header_suffix(&actions).build();
         let spinner = adw::Spinner::builder().width_request(32).height_request(32).halign(gtk::Align::Center).build();
         let status = gtk::Label::builder().wrap(true).visible(false).build();
@@ -77,6 +95,7 @@ impl ContributionsView {
         media.set_widget_name("contributions-media");
         let column = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(18).build();
         column.append(&rows);
+        column.append(&selection);
         column.append(&spinner);
         column.append(&status);
         column.append(&media);
@@ -89,6 +108,10 @@ impl ContributionsView {
             create,
             rename,
             delete,
+            select,
+            selection,
+            picked_label,
+            shift,
             status,
             spinner,
             media,
@@ -189,6 +212,29 @@ impl Inner {
                 i.ask_delete();
             }
         });
+        let weak = Rc::downgrade(this);
+        this.select.connect_toggled(move |b| {
+            let Some(i) = weak.upgrade() else { return };
+            i.selection.set_revealed(b.is_active());
+            if !b.is_active()
+                && let Some(buckets) = i.id.get()
+            {
+                bridge::send(Call::BucketsClearPicked { buckets });
+            }
+            eprintln!("veyq: contributions: select {}", b.is_active());
+        });
+        let weak = Rc::downgrade(this);
+        this.shift.connect_clicked(move |_| {
+            let Some(i) = weak.upgrade() else { return };
+            let Some(buckets) = i.id.get() else { return };
+            let (window, toasts) = (i.window.clone(), i.toasts.clone());
+            glib::spawn_future_local(async move {
+                match bridge::call(&Call::BucketsShift { buckets }).await.map(|(a, _)| a) {
+                    Ok(Answer::CaptureTimeShiftOpened { shift }) => super::curation::open_shift(shift, &window, || {}),
+                    other => header::say(&toasts, other, "Buckets"),
+                }
+            });
+        });
     }
 
     fn selected_row(&self) -> Option<BucketRowShown> {
@@ -201,7 +247,10 @@ impl Inner {
         eprintln!("veyq: contributions shown: {} buckets, selected {}, {} media, creates {}, renames {}, {} targets, loading {}, failed {}, refused {:?}",
             s.rows.len(), s.selected.is_some(), s.media.len(), s.creates_sub, s.renames, s.move_targets.len(), s.loading, s.failed, s.refused);
         let rows_changed = self.shown.borrow().as_ref().map(|o| (&o.rows, &o.selected)) != Some((&s.rows, &s.selected));
-        let media_changed = self.shown.borrow().as_ref().map(|o| &o.media) != Some(&s.media);
+        let media_changed = self.shown.borrow().as_ref().map(|o| (&o.media, &o.picked)) != Some((&s.media, &s.picked));
+        if self.shown.borrow().as_ref().map(|o| &o.selected) != Some(&s.selected) {
+            self.select.set_active(false);
+        }
         if let (Some(refused), Some(buckets)) = (s.refused, self.id.get()) {
             // a move's own answer says it; this is what any curation left behind
             if let Some(text) = not_done(refused, false) {
@@ -223,6 +272,9 @@ impl Inner {
         self.create.set_visible(s.creates_sub);
         self.rename.set_visible(s.renames);
         self.delete.set_visible(s.renames);
+        self.select.set_visible(s.selected.is_some() && s.media.len() >= 2);
+        self.picked_label.set_label(&words::select_count(s.picked.len() as i64));
+        self.shift.set_sensitive(s.shifts);
         if rows_changed {
             self.draw_rows(&s);
         }
@@ -272,6 +324,15 @@ impl Inner {
         for media_id in s.media.iter().map(|m| &m.media_id) {
             let picture = gtk::Picture::builder().content_fit(gtk::ContentFit::Cover).can_shrink(true).width_request(THUMB).height_request(THUMB).build();
             let frame = gtk::Overlay::builder().child(&picture).width_request(THUMB).height_request(THUMB).build();
+            if s.picked.contains(media_id) {
+                // GNOME's selection mode: a check over the picked thumbnail
+                let check = gtk::Image::builder().icon_name("object-select-symbolic").halign(gtk::Align::End).valign(gtk::Align::Start)
+                    .margin_top(6).margin_end(6).build();
+                check.add_css_class("osd");
+                check.add_css_class("circular");
+                frame.add_overlay(&check);
+                frame.update_state(&[gtk::accessible::State::Selected(Some(true))]);
+            }
             frame.set_overflow(gtk::Overflow::Hidden);
             frame.add_css_class("card");
             let child = gtk::FlowBoxChild::builder().child(&frame).focusable(true).build();
@@ -286,17 +347,28 @@ impl Inner {
                         i.move_menu(&a, &id, x, y);
                     }
                 } else {
-                    i.open_medium(&id);
+                    i.press(&id);
                 }
             });
             frame.add_controller(click);
             let (weak, id) = (Rc::downgrade(self), media_id.clone());
             child.connect_activate(move |_| {
                 if let Some(i) = weak.upgrade() {
-                    i.open_medium(&id);
+                    i.press(&id);
                 }
             });
             self.media.append(&child);
+        }
+    }
+
+    /// A tile pressed: toggled while *Select* is on, else its lightbox.
+    fn press(&self, media_id: &str) {
+        if self.select.is_active() {
+            if let Some(buckets) = self.id.get() {
+                bridge::send(Call::BucketsToggle { buckets, media_id: media_id.to_owned() });
+            }
+        } else {
+            self.open_medium(media_id);
         }
     }
 
@@ -461,6 +533,8 @@ mod tests {
             loading: false,
             failed: false,
             refused: None,
+            picked: vec![],
+            shifts: false,
         };
         assert_eq!(targets(&s).iter().map(|r| r.bucket_id.as_str()).collect::<Vec<_>>(), vec!["self"]);
         assert_eq!(not_done(BucketsOutcome::Done, true), None);

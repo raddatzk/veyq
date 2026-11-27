@@ -118,6 +118,9 @@ pub struct Shell {
     banner: adw::Banner,
     /// Under it, while writes made offline wait: their count (`ShellShown.queuedBanner`, ADR 0153 decision 5).
     queued_banner: adw::Banner,
+    /// The one-time "a clearer Emergency Kit exists" (`ShellShown.kitNotice`, ADR 0157 decision 5): its text and its bar.
+    kit_notice: gtk::Revealer,
+    kit_notice_text: gtk::Label,
     /// The reconnect's notices said last (`ShellShown.queuedSaid`), so an update that repeats them says nothing again.
     queued_said: RefCell<Vec<bridge::wire::Notice>>,
     /// A held rename's *Open* (`QueuedOpen.Rename`): the node whose header asks the person's name once it shows.
@@ -220,6 +223,29 @@ impl Shell {
         content_view.add_top_bar(&banner);
         let queued_banner = adw::Banner::new("");
         content_view.add_top_bar(&queued_banner);
+        // the kit notice: a quiet bar under the banners with its two answers (an AdwBanner holds one button only)
+        let kit_notice_text = gtk::Label::builder().wrap(true).xalign(0.0).hexpand(true).build();
+        let kit_dismiss = gtk::Button::builder().label(words::kit_notice_dismiss()).valign(gtk::Align::Center).build();
+        kit_dismiss.add_css_class("flat");
+        kit_dismiss.set_widget_name("kit-notice-dismiss");
+        let kit_open = gtk::Button::builder().label(words::kit_notice_open()).valign(gtk::Align::Center).build();
+        kit_open.add_css_class("suggested-action");
+        kit_open.set_widget_name("kit-notice-open");
+        let kit_bar = gtk::Box::builder().spacing(12).margin_start(12).margin_end(12).margin_top(6).margin_bottom(6).build();
+        kit_bar.append(&kit_notice_text);
+        kit_bar.append(&kit_dismiss);
+        kit_bar.append(&kit_open);
+        let kit_notice = gtk::Revealer::builder().child(&kit_bar).reveal_child(false).build();
+        kit_notice.set_widget_name("kit-notice");
+        content_view.add_top_bar(&kit_notice);
+        kit_dismiss.connect_clicked(|_| bridge::send(Call::ShellKitNoticeDismiss));
+        let (opens, kit_connection) = (window.downgrade(), shown_now.clone());
+        kit_open.connect_clicked(move |_| {
+            bridge::send(Call::ShellKitNoticeDismiss);
+            if let (Some(c), Some(window)) = (kit_connection.borrow().clone(), opens.upgrade()) {
+                crate::core_ui::account_settings::open(&window, c, Some("security".to_owned()));
+            }
+        });
         let toasts = adw::ToastOverlay::new();
         // the upload queue, GNOME Files' way: a header bar button while anything is listed, its popover the list
         let uploads = Uploads::new(&toasts);
@@ -294,6 +320,8 @@ impl Shell {
             nav,
             banner,
             queued_banner,
+            kit_notice,
+            kit_notice_text,
             queued_said: RefCell::new(Vec::new()),
             pending_rename: RefCell::new(None),
             gone_said: RefCell::new(Vec::new()),
@@ -573,6 +601,13 @@ impl Shell {
             }
             None => self.queued_banner.set_revealed(false),
         }
+        if let Some(news) = &shown.kit_notice {
+            self.kit_notice_text.set_markup(&format!(
+                "<b>{}</b>\n{} {}", home::glib_escape(&words::kit_notice_title()), home::glib_escape(&said::notice(news)),
+                home::glib_escape(&words::kit_status_keeps_working()),
+            ));
+        }
+        self.kit_notice.set_reveal_child(shown.kit_notice.is_some());
         // after a reconnect: how many writes made offline were sent, how many need the person — said once, then told seen
         if *self.queued_said.borrow() != shown.queued_said {
             *self.queued_said.borrow_mut() = shown.queued_said.clone();

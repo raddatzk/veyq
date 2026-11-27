@@ -33,7 +33,7 @@ use adw::prelude::*;
 use gtk::{gio, glib};
 
 use crate::bridge::{self, Watch, wire::Answer, wire::Call, wire::LimitField, wire::LimitUnit, wire::OfflineItem, wire::QueuedAsk, wire::QueuedLoss, wire::SettingsSection,
-    wire::SettingsFamily, wire::SettingsShown, wire::Storage, wire::Update, wire::Watched};
+    wire::KitStatusStanding, wire::SettingsFamily, wire::SettingsShown, wire::Storage, wire::Update, wire::Watched};
 use crate::core_ui::manage::{self, Change};
 use crate::core_ui::map_services::MapServices;
 use crate::core_ui::{said, sign_in, words};
@@ -423,7 +423,7 @@ impl Page {
                 SettingsSection::Email => ("email", vec![self.email()]),
                 SettingsSection::Password => ("password", vec![self.password()]),
                 SettingsSection::AddDevice => ("add-device", vec![Some(self.add_device.clone())]),
-                SettingsSection::Security => ("security", vec![self.security()]),
+                SettingsSection::Security => ("security", vec![self.security(), self.kit(s)]),
                 SettingsSection::Profile => ("profile", vec![self.profile()]),
                 SettingsSection::Erase => ("erase", vec![self.erase()]),
                 SettingsSection::WhosWho => ("tenant-people", vec![self.whos_who()]),
@@ -560,6 +560,25 @@ impl Page {
     fn security(self: &Rc<Self>) -> Option<adw::PreferencesGroup> {
         let group = adw::PreferencesGroup::builder().title(words::rotation_title()).description(words::rotation_sub()).build();
         group.add(&self.opens("settings-rotation", &words::rotation_action(), crate::core_ui::account_flows::rotation));
+        Some(group)
+    }
+
+    /// Which Emergency Kit the account has (ADR 0157 decision 5): current, or a clearer one exists — what it does better,
+    /// that the kit the person has keeps working, *Make a new kit* — or that it could not be read; nothing until read.
+    fn kit(self: &Rc<Self>, s: &SettingsShown) -> Option<adw::PreferencesGroup> {
+        let kit = s.kit?;
+        let description = match kit {
+            KitStatusStanding::Current => words::kit_status_current(),
+            KitStatusStanding::Unreadable => words::kit_status_unreadable(),
+            KitStatusStanding::Older => format!(
+                "{} {} {}", words::kit_status_older(), s.kit_news.as_ref().map(said::notice).unwrap_or_default(), words::kit_status_keeps_working(),
+            ),
+        };
+        let group = adw::PreferencesGroup::builder().title(words::kit_status_title()).description(description).build();
+        group.set_widget_name("settings-kit");
+        if kit == KitStatusStanding::Older {
+            group.add(&self.opens("settings-kit-make", &words::kit_status_make(), crate::core_ui::account_flows::kit_renewal));
+        }
         Some(group)
     }
 

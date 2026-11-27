@@ -729,6 +729,69 @@ pub fn address(parent: &gtk::Widget, connection: String) {
     });
 }
 
+// ---- a clearer Emergency Kit (ADR 0157 decision 6) ----
+
+/// *Make a new kit* for the account [connection] names: the password and the Secret Key (typed, the old kit read or
+/// scanned) checked against the floor by the core (`Kit.Renew`), then the kit saved as every kit is ([kit_page]); the
+/// core writes its record once it is kept. Closing it reads the Settings anew (`Kit.RenewalClose`).
+pub fn kit_renewal(parent: &gtk::Widget, connection: String) {
+    let flow = Flow::new(&words::kit_renew_title());
+    let id: Id = Rc::new(Cell::new(None));
+    let password = secret(&words::signin_password());
+    let key = KeyControl::new(&flow, &id, &words::password_change_secret_key());
+    let col = column();
+    col.append(&dim(&words::kit_renew_sub()));
+    col.append(&rows(&[password.upcast_ref()]));
+    col.append(&key.list);
+    col.append(&key.notes);
+    let error = error_label();
+    col.append(&error);
+    let check = pill(&words::kit_renew_check(), "suggested-action");
+    check.set_widget_name("kit-renew-check");
+    col.append(&check);
+    flow.nav.add(&page(&words::kit_renew_title(), "form", &col));
+    let (f, i, k) = (flow.clone(), id.clone(), key.clone());
+    check.connect_clicked(move |_| {
+        let Some(n) = i.get() else { return };
+        let (password, secret_key) = (take(&password), k.take());
+        let f2 = f.clone();
+        glib::spawn_future_local(async move {
+            match bridge::call(&Call::KitRenew { flow: n, password, secret_key }).await.map(|(a, _)| a) {
+                Ok(Answer::KitOpened { kit }) => {
+                    f2.held.kits.borrow_mut().push(kit);
+                    let close = pill(&words::share_done(), "suggested-action");
+                    let d = f2.dialog.clone();
+                    close.connect_clicked(move |_| {
+                        d.close();
+                    });
+                    let p = kit_page(&f2, kit, None, None, Some(&close));
+                    f2.nav.push(&p);
+                }
+                other => eprintln!("veyq: Kit.Renew: {}", crate::core_ui::manage::answer_kind(&other)),
+            }
+        });
+    });
+    let f = flow.clone();
+    open_flow(&flow, &id, Call::KitRenewalOpen { connection }, |flow| Watched::KitRenewal { flow }, move |u| {
+        let Update::KitRenewal { shown, kit, .. } = u else { return true };
+        let Some(s) = shown else {
+            f.dialog.force_close();
+            return false;
+        };
+        key.draw(kit.as_ref());
+        eprintln!("veyq: kit renewal: working {}, refusal {:?}", s.working, s.refusal);
+        check.set_sensitive(!s.working);
+        said_refusal(&error, s.refusal.as_ref());
+        true
+    });
+    let i = id.clone();
+    flow.present(parent, move || {
+        if let Some(flow) = i.take() {
+            bridge::send(Call::KitRenewalClose { flow });
+        }
+    });
+}
+
 // ---- replace the keys (D7) ----
 
 /// "Secure your account" for the account [connection] names: the gate, the new kit saved, the danger confirmation, the
