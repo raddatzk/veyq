@@ -426,6 +426,7 @@ impl Page {
                 SettingsSection::Security => ("security", vec![self.security(), self.kit(s)]),
                 SettingsSection::Profile => ("profile", vec![self.profile()]),
                 SettingsSection::Erase => ("erase", vec![self.erase()]),
+                SettingsSection::Members => ("tenant-members", vec![self.members()]),
                 SettingsSection::WhosWho => ("tenant-people", vec![self.whos_who()]),
                 SettingsSection::Terms => ("terms", vec![self.terms()]),
                 SettingsSection::SignOut => ("sign-out", vec![self.sign_out()]),
@@ -498,16 +499,34 @@ impl Page {
         self.dialog.root().map(|r| r.upcast::<gtk::Widget>()).unwrap_or_else(|| self.dialog.clone().upcast())
     }
 
-    /// The open space's terms, read-only (uc.account.accept-terms): a subpage of the dialog, as GNOME Settings' are.
+    /// The open space's members (the web's tenant section `tenant-members`): a subpage; what an act says is the dialog's toast.
+    fn members(self: &Rc<Self>) -> Option<adw::PreferencesGroup> {
+        let group = adw::PreferencesGroup::builder().title(words::members_title()).description(words::members_sub()).build();
+        let row = adw::ActionRow::builder().title(words::members_title()).activatable(true).build();
+        row.set_widget_name("settings-members-open");
+        row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+        let weak = Rc::downgrade(self);
+        row.connect_activated(move |_| {
+            if let Some(p) = weak.upgrade() {
+                let dialog = p.dialog.clone();
+                p.dialog.push_subpage(&crate::core_ui::members::page(Rc::new(move |t| dialog.add_toast(t))));
+            }
+        });
+        group.add(&row);
+        Some(group)
+    }
+
+    /// The open space's terms, an owner's to edit (uc.admin.tenant-terms): a subpage of the dialog, as GNOME Settings' are.
     fn terms(self: &Rc<Self>) -> Option<adw::PreferencesGroup> {
-        let group = adw::PreferencesGroup::builder().title(words::terms_settings_title()).description(words::terms_readonly_note()).build();
+        let group = adw::PreferencesGroup::builder().title(words::terms_settings_title()).description(words::terms_editor_sub()).build();
         let row = adw::ActionRow::builder().title(words::terms_settings_title()).activatable(true).build();
         row.set_widget_name("settings-terms-open");
         row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
         let weak = Rc::downgrade(self);
         row.connect_activated(move |_| {
             if let Some(p) = weak.upgrade() {
-                p.dialog.push_subpage(&crate::core_ui::terms::page());
+                let dialog = p.dialog.clone();
+                p.dialog.push_subpage(&crate::core_ui::terms::page(std::rc::Rc::new(move |t| dialog.add_toast(t))));
             }
         });
         group.add(&row);

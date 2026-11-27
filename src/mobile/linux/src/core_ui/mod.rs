@@ -34,6 +34,7 @@ pub mod kit_drawing;
 pub mod manage;
 pub mod map_services;
 pub mod media_tiers;
+pub mod members;
 pub mod move_sheet;
 pub mod music_bar;
 pub mod music_host;

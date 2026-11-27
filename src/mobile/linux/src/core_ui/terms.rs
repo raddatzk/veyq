@@ -7,7 +7,10 @@
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::bridge::{self, wire::Answer, wire::Call, wire::TermsShown, wire::TermsGate};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use crate::bridge::{self, wire::Answer, wire::Call, wire::LangText, wire::TermsChange, wire::TermsDraft, wire::TermsGate, wire::TermsShown};
 use crate::core_ui::sign_in::{error_label, show_error};
 use crate::core_ui::words;
 
@@ -45,7 +48,7 @@ impl TermsGateView {
         heading.add_css_class("title-1");
         self.column.append(&heading);
         self.column.append(&label(&words::terms_gate_intro(), false));
-        self.column.append(&terms_text(&gate.shown));
+        self.column.append(&terms_text(&gate.shown, true));
         let error = error_label();
         error.set_widget_name("terms-error");
         show_error(&error, &gate.error);
@@ -68,8 +71,9 @@ impl TermsGateView {
     }
 }
 
-/// Settings' Terms: a subpage read when it opens, the terms read-only with the note that the owner edits them in the browser.
-pub fn page() -> adw::NavigationPage {
+/// Settings' Terms: a subpage read when it opens — for an owner the editor over the core's draft (`Terms.Editing`,
+/// `Terms.Edit`, `Terms.Save`; the web's `TenantTermsPanel`), for a member the terms read-only; [toast] says a save's words.
+pub fn page(toast: Rc<dyn Fn(adw::Toast)>) -> adw::NavigationPage {
     let column = column();
     let spinner = adw::Spinner::new();
     column.append(&spinner);
@@ -80,20 +84,24 @@ pub fn page() -> adw::NavigationPage {
     let page = adw::NavigationPage::builder().title(words::terms_settings_title()).child(&view).build();
     page.set_widget_name("terms-page");
     glib::spawn_future_local(async move {
-        let shown = match bridge::call(&Call::SettingsTerms).await.map(|(a, _)| a) {
-            Ok(Answer::Terms { shown }) => shown,
+        let editing = match bridge::call(&Call::SettingsTermsEditing).await.map(|(a, _)| a) {
+            Ok(Answer::TermsEditing { editing }) => editing,
             other => {
-                eprintln!("veyq: Settings.Terms answered {other:?}");
+                eprintln!("veyq: Terms.Editing answered {other:?}");
                 None
             }
         };
-        while let Some(child) = column.first_child() {
-            column.remove(&child);
-        }
-        match shown {
-            Some(shown) => {
+        clear(&column);
+        match editing {
+            Some(e) if e.owner => {
+                let editor = Rc::new(Editor { column: column.clone(), shown: e.shown.clone(), draft: RefCell::new(e.draft.clone()), preview: RefCell::new(String::new()), toast });
+                let first = e.draft.clone();
+                // the first preview is the core's too: an edit that changes nothing answers it
+                editor.edit(first, TermsChange::Text, String::new(), None);
+            }
+            Some(e) => {
                 column.append(&label(&words::terms_readonly_note(), true));
-                column.append(&terms_text(&shown));
+                column.append(&terms_text(&e.shown, true));
             }
             None => {
                 let failed = label(&words::terms_load_failed(), false);
@@ -106,14 +114,217 @@ pub fn page() -> adw::NavigationPage {
     page
 }
 
+fn clear(column: &gtk::Box) {
+    while let Some(child) = column.first_child() {
+        column.remove(&child);
+    }
+}
+
+/// The owner's editor: the draft the core last answered, drawn anew after each change of its languages; a typed text
+/// asks the core for the new draft and preview without redrawing the field being typed in.
+struct Editor {
+    column: gtk::Box,
+    shown: TermsShown,
+    draft: RefCell<TermsDraft>,
+    preview: RefCell<String>,
+    toast: Rc<dyn Fn(adw::Toast)>,
+}
+
+impl Editor {
+    /// [change] on [lang] applied by the core to [draft]; the editor redrawn, or only its warning and preview after a typed text ([typed]).
+    fn edit(self: &Rc<Self>, draft: TermsDraft, change: TermsChange, lang: String, typed: Option<String>) {
+        let text = typed.clone().unwrap_or_default();
+        let call = Call::SettingsTermsEdit { draft, change, lang, text };
+        let me = self.clone();
+        glib::spawn_future_local(async move {
+            match bridge::call(&call).await.map(|(a, _)| a) {
+                Ok(Answer::TermsDrafted { draft, preview }) => {
+                    *me.draft.borrow_mut() = draft;
+                    *me.preview.borrow_mut() = preview;
+                    if typed.is_some() { me.redraw_tail() } else { me.draw() }
+                }
+                other => eprintln!("veyq: Terms.Edit answered {other:?}"),
+            }
+        });
+    }
+
+    fn draw(self: &Rc<Self>) {
+        clear(&self.column);
+        let draft = self.draft.borrow().clone();
+        self.column.append(&label(&words::terms_editor_sub(), true));
+        if draft.shows_revision {
+            let revision = label(&words::terms_revision(i64::from(draft.revision)), false);
+            revision.add_css_class("heading");
+            revision.set_widget_name("terms-revision");
+            self.column.append(&revision);
+        }
+        for t in &draft.texts {
+            self.column.append(&self.language(t));
+        }
+        if !draft.addable.is_empty() {
+            let menu = gio::Menu::new();
+            let group = gio::SimpleActionGroup::new();
+            for l in &draft.addable {
+                let a = gio::SimpleAction::new(&format!("add-{}", l.lang), None);
+                let (me, lang) = (self.clone(), l.lang.clone());
+                a.connect_activate(move |_, _| { let d = me.draft.borrow().clone(); me.edit(d, TermsChange::Add, lang.clone(), None) });
+                group.add_action(&a);
+                menu.append(Some(&l.name), Some(&format!("terms.add-{}", l.lang)));
+            }
+            let add = gtk::MenuButton::builder().label(words::terms_add_language()).menu_model(&menu).halign(gtk::Align::Start).build();
+            add.insert_action_group("terms", Some(&group));
+            add.set_widget_name("terms-add");
+            self.column.append(&add);
+        }
+        let tail = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        tail.set_widget_name("terms-tail");
+        self.column.append(&tail);
+        self.redraw_tail();
+    }
+
+    /// One language's text: its own name, the field, and its *Insert template* and remove, each asked first.
+    fn language(self: &Rc<Self>, t: &LangText) -> gtk::Box {
+        let b = gtk::Box::new(gtk::Orientation::Vertical, 6);
+        b.set_widget_name(&format!("terms-lang-{}", t.lang));
+        let name = gtk::Label::builder().label(t.name.as_str()).xalign(0.0).build();
+        name.add_css_class("heading");
+        b.append(&name);
+        let buffer = gtk::TextBuffer::new(None);
+        buffer.set_text(&t.text);
+        let field = gtk::TextView::builder().buffer(&buffer).wrap_mode(gtk::WrapMode::WordChar).monospace(true).top_margin(8).bottom_margin(8).left_margin(8).right_margin(8).build();
+        field.update_property(&[gtk::accessible::Property::Label(&t.name), gtk::accessible::Property::Placeholder(&words::terms_placeholder())]);
+        field.set_widget_name(&format!("terms-text-{}", t.lang));
+        let frame = gtk::Frame::builder().child(&gtk::ScrolledWindow::builder().min_content_height(180).child(&field).build()).build();
+        frame.add_css_class("view");
+        b.append(&frame);
+        let (me, lang) = (self.clone(), t.lang.clone());
+        buffer.connect_changed(move |buf| {
+            let text = buf.text(&buf.start_iter(), &buf.end_iter(), false).to_string();
+            let d = me.draft.borrow().clone();
+            me.edit(d, TermsChange::Text, lang.clone(), Some(text));
+        });
+        let acts = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+        if t.templated {
+            let template = gtk::Button::builder().label(words::terms_insert_template()).build();
+            template.add_css_class("flat");
+            template.set_widget_name(&format!("terms-template-{}", t.lang));
+            let (me, lang, ask_words, replaces) = (self.clone(), t.lang.clone(), said_msg_with(&t.template_ask, &t.name), t.template_replaces);
+            template.connect_clicked(move |w| {
+                let (me, lang) = (me.clone(), lang.clone());
+                ask(w, &words::terms_insert_template(), &ask_words, &words::terms_insert_template(), replaces, move || {
+                    let d = me.draft.borrow().clone();
+                    me.edit(d, TermsChange::Template, lang.clone(), None)
+                });
+            });
+            acts.append(&template);
+        }
+        let remove = gtk::Button::builder().label(words::terms_remove_lang(&t.name)).build();
+        remove.add_css_class("flat");
+        remove.set_widget_name(&format!("terms-remove-{}", t.lang));
+        let (me, lang, name) = (self.clone(), t.lang.clone(), t.name.clone());
+        remove.connect_clicked(move |w| {
+            let (me, lang) = (me.clone(), lang.clone());
+            ask(w, &words::terms_remove_lang(&name), &words::terms_remove_lang_ask(&name), &words::terms_remove_lang(&name), true, move || {
+                let d = me.draft.borrow().clone();
+                me.edit(d, TermsChange::Remove, lang.clone(), None)
+            });
+        });
+        acts.append(&remove);
+        b.append(&acts);
+        b
+    }
+
+    /// The blank language's warning, the hint, *Save terms*, the preview and the operator section: what a typed text moves.
+    fn redraw_tail(self: &Rc<Self>) {
+        let mut child = self.column.first_child();
+        let tail = loop {
+            match child {
+                Some(c) if c.widget_name() == "terms-tail" => break c.downcast::<gtk::Box>().ok(),
+                Some(c) => child = c.next_sibling(),
+                None => break None,
+            }
+        };
+        let Some(tail) = tail else { return };
+        clear(&tail);
+        let draft = self.draft.borrow().clone();
+        if let (Some(_), Some(names)) = (&draft.blank_warning, &draft.blank_names) {
+            let warning = label(&words::terms_blank_locale_warning(names), false);
+            warning.add_css_class("warning");
+            warning.set_widget_name("terms-blank");
+            tail.append(&warning);
+        }
+        let hint = label(&words::terms_markdown_hint("{contact}"), true);
+        hint.add_css_class("caption");
+        tail.append(&hint);
+        let save = gtk::Button::builder().label(words::terms_save()).halign(gtk::Align::Start).build();
+        save.add_css_class("suggested-action");
+        save.add_css_class("pill");
+        save.set_widget_name("terms-save");
+        let me = self.clone();
+        save.connect_clicked(move |b| me.save(b));
+        tail.append(&save);
+        let preview = self.preview.borrow().clone();
+        if !preview.is_empty() {
+            tail.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
+            let heading = gtk::Label::builder().label(words::terms_preview()).xalign(0.0).accessible_role(gtk::AccessibleRole::Heading).build();
+            heading.add_css_class("heading");
+            tail.append(&heading);
+            tail.append(&markdown(&preview));
+        }
+        tail.append(&terms_text(&self.shown, false));
+    }
+
+    fn save(self: &Rc<Self>, button: &gtk::Button) {
+        button.set_sensitive(false);
+        let draft = self.draft.borrow().clone();
+        let (me, button) = (self.clone(), button.clone());
+        glib::spawn_future_local(async move {
+            match bridge::call(&Call::SettingsTermsSave { draft }).await.map(|(a, _)| a) {
+                Ok(Answer::TermsSaved { draft, notice }) => {
+                    (me.toast)(crate::core_ui::said::notice_toast(&notice));
+                    if let Some(next) = draft {
+                        me.edit(next, TermsChange::Text, String::new(), None);
+                        return;
+                    }
+                }
+                other => eprintln!("veyq: Terms.Save answered {other:?}"),
+            }
+            button.set_sensitive(true);
+        });
+    }
+}
+
+/// A word of one text argument, as the core named it (its name the catalog's key in capitals, as `said_msg` reads it).
+fn said_msg_with(m: &crate::bridge::wire::Msg, arg: &str) -> String {
+    let key = serde_json::to_value(m).ok().and_then(|v| v.as_str().map(str::to_lowercase)).unwrap_or_default();
+    crate::core_ui::said::notice(&crate::bridge::wire::Notice { msg: key, args: vec![crate::bridge::wire::NoticeArg::Text { text: arg.to_string() }], kind: crate::bridge::wire::NoticeKind::Said })
+}
+
+/// Asks [heading] with [body] first; [accept] (destructive where it [destroys] something written) runs [then].
+fn ask(over: &impl IsA<gtk::Widget>, heading: &str, body: &str, accept: &str, destroys: bool, then: impl Fn() + 'static) {
+    let alert = adw::AlertDialog::builder().heading(heading).body(body).build();
+    alert.add_responses(&[("cancel", &words::signin_cancel()), ("accept", accept)]);
+    alert.set_response_appearance("accept", if destroys { adw::ResponseAppearance::Destructive } else { adw::ResponseAppearance::Suggested });
+    alert.set_default_response(Some("cancel"));
+    alert.set_close_response("cancel");
+    alert.connect_response(None, move |_, response| {
+        if response == "accept" {
+            then();
+        }
+    });
+    alert.present(Some(over));
+}
+
 /// The terms as the core hands them: the space's text (or that it has none), the operator section under its label and
 /// note, and the record's pointer with its link.
-fn terms_text(shown: &TermsShown) -> gtk::Box {
+fn terms_text(shown: &TermsShown, with_terms: bool) -> gtk::Box {
     let b = gtk::Box::new(gtk::Orientation::Vertical, 12);
-    if shown.has_terms && !shown.terms.trim().is_empty() {
-        b.append(&markdown(&shown.terms));
-    } else {
-        b.append(&label(&words::terms_none_set(), true));
+    if with_terms {
+        if shown.has_terms && !shown.terms.trim().is_empty() {
+            b.append(&markdown(&shown.terms));
+        } else {
+            b.append(&label(&words::terms_none_set(), true));
+        }
     }
     b.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
     let section = gtk::Label::builder().label(words::terms_operator_section_label()).xalign(0.0).accessible_role(gtk::AccessibleRole::Heading).build();
