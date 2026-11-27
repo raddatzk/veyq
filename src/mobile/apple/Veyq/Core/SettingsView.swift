@@ -86,6 +86,8 @@ struct SettingsView: View {
     @State private var flow: AccountFlow?
     /// Settings' Terms page open over the page (core's `SettingsSection.TERMS`).
     @State private var showingTerms = false
+    /// Settings' Members open over the Mac's page (core's `SettingsSection.MEMBERS`).
+    @State private var showingMembers = false
     /// Settings' Who's who open over the page on a Mac (core's `SettingsSection.WHOS_WHO`); iOS pushes it.
     @State private var showingWhosWho = false
     @State private var askPassword = false
@@ -211,6 +213,17 @@ struct SettingsView: View {
                 #endif
             }
         }
+        .sheet(isPresented: $showingMembers) {
+            if let model = maps {
+                NavigationStack {
+                    MembersView(model: model)
+                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { showingMembers = false } } }
+                }
+                #if os(macOS)
+                .frame(minWidth: 520, minHeight: 480)
+                #endif
+            }
+        }
         .sheet(isPresented: $showingTerms) {
             if let model = maps {
                 NavigationStack {
@@ -282,6 +295,23 @@ struct SettingsView: View {
             }
         case .profile: if let model = maps { flowSection(.profile, model) }
         case .erase: if let model = maps { flowSection(.erase, model) }
+        case .members:
+            // the open space's members and their roles (the web's tenant section `tenant-members`)
+            if let model = maps {
+                Section {
+                    #if os(iOS)
+                    NavigationLink { MembersView(model: model) } label: { Label(say(.membersTitle), systemImage: "person.2") }
+                        .accessibilityIdentifier("settings-members")
+                    #else
+                    Button { showingMembers = true } label: { Label(say(.membersTitle), systemImage: "person.2") }
+                        .accessibilityIdentifier("settings-members")
+                    #endif
+                } header: {
+                    Text(say(.membersTitle))
+                } footer: {
+                    Text(say(.membersSub))
+                }
+            }
         case .whosWho:
             // every other member's key in the open space (the web's tenant section `tenant-people`, inbox #967)
             if let model = maps {
@@ -300,7 +330,7 @@ struct SettingsView: View {
                 }
             }
         case .terms:
-            // the open space's terms and the operator section, read-only (uc.account.accept-terms)
+            // the open space's terms and the operator section, an owner's to edit (uc.admin.tenant-terms)
             if maps != nil {
                 Section {
                     Button { showingTerms = true } label: { Label(say(.termsSettingsTitle), systemImage: "doc.text") }
@@ -308,7 +338,7 @@ struct SettingsView: View {
                 } header: {
                     Text(say(.termsSettingsTitle))
                 } footer: {
-                    Text(say(.termsReadonlyNote))
+                    Text(say(.termsEditorSub))
                 }
             }
         case .signOut:

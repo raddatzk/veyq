@@ -515,11 +515,30 @@ final class AppModel {
         if let account = session.signedTo?.account as? VeyqAccount { signOut(account) }
     }
 
-    /// Settings' Terms page: the open tenant's terms in the app's language (core's `MemberTerms.page`), nil where they did
-    /// not read or no tenant is open.
-    func termsPage() async -> MemberTerms.TermsShown? {
+    /// Settings' Terms: the open tenant's terms in the app's language and, for an owner, the editor's draft (core's
+    /// `MemberTerms.editing`); nil where they did not read or no tenant is open.
+    func termsEditing() async -> MemberTerms.TermsEditing? {
         guard let t = tenantSession else { return nil }
-        return try? await MemberTerms.shared.page(tenant: t, language: AppleSessions.shared.appLanguage())
+        return try? await MemberTerms.shared.editing(tenant: t, language: AppleSessions.shared.appLanguage())
+    }
+
+    /// The owner's *Save Terms* (core's `MemberTerms.save`): the server's draft and what is said; nil without a tenant.
+    func saveTerms(_ draft: MemberTerms.TermsDraft) async -> MemberTerms.Saved? {
+        guard let t = tenantSession else { return nil }
+        return try? await MemberTerms.shared.save(tenant: t, draft: draft)
+    }
+
+    /// Settings' Members (core's `TenantMembers.read`): the open space's roster read anew; nil without a tenant.
+    func membersRead() async -> TenantMembers.Roster? { try? await tenantSession?.members.read() }
+
+    /// A row's *Make Co-Owner* ([owner]) or *Remove Co-Owner* (core's `TenantMembers.setRole`).
+    func setMemberRole(_ userId: String, owner: Bool) async throws -> TenantMembers.Outcome? {
+        try await tenantSession?.members.setRole(userId: userId, owner: owner)
+    }
+
+    /// A row's *Remove Member*, after its question (core's `TenantMembers.remove`).
+    func removeMember(_ userId: String, revokeLinks: Bool) async throws -> TenantMembers.Outcome? {
+        try await tenantSession?.members.remove(userId: userId, revokeLinks: revokeLinks)
     }
     /// A change of this device's trust is under way (the offer's answer, Manage's): its controls wait.
     private(set) var trustWorking = false
