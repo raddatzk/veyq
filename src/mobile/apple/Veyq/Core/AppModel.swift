@@ -1498,6 +1498,16 @@ final class AppModel {
     /// The tenant's safety numbers and their compare (core's `PersonTrust`).
     var personTrust: PersonTrust? { tenantSession?.personTrust }
 
+    /// Settings' Who's who (core's `PersonTrust.whosWho`, inbox #967): every other member of the open space, read anew; nil
+    /// while no tenant is open.
+    func whosWho() async -> WhosWho? { try? await personTrust?.whosWho() }
+
+    /// A Who's who row: Settings closes and the person's profile opens over the shell, where the compare lives.
+    func openPersonFromWhosWho(_ userId: String) {
+        closeSettings()
+        openPerson(userId)
+    }
+
     func passwordChangeFlow() -> PasswordChange? { session.signedTo?.account.passwordChange() }
     func addressChangeFlow() -> AddressChange? {
         guard let s = session.signedTo else { return nil }

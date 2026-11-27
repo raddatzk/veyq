@@ -86,6 +86,8 @@ struct SettingsView: View {
     @State private var flow: AccountFlow?
     /// Settings' Terms page open over the page (core's `SettingsSection.TERMS`).
     @State private var showingTerms = false
+    /// Settings' Who's who open over the page on a Mac (core's `SettingsSection.WHOS_WHO`); iOS pushes it.
+    @State private var showingWhosWho = false
     @State private var askPassword = false
     @State private var password = ""
     @State private var trustSaid: String?
@@ -198,6 +200,17 @@ struct SettingsView: View {
         .sheet(item: $flow) { f in
             if let model = maps { AccountFlowSheet(flow: f, model: model) }
         }
+        .sheet(isPresented: $showingWhosWho) {
+            if let model = maps {
+                NavigationStack {
+                    WhosWhoView(model: model)
+                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { showingWhosWho = false } } }
+                }
+                #if os(macOS)
+                .frame(minWidth: 520, minHeight: 480)
+                #endif
+            }
+        }
         .sheet(isPresented: $showingTerms) {
             if let model = maps {
                 NavigationStack {
@@ -265,6 +278,23 @@ struct SettingsView: View {
         case .security: if let model = maps { flowSection(.security, model) }
         case .profile: if let model = maps { flowSection(.profile, model) }
         case .erase: if let model = maps { flowSection(.erase, model) }
+        case .whosWho:
+            // every other member's key in the open space (the web's tenant section `tenant-people`, inbox #967)
+            if let model = maps {
+                Section {
+                    #if os(iOS)
+                    NavigationLink { WhosWhoView(model: model) } label: { Label(say(.whosWhoTitle), systemImage: "checkmark.seal") }
+                        .accessibilityIdentifier("settings-whos-who")
+                    #else
+                    Button { showingWhosWho = true } label: { Label(say(.whosWhoTitle), systemImage: "checkmark.seal") }
+                        .accessibilityIdentifier("settings-whos-who")
+                    #endif
+                } header: {
+                    Text(say(.whosWhoTitle))
+                } footer: {
+                    Text(say(.whosWhoSub))
+                }
+            }
         case .terms:
             // the open space's terms and the operator section, read-only (uc.account.accept-terms)
             if maps != nil {
