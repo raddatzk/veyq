@@ -689,10 +689,12 @@ internal sealed class NewPasswordField
 
     public UIElement View => _panel;
 
-    public NewPasswordField(Func<long?> flow, string id, Func<long, string, Call> check, Func<long, Call> edited, Func<long, bool, Call> anyway)
+    /// <summary><paramref name="edited"/> null: the flow drops its verdict on its own (a join's), nothing is sent per edit;
+    /// <paramref name="header"/> the box's (New password by default).</summary>
+    public NewPasswordField(Func<long?> flow, string id, Func<long, string, Call> check, Func<long, Call>? edited, Func<long, bool, Call> anyway, string? header = null)
     {
         _flow = flow;
-        Box = FlowPage.Secret(Words.PasswordChangeNew(), id);
+        Box = FlowPage.Secret(header ?? Words.PasswordChangeNew(), id);
         _notice = FlowText.Notice($"{id}-breach");
         AutomationProperties.SetAutomationId(_anyway, $"{id}-anyway");
         Box.PasswordChanged += (_, _) =>
@@ -702,7 +704,7 @@ internal sealed class NewPasswordField
                 if (Box.Password.Length == 0) return;
                 _forgetting = false;
             }
-            if (_flow() is { } f) Act.Send(edited(f));
+            if (edited is not null && _flow() is { } f) Act.Send(edited(f));
         };
         // the check when the box is left, never while typing (the web's blur)
         Box.LostFocus += (_, _) =>

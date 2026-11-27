@@ -1,7 +1,8 @@
 // A received link opened in the app as its guest (ADR 0150 decisions 2–4, 7 and 8; cr-app-received-links phase 10),
 // Fluent's way — Linux's received.rs, in WinUI. *Open a link* (OpenLink) is a ContentDialog with the link's box, a Paste
 // button that reads the clipboard on the tap only, and the core's reason where the text is no link the app opens — with
-// *Open in the browser* for a moderator's review (Received.Open answers ReceivedProblem). It stands on the sign-in page
+// *Open in the browser* for a moderator's review (Received.Open answers ReceivedProblem); a member invite answers
+// JoinOpened and shows as its join (JoinView). It stands on the sign-in page
 // under the sign-in and the unlock (owner 2026-11-19: not in the account menu).
 //
 // An opened link is a ReceivedView: a screen above everything (the window's face while it stands, MainWindow) with its
@@ -121,6 +122,7 @@ internal sealed class ReceivedView : IDisposable
             box.Loaded += (_, _) => box.Focus(FocusState.Programmatic);
             browser.Click += (_, _) => Launch(box.Text.Trim());
             long? opened = null;
+            long? joined = null;
             dialog.PrimaryButtonClick += async (_, args) =>
             {
                 // the dialog stays while the core reads the link: it closes on an opened one, else says why
@@ -138,6 +140,10 @@ internal sealed class ReceivedView : IDisposable
                     {
                         case Answer.ReceivedOpened o:
                             opened = o.received;
+                            break;
+                        case Answer.JoinOpened j:
+                            // a member invite opens its join, not a guest view (TenantJoin, JoinView)
+                            joined = j.join;
                             break;
                         case Answer.ReceivedProblem p:
                             args.Cancel = true;
@@ -164,6 +170,12 @@ internal sealed class ReceivedView : IDisposable
             await Dialogs.Show(window, dialog);
             LinkAsked = false;
             if (opened is { } received) Present(received, box.Text.Trim());
+            else if (joined is { } join)
+            {
+                // the box held the invite's secret parts: nothing of it stays
+                box.Text = "";
+                JoinView.Present(join);
+            }
         }
         catch (Exception e)
         {

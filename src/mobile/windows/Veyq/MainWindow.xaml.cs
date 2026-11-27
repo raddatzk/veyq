@@ -2,7 +2,7 @@
 // refuses, the sign-in, the unlock, or the shell (with "Manage servers" over it) — the screen the core's session says. Each screen draws the core's state and calls
 // its actions; nothing else. Linux's main.rs, in WinUI. A received link opened by *Open a link* (ReceivedView, ADR 0150
 // decision 4) stands above whichever face shows until it is let go; the face the session's gate gives meanwhile comes back
-// then.
+// then. A received invite's join (JoinView) stands there the same way.
 using System;
 using System.IO;
 using System.Linq;
@@ -29,6 +29,8 @@ public sealed partial class MainWindow : Window
     /// <summary>A received link's screen while one stands above the faces, and the face it covers (what the session's gate
     /// shows meanwhile), put back once the link is let go.</summary>
     private ReceivedView? _received;
+    /// <summary>A received invite's join while it stands above the faces (JoinView), as a received link does.</summary>
+    private JoinView? _join;
     private UIElement? _behind;
 
     public MainWindow()
@@ -46,16 +48,28 @@ public sealed partial class MainWindow : Window
         Status.Text = Words.Starting();
         // an opened link stands above whatever shows (*Open a link*: the sign-in, the unlock, a kept link's page)
         ReceivedView.Presenter = PresentReceived;
-        // the window closed lets go of a link still open
-        Closed += (_, _) => _received?.Dispose();
+        // a received invite's join stands above whatever shows, as a link does
+        JoinView.Presenter = PresentJoin;
+        // the window closed lets go of a link or a join still open
+        Closed += (_, _) =>
+        {
+            _received?.Dispose();
+            _join?.Dispose();
+        };
     }
 
     /// <summary>Received link <paramref name="received"/> as the window's face until it is let go; another link opened over
     /// it replaces it (the old one let go).</summary>
     private void PresentReceived(long received, string? browser)
     {
+        var joined = _join;
+        if (joined is not null)
+        {
+            _join = null;
+            joined.Dispose();
+        }
         if (_received is { } old) old.Dispose();
-        else _behind = Faces.Visibility == Visibility.Visible ? Faces.Content as UIElement : null;
+        else if (joined is null) _behind = Faces.Visibility == Visibility.Visible ? Faces.Content as UIElement : null;
         ReceivedView? view = null;
         view = new ReceivedView(this, received, ReceivedMode.OnItsOwn, browser, () =>
         {
@@ -72,6 +86,40 @@ public sealed partial class MainWindow : Window
         });
         _received = view;
         Log.Write("received link shown");
+        Show(view.Page);
+    }
+
+    /// <summary>Join <paramref name="join"/> as the window's face until it is let go; one over a link or another join
+    /// replaces it (the old one let go).</summary>
+    private void PresentJoin(long join)
+    {
+        var covering = _received is not null || _join is not null;
+        if (_received is { } received)
+        {
+            _received = null;
+            received.Dispose();
+        }
+        if (_join is { } old)
+        {
+            _join = null;
+            old.Dispose();
+        }
+        if (!covering) _behind = Faces.Visibility == Visibility.Visible ? Faces.Content as UIElement : null;
+        JoinView? view = null;
+        view = new JoinView(this, join, () =>
+        {
+            // on a later turn: not inside the view's own update
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!ReferenceEquals(_join, view)) return;
+                _join = null;
+                Log.Write("join left");
+                Show(_behind);
+                _behind = null;
+            });
+        });
+        _join = view;
+        Log.Write("join shown");
         Show(view.Page);
     }
 
@@ -181,8 +229,8 @@ public sealed partial class MainWindow : Window
 
     private void Face(UIElement? face)
     {
-        // a received link stands above: the face waits behind it
-        if (_received is not null)
+        // a received link or a join stands above: the face waits behind it
+        if (_received is not null || _join is not null)
         {
             _behind = face;
             return;

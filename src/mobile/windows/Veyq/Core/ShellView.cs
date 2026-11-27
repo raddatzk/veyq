@@ -459,11 +459,15 @@ internal sealed class ShellView
 
     /// <summary>The switcher: the space shown and its tenant and server; the spaces, then the tenants (one row each: name
     /// and where it is), then Manage servers (ManageDialog). The space's trash is the level's (LevelTool.Trash).</summary>
+    /// <summary>The open space's tenant name as the switcher last drew it (an invite mail's subject names it); empty before.</summary>
+    internal static string OpenTenantName { get; private set; } = "";
+
     private void DrawSwitcher(ShellModelState state, ShellShown shown)
     {
         _switcherTitle.Text = Said.Piece(shown.spaceName);
         _switcherSubtitle.Text = shown.switcherSubtitle;
         _me.DisplayName = shown.tenant.name;
+        OpenTenantName = shown.tenant.name;
         Avatars.Show(_me, shown.me);
         var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft };
         foreach (var s in shown.spaces)
