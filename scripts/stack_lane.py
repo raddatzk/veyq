@@ -52,7 +52,10 @@ MAIL_API = "http://mail.relay.test:8025"
 CONTAINER_OUT = "/out"
 APP_TRUSTSTORE = "app-truststore.p12"
 # Not a secret: the store holds one public certificate, and Java asks for a password (the overlay names it too).
+# keytool reads it from this variable (`-storepass:env`), handed to `docker run -e` by name, so no command line the run
+# prints carries it.
 APP_TRUSTSTORE_PASSWORD = "veyq-e2e"
+APP_TRUSTSTORE_PASSWORD_ENV = "VEYQ_E2E_TRUSTSTORE_PASSWORD"
 PEBBLE_MINICA_PATH = "/test/certs/pebble.minica.pem"
 PEBBLE_MANAGEMENT_PORT = 15000
 DOMAIN = "veyq.test"
@@ -370,9 +373,11 @@ def pebble(release: Release, workdir: Path, values: dict[str, str], app_image: s
     # the distroless image puts only `java` on the PATH (ADR 0118), and keytool's launcher is this main class of
     # java.base under an architecture-specific JRE path.
     run("docker", "run", "--rm", "--network", "none", "--user", f"{os.getuid()}:{os.getgid()}",
+        "-e", APP_TRUSTSTORE_PASSWORD_ENV,
         "-v", f"{workdir}:/w", "--entrypoint", "java", app_image, "-m", "java.base/sun.security.tools.keytool.Main",
         "-importcert", "-noprompt", "-alias", "veyq-e2e-pebble-root", "-file", f"/w/{root.name}",
-        "-keystore", f"/w/{APP_TRUSTSTORE}", "-storetype", "PKCS12", "-storepass", APP_TRUSTSTORE_PASSWORD)
+        "-keystore", f"/w/{APP_TRUSTSTORE}", "-storetype", "PKCS12", "-storepass:env", APP_TRUSTSTORE_PASSWORD_ENV,
+        env={**os.environ, APP_TRUSTSTORE_PASSWORD_ENV: APP_TRUSTSTORE_PASSWORD})
     print(f"pebble: the app trusts {describe(ssl.PEM_cert_to_DER_cert(root.read_text()))} and nothing else", flush=True)
     return pebble_container(values["COMPOSE_PROJECT_NAME"], workdir)
 

@@ -444,6 +444,21 @@ def upgrade(start: Start, candidate: lane.Release, installed: lane.Installed, wo
     return Upgraded(after, captures[0], key)
 
 
+# The states a reading's `configSecretState` can name (contracts/api/instance.openapi.yaml, an `enum`). What the lane
+# prints is one of these constants, never the value it read: a state is no secret, but it is read under a name that
+# says "secret", and a log line built from the read value would pass on whatever an altered reader put there.
+CONFIG_SECRET_STATES = ("OK", "ABSENT", "MISMATCH")
+
+
+def shown_state(reading: dict, absent: str) -> str:
+    """The reading's `configSecretState` as one of `CONFIG_SECRET_STATES`, `absent` when it holds none, or "not a
+    state" for anything else."""
+    if "configSecretState" not in reading:
+        return absent
+    value = reading.get("configSecretState")
+    return next((state for state in CONFIG_SECRET_STATES if state == value), "not a state")
+
+
 def reader_of(web: Path) -> str:
     """A tree's reader: the `upgrade` group's last member, below its web client's directory."""
     members = sorted(p.relative_to(web).as_posix() for p in proof.discover(web)
@@ -466,7 +481,7 @@ def read(installed: lane.Installed, tree: Path, workdir: Path, stamp: str, name:
         (workdir / f"reading-{name}.json").write_text(json.dumps(reading, indent=2) + "\n")
         READINGS[name] = reading
     print(f"read ({name}): {reader} from {tree} opened every item; configSecretState "
-          f"{reading.get('configSecretState')}", flush=True)
+          f"{shown_state(reading, 'none')}", flush=True)
     return reading
 
 
@@ -510,7 +525,7 @@ def closing_lines(start: Start | None, tree: proof.Predecessor | None, red: list
                      f"V{proof.highest_migration(after)}")
         lines.append(f"migrations changed or removed since {start.tag}: {', '.join(changed) or 'none'}")
     for name, reading in readings.items():
-        lines.append(f"configSecretState ({name}): {reading.get('configSecretState', '(never read)')}")
+        lines.append(f"configSecretState ({name}): {shown_state(reading, '(never read)')}")
     lines.append("outcome: " + ("GREEN — installed, seeded, upgraded in place, read, opened in a browser, rolled back "
                                 "and read again" if not red else f"RED — {red[0]}"))
     return lines
