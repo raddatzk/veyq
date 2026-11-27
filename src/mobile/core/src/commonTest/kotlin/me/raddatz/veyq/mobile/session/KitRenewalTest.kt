@@ -96,6 +96,7 @@ class KitRenewalTest {
         val done = kept(step)
         assertEquals(true, done.recorded)
         assertNull(done.refusal)
+        assertEquals(Msg.KIT_RENEW_DONE, done.done, "the web's kit.renew.done once the record is written (2026-11-27: the apps said nothing)")
         assertEquals(KitWriter.LAYOUT, KitRecord.layoutOf(a.suite, a.masterKey()!!, a.kitRecords.single()), "the record names this layout under the account's Master Key")
         step.confirm(false)
         step.confirm(true)
@@ -110,6 +111,7 @@ class KitRenewalTest {
         val done = kept(step)
         assertEquals(false, done.recorded)
         assertEquals(Msg.KIT_RENEW_NOT_NOTED, done.refusal)
+        assertNull(done.done, "no done line over a record that did not write")
         assertTrue(done.saved && done.ready, "the kit itself stands")
         step.close()
     }
@@ -119,7 +121,9 @@ class KitRenewalTest {
         val a = PlayedCredentials(p).apply { taken = true }
         val step = assertNotNull(AddressChange(a, p).kit(a.password, a.secretKeyCopy()))
         assertTrue(a.kitRecords.isEmpty())
-        assertEquals(true, kept(step).recorded)
+        val kept = kept(step)
+        assertEquals(true, kept.recorded)
+        assertNull(kept.done, "the address change says its own, not the renewal's")
         assertEquals(KitWriter.LAYOUT, KitRecord.layoutOf(a.suite, a.masterKey()!!, a.kitRecords.single()))
         step.close()
     }

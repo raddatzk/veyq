@@ -28,6 +28,9 @@ class KitStep internal constructor(
      * written, whether it was; null where the flow records the kit otherwise (a rotation carries it in its request).
      */
     private val kept: (suspend () -> Boolean)? = null,
+    /** What the step says once [kept] wrote the record ([State.done]): the renewal's [Msg.KIT_RENEW_DONE], the web's
+     *  `kit.renew.done`; null where the flow goes on and says its own (an address change). */
+    private val doneWord: Msg? = null,
     /** Where [kept] runs: the step's own, a test's. */
     private val scope: kotlinx.coroutines.CoroutineScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default),
 ) {
@@ -46,6 +49,8 @@ class KitStep internal constructor(
         /** The account's kit record after "I saved it": true written, false not ([refusal] then says the kit still
          *  works, uc.account.renew-emergency-kit E3); null where none is written or not yet. */
         val recorded: Boolean? = null,
+        /** Said once the record was written ([recorded] true): the flow's done line, null for a flow without one. */
+        @Serializable(with = MsgKey::class) val done: Msg? = null,
     ) {
         /** The flow may go on past the kit. */
         val ready: Boolean get() = saved && confirmed
@@ -95,7 +100,11 @@ class KitStep internal constructor(
         // the record goes once the kit is kept, never at render (the web's `onKept`); its key was sealed before the save
         scope.launch {
             val written = runCatching { record() }.getOrDefault(false)
-            _state.value = current.copy(recorded = written, refusal = if (written) current.refusal else Msg.KIT_RENEW_NOT_NOTED)
+            _state.value = current.copy(
+                recorded = written,
+                refusal = if (written) current.refusal else Msg.KIT_RENEW_NOT_NOTED,
+                done = if (written) doneWord else null,
+            )
         }
     }
 

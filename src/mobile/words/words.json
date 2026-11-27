@@ -572,6 +572,11 @@
     "en": "The check didn’t go through, so no kit was made. Check your connection and try again.",
     "de": "Die Prüfung hat nicht geklappt, deshalb wurde kein Kit erstellt. Prüfe deine Verbindung und versuche es erneut."
   },
+  "kit_renew_done": {
+    "note": "the renewal's new kit saved, kept and its record written (uc.account.renew-emergency-kit step 6)",
+    "en": "Done. Once the new kit is kept safe, you can destroy the old sheet.",
+    "de": "Fertig. Sobald das neue Kit sicher verwahrt ist, kannst du das alte Blatt vernichten."
+  },
   "kit_renew_not_noted": {
     "note": "a kit saved and kept whose record did not write (uc.account.renew-emergency-kit E3); also after an address change's kit",
     "en": "Your new kit is saved and works. veyq could not note that you made it, so it may suggest a new kit again – making one again only updates that.",

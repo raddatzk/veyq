@@ -316,6 +316,7 @@
     "kit_pdf_where": ["kit.pdfWhere"],
     "kit_renew_check": ["kit.renew.check"],
     "kit_renew_failed": ["kit.renew.failed"],
+    "kit_renew_done": ["kit.renew.done"],
     "kit_renew_not_noted": ["kit.renew.notNoted"],
     "kit_renew_refused": ["kit.renew.refused"],
     "kit_renew_sub": ["kit.renew.sub"],

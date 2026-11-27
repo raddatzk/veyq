@@ -71,7 +71,7 @@ class KitRenewal(
                 mk.fill(0)
             }
             _state.value = State()
-            KitStep(primitives, door.email, door.server, secretKey, kept = { door.writeKitRecord(record) }).also { intake.spent() }
+            KitStep(primitives, door.email, door.server, secretKey, kept = { door.writeKitRecord(record) }, doneWord = Msg.KIT_RENEW_DONE).also { intake.spent() }
         } catch (e: ColdCredential.Refused) {
             // a vault behind a secured account is "didn't match" here, as on every credential screen but the rotation's
             _state.value = State(refusal = if (ColdCredential.staleAsRejected(e).reason == ColdCredential.Refusal.REJECTED) Msg.KIT_RENEW_REFUSED else Msg.KIT_RENEW_FAILED)
