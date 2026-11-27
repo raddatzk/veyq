@@ -714,6 +714,8 @@ struct MarkdownText: View {
                     let l = line.trimmingCharacters(in: .whitespaces)
                     return (l.hasPrefix("- ") || l.hasPrefix("* ")) ? "• " + l.dropFirst(2) : l
                 }.joined(separator: "\n").replacingOccurrences(of: "**", with: "")
+                    // an *emphasis* as its words (the operator section's "*Report*": the stars were drawn, inbox #1418)
+                    .replacingOccurrences(of: #"\*([^\s*](?:[^*\n]*[^\s*])?)\*"#, with: "$1", options: .regularExpression)
             }
     }
 }

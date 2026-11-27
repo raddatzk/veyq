@@ -217,6 +217,8 @@ struct KitSaveSection: View {
             }))
             .disabled(!saved)
             Refusal(msg: state?.refusal)
+            // the flow's done line once the kit is kept and recorded (the renewal's, the web's kit.renew.done)
+            if let done = state?.done { Text(say(done)).accessibilityIdentifier("kit-done") }
         }
         .onAppear {
             if held == nil { held = HeldFlow(step, current: { $0.current }, flow: { $0.state }) }
