@@ -224,7 +224,7 @@ deleted, and #436's mention of the disabled major-entry proof is updated.
   `copy --immutable` takes each pooled object for a modified one; on the Fedora VM (podman, native bind mount) the
   mtime keeps its nanoseconds and the second copy passes. So CI (a Linux runner) is expected unaffected (inferred, not
   measured on GitHub), and a Server Owner on a Mac with a directory pool cannot back up. Not patched here (a tools
-  change, and outside this CR). Recommendation: an inbox row; the fix is likely `--modify-window 1s` on the directory
+  change, and outside this CR). Recommendation: an inbox row — filed as inbox #870; the fix is likely `--modify-window 1s` on the directory
   pool's copies in `instance_backup.py` (rclone's own lever for coarse-mtime filesystems), proved by the same two-copy
   case. The local run used a scratch `docker` shim adding `RCLONE_MODIFY_WINDOW=1s` to the rclone container only —
   never in the repository.
