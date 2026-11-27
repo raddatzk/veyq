@@ -56,6 +56,14 @@ enum Target {
 /// leave the content less than 360sp.
 pub const COLLAPSE_BELOW: &str = "max-width: 600sp";
 
+/// The window action that opens the open connection's Settings at a section (its parameter, "" for the page's top).
+pub const SETTINGS_AT: &str = "settings-at";
+
+/// The Settings page at [section] (inbox #1415's Settings link), over the shell's open connection.
+pub fn open_settings_at(widget: &impl IsA<gtk::Widget>, section: Option<String>) {
+    let _ = widget.activate_action(&format!("win.{SETTINGS_AT}"), Some(&section.unwrap_or_default().to_variant()));
+}
+
 pub struct Shell {
     /// What the window shows while signed in: the split view, and under it the account's music bar ([MusicBar]).
     pub root: adw::ToolbarView,
@@ -246,6 +254,16 @@ impl Shell {
                 crate::core_ui::account_settings::open(&window, c, Some("security".to_owned()));
             }
         });
+        // a `veyq:` link's or a member's link's Settings section (inbox #1415): the open connection's page at it ("" its top)
+        let settings_at = gtk::gio::SimpleAction::new(SETTINGS_AT, Some(glib::VariantTy::STRING));
+        let (opens, at_connection) = (window.downgrade(), shown_now.clone());
+        settings_at.connect_activate(move |_, section| {
+            let section = section.and_then(|s| s.get::<String>()).filter(|s| !s.is_empty());
+            if let (Some(c), Some(window)) = (at_connection.borrow().clone(), opens.upgrade()) {
+                crate::core_ui::account_settings::open(&window, c, section);
+            }
+        });
+        window.add_action(&settings_at);
         let toasts = adw::ToastOverlay::new();
         // the upload queue, GNOME Files' way: a header bar button while anything is listed, its popover the list
         let uploads = Uploads::new(&toasts);

@@ -42,7 +42,7 @@ use gtk::{gio, glib};
 
 use crate::bridge::{
     self, Watch,
-    wire::{Answer, Call, Create, HeaderAction, LevelTool, Msg, NodeAt, ReceivedGate, ReceivedPage, ReceivedPageKind, ReceivedRefusal, ReceivedShown, Update, Watched, Why},
+    wire::{Answer, Call, Create, DeepScreen, HeaderAction, LevelTool, Msg, NodeAt, ReceivedGate, ReceivedPage, ReceivedPageKind, ReceivedRefusal, ReceivedShown, Update, Watched, Why},
 };
 use crate::core_ui::home::{glib_escape, kind_icon};
 use crate::core_ui::registry::{registry, GuestFrame, Page};
@@ -138,6 +138,13 @@ pub fn open_link(parent: &impl IsA<gtk::Widget>) {
                 Ok(Answer::JoinOpened { join }) => {
                     d.close();
                     crate::core_ui::join::present(join, &over);
+                }
+                // a member's own link (inbox #1415): the shell moved there in the core, a Settings section opens here
+                Ok(Answer::DeepLinked { screen, section }) => {
+                    d.close();
+                    if matches!(screen, DeepScreen::Settings) {
+                        crate::core_ui::shell::open_settings_at(&over, section);
+                    }
                 }
                 Ok(Answer::ReceivedProblem { problem, browser }) => {
                     p.set_label(&said_msg(&problem));

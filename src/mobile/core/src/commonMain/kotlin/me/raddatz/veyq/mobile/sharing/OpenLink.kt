@@ -90,9 +90,10 @@ class OpenLink(private val opener: (ReceivedLink.ShareLink, report: Boolean) -> 
     }
 
     /**
-     * The member's link the field holds handed to the open shell once — [arrive] is its `ShellModel.arrive`, or answers null
-     * where no shell is open (the sign-in, the unlock) —, and its answer: opened (the field emptied, nothing of a link is
-     * kept), a Settings section for the platform to open, or [Arrived.NotHere] said in the field with the text kept as typed.
+     * The member's link the field holds handed to the open shell once — [arrive] is its `ShellModel.arrive`, answers
+     * [Arrived.Waiting] where the platform holds it for the shell an unlock opens, or null where no shell can open it (the
+     * sign-in) —, and its answer: opened or held (the field emptied, nothing of a link is kept), a Settings section for the
+     * platform to open, or [Arrived.NotHere] said in the field with the text kept as typed.
      * Null while the text is no member's link.
      */
     fun openPlace(arrive: (me.raddatz.veyq.mobile.navigation.PlaceLink) -> me.raddatz.veyq.mobile.navigation.Arrived?): me.raddatz.veyq.mobile.navigation.Arrived? {

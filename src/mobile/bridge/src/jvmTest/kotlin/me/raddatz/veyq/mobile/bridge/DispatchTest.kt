@@ -152,6 +152,22 @@ class DispatchTest {
     }
 
     /**
+     * A member's own web link pasted into *Open a link* (inbox #1415) is the shell's, never the share check's: while the
+     * start still decides it waits for the shell an unlock opens (the field closes), and on the sign-in, with no account to
+     * open it, it is refused as not open here. Bitten by a `Received.Open` without its place branch (red: `NOT_A_SHARE`).
+     */
+    @Test
+    fun aMembersLinkWaitsForTheShellOrIsNotOpenHere() = runBlocking {
+        val b = bridge()
+        val link = "https://veyq.localhost/#~me/reise/memories/rom"
+        assertEquals(Answer.DeepLinked(DeepScreen.OPEN), b.ask(Call.ReceivedOpen(link)), "held while the start decides")
+        assertEquals(Answer.Done, b.ask(Call.SessionStart))
+        assertEquals(Answer.ReceivedProblem(Msg.LINK_PROBLEM_NOT_OPEN_HERE, browser = false), b.ask(Call.ReceivedOpen(link)))
+        assertEquals(Answer.ReceivedProblem(Msg.LINK_PROBLEM_NOT_A_SHARE, browser = false), b.ask(Call.ReceivedOpen("https://veyq.localhost/recover#tok")))
+        b.shutdown()
+    }
+
+    /**
      * An invite link pasted into *Open a link* goes to its join, never to the share page's refusal (ADR 0111, ADR 0129):
      * with no join to open (this composition has none) it is refused as not offered, where a share's check would have
      * said `NOT_A_SHARE`; the owner's invite calls need a tenant and the join's calls a join. Bitten by a `Received.Open`
@@ -3214,6 +3230,8 @@ class DispatchTest {
             "veyq://link#k=$canary" to DeepScreen.LINK, "veyq://link?u=https://photos.example.org/s/$canary" to DeepScreen.LINK,
             "veyq://$canary@link/s/$canary" to DeepScreen.LINK, "veyq://$canary" to DeepScreen.OPEN,
             "https://photos.example.org/s/$canary#k=$canary" to DeepScreen.OPEN,
+            // a place the web named (inbox #1415), with no shell open: held, the app where it is, nothing of it answered
+            "veyq://open?i=https%3A%2F%2Fphotos.example.org&s=0b9e2a52-6a3e-4f3c-9d55-0d1f7e6f2a10" to DeepScreen.OPEN,
         )) {
             val json = raw(uri)
             assertEquals(Answer.DeepLinked(screen), wire.decodeFromString(Answer.serializer(), json), uri)

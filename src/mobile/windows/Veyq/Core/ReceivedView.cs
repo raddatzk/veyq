@@ -123,6 +123,8 @@ internal sealed class ReceivedView : IDisposable
             browser.Click += (_, _) => Launch(box.Text.Trim());
             long? opened = null;
             long? joined = null;
+            var placed = false;
+            string? placedSection = null;
             dialog.PrimaryButtonClick += async (_, args) =>
             {
                 // the dialog stays while the core reads the link: it closes on an opened one, else says why
@@ -144,6 +146,11 @@ internal sealed class ReceivedView : IDisposable
                         case Answer.JoinOpened j:
                             // a member invite opens its join, not a guest view (TenantJoin, JoinView)
                             joined = j.join;
+                            break;
+                        case Answer.DeepLinked d:
+                            // a member's own link (inbox #1415): the shell moved there in the core; Settings opens here
+                            placed = true;
+                            placedSection = d.screen == DeepScreen.Settings ? d.section ?? "" : null;
                             break;
                         case Answer.ReceivedProblem p:
                             args.Cancel = true;
@@ -169,7 +176,12 @@ internal sealed class ReceivedView : IDisposable
             };
             await Dialogs.Show(window, dialog);
             LinkAsked = false;
-            if (opened is { } received) Present(received, box.Text.Trim());
+            if (placed)
+            {
+                box.Text = "";
+                if (placedSection is { } section && window is MainWindow main) main.OpenSettingsAt(section.Length == 0 ? null : section);
+            }
+            else if (opened is { } received) Present(received, box.Text.Trim());
             else if (joined is { } join)
             {
                 // the box held the invite's secret parts: nothing of it stays

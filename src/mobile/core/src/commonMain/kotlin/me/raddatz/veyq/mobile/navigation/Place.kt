@@ -24,6 +24,12 @@ sealed class Arrived {
     /** The link is for no tenant open here, or names no space listed: nothing moved. */
     data object NotHere : Arrived()
 
+    /**
+     * Held in memory until the shell opens (a remembered account's unlock is on screen): the platform hands it to that
+     * shell's [ShellModel.arrive] then — nothing moves for another tenant.
+     */
+    data object Waiting : Arrived()
+
     /** A Settings link: the platform opens its settings page at [section] (null: the page's top), as a search's result does. */
     data class Settings(val section: String?) : Arrived()
 }

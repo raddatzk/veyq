@@ -1287,12 +1287,13 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.ShareDelete -> shares[call.share]?.let { Answer.Said(it.delete().notice) } ?: noShare
             is Call.ShareSwitchOff -> shares[call.share]?.let { Answer.Said(it.switchOff(call.link).notice) } ?: noShare
             is Call.ShareReactivate -> shares[call.share]?.let { Answer.Said(it.reactivate(call.link).notice) } ?: noShare
-            is Call.DeepLink -> Answer.DeepLinked(
-                when (me.raddatz.veyq.mobile.sharing.DeepLink.parse(call.uri)) {
-                    is me.raddatz.veyq.mobile.sharing.DeepLink.Link -> DeepScreen.LINK
-                    is me.raddatz.veyq.mobile.sharing.DeepLink.Open -> DeepScreen.OPEN
-                },
-            )
+            is Call.DeepLink -> when (val link = me.raddatz.veyq.mobile.sharing.DeepLink.parse(call.uri)) {
+                is me.raddatz.veyq.mobile.sharing.DeepLink.Link -> Answer.DeepLinked(DeepScreen.LINK)
+                is me.raddatz.veyq.mobile.sharing.DeepLink.Open -> Answer.DeepLinked(DeepScreen.OPEN)
+                // a place the web named (inbox #1415): the open shell's now, else held in memory until a shell opens
+                is me.raddatz.veyq.mobile.sharing.DeepLink.At -> arrive(link.place)
+                    ?: run { arriving = link.place; Answer.DeepLinked(DeepScreen.OPEN) }
+            }
             is Call.ScanOpen -> {
                 val id = ids.incrementAndFetch()
                 scans.put(id, when (call.kind) {
@@ -2517,6 +2518,22 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             return Answer.JoinOpened(id)
         }
         val r = me.raddatz.veyq.mobile.sharing.ReceivedLink.open(text)
+        // a member's own link (inbox #1415): the open shell moves there, or the field says the space is not open here
+        if ((r as? me.raddatz.veyq.mobile.sharing.ReceivedLink.Parsed.Refused)?.problem == me.raddatz.veyq.mobile.sharing.ReceivedLink.Problem.NOT_A_SHARE) {
+            me.raddatz.veyq.mobile.navigation.PlaceLink.ofWeb(text)?.let { place ->
+                val shell = tenant.value?.models?.shell?.takeIf { it.current != null }
+                // on the unlock it waits for the shell the unlock opens; on the sign-in no account here opens it
+                val a = shell?.arrive(place) ?: if (parts.session.gate.value.let { it is SessionModel.Gate.Unlock || it is SessionModel.Gate.Starting }) {
+                    arriving = place
+                    me.raddatz.veyq.mobile.navigation.Arrived.Waiting
+                } else me.raddatz.veyq.mobile.navigation.Arrived.NotHere
+                return when (a) {
+                    is me.raddatz.veyq.mobile.navigation.Arrived.Settings -> Answer.DeepLinked(DeepScreen.SETTINGS, a.section)
+                    me.raddatz.veyq.mobile.navigation.Arrived.Opened, me.raddatz.veyq.mobile.navigation.Arrived.Waiting -> Answer.DeepLinked(DeepScreen.OPEN)
+                    me.raddatz.veyq.mobile.navigation.Arrived.NotHere -> Answer.ReceivedProblem(Msg.LINK_PROBLEM_NOT_OPEN_HERE, browser = false)
+                }
+            }
+        }
         if (r is me.raddatz.veyq.mobile.sharing.ReceivedLink.Parsed.Refused) {
             val word = me.raddatz.veyq.mobile.sharing.BookmarkCreate.wordOf(r.problem) ?: Msg.LINK_PROBLEM_NOT_A_URL
             return Answer.ReceivedProblem(word, browser = r.problem == me.raddatz.veyq.mobile.sharing.ReceivedLink.Problem.MODERATION)
@@ -2999,7 +3016,23 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         queuedSaidJob = t.queued?.let { q -> scope.launch { q.sent.collect { if (it.isNotEmpty()) queuedSaid.value = it } } }
         scope.launch { runCatching { t.loadPictures() } }
         t.shell?.load(openLastUsed = true)
+        // a place a `veyq:` link named before this shell opened (the sign-in, the unlock): over this tenant only; a Settings
+        // link there opens the shell alone (no host waits for an answer then)
+        arriving?.let { place -> arriving = null; t.shell?.arrive(place) }
         return Answer.Done
+    }
+
+    /** A `veyq://open` place held until a shell opens (inbox #1415): in memory only, never stored or logged. */
+    @kotlin.concurrent.Volatile
+    private var arriving: me.raddatz.veyq.mobile.navigation.PlaceLink? = null
+
+    /** [place] opened by the open shell, as its answer to a host; null where no shell is open. */
+    private fun arrive(place: me.raddatz.veyq.mobile.navigation.PlaceLink): Answer? {
+        val shell = tenant.value?.models?.shell?.takeIf { it.current != null } ?: return null
+        return when (val a = shell.arrive(place)) {
+            is me.raddatz.veyq.mobile.navigation.Arrived.Settings -> Answer.DeepLinked(DeepScreen.SETTINGS, a.section)
+            else -> Answer.DeepLinked(DeepScreen.OPEN)
+        }
     }
 
     private fun closeTenant() {

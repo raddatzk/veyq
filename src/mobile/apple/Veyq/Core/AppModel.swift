@@ -803,6 +803,43 @@ final class AppModel {
     /// "Storage on this device" read anew at each change of the pins while the page is open (core's).
     @ObservationIgnored private var storageWatch: AccountSettingsWatch?
 
+    // MARK: A place reached from outside (inbox #1415)
+
+    /// A `veyq://open` place held in memory until a shell opens (never stored, never logged): one for no tenant open here
+    /// then moves nothing.
+    @ObservationIgnored private var arriving: PlaceLink?
+
+    /// A `veyq://open` place: the shell's now where one is on screen, else once one opens.
+    func arrive(_ place: PlaceLink) {
+        guard let model = arrivable() else { arriving = place; return }
+        arrived(model.arrive(link: place))
+    }
+
+    /// The shell on screen (signed in and unlocked); a locked one holds a link until its unlock opens a shell anew.
+    private func arrivable() -> ShellModel? {
+        guard let model = shellModel, model.current != nil, session.current is SessionModelGate.Signed else { return nil }
+        return model
+    }
+
+    /// The open shell's answer to a member's link pasted or shared (core's `OpenLink.openPlace`); on the unlock it waits for
+    /// the shell the unlock opens (`arriving`); nil on the sign-in, where no account is on the device to open it.
+    func arriveHere(_ place: PlaceLink) -> Arrived? {
+        if let model = arrivable() { return model.arrive(link: place) }
+        // the unlock on screen, or the start still deciding whether one comes (a share that started the app)
+        guard session.current is SessionModelGate.Unlock || session.current is SessionModelGate.Starting else { return nil }
+        arriving = place
+        return Arrived.Waiting.shared
+    }
+
+    /// What an arrival answered: a Settings link opens the page at its section (its top: the first); the rest is the shell's.
+    func arrived(_ answer: Arrived) {
+        guard let settings = answer as? Arrived.Settings else { return }
+        settingsAnchor = settings.section ?? SettingsSection.appearance.id
+        #if os(iOS)
+        openSettings()
+        #endif
+    }
+
     /// The drawer's Settings (and a Mac's Settings window): the current account's page, read anew as it opens.
     func openSettings() {
         drawerOpen = false
@@ -902,6 +939,11 @@ final class AppModel {
         openMusic(model, switched: switched)
         dropHeaders()
         try await model.load(openLastUsed: incoming == nil)
+        // a place a `veyq:` link named before this shell opened (the sign-in, the unlock): opened now, over this tenant only
+        if let place = arriving {
+            arriving = nil
+            arrived(model.arrive(link: place))
+        }
         shellWatch = model.watch { @Sendable _ in
             Task { @MainActor [weak self] in self?.applyShell(start: false) }
         }

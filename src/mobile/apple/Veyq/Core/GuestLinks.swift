@@ -80,6 +80,17 @@ final class GuestLinks {
             held.load()
             return
         }
+        // a member's own link (inbox #1415): the shell moves there, or the field says it is not open here
+        if field.state.value.place {
+            let answer = field.link.field.openPlace(arrive: { place in model.arriveHere(place) })
+            field.state.refresh()
+            guard let answer, !(answer is Arrived.NotHere) else { return }
+            field.stop()
+            asking = nil
+            model.arrived(answer)
+            if screen == nil, joining == nil { onDone?() }
+            return
+        }
         guard let s = field.link.open(tenant: model.guestTenant) else { return }
         field.stop()
         asking = nil

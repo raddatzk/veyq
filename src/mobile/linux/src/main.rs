@@ -322,8 +322,9 @@ fn activate(app: &adw::Application) {
 
 /// A `veyq:` link (ADR 0150 § O): the window brought to the front — made first if the link started the app —, and on
 /// `veyq://link` *Open a link* over whatever it shows (the sign-in, the unlock, the open tenant); a dialog already open
-/// keeps what was typed there. The core reads the host alone (`Call::DeepLink`); nothing of the URI is kept or said on
-/// stderr.
+/// keeps what was typed there. `veyq://open` with a place the web named moves the open shell there in the core (or once a
+/// shell opens), a Settings section opening its page here (inbox #1415). The core reads it (`Call::DeepLink`); nothing of
+/// the URI is kept or said on stderr.
 fn open(app: &adw::Application, files: &[gio::File], _hint: &str) {
     if app.active_window().is_none() {
         activate(app);
@@ -333,11 +334,21 @@ fn open(app: &adw::Application, files: &[gio::File], _hint: &str) {
     let uris: Vec<String> = files.iter().map(|f| f.uri().to_string()).collect();
     glib::spawn_future_local(async move {
         let mut link = false;
+        let mut settings = None;
         for uri in uris {
             match bridge::call(&Call::DeepLink { uri }).await.map(|(answer, _)| answer) {
-                Ok(Answer::DeepLinked { screen }) => link |= matches!(screen, DeepScreen::Link),
+                Ok(Answer::DeepLinked { screen, section }) => {
+                    link |= matches!(screen, DeepScreen::Link);
+                    if matches!(screen, DeepScreen::Settings) {
+                        settings = Some(section);
+                    }
+                }
                 _ => eprintln!("veyq: a veyq: link was not answered"),
             }
+        }
+        if let Some(section) = settings {
+            eprintln!("veyq: a veyq: link opened Settings");
+            veyq::core_ui::shell::open_settings_at(&window, section);
         }
         let shown = window
             .downcast_ref::<adw::ApplicationWindow>()

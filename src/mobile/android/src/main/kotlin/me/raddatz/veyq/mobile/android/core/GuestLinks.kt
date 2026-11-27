@@ -53,6 +53,10 @@ class GuestLinks(
     private val music: () -> me.raddatz.veyq.mobile.audio.PageMusic? = { null },
     /** An invite the field holds (`OpenLink.State.invite`): opened as its join, not a guest view. */
     private val onInvite: (ReceivedLink.InviteLink) -> Unit = {},
+    /** A member's own link handed to the open shell (inbox #1415): its answer, null where no shell is on screen. */
+    private val onPlace: (me.raddatz.veyq.mobile.navigation.PlaceLink) -> me.raddatz.veyq.mobile.navigation.Arrived? = { null },
+    /** A Settings link's section (null: the page's top), opened by the app. */
+    private val onSettings: (String?) -> Unit = {},
 ) {
     private val _asking = MutableStateFlow<OpenLink?>(null)
 
@@ -105,6 +109,14 @@ class GuestLinks(
             val invite = field.invite() ?: return
             _asking.value = null
             onInvite(invite)
+            return
+        }
+        if (field.state.value.place) {
+            // a member's own link: the shell moves there, or the field says it is not open here
+            val answer = field.openPlace(onPlace) ?: return
+            if (answer == me.raddatz.veyq.mobile.navigation.Arrived.NotHere) return
+            _asking.value = null
+            if (answer is me.raddatz.veyq.mobile.navigation.Arrived.Settings) onSettings(answer.section)
             return
         }
         val view = field.open() ?: return

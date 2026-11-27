@@ -2378,9 +2378,11 @@ internal sealed class Answer {
 
     /**
      * The screen a `veyq:` link opens ([Call.DeepLink]): [DeepScreen.LINK] *Open a link* — on the sign-in or the unlock
-     * screen, and signed in over the open tenant —, [DeepScreen.OPEN] the app where it is. Nothing of the link.
+     * screen, and signed in over the open tenant —, [DeepScreen.OPEN] the app where it is (the shell already moved to a
+     * place the link named, inbox #1415), [DeepScreen.SETTINGS] the Settings page at [section] (null: its top). Also the
+     * answer to a member's own link pasted into *Open a link* ([Call.ReceivedOpen]): the field closes. Nothing of the link.
      */
-    @Serializable @SerialName("DeepLinked") data class DeepLinked(val screen: DeepScreen) : Answer()
+    @Serializable @SerialName("DeepLinked") data class DeepLinked(val screen: DeepScreen, val section: String? = null) : Answer()
 
     /** A received link opened ([Call.ReceivedOpen]): its id, for [Watched.Received] and the `Received.*` calls. */
     @Serializable @SerialName("ReceivedOpened") data class ReceivedOpened(val received: Long) : Answer()
@@ -4801,9 +4803,9 @@ internal object Roots {
 @Serializable
 internal enum class TermsChange { TEXT, ADD, REMOVE, TEMPLATE }
 
-/** What a `veyq:` link opens (core's `DeepLink`, ADR 0150 § O1): the app where it is, or *Open a link*. */
+/** What a `veyq:` link opens (core's `DeepLink`, ADR 0150 § O1): the app where it is, *Open a link*, or Settings at a section. */
 @Serializable
-internal enum class DeepScreen { OPEN, LINK }
+internal enum class DeepScreen { OPEN, LINK, SETTINGS }
 
 /** Where a received link stands (core's `ShareGates.State`, ADR 0150 decision 2). */
 @Serializable

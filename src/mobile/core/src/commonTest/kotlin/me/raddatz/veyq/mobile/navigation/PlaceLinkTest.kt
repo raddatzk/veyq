@@ -132,6 +132,10 @@ class PlaceLinkTest {
         assertNotNull(handed)
         assertEquals(OpenLink.State(), field.state.value, "the field keeps nothing once opened")
         assertNull(field.openPlace { Arrived.Opened }, "handed once")
+        // the unlock on screen: held for the shell it opens, the field emptied as for an opened one
+        field.text(url)
+        assertEquals(Arrived.Waiting, field.openPlace { Arrived.Waiting })
+        assertEquals(OpenLink.State(), field.state.value)
         // a share link is still a guest's, and a foreign link still refused as before
         field.text("https://photos.example.org/s/Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_2#k=S2V5S2V5S2V5S2V5S2V5S2V5S2V5S2V5S2V5S2V5S2U")
         assertFalse(field.state.value.place)

@@ -1647,6 +1647,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         eachHolding { it.shown(model, t, switched) }
         startPending = true
         model.load(openLastUsed = shareInbox.waiting.value == null)
+        // a place a `veyq:` link named before this shell opened (the sign-in, the unlock): opened now, over this tenant only
+        arriving?.let { arriving = null; arrived(model.arrive(it)) }
         shellWatch = viewModelScope.launch { model.state.collect { it?.let(::publish) } }
         readRowDetails(t)
         watchAvatars(t)
@@ -2499,6 +2501,42 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         openSettings()
     }
 
+    /**
+     * A place reached from outside (inbox #1415, core's `PlaceLink`): opened by the shell over the open tenant, or held in
+     * memory until a shell opens (never stored, never logged) — a link for no tenant open here then moves nothing.
+     */
+    private var arriving: me.raddatz.veyq.mobile.navigation.PlaceLink? = null
+
+    /** A `veyq://open` place ([arriving]): the shell's now where one is open, else once one opens. */
+    fun arrive(place: me.raddatz.veyq.mobile.navigation.PlaceLink) {
+        val model = shellModel?.takeIf { it.current != null && signedIn() } ?: run { arriving = place; return }
+        arrived(model.arrive(place))
+    }
+
+    /** The shell is on screen: signed in and unlocked (a locked one holds a link until its unlock opens a shell anew). */
+    private fun signedIn() = session.gate.value is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed
+
+    /** What an arrival answered: a Settings link opens the page at its section; the rest is the shell's. */
+    internal fun arrived(answer: me.raddatz.veyq.mobile.navigation.Arrived) {
+        if (answer is me.raddatz.veyq.mobile.navigation.Arrived.Settings) {
+            _settingsAt.value = answer.section
+            openSettings()
+        }
+    }
+
+    /**
+     * The open shell's answer to [place] (a member's link pasted or shared, core's `OpenLink.openPlace`); on the unlock it
+     * waits for the shell the unlock opens ([arriving]); null on the sign-in, where no account is on the device to open it.
+     */
+    internal fun arriveHere(place: me.raddatz.veyq.mobile.navigation.PlaceLink): me.raddatz.veyq.mobile.navigation.Arrived? {
+        shellModel?.takeIf { it.current != null && signedIn() }?.let { return it.arrive(place) }
+        // the unlock on screen, or the start still deciding whether one comes (a share that started the app)
+        val g = session.gate.value
+        if (g !is me.raddatz.veyq.mobile.session.SessionModel.Gate.Unlock && g !is me.raddatz.veyq.mobile.session.SessionModel.Gate.Starting) return null
+        arriving = place
+        return me.raddatz.veyq.mobile.navigation.Arrived.Waiting
+    }
+
     /** The page scrolled to [settingsAt]. */
     fun settingsAtSeen() {
         _settingsAt.value = null
@@ -2532,7 +2570,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     val guests: GuestLinks by lazy {
-        GuestLinks(viewModelScope, PreferencesStore(getApplication()), AndroidGuestSessions(deviceKeys), uploads, guestDeriver, { shellModel?.tenant }, ::appLanguage, ::guestMusic, onInvite = ::openJoin)
+        GuestLinks(viewModelScope, PreferencesStore(getApplication()), AndroidGuestSessions(deviceKeys), uploads, guestDeriver, { shellModel?.tenant }, ::appLanguage, ::guestMusic, onInvite = ::openJoin, onPlace = ::arriveHere, onSettings = { arrived(me.raddatz.veyq.mobile.navigation.Arrived.Settings(it)) })
     }
 
     /**

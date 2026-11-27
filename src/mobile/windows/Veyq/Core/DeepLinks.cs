@@ -2,9 +2,10 @@
 // WinUI. The MSIX claims the scheme (Package.appxmanifest.in); the first activation arrives at the start (App.OnLaunched),
 // every later one at the running instance (Program.cs's AppInstance redirect). The core reads the URI's host alone
 // (Call.DeepLink): `veyq://link` shows *Open a link* over whatever stands — the sign-in, the unlock, the open tenant, a
-// received link's screen — unless it already shows (what was typed stays); `veyq://open` and anything else bring the
-// window to the front and nothing more. The URI is never logged, kept or shown: it waits in memory only until the core
-// has started, and the log names the screen alone.
+// received link's screen — unless it already shows (what was typed stays); `veyq://open` with a place the web named moves
+// the open shell there in the core (or once a shell opens), a Settings section opening its page here (inbox #1415); anything
+// else brings the window to the front and nothing more. The URI is never logged, kept or shown: it waits in memory only
+// until the core has started, and the log names the screen alone.
 
 namespace Veyq.Core;
 
@@ -65,13 +66,19 @@ internal static class DeepLinks
         try
         {
             var (answer, _) = await Core.CallAsync(new Call.DeepLink { uri = uri });
-            if (answer is not Answer.DeepLinked { screen: var screen })
+            if (answer is not Answer.DeepLinked { screen: var screen } linked)
             {
                 Log.Write($"a veyq: link answered {answer.GetType().Name}");
                 return;
             }
             var window = _window!;
             Front(window);
+            if (screen == DeepScreen.Settings)
+            {
+                Log.Write("veyq: link opened Settings");
+                window.OpenSettingsAt(linked.section);
+                return;
+            }
             if (screen != DeepScreen.Link)
             {
                 Log.Write("veyq: link opened the app where it is");

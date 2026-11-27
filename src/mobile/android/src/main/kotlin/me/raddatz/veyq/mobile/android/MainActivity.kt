@@ -62,7 +62,8 @@ class MainActivity : ComponentActivity() {
 
     /**
      * A `veyq:` link (ADR 0150 § O): `veyq://link` opens *Open a link* over whatever shows — the sign-in, the unlock or the
-     * open tenant —, anything else only brings the app to the front, which the system already did. Nothing of the URI is
+     * open tenant —, `veyq://open` with a place the web named opens it over the open tenant or once one opens (core's
+     * [DeepLink.At], inbox #1415), anything else only brings the app to the front, which the system already did. Nothing of the URI is
      * read but what core's [DeepLink.parse] reads, nothing of it is logged, and it is taken off the activity's intent so
      * nothing later finds it there. A start from the recents list hands the task's first intent again: it opens nothing.
      */
@@ -71,8 +72,12 @@ class MainActivity : ComponentActivity() {
         val uri = intent.dataString
         intent.data = null
         if (intent.flags and android.content.Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0 || uri == null) return
-        // a field already open keeps what the person typed there
-        if (DeepLink.parse(uri) is DeepLink.Link && model.guests.asking.value == null) model.guests.ask()
+        when (val link = DeepLink.parse(uri)) {
+            // a field already open keeps what the person typed there
+            DeepLink.Link -> if (model.guests.asking.value == null) model.guests.ask()
+            is DeepLink.At -> model.arrive(link.place)
+            DeepLink.Open -> Unit
+        }
     }
 
     /**

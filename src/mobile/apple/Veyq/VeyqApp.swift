@@ -79,12 +79,18 @@ struct VeyqApp: App {
     }
 
     /// A `veyq:` link (ADR 0150 § O): `veyq://link` opens *Open a link* over whatever shows — the sign-in, the unlock or
-    /// the open tenant —, anything else only brings the app to the front, which the system already did. Nothing of the URL
-    /// is read but what core's `DeepLink.parse` reads, and nothing of it is kept or logged. A field already open keeps
-    /// what the person typed there.
+    /// the open tenant —, `veyq://open` with a place the web named opens it over the open tenant or once one opens (core's
+    /// `DeepLink.At`, inbox #1415), anything else only brings the app to the front, which the system already did. Nothing
+    /// of the URL is read but what core's `DeepLink.parse` reads, and nothing of it is kept or logged. A field already open
+    /// keeps what the person typed there.
     private func openDeepLink(_ url: URL) {
-        guard !model.inExtension, DeepLinkCompanion.shared.parse(uri: url.absoluteString) is DeepLinkLink else { return }
-        if model.guests.asking == nil { model.guests.ask(model) }
+        guard !model.inExtension else { return }
+        let link = DeepLinkCompanion.shared.parse(uri: url.absoluteString)
+        if link is DeepLinkLink {
+            if model.guests.asking == nil { model.guests.ask(model) }
+        } else if let at = link as? DeepLinkAt {
+            model.arrive(at.place)
+        }
     }
 }
 
