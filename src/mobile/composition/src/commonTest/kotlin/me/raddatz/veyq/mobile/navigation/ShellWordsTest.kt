@@ -58,7 +58,8 @@ class ShellWordsTest {
     fun a_space_is_named_by_its_kind_else_its_name_and_none_is_home() {
         assertEquals(Piece.Said(Notice(Msg.DRAWER_HOME)), ShellWords.space(null))
         assertEquals(Piece.Said(Notice(Msg.SPACE_PERSONAL)), ShellWords.space(SpaceRef("s", "PERSONAL", "x")))
-        assertEquals(Piece.Said(Notice(Msg.SPACE_GROUP)), ShellWords.space(SpaceRef("s", "GROUP", "x")))
+        assertEquals(Piece.Plain("Chor"), ShellWords.space(SpaceRef("s", "GROUP", "Chor")), "a group by the name its key opened")
+        assertEquals(Piece.Said(Notice(Msg.SPACE_GROUP)), ShellWords.space(SpaceRef("s", "GROUP", "")), "the word where no name opened")
         assertEquals(Piece.Plain("Verein"), ShellWords.space(SpaceRef("s", "SHARED", "Verein")))
     }
 

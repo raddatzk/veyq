@@ -50,6 +50,8 @@ class TenantGroups internal constructor(private val tenant: TenantSession) {
         val deleted: Boolean,
         /** The grant is behind the group's epoch: nothing of it opens until a member online re-grants it. */
         val behind: Boolean,
+        /** A deleted group's line: until which day it may be restored (`groups.pendingDeletion`); null otherwise. */
+        val deletion: Notice? = null,
     ) {
         val titleWord: Msg? = if (name.isEmpty()) Msg.GROUPS_UNTITLED else null
     }
@@ -92,6 +94,8 @@ class TenantGroups internal constructor(private val tenant: TenantSession) {
         val deleted: Boolean,
         val members: List<GroupMember>,
         val said: Msg?,
+        /** A deleted group's line with its day (`groups.pendingDeletion`); null otherwise. */
+        val deletion: Notice? = null,
     ) {
         /** A member's page is read-only (the web's `groups.readonlyNote`). */
         val readonlyNote: Msg? = if (!owner && said == null) Msg.GROUPS_READONLY_NOTE else null
@@ -129,7 +133,7 @@ class TenantGroups internal constructor(private val tenant: TenantSession) {
         val rows = scopes.map { s ->
             val behind = s.grantedEpoch < s.currentEpoch
             val name = if (behind) tenant.scopeName(s.id).orEmpty() else nameOf(s)
-            GroupRow(s.id, name, s.role == ScopeSummary.Role.OWNER, s.deletedAt != null, behind)
+            GroupRow(s.id, name, s.role == ScopeSummary.Role.OWNER, s.deletedAt != null, behind, deletionOf(s))
         }.sortedByDescending { it.owner }
         return Groups(rows, canCreate, null)
     }
@@ -140,6 +144,9 @@ class TenantGroups internal constructor(private val tenant: TenantSession) {
         val opened = runCatching { account.openOwnGrant(s, null, false) }.getOrNull() as? GrantOutcome.Opened ?: return ""
         return GroupNames.open(suite, s, opened.key).orEmpty()
     }
+
+    private fun deletionOf(s: ScopeSummary): Notice? =
+        s.deletedAt?.let { Notice(Msg.GROUPS_PENDING_DELETION, me.raddatz.veyq.mobile.words.Moment(TenantInvites.epochMs(s.purgeAfter ?: it))) }
 
     // ---- create, rename, delete, restore ----
 
@@ -234,7 +241,7 @@ class TenantGroups internal constructor(private val tenant: TenantSession) {
         val (tenantKey, tenantEpoch) = tenant.scopeKey(tenantId) ?: (null to 0)
         val joins = JoinRecords(suite)
         val rows = assemble(members, owner, account.userId) { m -> tenantKey?.let { People.realName(joins, tenantId, it, tenantEpoch.toLong(), m) } }
-        return GroupPage(scopeId, name, owner, listed.deletedAt != null, rows, if (rows.isEmpty()) Msg.MEMBERS_EMPTY else null)
+        return GroupPage(scopeId, name, owner, listed.deletedAt != null, rows, if (rows.isEmpty()) Msg.MEMBERS_EMPTY else null, deletionOf(listed))
     }
 
     /**

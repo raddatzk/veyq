@@ -76,6 +76,7 @@ import me.raddatz.veyq.mobile.blob.pathName
 import me.raddatz.veyq.mobile.words.Notices
 import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Msg
+import me.raddatz.veyq.mobile.session.TenantGroups.Outcome as GroupsOutcome
 import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.navigation.ShellWords
@@ -2835,17 +2836,19 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     /** The tenant's groups (`TenantGroups`, en.spaces.group-scope): every rule the core's. Dispatched apart (the JVM's size limit). */
     private suspend fun grouping(call: Call): Answer {
         val g = tenant.value?.models?.session?.groups ?: return noTenant
+        // an act that changed which groups open, or their names, reads the shell's lists anew (the switcher, Home)
+        fun GroupsOutcome.shown(): GroupsOutcome = also { if (it.done) scope.launch { runCatching { tenant.value?.models?.shell?.refresh() } } }
         return when (call) {
             Call.SettingsGroups -> Answer.GroupsListed(g.list())
-            is Call.SettingsGroupCreate -> Answer.GroupChanged(g.create(call.name))
+            is Call.SettingsGroupCreate -> Answer.GroupChanged((g.create(call.name)).shown())
             is Call.SettingsGroup -> Answer.GroupPage(g.page(call.scopeId))
-            is Call.SettingsGroupRename -> Answer.GroupChanged(g.rename(call.scopeId, call.name))
-            is Call.SettingsGroupDelete -> Answer.GroupChanged(if (call.restore) g.restore(call.scopeId) else g.delete(call.scopeId))
+            is Call.SettingsGroupRename -> Answer.GroupChanged((g.rename(call.scopeId, call.name)).shown())
+            is Call.SettingsGroupDelete -> Answer.GroupChanged((if (call.restore) g.restore(call.scopeId) else g.delete(call.scopeId)).shown())
             is Call.SettingsGroupAdd -> Answer.GroupChanged(g.add(call.scopeId, call.username))
             is Call.SettingsGroupRole -> Answer.GroupChanged(g.setRole(call.scopeId, call.userId, call.owner))
-            is Call.SettingsGroupRemove -> Answer.GroupChanged(if (call.rescind) g.rescind(call.scopeId, call.userId) else g.remove(call.scopeId, call.userId, call.revokeLinks))
+            is Call.SettingsGroupRemove -> Answer.GroupChanged((if (call.rescind) g.rescind(call.scopeId, call.userId) else g.remove(call.scopeId, call.userId, call.revokeLinks)).shown())
             Call.SettingsGroupInvitations -> Answer.GroupInvitations(g.invitations())
-            is Call.SettingsGroupInvitationAnswer -> Answer.GroupChanged(if (call.accept) g.accept(call.scopeId) else g.decline(call.scopeId))
+            is Call.SettingsGroupInvitationAnswer -> Answer.GroupChanged((if (call.accept) g.accept(call.scopeId) else g.decline(call.scopeId)).shown())
             else -> error("not a group's call: $call")
         }
     }

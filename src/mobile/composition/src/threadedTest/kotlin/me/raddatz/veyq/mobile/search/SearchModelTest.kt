@@ -358,7 +358,8 @@ class SearchModelTest {
         assertEquals(listOf(null, null, "t-s1", "t-s2"), door.listingTags.take(4))
         door.listingFails = setOf("s2")
         started()
-        assertEquals(Notice(Msg.SEARCH_NOT_SEARCHED, me.raddatz.veyq.mobile.words.Joined(listOf(Notice(Msg.SPACE_GROUP)), ", ")), ask("x").status.first())
+        // a group by the name its key opened (ShellWords.space)
+        assertEquals(Notice(Msg.SEARCH_NOT_SEARCHED, me.raddatz.veyq.mobile.words.Joined(listOf("Club"), ", ")), ask("x").status.first())
         // its nodes are still searched
         assertEquals(listOf("Kevelaer"), names(ask("kevel")))
     }

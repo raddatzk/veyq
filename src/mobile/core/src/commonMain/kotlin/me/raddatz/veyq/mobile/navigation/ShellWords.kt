@@ -10,7 +10,8 @@ object ShellWords {
     fun space(space: SpaceRef?): Piece = when (space?.kind) {
         null -> Piece.Said(Notice(Msg.DRAWER_HOME))
         "PERSONAL" -> Piece.Said(Notice(Msg.SPACE_PERSONAL))
-        "GROUP" -> Piece.Said(Notice(Msg.SPACE_GROUP))
+        // a group by the name its key opened on the device (GroupNames); the word where none opens
+        "GROUP" -> if (space.name.isNotEmpty()) Piece.Plain(space.name) else Piece.Said(Notice(Msg.SPACE_GROUP))
         else -> Piece.Plain(space.name)
     }
 
