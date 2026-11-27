@@ -426,6 +426,7 @@ impl Page {
                 SettingsSection::Security => ("security", vec![self.security()]),
                 SettingsSection::Profile => ("profile", vec![self.profile()]),
                 SettingsSection::Erase => ("erase", vec![self.erase()]),
+                SettingsSection::WhosWho => ("tenant-people", vec![self.whos_who()]),
                 SettingsSection::Terms => ("terms", vec![self.terms()]),
                 SettingsSection::SignOut => ("sign-out", vec![self.sign_out()]),
             };
@@ -507,6 +508,26 @@ impl Page {
         row.connect_activated(move |_| {
             if let Some(p) = weak.upgrade() {
                 p.dialog.push_subpage(&crate::core_ui::terms::page());
+            }
+        });
+        group.add(&row);
+        Some(group)
+    }
+
+    /// Who's who in the open space (the web's tenant section `tenant-people`, inbox #967): a subpage; a person chosen
+    /// there closes the dialog for their profile in the shell.
+    fn whos_who(self: &Rc<Self>) -> Option<adw::PreferencesGroup> {
+        let group = adw::PreferencesGroup::builder().title(words::whos_who_title()).description(words::whos_who_sub()).build();
+        let row = adw::ActionRow::builder().title(words::whos_who_title()).activatable(true).build();
+        row.set_widget_name("settings-whos-who-open");
+        row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+        let weak = Rc::downgrade(self);
+        row.connect_activated(move |_| {
+            if let Some(p) = weak.upgrade() {
+                let dialog = p.dialog.clone();
+                p.dialog.push_subpage(&crate::core_ui::whos_who::page(Rc::new(move || {
+                    dialog.close();
+                })));
             }
         });
         group.add(&row);
