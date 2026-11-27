@@ -26,22 +26,38 @@ class OpenLink(private val opener: (ReceivedLink.ShareLink, report: Boolean) -> 
         val canOpen: Boolean = false,
         /** The text is an invite: [canOpen] opens its join ([invite]), not a guest view. */
         val invite: Boolean = false,
+        /**
+         * The text is a member's web link of the allow-list (inbox #1415, [PlaceLink.ofWeb]): [canOpen] hands it to the open
+         * shell ([place], then `ShellModel.arrive`), not a guest view.
+         */
+        val place: Boolean = false,
     )
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
     private var parsed: ReceivedLink.Parsed.Ok? = null
     private var invited: ReceivedLink.InviteLink? = null
+    private var placed: me.raddatz.veyq.mobile.navigation.PlaceLink? = null
 
     fun text(value: String) {
         // an invite pasted with the owner's message around it (the invite dialog's *Copy* copies the whole message)
         invited = ReceivedLink.inviteOf(value) ?: (SharedText.linkIn(value) as? SharedText.Found.One)?.text?.let(ReceivedLink::inviteOf)
+        placed = null
         if (invited != null) {
             parsed = null
             _state.value = State(text = value, canOpen = true, invite = true)
             return
         }
         val r = ReceivedLink.open(value)
+        // a member's own link to a place (a folder, a Memory, a Settings section): the shell's, never a guest's
+        if ((r as? ReceivedLink.Parsed.Refused)?.problem == ReceivedLink.Problem.NOT_A_SHARE) {
+            me.raddatz.veyq.mobile.navigation.PlaceLink.ofWeb(value)?.let {
+                parsed = null
+                placed = it
+                _state.value = State(text = value, canOpen = true, place = true)
+                return
+            }
+        }
         parsed = r as? ReceivedLink.Parsed.Ok
         val problem = (r as? ReceivedLink.Parsed.Refused)?.problem
         _state.value = State(
@@ -69,7 +85,27 @@ class OpenLink(private val opener: (ReceivedLink.ShareLink, report: Boolean) -> 
     private fun refuse(problem: Msg) {
         parsed = null
         invited = null
+        placed = null
         _state.value = State(problem = problem)
+    }
+
+    /**
+     * The member's link the field holds handed to the open shell once — [arrive] is its `ShellModel.arrive`, or answers null
+     * where no shell is open (the sign-in, the unlock) —, and its answer: opened (the field emptied, nothing of a link is
+     * kept), a Settings section for the platform to open, or [Arrived.NotHere] said in the field with the text kept as typed.
+     * Null while the text is no member's link.
+     */
+    fun openPlace(arrive: (me.raddatz.veyq.mobile.navigation.PlaceLink) -> me.raddatz.veyq.mobile.navigation.Arrived?): me.raddatz.veyq.mobile.navigation.Arrived? {
+        val p = placed ?: return null
+        val text = _state.value.text
+        val answer = arrive(p) ?: me.raddatz.veyq.mobile.navigation.Arrived.NotHere
+        if (answer == me.raddatz.veyq.mobile.navigation.Arrived.NotHere) {
+            _state.value = State(text = text, problem = Msg.LINK_PROBLEM_NOT_OPEN_HERE)
+            return answer
+        }
+        placed = null
+        _state.update { State() }
+        return answer
     }
 
     /**

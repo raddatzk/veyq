@@ -69,6 +69,12 @@ class KeptRead(val kind: String, @PlatformApi @HiddenFromObjC val model: KSerial
         /** A queued blob's frames, each sealed under its own fresh `K_blob` at once (ADR 0153 decision 1), then under `K_off`. */
         const val OUTBOX_FRAMES = "outbox-frames"
 
+        /**
+         * Where the shell stood last in a tenant (inbox #1415, [me.raddatz.veyq.mobile.navigation.KeptPlace]): ids only, the
+         * entry of id `""` per tenant, sealed as every entry is. Never evicted, cleared or swept; dropped by a wipe.
+         */
+        const val PLACE = "place"
+
         /** The outbox's kinds: never evicted, never cleared, never swept — only sent, discarded or wiped. */
         internal val QUEUED = setOf(OUTBOX, OUTBOX_FRAMES)
 
@@ -77,10 +83,10 @@ class KeptRead(val kind: String, @PlatformApi @HiddenFromObjC val model: KSerial
         @HiddenFromObjC
         val OPENING = setOf(KEY_MATERIAL.kind, MY_TENANTS.kind, MY_SCOPES.kind)
 
-        /** What neither the limit, "Clear cache" nor the sweep drops: the opening answers, the pins' record and the outbox. */
+        /** What neither the limit, "Clear cache" nor the sweep drops: the opening answers, the pins' record, the outbox and the places. */
         @PlatformApi
         @HiddenFromObjC
-        val PROTECTED = OPENING + PINS + QUEUED
+        val PROTECTED = OPENING + PINS + QUEUED + PLACE
 
         /** The listings below a scope: what a pin reaches through — core's and each application's ([ApplicationKept.listings]). */
         internal val LISTINGS: Set<String>

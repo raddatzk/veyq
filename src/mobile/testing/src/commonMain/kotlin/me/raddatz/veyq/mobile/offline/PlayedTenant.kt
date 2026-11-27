@@ -45,11 +45,14 @@ class PlayedTenant(
     level: StaySignedIn = StaySignedIn.LOGIN,
     /** Whether this device runs scheduled syncs (a phone, `BackgroundRun`). */
     backgroundRuns: Boolean = false,
+    /** The account's user id: a second account on [on]'s device is another user of the same server. */
+    val userId: String = "00000000-0000-4000-8000-000000000001",
+    /** Another played account whose device this one is remembered on (two accounts on one device, inbox #1415). */
+    on: PlayedTenant? = null,
 ) {
     val p = testPrimitives
     val suite = V1(p)
     val server = "http://a.example"
-    val userId = "00000000-0000-4000-8000-000000000001"
     val masterKey: ByteArray = p.randomBytes(32)
     private val identity = IdentityPrivate(p.randomBytes(32), p.randomBytes(32))
     private val wrappedIdentity = suite.seal(Context("identity-priv"), masterKey, concat(lp(identity.kemSeed), lp(identity.signSeed)))
@@ -326,11 +329,12 @@ class PlayedTenant(
 
     // ---- this device
 
-    val prefs = MemoryDeviceStore()
-    val keys = SoftwareDeviceKeys(p)
-    val root: String = freshTestDirectory()
-    val device = ThisDevice(prefs, keys, "test device", p, offlineRoot = root, backgroundRuns = backgroundRuns).also { it.offlineFiles = files; it.offlineClock = clock }
-    val record = TrustedDevice(server, "u1@a.example", userId, TrustedDevice.Method.DEVICE_KEY, "w-1", "veyq.device.1", level)
+    val prefs: MemoryDeviceStore = on?.prefs ?: MemoryDeviceStore()
+    val keys: SoftwareDeviceKeys = on?.keys ?: SoftwareDeviceKeys(p)
+    val root: String = on?.root ?: freshTestDirectory()
+    val device: ThisDevice = on?.device ?: ThisDevice(prefs, keys, "test device", p, offlineRoot = root, backgroundRuns = backgroundRuns).also { it.offlineFiles = files; it.offlineClock = clock }
+    private val tag = userId.takeLast(1).let { if (it == "1") "1" else userId.takeLast(4) }
+    val record = TrustedDevice(server, "u$tag@a.example", userId, TrustedDevice.Method.DEVICE_KEY, "w-$tag", "veyq.device.$tag", level)
     private lateinit var sealed: Pair<ByteArray, ByteArray>
 
     suspend fun remember() {

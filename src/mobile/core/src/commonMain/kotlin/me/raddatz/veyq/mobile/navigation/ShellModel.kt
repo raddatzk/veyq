@@ -159,12 +159,18 @@ class ShellModel(
     // ---- reading ----
 
     /**
-     * Reads the tenant and opens the shell as the app starts on it: on the object last used ([openLastUsed]; not while
-     * something shared waits for its place), else Home's default space.
+     * Reads the tenant and opens the shell as the app starts on it: where the person left it in this tenant on this device
+     * ([openLastUsed]; not while something shared waits for its place) — the place this account's offline store keeps
+     * sealed ([KeptPlace], inbox #1415), opened through the lists as read, a node gone by its nearest ancestor still listed —,
+     * else Home's default space. An account without a store on the device (not trusted, a TV) opens on Home. From then on
+     * each move of the shell is kept there ([keepPlaces]).
      */
     suspend fun load(openLastUsed: Boolean) {
         reading.withLock { raw = read() }
+        startPlace = if (openLastUsed) runCatching { tenant.account.offline?.place(tenantId) }.getOrNull() else null
         rebuild(start = true, openLastUsed = openLastUsed)
+        startPlace = null
+        keepPlaces()
         // a re-key the tenant ran (its background resume, a link closed) changed keys the lists were read under
         if (rekeys == null) rekeys = CoroutineScope(Dispatchers.Default).launch { tenant.rekeyed.drop(1).collect { refresh() } }
         // offline the lists are the store's and say so; back online they are read anew (ADR 0140 decision 5)
@@ -497,7 +503,9 @@ class ShellModel(
             uses = recent.resolve(objects),
         )
         put { prior ->
-            State(next(prior?.shell.takeUnless { start }, spaces, if (openLastUsed) recent.lastUsed(objects) else null).relabelled(nodes), lists, offlineNow(), prior?.gone.orEmpty(), tenant.pagesOffline.shown.value)
+            val kept = startPlace?.takeIf { start && openLastUsed }
+            val shell = if (kept != null) reopened(kept, spaces, nodes) else next(prior?.shell.takeUnless { start }, spaces, null)
+            State(shell.relabelled(nodes), lists, offlineNow(), prior?.gone.orEmpty(), tenant.pagesOffline.shown.value)
         }
     }
 
@@ -1274,6 +1282,79 @@ class ShellModel(
         if (obj != null) opened(obj) { moved } else update { moved }
     }
 
+    // ---- where the person left, and a place reached from outside (inbox #1415)
+
+    /** The place this account's store keeps for this tenant, read by [load] for its first rebuild only. */
+    @kotlin.concurrent.Volatile
+    private var startPlace: KeptPlace? = null
+
+    private var keeping: kotlinx.coroutines.Job? = null
+
+    /**
+     * Every move of the shell kept as where it stands ([placeOf]) in this account's own store, sealed (no id in clear on
+     * disk), one entry per tenant: a later start of this account in this tenant opens there, and no other account's ever
+     * does — each reads its own store. Nothing is kept without a store.
+     */
+    private fun keepPlaces() {
+        if (keeping != null) return
+        keeping = CoroutineScope(Dispatchers.Default).launch {
+            var last: KeptPlace? = null
+            state.collect { s ->
+                val place = s?.let { placeOf(it.shell, it.lists.nodes) } ?: return@collect
+                if (place == last) return@collect
+                last = place
+                runCatching { tenant.account.offline?.keepPlace(tenantId, place) }
+            }
+        }
+    }
+
+    /** The shell after a start on [kept]: [placed] over a Home with nothing behind it, as a start has. */
+    private fun reopened(kept: KeptPlace, spaces: List<SpaceRef>, nodes: List<NodeRef>): Shell =
+        placed(Shell.start(null, Home.defaultSpace(spaces)?.scopeId), spaces, nodes, kept.scopeId, kept.path, back = false)
+            ?: next(null, spaces, null)
+
+    /**
+     * [link] opened (inbox #1415): only where its origin is this tenant's own ([TenantSession.base]) — a link of another
+     * tenant or instance moves nothing and starts no sign-in or fetch —, a space only where it is listed, a node by the
+     * shell's own open over the lists ([found]: as a search's hit, back returning here), a node not listed by the nearest
+     * listed ancestor a slug path names, else the space's root. A Settings link is the platform's to open ([Arrived.Settings]).
+     * Nothing of the link is kept: what is kept is where the shell then stands.
+     */
+    fun arrive(link: PlaceLink): Arrived {
+        if (!link.origin.equals(tenant.base.trimEnd('/'), ignoreCase = true)) return Arrived.NotHere
+        val target = link.target
+        if (target is PlaceLink.Target.Settings) return Arrived.Settings(target.section?.id)
+        val s = current ?: return Arrived.NotHere
+        val spaces = s.lists.spaces
+        val nodes = s.lists.nodes
+        val (scopeId, path) = when (target) {
+            is PlaceLink.Target.Ids -> target.scopeId to listOfNotNull(target.nodeId)
+            is PlaceLink.Target.Route -> {
+                val scope = scopeOf(target.scope, spaces) ?: return Arrived.NotHere
+                scope to listOfNotNull(RoutePath.nearest(nodes.filter { it.scopeId == scope }, target.segments, target.folder))
+            }
+            is PlaceLink.Target.Settings -> return Arrived.Settings(target.section?.id)
+        }
+        val moved = placed(s.shell, spaces, nodes, scopeId, path, back = true) ?: return Arrived.NotHere
+        moved.openObject?.let { recent.record(it, now()) }
+        update { moved }
+        return Arrived.Opened
+    }
+
+    /** The scope a route's token names among [spaces] (`location.ts`): `""` the tenant's, `~me` the personal one, `@<x>` the
+     *  group of that id, or the one group whose name's slug it is. */
+    private fun scopeOf(token: String, spaces: List<SpaceRef>): String? = when {
+        token == "" -> spaces.firstOrNull { it.kind == "TENANT" }?.scopeId
+        token == PlaceLink.PERSONAL -> spaces.firstOrNull { it.kind == "PERSONAL" }?.scopeId
+        token.startsWith("@") -> {
+            val t = token.substring(1)
+            val groups = spaces.filter { it.kind == "GROUP" }
+            groups.firstOrNull { it.scopeId.equals(t, ignoreCase = true) }?.scopeId
+                ?: groups.filter { me.raddatz.veyq.mobile.crypto.Naming.slugify(it.name) == t }.singleOrNull()?.scopeId
+        }
+        else -> null
+    }
+
     /**
      * This tenant's map services once the platform built them ([mapServices]); null before. What a Memory's place names
      * are looked up through (Memories' `placeNames`, derived from it with [mapsLanguage]), and whether Settings offers the
@@ -1347,6 +1428,42 @@ class ShellModel(
                 prior.space != null && spaces.none { it.scopeId == prior.space } -> prior.switchSpace(defaultSpace ?: "")
                 else -> prior
             }
+        }
+
+        /**
+         * Where [shell] stands as a start reopens it ([KeptPlace]): the space Home or the open page is in, and the node on
+         * screen — an object's page, a kept link's page, or the folder Home shows — with its ancestors from [nodes], nearest
+         * first. Null where the screen is no place to keep (a person's profile, an application's list): the place below it
+         * stays kept.
+         */
+        fun placeOf(shell: Shell, nodes: List<NodeRef>): KeptPlace? {
+            if (shell.person != null) return null
+            val at: Pair<String, String?> = when {
+                shell.bookmark != null -> shell.bookmark.scopeId to shell.bookmark.nodeId
+                shell.openObject != null -> shell.openObject.scopeId to shell.openObject.nodeId
+                shell.application != null -> return null
+                else -> (shell.space ?: return null) to shell.folder?.nodeId
+            }
+            val byId = nodes.filter { it.scopeId == at.first }.associateBy { it.nodeId }
+            val path = ArrayList<String>()
+            val seen = HashSet<String>()
+            var id = at.second
+            while (id != null && seen.add(id)) {
+                path += id
+                id = byId[id]?.parentId
+            }
+            return KeptPlace(at.first, path)
+        }
+
+        /**
+         * [shell] moved to [scopeId] at the first node of [path] listed in [nodes] ([found], the shell's open), or at the
+         * space's root where none is; null where [scopeId] is not listed. [back]: false for a start, which has nothing behind.
+         */
+        fun placed(shell: Shell, spaces: List<SpaceRef>, nodes: List<NodeRef>, scopeId: String, path: List<String>, back: Boolean): Shell? {
+            if (spaces.none { it.scopeId == scopeId }) return null
+            val listed = path.firstOrNull { id -> nodes.any { it.scopeId == scopeId && it.nodeId == id } }
+            val moved = if (listed == null) shell.switchSpace(scopeId) else found(shell, nodes, scopeId, listed).first
+            return if (back) moved else moved.copy(back = null)
         }
 
         /** Whether [shell] stands on [space]'s top level on Home: no folder, object, application, person's page or Search open. */

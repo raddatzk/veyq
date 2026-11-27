@@ -220,7 +220,8 @@ object ReceivedLink {
     }.getOrNull()
 
     /** The parts of an absolute URL this check reads; null where the WHATWG parser would refuse it (or read it otherwise). */
-    private class Url(val scheme: String, val host: String, val origin: String, val credentials: Boolean, val path: String, val fragment: String) {
+    /** A URL as the WHATWG parser reads a special one (see the object's comment); [query] null where it has none. */
+    internal class Url(val scheme: String, val host: String, val origin: String, val credentials: Boolean, val path: String, val fragment: String, val query: String? = null) {
         companion object {
             fun of(raw: String): Url? {
                 // the WHATWG parser drops every tab and newline inside the input, and reads `\` as `/` in a special URL
@@ -267,7 +268,8 @@ object ReceivedLink {
                 val pathEnd = if (query in end until (if (hash < 0) text.length else hash)) query else if (hash < 0) text.length else hash
                 var path = ""
                 for (k in end until pathEnd) path += if (text[k] == '\\') '/' else text[k]
-                return Url(scheme, host, origin, at > 0, path.ifEmpty { "/" }, if (hash < 0) "" else text.substring(hash + 1))
+                val q = if (query in end until (if (hash < 0) text.length else hash)) text.substring(query + 1, if (hash < 0) text.length else hash) else null
+                return Url(scheme, host, origin, at > 0, path.ifEmpty { "/" }, if (hash < 0) "" else text.substring(hash + 1), q)
             }
         }
     }

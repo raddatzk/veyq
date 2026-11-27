@@ -6588,6 +6588,11 @@
     "de": "Was mit veyq geteilt wurde, enthält mehr als einen Freigabelink. Teile nur den Link, den du öffnen willst, oder füge ihn ein.",
     "note": "A shared text with two or more different veyq share links: which one was meant is never guessed (inbox #1015)."
   },
+  "link_problem_not_open_here": {
+    "en": "This link leads into a space that is not open in the app. Open that space first, then the link.",
+    "de": "Dieser Link führt in einen Bereich, der in der App nicht geöffnet ist. Öffne zuerst diesen Bereich, dann den Link.",
+    "note": "A member's web link (a folder, a Memory, a Settings section) whose instance or tenant is not the one open in the app: the app only navigates within the open one, never signs in or switches for a link (inbox #1415)."
+  },
   "link_problem_moderation": {
     "en": "This is a moderator’s review link. It opens only in the browser.",
     "de": "Das ist ein Prüflink für die Moderation. Er öffnet nur im Browser."

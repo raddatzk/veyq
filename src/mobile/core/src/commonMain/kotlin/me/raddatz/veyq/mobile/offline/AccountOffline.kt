@@ -339,8 +339,9 @@ class AccountOffline internal constructor(
         val reached = HashSet<EntryKey>()
         reached += key(KeptRead.KEY_MATERIAL)
         reached += pinsKey
-        // the person's unsent writes (ADR 0153 decision 2): no listing reaches them, and no sweep drops them
-        store.entries().filter { it.key.kind in KeptRead.QUEUED }.mapTo(reached) { it.key }
+        // the person's unsent writes (ADR 0153 decision 2) and where the shell stood (#1415): no listing reaches them, and no
+        // sweep drops them
+        store.entries().filter { it.key.kind in KeptRead.QUEUED || it.key.kind == KeptRead.PLACE }.mapTo(reached) { it.key }
         val tenantsKey = key(KeptRead.MY_TENANTS)
         reached += tenantsKey
         val tenants = json(tenantsKey).flatMap { it.array() }.mapNotNull { it.text("tenantId") }.toSet()
@@ -594,10 +595,26 @@ class AccountOffline internal constructor(
         if (now != r.pins) save(r.copy(pins = now, gone = r.gone + gone.map { PinGone(it.tenant, it.node, it.kind) }))
     }
 
-    /** "Remove all offline content": every entry but the answers an account opens with, the pins with them (asked first). */
+    /**
+     * "Remove all offline content": every entry but the answers an account opens with and where the shell stood (no content),
+     * the pins with them (asked first).
+     */
     suspend fun removeAll() {
         pinLock.withLock { save(PinRecord()) }
-        store.removeAll(store.entries().filter { it.key.kind !in KeptRead.OPENING }.map { it.key })
+        store.removeAll(store.entries().filter { it.key.kind !in KeptRead.OPENING && it.key.kind != KeptRead.PLACE }.map { it.key })
+    }
+
+    // ---- where the shell stood (inbox #1415)
+
+    private fun placeKey(tenant: String) = EntryKey(server, tenant, "", KeptRead.PLACE, "")
+
+    /** Where the shell stood last in [tenant] on this device; null where nothing is kept or the entry does not open. */
+    suspend fun place(tenant: String): me.raddatz.veyq.mobile.navigation.KeptPlace? =
+        store.get(placeKey(tenant))?.let { runCatching { JSON.decodeFromString(me.raddatz.veyq.mobile.navigation.KeptPlace.serializer(), it.decodeToString()) }.getOrNull() }
+
+    /** [place] kept as where the shell stands in [tenant], sealed as every entry is (no id in clear on disk). */
+    suspend fun keepPlace(tenant: String, place: me.raddatz.veyq.mobile.navigation.KeptPlace) {
+        store.put(placeKey(tenant), JSON.encodeToString(me.raddatz.veyq.mobile.navigation.KeptPlace.serializer(), place).encodeToByteArray())
     }
 
     /**

@@ -1080,7 +1080,7 @@ class VeyqAccount private constructor(
 
     /**
      * This account's store at a Master Key rotation this device holds both keys of (ADR 0153 decision 2 — its own rotation,
-     * or one made elsewhere taken while this account still holds the old key): the waiting writes carried under a fresh
+     * or one made elsewhere taken while this account still holds the old key): the waiting writes (and where the shell stood, #1415) carried under a fresh
      * `K_off` wrapped by [newMasterKey], everything kept beside them gone as ADR 0140 decision 2 has it. Where the carry fails
      * (or no store is open) the store is wiped, as before the outbox. The caller opens it anew ([ensureOffline]).
      */
@@ -1090,7 +1090,7 @@ class VeyqAccount private constructor(
         if (o == null || stores == null) return wipeOffline()
         pinsHeld?.stop()
         pinsHeld = null
-        val carried = runCatching { stores.rekey(key, o.store, newMasterKey) { it.kind in KeptRead.QUEUED } }
+        val carried = runCatching { stores.rekey(key, o.store, newMasterKey) { it.kind in KeptRead.QUEUED || it.kind == KeptRead.PLACE } }
             .onFailure { println("veyq: the outbox was not carried across the rotation: $it") }.isSuccess
         runCatching { o.closeForWipe() }
         offline = null
