@@ -21,7 +21,7 @@ import me.raddatz.veyq.mobile.words.ShownText
  * anomalies first (the one state that asks for action), then by name ([NameOrder] over the folded names), then the id.
  */
 @Serializable
-data class WhosWho(val people: List<Row>, val said: Msg?, val retry: Boolean) {
+data class WhosWho(val people: List<Other>, val said: Msg?, val retry: Boolean) {
 
     /** The one state a person shows (the web's `OverviewState`). */
     enum class State {
@@ -37,7 +37,7 @@ data class WhosWho(val people: List<Row>, val said: Msg?, val retry: Boolean) {
 
     /** One other member as the page lists them. */
     @Serializable
-    data class Row(
+    data class Other(
         val userId: String,
         val username: String,
         /** The display name: the real name the directory seals, else the username. */
@@ -117,13 +117,13 @@ data class WhosWho(val people: List<Row>, val said: Msg?, val retry: Boolean) {
             val rows = listed(selfUserId, members).map { m ->
                 val name = names[m.userId] ?: m.username
                 when (checks[m.userId] ?: Check.UNCHECKED) {
-                    Check.ANOMALY -> Row(m.userId, m.username, name, State.CANT_CONFIRM, false, emptyList(), false, null, false)
-                    Check.UNCHECKED -> Row(m.userId, m.username, name, State.UNCHECKED, false, emptyList(), false, null, false)
+                    Check.ANOMALY -> Other(m.userId, m.username, name, State.CANT_CONFIRM, false, emptyList(), false, null, false)
+                    Check.UNCHECKED -> Other(m.userId, m.username, name, State.UNCHECKED, false, emptyList(), false, null, false)
                     Check.ANCHORED -> {
                         val pin = pins[m.userId]
                         val by = counted[m.userId].orEmpty()
                         val rotated = rotations[m.userId]
-                        Row(
+                        Other(
                             userId = m.userId,
                             username = m.username,
                             name = name,
@@ -146,7 +146,7 @@ data class WhosWho(val people: List<Row>, val said: Msg?, val retry: Boolean) {
             members.filter { it.userId != selfUserId && it.pendingConsent != true }
 
         /** Anomalies first, then by name as a person reads it, then the id. */
-        private val ORDER: Comparator<Row> = Comparator { a, b ->
+        private val ORDER: Comparator<Other> = Comparator { a, b ->
             (b.state == State.CANT_CONFIRM).compareTo(a.state == State.CANT_CONFIRM).takeIf { it != 0 }
                 ?: NameOrder.compare(Fold.fold(a.name), Fold.fold(b.name)).takeIf { it != 0 }
                 ?: a.userId.compareTo(b.userId)

@@ -67,7 +67,7 @@ internal fun WhosWhoDialog(page: WhosWhoPage, onRetry: () -> Unit, onOpen: (Stri
 }
 
 @Composable
-private fun WhosWhoRow(row: WhosWho.Row, onOpen: (String) -> Unit) {
+private fun WhosWhoRow(row: WhosWho.Other, onOpen: (String) -> Unit) {
     val context = LocalContext.current
     val openLabel = stringResource(R.string.whos_who_open_profile, row.name)
     ListItem(

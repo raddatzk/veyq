@@ -335,7 +335,7 @@ class WireTest {
             Answer.BannerSaved(BannerSave.CANCELLED), Answer.WasThere(true), Answer.WasThere(false, autoPlace = true), Answer.PersonOpened(113), Answer.SearchOpened(114),
             Answer.ProfileOpened(120), Answer.FlowOpened(121), Answer.KitOpened(125), Answer.SafetyNumber("12345 67890 12345 67890 12345 67890", "12345 67890"),
             Answer.PersonTrust(me.raddatz.veyq.mobile.session.PersonTrust.Shown("user-2", false, "1 2", "3 4", true, listOf("Sam"), false, 1_794_000_000_000, false), me.raddatz.veyq.mobile.session.PersonTrust.Status.VERIFIED),
-            Answer.PersonTrust(null, null), Answer.WhosWho(me.raddatz.veyq.mobile.session.WhosWho(listOf(me.raddatz.veyq.mobile.session.WhosWho.Row("user-2", "sam", "Sam Lee", me.raddatz.veyq.mobile.session.WhosWho.State.VERIFIED, true, listOf("Ann"), true, 1_794_000_000_000, false)), null, false)), Answer.WhosWho(me.raddatz.veyq.mobile.session.WhosWho(emptyList(), Msg.WHOS_WHO_LOAD_FAILED, true)), Answer.TrustOutcome(me.raddatz.veyq.mobile.session.PersonTrust.Outcome.VERIFIED),
+            Answer.PersonTrust(null, null), Answer.WhosWho(me.raddatz.veyq.mobile.session.WhosWho(listOf(me.raddatz.veyq.mobile.session.WhosWho.Other("user-2", "sam", "Sam Lee", me.raddatz.veyq.mobile.session.WhosWho.State.VERIFIED, true, listOf("Ann"), true, 1_794_000_000_000, false)), null, false)), Answer.WhosWho(me.raddatz.veyq.mobile.session.WhosWho(emptyList(), Msg.WHOS_WHO_LOAD_FAILED, true)), Answer.TrustOutcome(me.raddatz.veyq.mobile.session.PersonTrust.Outcome.VERIFIED),
             Answer.Refused(Answer.Why.NO_SUCH_PARTICIPANTS), Answer.Refused(Answer.Why.NO_SUCH_CAPTURE_TIME), Answer.Refused(Answer.Why.NO_SUCH_BANNER),
             Answer.Refused(Answer.Why.NO_SUCH_PERSON),
         ),
