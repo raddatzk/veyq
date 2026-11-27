@@ -230,15 +230,18 @@ def moved_predecessors(attested: object, now: dict[str, str | None]) -> str | No
     return None
 
 
-def lane_verdicts(statements: list[dict], *, image: str, index_digest: str, commit: str, archs: list[str],
-                  lanes: dict[str, list[str]], predecessors: dict[str, str | None]) -> dict[tuple[str, str], tuple[str, str]]:
-    """{(lane, arch): (asset set, the per-arch digest it installed)} for every lane × arch, from the statements about
-    `image`'s index; refused on a missing or wrong one, naming each. `lanes` is each lane's shards; `predecessors`
-    the release each lane L2 leg starts from as resolved now, which its attestation must name."""
+def lane_verdicts(statements: list[dict], *, image: str, index_digest: str, commit: str,
+                  lanes: dict[str, tuple[list[str], list[str]]],
+                  predecessors: dict[str, str | None]) -> dict[tuple[str, str], tuple[str, str]]:
+    """{(lane, arch): (asset set, the per-arch digest it installed)} for every lane × each of ITS architectures, from
+    the statements about `image`'s index; refused on a missing or wrong one, naming each. `lanes` is each lane's
+    (architectures, shards) — lane L1 on every architecture the index holds, lane L2 on amd64 alone (ADR 0091
+    decision 6, amended 2026-11-27); `predecessors` the release each lane L2 leg starts from as resolved now, which
+    its attestation must name."""
     found: dict[tuple[str, str], tuple[str, str]] = {}
     problems: list[str] = []
     for lane in LANES:
-        shards = lanes.get(lane) or []
+        archs, shards = lanes.get(lane) or ([], [])
         for arch in archs:
             candidates = [s for s in statements
                           if s.get("predicateType") == snapshot.PREDICATE_TYPE
@@ -369,15 +372,18 @@ def _check(host, draft: Draft, *, ref: str, repository: str, registry: str, unsc
         lane_archs, lane_shards = matrices.get(lane) or ([], [])
         if not lane_archs or not lane_shards:
             raise Refused(f"lane {lane}'s matrix at {commit} names no architecture or no shard")
-        if lane_archs != archs:
-            raise Refused(f"lane {lane} runs on {lane_archs} at {commit}, lane L1 on {archs}")
-    lanes = {lane: matrices[lane][1] for lane in LANES}
-    predecessors = host.predecessors(commit, lanes.get(UPGRADE_LANE) or [])
+        # Lane L1 boots every architecture with its features; another lane proves the data path, the same on each, so
+        # it may run on fewer — never on one L1 did not boot (ADR 0091 decision 6, amended 2026-11-27).
+        if not set(lane_archs) <= set(archs):
+            raise Refused(f"lane {lane} runs on {lane_archs} at {commit}, lane L1 on {archs} — an architecture only "
+                          f"{lane} ran was never booted with its features")
+    lanes = {lane: (matrices[lane][0], matrices[lane][1]) for lane in LANES}
+    predecessors = host.predecessors(commit, lanes[UPGRADE_LANE][1] if UPGRADE_LANE in lanes else [])
     asset_sets: set[str] = set()
     for image in LANE_IMAGES:
         statements = parse_attestations(host.attestations(f"{registry}/{image}@{digests[image]}", identity))
         expand = lambda d, image=image: snapshot.children(host.inspect(f"{registry}/{image}@{d}") or "{}")  # noqa: E731
-        verdicts = lane_verdicts(statements, image=image, index_digest=digests[image], commit=commit, archs=archs,
+        verdicts = lane_verdicts(statements, image=image, index_digest=digests[image], commit=commit,
                                  lanes=lanes, predecessors=predecessors)
         check_index_covered(image, children[image], verdicts, expand)
         asset_sets |= {asset_set for asset_set, _ in verdicts.values()}

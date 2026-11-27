@@ -17,7 +17,7 @@ Build lane L2 of [ADR 0091](../docs/decisions/0091-one-pipeline-per-commit-a-rel
 as decision 6's amendment of 2026-11-26 decides it (inbox #453), and the building block lane L3 reuses: **install a
 published, signed release on the production stack and write into it with that release's own seeder.**
 
-On every pull request (amd64) and every push (both architectures), L2:
+On every pull request and every push, on amd64 alone (ADR 0091 decision 6, amended 2026-11-27), L2:
 1. installs the starting release from its published release with `veyqctl install`, verified under the release identity;
 2. writes with that release's own API seeder (`upgrade.a-seed.e2e.test.ts` from a worktree of its tag);
 3. upgrades to the candidate with **that release's** `veyqctl upgrade --unsigned-local`;
@@ -92,7 +92,8 @@ require one, e.g. `VEYQ_ACME_EMAIL`): the install reads the **starting release's
    as the seeded owner from the record and opens the seeded Memory and Depot file. It runs only in L2 (and L3 later),
    never in L1's domains; `shards.test.mjs` learns that.
 7. **Jobs.** A matrix job `Stack lane L2 (<arch>, <leg>)` in checks.yml, `needs:` as `stack`'s, 15-minute budget per
-   leg, amd64 only on `pull_request` (ADR 0091 decision 4). A leg whose predecessor resolves to nothing builds nothing
+   leg, amd64 alone on every event (ADR 0091 decision 6, amended 2026-11-27 — first built on both architectures,
+   cut back the same day: an upgrade's data path is the same on each). A leg whose predecessor resolves to nothing builds nothing
    and passes, saying why. `green` needs it. `shards.test.mjs`'s slice is re-anchored so it reads the `stack` job
    alone, whatever follows it.
 8. **Attestation and promotion.** `lane-result` gains `predecessor` (tag, and the app and admin digests the verified
@@ -138,7 +139,7 @@ release's reader (its worktree path in the log).
 
 ### Phase 3 — CI, attestation, promotion
 
-Decisions 7 and 8. Done when: a pull request's run shows the amd64 L2 legs green and a push's both architectures;
+Decisions 7 and 8. Done when: a pull request's run and a push's show the amd64 L2 legs green;
 `snapshot_selftest.py` and `promote.py`'s self-test cover the predecessor field, the L2 requirement and the refusal of
 a moved predecessor (each bitten: remove the check, see the case red); a dispatched Publish on the push attests L2 per
 architecture with its predecessor (`cosign verify-attestation` output in the PR); `shards.test.mjs` green with the
@@ -152,7 +153,7 @@ inbox #453 is deleted. Coverage rows for `uc.admin.install-and-upgrade-instance`
 
 ## Definition of done
 
-- L2 gates every pull request (amd64) and every push (both architectures) from the newest release and the major entry,
+- L2 gates every pull request and every push, on amd64, from the newest release and the major entry,
   and the promotion refuses a snapshot whose L2 predecessor moved.
 - Every phase's bite went red and was reverted.
 - `./gradlew check` untouched; `pnpm run check` in `tests/e2e`, the scripts' self-tests and the trust-chain guards green.

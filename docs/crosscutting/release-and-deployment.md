@@ -55,8 +55,8 @@ install exactly those (below). What a push stages is what Publish may sign.
 weekly `schedule` (Monday 03:17 UTC; GitHub runs it on the default branch only, so it publishes `main`'s HEAD) and a
 `workflow_dispatch` — Actions → Publish → *Run workflow* — on `main` or `release/<major>.x`, the one way a release
 branch's fix gets a snapshot. It runs no pipeline and builds nothing: it publishes the **publishable commit's newest
-Checks push run**, and only when that run concluded `success` with its gate and every lane leg on both architectures
-green; a run still going, red, or cancelled by hand is refused, named, and Publish never starts Checks. The publishable
+Checks push run**, and only when that run concluded `success` with its gate and every leg of every lane's matrix
+green (lane L1 on both architectures, lane L2 on amd64, ADR 0091 decision 6); a run still going, red, or cancelled by hand is refused, named, and Publish never starts Checks. The publishable
 commit is HEAD, or — Checks skips a commit that changes only what its push `paths-ignore` names (docs, Markdown, the
 site), so a docs-only HEAD has no run — the newest first-parent ancestor with a run, provided every commit after it is
 docs-only (amended 2026-11-08; within 50 commits, refused and named otherwise); every name the snapshot writes, its

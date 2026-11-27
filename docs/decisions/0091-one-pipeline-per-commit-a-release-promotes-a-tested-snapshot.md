@@ -75,8 +75,8 @@ Three structural costs sat on top of what a run took:
      Now `checks.yml` runs on every push and pull request; a push to `main` or `release/<major>.x` **stages** its images
      — the per-arch `build-<sha>-<arch>` tags, unsigned, pulled by digest by its lanes, whose green legs record what
      they installed. **Publish** (`publish.yml`, weekly and on a dispatch) runs no pipeline and builds nothing: it finds
-     HEAD's newest Checks push run, refuses unless that run concluded `success` with its gate and every lane leg on
-     both architectures green, and then signs and names exactly the digests that run staged and its lanes recorded
+     HEAD's newest Checks push run, refuses unless that run concluded `success` with its gate and every leg of every
+     lane's matrix green (L1 on both architectures), and then signs and names exactly the digests that run staged and its lanes recorded
      (decision 5). The signing is Publish's own: keyless signing names the file that holds the signing job. A pull
      request's run holds no write (`build` runs on a push alone and is the one job with `packages: write`; a pull
      request builds the same matrix and steps as `build-local`).
@@ -293,9 +293,14 @@ several, or one on another tag is refused (`scripts/promote.py` check 1). A save
         covered only at the edges of its state — the oldest release by L3, the newest by L2. A format first written
         by a release in the middle of a state and changed again before the state ends is never restored. A data
         format version of its own would close that; it is not decided.
-     5. **When.** L2 as L1: amd64 on a pull request, both architectures on a push. L3 on a push, both
-        architectures, its backups spread over as many legs as decision 1's budget needs; not on a pull request, which
-        keeps L2. A backup the selection names that is not archived is red — a defect, never a skip.
+     5. **When.** L2 on every pull request and push; L3 on a push, its backups spread over as many legs as decision
+        1's budget needs, not on a pull request, which keeps L2. A backup the selection names that is not archived is
+        red — a defect, never a skip. **Both on amd64 alone** (amended 2026-11-27, owner): what they prove is the data
+        path — Flyway's SQL on the one pinned MariaDB, the dump through the pinned vendor image, ciphertext — and no
+        architecture changes it; what an architecture does change (the image's start, its native code, the features)
+        is lane L1's, on every architecture the build publishes. Decision 4's rule that what is published for an
+        architecture has passed on it holds through L1; a data-path lane runs on a published architecture, never on
+        one L1 did not boot (`scripts/validate_release_identity.py`, `snapshot.py`, `promote.py`).
 
 7. **The jar-level upgrade proof retires when L2 and L3 gate.** They prove the same data path on the artifact that
    ships; ADR 0057 §7 then names them. The API end-to-end suites stay: fast, fresh per file, and where a wire defect is

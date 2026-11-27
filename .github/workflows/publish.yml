@@ -226,7 +226,7 @@ jobs:
           python3 scripts/snapshot.py predicates --lane L1 --arch amd64 --arch arm64 \
             --shard account --shard depot --shard expenses --shard memories --shard moderation --shard platform \
             --commit "$COMMIT" --run "$RUN_URL" --results "${RUNNER_TEMP}/lane-results" --out "${RUNNER_TEMP}/predicates"
-          python3 scripts/snapshot.py predicates --lane L2 --arch amd64 --arch arm64 --shard newest --shard major-entry \
+          python3 scripts/snapshot.py predicates --lane L2 --arch amd64 --shard newest --shard major-entry \
             --commit "$COMMIT" --run "$RUN_URL" --results "${RUNNER_TEMP}/lane-results" --out "${RUNNER_TEMP}/predicates"
 
       # The snapshot's names on the digests `build` pushed: `<version>-SNAPSHOT` and `sha-<commit>`, nothing else — no

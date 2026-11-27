@@ -426,13 +426,19 @@ def await_completion(run: dict, fetch, wait_seconds: int, poll: int = 60, sleep=
     return run
 
 
-def checks_verdict(run: dict, jobs: list[dict], archs: list[str], domains: list[str], legs: list[str]) -> dict:
+def checks_verdict(run: dict, jobs: list[dict], archs: list[str], domains: list[str], legs: list[str],
+                   upgrade_archs: list[str]) -> dict:
     """Whether a snapshot may be made from `run` (pick_run's), given its latest attempt's jobs (`filter=latest`);
-    refused, naming why not. Every lane L1 leg (`domains`) and every lane L2 leg (`legs`) of each architecture."""
+    refused, naming why not. Every lane L1 leg (`domains`) of each of its architectures (`archs`), and every lane L2
+    leg (`legs`) of each of L2's (`upgrade_archs`) — amd64 alone since ADR 0091 decision 6's amendment of 2026-11-27,
+    the data path being the same on every architecture; L2's must be among L1's."""
     if not archs or not domains:
         raise Refused("the commit's `stack` matrix names no architecture or no domain, so no lane result can be checked")
-    if not legs:
-        raise Refused(f"the commit's `{UPGRADE_JOB}` matrix names no leg, so lane L2 cannot be checked")
+    if not legs or not upgrade_archs:
+        raise Refused(f"the commit's `{UPGRADE_JOB}` matrix names no leg or no architecture, so lane L2 cannot be checked")
+    if not set(upgrade_archs) <= set(archs):
+        raise Refused(f"lane L2 runs on {sorted(upgrade_archs)}, lane L1 on {sorted(archs)} — an architecture only L2 "
+                      f"ran was never booted with its features")
     where = f"Checks run {run.get('id')} (attempt {run.get('run_attempt')}, {run.get('html_url')})"
     if run.get("status") != "completed":
         raise Refused(f"{where} is `{run.get('status')}`, not completed — publish again once it has finished")
@@ -446,13 +452,13 @@ def checks_verdict(run: dict, jobs: list[dict], archs: list[str], domains: list[
     if attempts and attempts != {int(run.get("run_attempt") or 0)}:
         raise Refused(f"{where}: its jobs are of attempts {sorted(attempts)}, not only its latest — read the latest")
     wanted = ([GATE_JOB_NAME] + [LANE_JOB_NAME.format(arch=a, domain=d) for a in archs for d in domains]
-              + [UPGRADE_JOB_NAME.format(arch=a, leg=leg) for a in archs for leg in legs])
+              + [UPGRADE_JOB_NAME.format(arch=a, leg=leg) for a in upgrade_archs for leg in legs])
     for name in wanted:
         found = by_name.get(name) or []
         if len(found) != 1 or found[0].get("conclusion") != "success":
             state = "missing" if not found else ", ".join(str(j.get("conclusion")) for j in found)
-            raise Refused(f"{where}: job `{name}` is {state}, not one `success` — every stage and every lane leg on "
-                          f"both architectures must have passed in the run a snapshot is made from")
+            raise Refused(f"{where}: job `{name}` is {state}, not one `success` — every stage and every leg of "
+                          f"every lane's matrix must have passed in the run a snapshot is made from")
     return {"run_id": str(run.get("id")), "run_url": str(run.get("html_url")), "attempt": str(run.get("run_attempt"))}
 
 
@@ -500,6 +506,14 @@ def upgrade_legs(root: pathlib.Path) -> list[str]:
     doc = yaml.safe_load((root / CHECKS_WORKFLOW).read_text()) or {}
     matrix = (((doc.get("jobs") or {}).get(UPGRADE_JOB) or {}).get("strategy") or {}).get("matrix") or {}
     return sorted(map(str, matrix.get("leg") or []))
+
+
+def upgrade_archs(root: pathlib.Path) -> list[str]:
+    """Lane L2's architectures in the checked-out commit's checks.yml (`stack-upgrade`'s matrix `arch`)."""
+    import yaml
+    doc = yaml.safe_load((root / CHECKS_WORKFLOW).read_text()) or {}
+    matrix = (((doc.get("jobs") or {}).get(UPGRADE_JOB) or {}).get("strategy") or {}).get("matrix") or {}
+    return sorted(map(str, matrix.get("arch") or []))
 
 
 def _git_out(root: pathlib.Path, *args: str) -> str:
@@ -558,7 +572,7 @@ def checks_run(repository: str, head: str, branch: str, root: pathlib.Path, boun
         if len(chunk.get("jobs") or []) < 100:
             break
         page += 1
-    verdict = checks_verdict(run, jobs, archs, domains, upgrade_legs(root))
+    verdict = checks_verdict(run, jobs, archs, domains, upgrade_legs(root), upgrade_archs(root))
     version = release_assets.tree_release(root, commit)
     print(f"publishing {version} of {commit} from {verdict['run_url']} (attempt {verdict['attempt']})")
     return {"kind": "snapshot", "commit": commit, **verdict, "version": version, "draft_version": version}

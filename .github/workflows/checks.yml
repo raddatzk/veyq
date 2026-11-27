@@ -1184,10 +1184,12 @@ jobs:
   # legs: the newest release and the candidate's major entry (the jar-level proof's resolution, `--resolve`). A leg that
   # resolves to nothing — the major entry while it is the newest release, or none — builds and installs nothing and
   # passes, saying why, and still records that it had no release to start from, so every leg of the matrix is attested.
-  # amd64 on a pull request, both architectures on a push (ADR 0091 decision 4), as lane L1.
+  # amd64 alone, on a pull request and a push (ADR 0091 decision 6, amended 2026-11-27): what this lane proves is the data
+  # path — Flyway's SQL on the pinned MariaDB, the dump through the pinned vendor image, ciphertext — which no
+  # architecture changes; what does is lane L1's, on every architecture the build publishes.
   stack-upgrade:
     name: Stack lane L2 (${{ matrix.arch }}, ${{ matrix.leg }})
-    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     # As lane L1's, for its reasons: the images this lane builds or pulls install a lockfile `frontend` has passed.
     needs:
@@ -1203,11 +1205,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [amd64, arm64]
+        arch: [amd64]
         leg: [newest, major-entry]
-        # As lane L1's: an exclude, never an include (an include that matches no leg is added as one).
-        exclude:
-          - arch: ${{ github.event_name == 'pull_request' && 'arm64' || 'none' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

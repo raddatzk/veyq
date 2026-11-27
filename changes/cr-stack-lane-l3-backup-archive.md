@@ -21,7 +21,7 @@ as decision 6's amendment of 2026-11-26 decides them (inbox #461), then retire t
   published as a signed OCI artifact beside the release's images. `release.yml` calls it after a promotion; a dispatch
   with a tag runs it for a release already out. Every release is archived. The eighteen released before it are
   written once, by dispatch.
-- **L3:** on every push, both architectures, the candidate restores one archived backup per schema state of its major
+- **L3:** on every push, on amd64 alone (ADR 0091 decision 6, amended 2026-11-27), the candidate restores one archived backup per schema state of its major
   (the oldest release of each state) plus the major entry's, each into a fresh `veyqctl install` of the candidate with
   `veyqctl restore --objects-from`, and reads it with the candidate's reader and browser spec.
 - **Then** the `upgrade-proof` job goes, and every doc that names it says what proves the upgrade now.
@@ -67,7 +67,8 @@ seeded on the stack, the suites in a container on the stack's networks, the brow
    not `--merged`, so fix releases on `release/<N>.x` count): the releases of the candidate's major grouped by the
    highest migration of their own pin file, the oldest of each group, plus the major entry. Its self-test holds the
    2026-11-26 grouping as a fixture case and a case where a fix release on the old branch moves the entry.
-5. **L3's jobs.** `Stack lane L3 (<arch>, <shard>)` on push only, both architectures; the selection split over shards
+5. **L3's jobs.** `Stack lane L3 (<arch>, <shard>)` on push only, amd64 alone (a data-path lane: `validate_release_identity.py`'s
+   `EVERY_ARCH_LANES` leaves it out, as L2); the selection split over shards
    so a shard fits decision 1's 15-minute budget, each shard restoring its backups one after another into a fresh
    install each. Per backup: pull, `cosign verify` under `archive.yml`'s identity, fresh `veyqctl install
    --unsigned-local` of the candidate with the archived domain, `veyqctl restore --objects-from --key-from`, the
@@ -113,7 +114,7 @@ verifying; the run links are in the PR.
 
 ### Phase 3 — the selection and lane L3
 
-Decisions 4 to 6. Done when: L3 is green on a push on both architectures, restoring exactly the selection (five
+Decisions 4 to 6. Done when: L3 is green on a push on amd64, restoring exactly the selection (five
 backups on 2026-11-26's tags: v0.2480, v1.0, v1.168, v1.248, v1.260 — v0.2480 as the entry, v1.0 as the oldest of
 the first state); **bites:** a selection whose newest state's oldest release is deleted from the registry (or its tag
 pointed at a missing artifact in a test registry) is red naming it; a candidate whose reader expects one more item is
@@ -131,7 +132,7 @@ deleted, and #436's mention of the disabled major-entry proof is updated.
 ## Definition of done
 
 - Every release, the eighteen before this CR included, has a signed archived backup written by its own seeder.
-- L3 gates every push on both architectures from one backup per schema state plus the major entry; the promotion
+- L3 gates every push on amd64 from one backup per schema state plus the major entry; the promotion
   refuses a snapshot whose backup list moved.
 - The jar-level upgrade proof is gone and nothing that read it is left stale.
 - Every bite went red and was reverted; the scripts' self-tests and the trust-chain guards green.

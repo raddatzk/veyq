@@ -83,7 +83,8 @@ manifests, the image signatures, the predicates and the tag each name it.
  10. **The snapshot waits on lanes L1 and L2** (ADR 0090 decision 2, ADR 0091 decision 3). Assertion 9 holds the
      snapshot to the jobs the file has, and cannot see one that is gone; so the job of each lane — found by the
      orchestrator it runs (`LANE_ORCHESTRATORS`: `scripts/run_stack_e2e.py`, `scripts/run_stack_upgrade.py`), never by
-     its name — must exist, need `build`, run on every architecture the build matrix publishes, and be in the gate's
+     its name — must exist, need `build`, run on every architecture the build matrix publishes (lane L1; lane L2, which
+     proves the data path, on a non-empty subset of them — amd64, ADR 0091 decision 6 amended 2026-11-27), and be in the gate's
      `needs:` with `needs.<lane>.result == 'success'` among its `&&` terms; and lane L2's job is named as
      `scripts/snapshot.py` reads it (`UPGRADE_JOB_NAME`), as L1's is.
  13. **Each lane's result is attested by the snapshot, never by the lane** (ADR 0091 decision 5). Each lane's job
@@ -460,6 +461,9 @@ BUILD_JOB, LOCAL_BUILD_JOB = "build", "build-local"
 # The stack lanes' orchestrators: assertion 10 finds each lane's job by what it runs, never by the job's name, and
 # assertion 13 reads its legs from the matrix key named here (lane L1's domains, lane L2's starting releases).
 LANE_ORCHESTRATORS = {"L1": ("scripts/run_stack_e2e.py", "domain"), "L2": ("scripts/run_stack_upgrade.py", "leg")}
+# The lanes that boot every architecture the build publishes; every other lane proves the data path, which no
+# architecture changes, and runs on a non-empty subset of them (ADR 0091 decision 6, amended 2026-11-27).
+EVERY_ARCH_LANES = {"L1"}
 # The snapshot's decisions (assertion 13): a lane leg's record, the predicates, the write-once refusal.
 SNAPSHOT_SCRIPT = "scripts/snapshot.py"
 CHART_DIR = repo_layout.CHART_DIR
@@ -1552,10 +1556,14 @@ if workflow_doc:
         lane_archs = {str(a) for a in (((lane_job.get("strategy") or {}).get("matrix") or {}).get("arch") or [])}
         if not build_archs:
             fail(f"the `{BUILD_JOB}` job's matrix names no `arch` — lane {lane_id}'s architectures cannot be held to it")
-        elif not build_archs <= lane_archs:
+        elif lane_id in EVERY_ARCH_LANES and not build_archs <= lane_archs:
             fail(f"lane {lane_id}'s job `{lane}` runs on {sorted(lane_archs)}, the `{BUILD_JOB}` publishes "
                  f"{sorted(build_archs)} — what is published for an architecture must have passed on it (ADR 0091 "
                  f"decision 4)")
+        elif lane_id not in EVERY_ARCH_LANES and (not lane_archs or not lane_archs <= build_archs):
+            fail(f"lane {lane_id}'s job `{lane}` runs on {sorted(lane_archs)}, the `{BUILD_JOB}` publishes "
+                 f"{sorted(build_archs)} — a data-path lane runs on at least one published architecture and on none "
+                 f"the build does not publish (ADR 0091 decision 6, amended 2026-11-27)")
 
     # ---- 13. each lane's result is attested, per architecture, by the publish and never by the lane --------------
     # ADR 0091 decision 5: every snapshot is published with each lane's result as a signed attestation
