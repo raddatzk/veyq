@@ -536,9 +536,46 @@ final class AppModel {
         try await tenantSession?.members.setRole(userId: userId, owner: owner)
     }
 
-    /// A row's *Remove Member*, after its question (core's `TenantMembers.remove`).
-    func removeMember(_ userId: String, revokeLinks: Bool) async throws -> TenantMembers.Outcome? {
-        try await tenantSession?.members.remove(userId: userId, revokeLinks: revokeLinks)
+    /// A row's *Remove Member*, after its question with its two options (core's `TenantMembers.remove`): every link off,
+    /// and a new lock run after the removal, the removed member left out of it.
+    func removeMember(_ userId: String, revokeLinks: Bool, newLock: Bool) async throws -> TenantMembers.Outcome? {
+        try await tenantSession?.members.remove(userId: userId, revokeLinks: revokeLinks, newLock: newLock)
+    }
+
+    /// The owner's *Give it a new lock*, after its question (core's `TenantMembers.newLock`).
+    func membersNewLock() async throws -> TenantMembers.Outcome? {
+        try await tenantSession?.members.doNewLock(excluding: nil)
+    }
+
+    /// The owner's *Turn off every link* of the space, after its question (core's `TenantMembers.revokeAllLinks`).
+    func membersRevokeLinks() async throws -> TenantMembers.Outcome? {
+        try await tenantSession?.members.revokeAllLinks()
+    }
+
+    // MARK: A scope's icon (core's `ScopeIcons`, uc.spaces.set-space-icon)
+
+    /// The open space's scope id, whose icon Members' header draws.
+    var tenantScopeId: String? { tenantSession?.tenant.tenantId }
+
+    /// The core's icons with its own WebP encoder (libwebp's, as the profile's picture; the default argument is not exported).
+    private func icons(_ t: TenantSession) -> ScopeIcons { t.icons(encoder: LibwebpEncoderKt.coreWebpEncoder) }
+
+    /// `scopeId`'s icon opened on this device, as encoded bytes; nil where none is set or it does not open (the initial shows).
+    func scopeIcon(_ scopeId: String) async -> Data? {
+        guard let t = tenantSession, let bytes = try? await icons(t).icon(scopeId: scopeId) else { return nil }
+        return Data(kotlin: bytes)
+    }
+
+    /// *Add icon* / *Change icon*: the square crop's `ProfileModel.EDGE` RGBA as `scopeId`'s icon (core's `ScopeIcons.set`).
+    func setScopeIcon(_ scopeId: String, rgba: Data) async -> ScopeIcons.Outcome? {
+        guard let t = tenantSession else { return nil }
+        return try? await icons(t).set(scopeId: scopeId, rgba: AppleKit.shared.bytes(data: rgba))
+    }
+
+    /// *Remove icon*, after its question (core's `ScopeIcons.clear`).
+    func clearScopeIcon(_ scopeId: String) async -> ScopeIcons.Outcome? {
+        guard let t = tenantSession else { return nil }
+        return try? await icons(t).clear(scopeId: scopeId)
     }
 
     // MARK: Groups (core's `TenantGroups`, en.spaces.group-scope, uc.spaces.consent-group-add)

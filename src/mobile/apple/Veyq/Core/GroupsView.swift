@@ -70,8 +70,8 @@ private struct GroupRowView: View {
             Text(row.titleWord.map { say($0) } ?? row.name)
             Text(say(row.owner ? .membersRoleOwner : .membersRoleMember)).font(.subheadline).foregroundStyle(Role.muted)
             if row.deleted {
-                // the web's `groups.pendingDeletion` names the purge day, which the core's row does not carry yet
-                Text(say(.groupsPendingSub)).font(.footnote).foregroundStyle(Role.danger).accessibilityIdentifier("group-deleted")
+                // the web's `groups.pendingDeletion`: the day it is deleted (core's `GroupRow.deletion`)
+                Text(row.deletion.map { say(notice: $0) } ?? say(.groupsPendingSub)).font(.footnote).foregroundStyle(Role.danger).accessibilityIdentifier("group-deleted")
             }
             if row.behind {
                 Text(say(.membersPending)).font(.footnote).foregroundStyle(Role.muted).accessibilityIdentifier("group-behind")
@@ -135,10 +135,11 @@ private struct CreateGroupSheet: View {
     }
 }
 
-/// A group's page (the web's `GroupMembersPanel`, without the group's icon; its links card and its new lock are not
-/// built yet): the name and an owner's *Rename*, a member's read-only note, an owner's *Add* by username, the members with
-/// the acts core offers on each — its menu and its context menu —, and an owner's danger zone: *Delete group* after its
-/// question, or a deleted group's *Restore group*. The page reads itself (`.task`) and again after every act that went
+/// A group's page (the web's `GroupMembersPanel`): its header ([ScopeHeader]: the group's icon, which an owner sets or
+/// removes) and an owner's *Rename*, a deleted group's day, a member's read-only note, an owner's *Add* by username, the
+/// members with their trust badges and the acts core offers on each — its menu and its context menu —, where core's
+/// `wholeActs` the *Links* and *New lock* sections ([ScopeLinksAndLock]), and an owner's danger zone: *Delete group* after
+/// its question, or a deleted group's *Restore group*. The page reads itself (`.task`) and again after every act that went
 /// through; what an act says shows under the members.
 struct GroupPageView: View {
     let model: AppModel
@@ -152,6 +153,13 @@ struct GroupPageView: View {
     @State private var removing: GroupRemoval?
     @State private var revokeLinks = false
     @State private var confirmingDelete = false
+    /// The group's icon opened on this device (core's `ScopeIcons.icon`); nil shows its initial.
+    @State private var icon: Data?
+    @State private var choosingIcon = false
+    @State private var iconNotImage = false
+    @State private var removingIcon = false
+    @State private var askingLinks = false
+    @State private var askingLock = false
 
     var body: some View {
         List {
@@ -196,6 +204,18 @@ struct GroupPageView: View {
         } message: {
             Text(say(.groupsDeleteSub))
         }
+        .squarePicture($choosingIcon, title: say(icon == nil ? .spaceIconAdd : .spaceIconChange), notImage: $iconNotImage) { rgba in
+            iconAct { await model.setScopeIcon(scopeId, rgba: rgba) }
+        }
+        .dangerConfirm($removingIcon, title: say(.spaceIconRemove), message: say(.spaceIconRemoveConfirm), action: say(.spaceIconRemove)) {
+            iconAct { await model.clearScopeIcon(scopeId) }
+        }
+        .dangerConfirm($askingLinks, title: say(.spaceLinksRevokeAll), message: say(.spaceLinksRevokeAllConfirm), action: say(.spaceLinksRevokeAll)) {
+            act { try await model.groups?.revokeAllLinks(scopeId: scopeId) }
+        }
+        .dangerConfirm($askingLock, title: say(.spaceLockConfirmTitle), message: say(.spaceLockConfirmGroup), action: say(.spaceLockAction)) {
+            act { try await model.groups?.doNewLock(scopeId: scopeId) }
+        }
     }
 
     private var title: String {
@@ -207,7 +227,15 @@ struct GroupPageView: View {
 
     @ViewBuilder private func content(_ page: TenantGroups.GroupPage) -> some View {
         Section {
-            Text(title).font(.headline).accessibilityIdentifier("group-name")
+            ScopeHeader(
+                name: title, icon: icon, owner: page.owner, working: working, notImage: iconNotImage,
+                choose: { choosingIcon = true }, remove: { removingIcon = true }
+            )
+            if page.deleted {
+                // a deleted group's day (core's `GroupPage.deletion`), the web's warning line above the roster
+                Text(page.deletion.map { say(notice: $0) } ?? say(.groupsPendingSub))
+                    .font(.footnote).foregroundStyle(Role.danger).accessibilityIdentifier("group-deleted")
+            }
             if page.owner {
                 Button { renaming = true } label: { Label(say(.groupsRename), systemImage: "pencil") }
                     .disabled(working)
@@ -259,6 +287,9 @@ struct GroupPageView: View {
                 if let said { Text(said).foregroundStyle(.primary).accessibilityIdentifier("group-notice") }
             }
         }
+        if page.wholeActs {
+            ScopeLinksAndLock(lockSub: say(.spaceLockSubGroup), working: working, revoke: { askingLinks = true }, lock: { askingLock = true })
+        }
         if page.owner {
             Section {
                 if page.deleted {
@@ -286,6 +317,19 @@ struct GroupPageView: View {
         loading = true
         page = try? await model.groups?.page(scopeId: scopeId)
         loading = false
+        icon = await model.scopeIcon(scopeId)
+    }
+
+    /// An act on the group's icon: what it said shows under the members; one that went through opens the icon anew.
+    private func iconAct(_ run: @escaping () async -> ScopeIcons.Outcome?) {
+        working = true
+        said = nil
+        Task {
+            let outcome = await run()
+            said = outcome.map { say(notice: $0.notice) } ?? say(.spaceIconFailed)
+            if outcome?.done == true { icon = await model.scopeIcon(scopeId) }
+            working = false
+        }
     }
 
     private func add() {
@@ -406,7 +450,9 @@ private struct GroupMemberRowView: View {
                     if let pending = member.pendingWord {
                         Text(say(pending)).font(.footnote).foregroundStyle(Role.muted).accessibilityIdentifier("group-member-pending")
                     }
+                    TrustBadge(word: member.badgeWord, anomaly: member.badgeNote != nil)
                 }
+                TrustNote(note: member.badgeNote)
             }
             Spacer()
             if offers {

@@ -137,8 +137,8 @@ private struct FlowFrame<Content: View>: View {
 }
 
 /// The danger step's confirmation, as each platform's guidelines ask: a destructive confirmation dialog on iOS, a
-/// destructive alert on a Mac.
-private extension View {
+/// destructive alert on a Mac. Also the question before a scope's *Remove icon*, *Turn off every link* and new lock.
+extension View {
     func dangerConfirm(_ shown: Binding<Bool>, title: String, message: String, action: String, run: @escaping () -> Void) -> some View {
         #if os(iOS)
         confirmationDialog(title, isPresented: shown, titleVisibility: .visible) {
@@ -1220,6 +1220,8 @@ private struct CroppedImage: Identifiable {
 /// the slider zooms; *Use this picture* renders the framed part to `ProfileModel.EDGE` square RGBA for the core.
 struct SquareCropSheet: View {
     let image: CGImage
+    /// The sheet's title: the profile's *Profile picture*, a scope's *Add icon* / *Change icon*.
+    var title: String = say(.profilePictureLabel)
     let done: (Data?) -> Void
     @State private var pose: CoverFrame.Pose?
     @State private var size: CGSize = .zero
@@ -1254,7 +1256,7 @@ struct SquareCropSheet: View {
                 }
             }
             .formStyle(.grouped)
-            .navigationTitle(say(.profilePictureLabel))
+            .navigationTitle(title)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -1323,6 +1325,69 @@ struct SquareCropSheet: View {
         ctx.interpolationQuality = .high
         ctx.draw(part, in: CGRect(x: 0, y: 0, width: edge, height: edge))
         return data as Data
+    }
+}
+
+extension View {
+    /// The app's one square picture choice beyond the profile's own (ADR 0148 decision 2): while `shown`, the picture is
+    /// picked — iOS's Photos picker, a Mac's files, as the profile's — and framed in [SquareCropSheet] titled `title`;
+    /// *Use this picture* hands `chosen` its `ProfileModel.EDGE` square RGBA. A pick that is no image sets `notImage`.
+    /// A space's and a group's icon and the join's picture go through it.
+    func squarePicture(_ shown: Binding<Bool>, title: String, notImage: Binding<Bool>, chosen: @escaping (Data) -> Void) -> some View {
+        modifier(SquarePicture(shown: shown, title: title, notImage: notImage, chosen: chosen))
+    }
+}
+
+private struct SquarePicture: ViewModifier {
+    @Binding var shown: Bool
+    let title: String
+    @Binding var notImage: Bool
+    let chosen: (Data) -> Void
+    @State private var item: PhotosPickerItem?
+    @State private var cropping: CGImage?
+
+    func body(content: Content) -> some View {
+        content
+            #if os(iOS)
+            .photosPicker(isPresented: $shown, selection: $item, matching: .images)
+            .onChange(of: item) { _, picked in
+                guard let picked else { return }
+                item = nil
+                Task {
+                    guard let data = try? await picked.loadTransferable(type: Data.self) else {
+                        notImage = true
+                        return
+                    }
+                    framed(data)
+                }
+            }
+            #else
+            .fileImporter(isPresented: $shown, allowedContentTypes: [.image]) { result in
+                guard case .success(let url) = result else { return }
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                guard let data = try? Data(contentsOf: url) else {
+                    notImage = true
+                    return
+                }
+                framed(data)
+            }
+            #endif
+            .sheet(item: Binding(get: { cropping.map(CroppedImage.init) }, set: { if $0 == nil { cropping = nil } })) { c in
+                SquareCropSheet(image: c.image, title: title) { rgba in
+                    cropping = nil
+                    if let rgba { chosen(rgba) }
+                }
+            }
+    }
+
+    private func framed(_ data: Data) {
+        guard let picture = CoverImages.image(data, maxPixels: 2048) else {
+            notImage = true
+            return
+        }
+        notImage = false
+        cropping = picture
     }
 }
 

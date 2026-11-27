@@ -4,8 +4,10 @@ import VeyqCore
 /// Settings' *Members* (core's `SettingsSection.MEMBERS` over `TenantMembers`, the web's `TenantMembersPanel` roster;
 /// uc.spaces.remove-tenant-member): every member of the open space with their role and state, as a grouped list. A row's
 /// acts — *Make Co-Owner*, *Remove Co-Owner*, *Remove Member* — are its menu and its context menu, offered as core says;
-/// the removal asks first in an alert, with the option to turn off every link of the space. What an act says shows under
-/// the list. Pushed in iOS's Settings, a sheet over the Mac's.
+/// the removal asks first, with the options to turn off every link of the space and to give it a new lock. Above the
+/// roster the space's header ([ScopeHeader]: its icon, which an owner sets or removes, uc.spaces.set-space-icon); on each
+/// row its trust badge; below, an owner's *Links* and *New lock* ([ScopeLinksAndLock]), each behind its question. What an
+/// act says shows under the list. Pushed in iOS's Settings, a sheet over the Mac's.
 struct MembersView: View {
     let model: AppModel
     @State private var loading = true
@@ -14,6 +16,14 @@ struct MembersView: View {
     @State private var working = false
     @State private var removing: TenantMembers.RosterMember?
     @State private var revokeLinks = false
+    @State private var newLock = false
+    /// The space's icon opened on this device (core's `ScopeIcons.icon`); nil shows its initial.
+    @State private var icon: Data?
+    @State private var choosingIcon = false
+    @State private var iconNotImage = false
+    @State private var removingIcon = false
+    @State private var askingLinks = false
+    @State private var askingLock = false
     /// *Invite member*'s sheet (owners only).
     @State private var inviting = false
     /// A re-issue's new link or code, shown once.
@@ -25,6 +35,15 @@ struct MembersView: View {
 
     var body: some View {
         List {
+            if let roster, roster.said == nil {
+                Section {
+                    ScopeHeader(
+                        name: roster.tenantName.isEmpty ? (model.tenant?.name ?? "") : roster.tenantName, icon: icon,
+                        owner: roster.ownerActs, working: working, notImage: iconNotImage,
+                        choose: { choosingIcon = true }, remove: { removingIcon = true }
+                    )
+                }
+            }
             if roster?.owner == true {
                 // the owners' *Invite member* (uc.spaces.add-member), the web's button above the roster
                 Section {
@@ -45,6 +64,7 @@ struct MembersView: View {
                     ForEach(roster.rows, id: \.userId) { row in
                         MemberRowView(row: row, working: working, role: { owner in act { try await model.setMemberRole(row.userId, owner: owner) } }, remove: {
                             revokeLinks = false
+                            newLock = false
                             removing = row
                         })
                     }
@@ -70,6 +90,22 @@ struct MembersView: View {
                     Text(say(.membersPendingSub))
                 }
             }
+            if let roster, roster.ownerActs {
+                ScopeLinksAndLock(lockSub: say(.spaceLockSub), working: working, revoke: { askingLinks = true }, lock: { askingLock = true })
+            }
+        }
+        .overlay(alignment: .top) { if working { ProgressView().padding(8) } }
+        .squarePicture($choosingIcon, title: say(icon == nil ? .spaceIconAdd : .spaceIconChange), notImage: $iconNotImage) { rgba in
+            iconAct { id in await model.setScopeIcon(id, rgba: rgba) }
+        }
+        .dangerConfirm($removingIcon, title: say(.spaceIconRemove), message: say(.spaceIconRemoveConfirm), action: say(.spaceIconRemove)) {
+            iconAct { id in await model.clearScopeIcon(id) }
+        }
+        .dangerConfirm($askingLinks, title: say(.spaceLinksRevokeAll), message: say(.spaceLinksRevokeAllConfirm), action: say(.spaceLinksRevokeAll)) {
+            act { try await model.membersRevokeLinks() }
+        }
+        .dangerConfirm($askingLock, title: say(.spaceLockConfirmTitle), message: say(.spaceLockConfirm), action: say(.spaceLockAction)) {
+            act { try await model.membersNewLock() }
         }
         .environment(\.avatars, model.avatars)
         .navigationTitle(say(.membersTitle))
@@ -77,9 +113,10 @@ struct MembersView: View {
         .task { await load() }
         .refreshable { await load() }
         .sheet(item: Binding(get: { removing.map(Removing.init) }, set: { if $0 == nil { removing = nil } })) { r in
-            RemoveMemberSheet(revokeLinks: $revokeLinks, confirm: {
+            RemoveMemberSheet(revokeLinks: $revokeLinks, newLock: $newLock, confirm: {
                 removing = nil
-                act { try await model.removeMember(r.row.userId, revokeLinks: revokeLinks) }
+                let links = revokeLinks, lock = newLock
+                act { try await model.removeMember(r.row.userId, revokeLinks: links, newLock: lock) }
             }, cancel: { removing = nil })
         }
         .sheet(isPresented: $inviting) {
@@ -109,6 +146,19 @@ struct MembersView: View {
         loading = true
         roster = await model.membersRead()
         loading = false
+        if let id = model.tenantScopeId { icon = await model.scopeIcon(id) }
+    }
+
+    /// An act on the space's icon: what it said shows under the list; one that went through opens the icon anew.
+    private func iconAct(_ run: @escaping (String) async -> ScopeIcons.Outcome?) {
+        guard let id = model.tenantScopeId else { return }
+        working = true
+        Task {
+            let outcome = await run(id)
+            said = outcome.map { say(notice: $0.notice) } ?? say(.spaceIconFailed)
+            if outcome?.done == true { icon = await model.scopeIcon(id) }
+            working = false
+        }
     }
 
     /// One act: its words said under the list, the roster read anew where it went through.
@@ -173,9 +223,11 @@ private struct Removing: Identifiable {
     var id: String { row.userId }
 }
 
-/// The removal's question (the web's `askWithOptions`): its words, the opt-in to turn off every link of the space, Remove and Cancel.
+/// The removal's question (the web's `askWithOptions`): its words, two opt-ins, each off — turn off every link of the
+/// space, and give the space a new lock (run after the removal, the removed member left out of it) —, Remove and Cancel.
 private struct RemoveMemberSheet: View {
     @Binding var revokeLinks: Bool
+    @Binding var newLock: Bool
     let confirm: () -> Void
     let cancel: () -> Void
 
@@ -189,6 +241,12 @@ private struct RemoveMemberSheet: View {
                 } footer: {
                     Text(say(.membersRemoveRevokeLinksHint))
                 }
+                Section {
+                    Toggle(isOn: $newLock) { Text(say(.spaceLockRemoveOption)) }
+                        .accessibilityIdentifier("member-remove-lock")
+                } footer: {
+                    Text(say(.spaceLockRemoveOptionHint))
+                }
             }
             .formStyle(.grouped)
             .navigationTitle(say(.membersRemove))
@@ -200,7 +258,7 @@ private struct RemoveMemberSheet: View {
             }
         }
         #if os(macOS)
-        .frame(minWidth: 420, minHeight: 320)
+        .frame(minWidth: 420, minHeight: 400)
         #endif
     }
 }
@@ -222,7 +280,9 @@ private struct MemberRowView: View {
                 HStack(spacing: 8) {
                     Text(say(row.statusWord)).font(.footnote).foregroundStyle(Role.accent)
                     if let pending = row.pendingWord { Text(say(pending)).font(.footnote).foregroundStyle(Role.muted).accessibilityIdentifier("member-pending") }
+                    TrustBadge(word: row.badgeWord, anomaly: row.badgeNote != nil)
                 }
+                TrustNote(note: row.badgeNote)
             }
             Spacer()
             if offers {
@@ -243,5 +303,94 @@ private struct MemberRowView: View {
         if row.promote { Button { role(true) } label: { Label(say(.membersPromote), systemImage: "arrow.up.circle") } }
         if row.demote { Button { role(false) } label: { Label(say(.membersDemote), systemImage: "arrow.down.circle") } }
         if row.remove { Button(role: .destructive, action: remove) { Label(say(.membersRemove), systemImage: "person.badge.minus") } }
+    }
+}
+
+/// A member's trust badge (the web's `MemberTrustBadge`, core's `MemberBadge` over Who's who): *Verified*, *New* or the
+/// anomaly's word, in the danger colour for the anomaly; none where core says none.
+struct TrustBadge: View {
+    let word: Msg?
+    let anomaly: Bool
+
+    var body: some View {
+        if let word {
+            Text(say(word)).font(.footnote).foregroundStyle(anomaly ? Role.danger : Role.muted).accessibilityIdentifier("member-trust")
+        }
+    }
+}
+
+/// The anomaly's note under a row's badges: nothing is shared with that key.
+struct TrustNote: View {
+    let note: Msg?
+
+    var body: some View {
+        if let note { Text(say(note)).font(.footnote).foregroundStyle(Role.muted).accessibilityIdentifier("member-trust-note") }
+    }
+}
+
+/// A scope's identity header (the web's `TenantAvatar` beside the name): its icon opened on this device, else its
+/// initial, and its name. An `owner` adds or changes the icon through the app's one square crop (`squarePicture`) and
+/// removes it after a question, both of which the screen holds; every member sees the icon.
+struct ScopeHeader: View {
+    let name: String
+    let icon: Data?
+    let owner: Bool
+    let working: Bool
+    let notImage: Bool
+    let choose: () -> Void
+    let remove: () -> Void
+
+    var body: some View {
+        HStack(spacing: 16) {
+            PersonAvatar(name: name, userId: nil, size: 56, data: icon)
+                .accessibilityIdentifier(icon == nil ? "scope-icon-initial" : "scope-icon")
+            VStack(alignment: .leading, spacing: 8) {
+                Text(name).font(.headline).accessibilityIdentifier("scope-name")
+                if owner {
+                    HStack(spacing: 12) {
+                        Button(say(icon == nil ? .spaceIconAdd : .spaceIconChange), action: choose)
+                            .accessibilityIdentifier("scope-icon-choose")
+                        if icon != nil {
+                            Button(say(.spaceIconRemove), role: .destructive, action: remove)
+                                .accessibilityIdentifier("scope-icon-remove")
+                        }
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(working)
+                    if notImage { Text(say(.profilePictureNotImage)).font(.footnote).foregroundStyle(Role.danger) }
+                }
+            }
+        }
+        .accessibilityIdentifier("scope-header")
+    }
+}
+
+/// An owner's *Links* and *New lock* sections (the web's panels'): *Turn off every link* and *Give it a new lock*, each a
+/// destructive button whose question the screen asks; `lockSub` is the space's or the group's words.
+struct ScopeLinksAndLock: View {
+    let lockSub: String
+    let working: Bool
+    let revoke: () -> Void
+    let lock: () -> Void
+
+    var body: some View {
+        Section {
+            Button(role: .destructive, action: revoke) { Label(say(.spaceLinksRevokeAll), systemImage: "link") }
+                .disabled(working)
+                .accessibilityIdentifier("scope-links-revoke")
+        } header: {
+            Text(say(.spaceLinksTitle))
+        } footer: {
+            Text(say(.spaceLinksSub))
+        }
+        Section {
+            Button(role: .destructive, action: lock) { Label(say(.spaceLockAction), systemImage: "lock.rotation") }
+                .disabled(working)
+                .accessibilityIdentifier("scope-new-lock")
+        } header: {
+            Text(say(.spaceLockTitle))
+        } footer: {
+            Text(lockSub)
+        }
     }
 }

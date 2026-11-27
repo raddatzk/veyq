@@ -56,6 +56,10 @@ struct JoinView: View {
     /// The password the breach check last ran on: its verdict is shown only while the field still holds it.
     @State private var checkedPassword: String?
     @State private var opening = false
+    /// The optional picture's encoded bytes as the join keeps them (`TenantJoin.picture`), read after each choice.
+    @State private var pictureData: Data?
+    @State private var choosingPicture = false
+    @State private var pictureNotImage = false
     @FocusState private var passwordFocused: Bool
 
     private var state: TenantJoin.State { held.state.value }
@@ -65,6 +69,7 @@ struct JoinView: View {
         NavigationStack {
             Form { content }
                 .formStyle(.grouped)
+                .squarePicture($choosingPicture, title: say(.profilePictureLabel), notImage: $pictureNotImage, chosen: choosePicture)
                 .disabled(working)
                 .navigationTitle(say(.joinTitle))
                 #if os(iOS)
@@ -264,6 +269,7 @@ struct JoinView: View {
                 Text(say(.joinNameHint))
             }
         }
+        if state.asksPicture { picture }
         if state.asksEmail {
             Section {
                 TextField(say(.signinEmail), text: $email, prompt: Text(say(.signinEmail)))
@@ -276,6 +282,44 @@ struct JoinView: View {
                     .accessibilityIdentifier("join-email")
             }
         }
+    }
+
+    /// The optional picture below the name (the web's `JoinPicturePicker`, ADR 0084): a preview of the chosen picture (the
+    /// initial otherwise), *Choose picture* / *Change picture* through the app's one square crop and *Remove* once one is
+    /// chosen. Core keeps it encoded in the join only, sealed beside the name at the accept.
+    @ViewBuilder private var picture: some View {
+        Section {
+            HStack(spacing: 16) {
+                PersonAvatar(name: pictureName, userId: nil, size: 72, data: state.picture ? pictureData : nil)
+                    .accessibilityIdentifier("join-picture")
+                VStack(alignment: .leading, spacing: 8) {
+                    Button(say(state.pictureWord)) { choosingPicture = true }
+                        .accessibilityIdentifier("join-picture-choose")
+                    if state.picture {
+                        Button(say(.profilePictureRemove), role: .destructive) {
+                            held.join.removePicture()
+                            pictureData = nil
+                            held.state.refresh()
+                        }
+                        .accessibilityIdentifier("join-picture-remove")
+                    }
+                }
+                .buttonStyle(.borderless)
+            }
+        } header: {
+            Text(say(.profilePictureLabel))
+        } footer: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(say(.profilePictureJoinHint))
+                if pictureNotImage { Text(say(.profilePictureNotImage)).foregroundStyle(Role.danger) }
+            }
+        }
+    }
+
+    /// The name the picture's initial is drawn from: the typed name, else the username.
+    private var pictureName: String {
+        let name = "\(firstName) \(lastName)".trimmingCharacters(in: .whitespaces)
+        return name.isEmpty ? username : name
     }
 
     /// The breach check's verdict on the password as checked, as the app's other password flows show it (`NewPasswordRows`).
@@ -305,6 +349,17 @@ struct JoinView: View {
         let typed = code
         guard !typed.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         held.run { try await $0.code(typed: typed) }
+    }
+
+    /// The square crop's `ProfileModel.EDGE` RGBA handed to the join, which encodes it and keeps it until the accept.
+    private func choosePicture(_ rgba: Data) {
+        let join = held.join
+        let bytes = AppleKit.shared.bytes(data: rgba)
+        Task {
+            _ = try? await join.choosePicture(rgba: bytes)
+            pictureData = join.picture().map { Data(kotlin: $0) }
+            held.state.refresh()
+        }
     }
 
     private func choose(register: Bool) {
