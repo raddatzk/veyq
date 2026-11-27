@@ -147,7 +147,7 @@ A Gradle build of its own, run through its own wrapper.
   content, the naming), `GuestTree`, `GuestView` and `GuestAccess` (the link's reads, writes and own upload queue),
   `GuestMove` (a READ_WRITE guest's move within the link's folders through the member's `MoveSheet`, its top the link's
   root; a guest level's row menu, Select and selection, `GuestLevel.move`),
-  `GuestReport`, the `GuestSessions` port; *Open a link* and the screen above the shell, `OpenLink` and `GuestScreen`
+  `GuestReport`, the `GuestSessions` port; *Open a link* and the screen above the shell, `OpenLink` and `GuestScreen` (a member's own web link handed to the shell, `OpenLink.openPlace`); a place from outside and the reopen, `navigation/Place.kt` (`PlaceLink`'s allow-list, `RoutePath`'s port of the web's slug paths, `KeptPlace` sealed in the account's store as kind `place`, `ShellModel.arrive`; ADR 0150 § O5–O6; `PlaceLinkTest`, `ReopenTest`)
   (*Keep* where a tenant is open, *Back* that asks at the root); a kept link's meta, dialog and page, `BookmarkMeta`,
   `BookmarkCreate`, `BookmarkPage` (listed and opened through `Shell.bookmark`). Each kind's guest door is its
   application's, through `AppKinds.guestDoor`: core's `GuestLevel`, Depot's `DepotGuest`, Memories' `MemoriesGuest`,
@@ -343,7 +343,7 @@ A Gradle build of its own, run through its own wrapper.
   `Veyq` is the app (WinUI 3, unpackaged, self-contained, `win-x64`; its assembly `Veyq.App`): `Program.cs` (the entry in
   place of WinUI's generated one: with package identity one instance, a second activation handed to the running one by
   `AppInstance`), `App.xaml.cs`, `DeepLinks` (a `veyq:` link the MSIX's `windows.protocol` hands in, through
-  `Call.DeepLink`: *Open a link* or the window in front, ADR 0150 § O), `MainWindow`, one class per screen (`SignInView`, `ShellView` with Search, `HomeView`, `PotPage` with its download;
+  `Call.DeepLink`: *Open a link*, a place the web named (the shell moved in the core, Settings opened here) or the window in front, ADR 0150 § O), `MainWindow`, one class per screen (`SignInView`, `ShellView` with Search, `HomeView`, `PotPage` with its download;
   a node's header `NodeHeader` with `HeaderPlan` (every entry of the core's plan, a `switch` expression over
   `HeaderAction` without a discard — `CS8509` an error, `CS8524` off, `Directory.Build.props`), a level row's menu
   `RowMenu` (`Row.Plan`, run through a header of the row's node), and its sheets `TrashDialog`, `MoveDialog`, `ShareDialog` with

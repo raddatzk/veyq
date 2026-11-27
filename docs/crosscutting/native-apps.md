@@ -779,8 +779,11 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   the Members panel's and a group page's status lines (the re-keying and resealing hints, a stuck compromise rotation's
   notice), a space's picture in the switcher and the drawer (the apps show it on the Members header and a group's page
   only), finishing a recovery (the apps ask for the reset link; the web finishes it), the trust reset,
-  the moderation key (#965), the task queue's jobs (#966), reopening where the person left after a restart (#1415), and an in-app choice of appearance and language (the apps follow the system's; the desktops
+  the moderation key (#965), the task queue's jobs (#966), and an in-app choice of appearance and language (the apps follow the system's; the desktops
   have no per-app language of their own).
+- Reopening where the person left and a place reached from outside (ADR 0150 § O5–O6, built 2026-11-27; passed on Android
+  and Linux as throwaways and by the core's tests): Apple, Windows, a real browser's `veyq://open` and the Mac's `open` (#1424);
+  the drawer's Recent still one per device (#1423).
 - A selection's capture-time shift and the kit's layout 2 (built 2026-11-27, inbox #1417; passed on Linux, Android and
   Windows and by the core's live tests): the passes on the Mac, iPhone and iPad.
 - *Who's who* (ADR 0148 § Who's who, built 2026-11-27): the macOS pass (the sheet over the Settings window, the window

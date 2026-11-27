@@ -680,8 +680,8 @@ Store signs its package under a certificate Windows already trusts) and a Flathu
 
 A share page in the browser offers **Copy link and open the app**: the click puts the page's link — its key after
 `#k=` included — on the clipboard and then opens `veyq://link`, which the app answers with *Open a link*, where the
-person pastes it. The `veyq:` link itself carries nothing: no key, no token, no address, and the app reads nothing of
-it but which of two screens to show. But a custom scheme is owned by no one: any app on the device can declare `veyq:`,
+person pastes it. That `veyq:` link itself carries nothing: no key, no token, no address, and the app reads nothing of
+it but which screen to show. But a custom scheme is owned by no one: any app on the device can declare `veyq:`,
 and which one opens is the system's choice (Apple's) or the person's in a chooser (Android, the desktops). An app that
 claimed the scheme and reads the clipboard when it is opened learns the link, and with it what the link shares.
 
@@ -697,3 +697,17 @@ The pages a mailed link opens copy nothing: their banner only opens the app.
 **Closed by:** nothing recorded. Opening the app on its own and choosing *Open a link* there, with the link copied by
 hand, avoids the launch; universal and app links, which would name the app by its publisher's domain, need a domain a
 self-hosted server does not have and are not built.
+
+## *Open in the veyq app* tells whichever app holds `veyq:` the server and the place's ids
+
+On a member's page in the browser, **Open in the veyq app** opens `veyq://open` with the page's origin and the place on
+screen: the space's id and the node's id (or a Settings section's name). The app opens that place only for the tenant it
+has open, through the same checked open as a search's result, and keeps nothing of the link. The link carries no name —
+the browser's own address names folders and Memories by their names folded into its fragment, and that is never handed
+on — and no key or token. But an app that claimed `veyq:` (see above) learns the server's domain and those opaque ids:
+material for a convincing phishing page, no content and nothing that opens any.
+
+**Decided in:** [ADR 0150](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md)
+§ O (decisions 1, 4 and 5; the owner accepted the residual, 2026-11-27).
+
+**Closed by:** nothing recorded; universal and app links, as above.

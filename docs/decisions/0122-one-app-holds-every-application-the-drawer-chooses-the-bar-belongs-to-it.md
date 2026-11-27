@@ -58,7 +58,7 @@ two apps, and a store listing, review and signing setup per app for one maintain
 
 5. **Every list follows one rule: Favorites, then Recent, then All,** each ordered by last use, an object listed once.
    An application's list holds its objects **across every space of the tenant as one flat list**, never the tree; the
-   tree is Home's. The app opens on the object last used; with none yet, on Home with the drawer open. A person's
+   tree is Home's. The app opens where the person left it in that tenant on this device — the place the account's offline store keeps sealed (ADR 0150 § O6, inbox #1415), never another account's —; with none (nothing kept yet, or an account without a store on the device), on Home with the drawer open. A person's
    Memories on their profile are no application's list and are ordered by date, newest first, as the web orders them
    ([ADR 0144](0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) decision 13, built).
 

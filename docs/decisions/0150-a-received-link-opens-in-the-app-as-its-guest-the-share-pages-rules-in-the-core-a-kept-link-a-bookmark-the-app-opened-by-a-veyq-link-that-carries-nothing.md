@@ -1,9 +1,10 @@
-# ADR 0150 — A received link opens in the app as its guest — the share page's rules in the core, a kept link a bookmark, the app opened by a `veyq:` link that carries nothing
+# ADR 0150 — A received link opens in the app as its guest — the share page's rules in the core, a kept link a bookmark, the app opened by a `veyq:` link that carries no name and no key
 - Status: Accepted
 - Built: decisions 1–9 yes — on every app (Android, iOS, macOS, Linux, Windows), 2026-11-19; passed on Android, Linux
   and Windows as throwaways and by the core's live tests; the macOS pass is open and the iPhone's and iPad's are the
   owner's (§ Consequences); § O yes — the web's banner and `veyq:` on every app, 2026-11-19; passed on the web,
-  Android, Linux and Windows as throwaways; the Mac's `open` and the iPhone's are open (§ Consequences); § S yes — a link
+  Android, Linux and Windows as throwaways; the Mac's `open` and the iPhone's are open (§ Consequences); § O5–O6 (a place from
+  outside, the reopen) on every app, 2026-11-27 (§ Consequences); § S yes — a link
   shared into the app on Android and iOS, 2026-11-24, by the core's and Android's JVM tests and the Apple builds; the
   Android and iPhone share passes are owed (§ Consequences)
 - Date: 2026-11-19
@@ -145,22 +146,59 @@ New keys in `src/mobile/words/words.json` (EN+DE), the web's own words wherever 
 naming, the bookmark dialog); new only *Open a link* / *Link öffnen*, *Paste the link you received* / *Füge den Link ein,
 den du bekommen hast*, *Open in the browser* / *Im Browser öffnen*, *Keep* / *Behalten* and the *Back* question.
 
-### O — The app opened by a `veyq:` link that carries nothing (cr-open-in-the-app)
+### O — The app opened by a `veyq:` link that carries no name and no key (cr-open-in-the-app, cr-apps-reopen-and-deep-links)
 
-1. **`veyq:` with two forms, and nothing read.** `veyq://open` opens the app where it is; `veyq://link` opens *Open a
-   link*. The core's `DeepLink.parse(uri)` answers `Open` or `Link` and reads nothing else — a path, a query, a fragment,
-   user info are ignored, never stored, never logged. A custom scheme is owned by no one, so a key in it would be handed
-   to whoever claimed the scheme (and to the browser's history, a desktop handler's command line). Rejected: the key in
-   the deep link's fragment; the key sealed for the app (the browser shares no key with it); universal / app links (a
-   self-hosted domain has no publisher's association file, owner 2026-11-18).
+1. **`veyq:` with three forms, each read by an allow-list.** `veyq://link` opens *Open a link*, read by its host alone;
+   `veyq://open` opens the app where it is; `veyq://open?i=<origin>&s=<scope id>[&n=<node id>]` or
+   `veyq://open?i=<origin>&settings=<section>` opens that place (decision 5, inbox #1415). The core's `DeepLink.parse(uri)`
+   answers `Link`, `Open` or `At(place)` (`navigation/PlaceLink.ofDeepLink`): exactly those parameter sets, the origin an
+   http(s) origin and nothing else, every id a UUID, the section one of the apps' `SettingsSection` ids but `erase` and
+   `sign-out`; any other parameter, a repeated one, a fragment or a value of another shape is plain `Open`. Nothing of
+   it is stored or logged. A custom scheme is owned by no one, so a key or a name in it would be handed to whoever
+   claimed the scheme (and to the browser's history, a desktop handler's command line): the place is carried as **ids**,
+   never the web's fragment, whose segments are names folded (`location.ts`' slugs). Rejected: the key in the deep
+   link's fragment; the key sealed for the app (the browser shares no key with it); the web's route as it is (its slugs
+   are names); universal / app links (a self-hosted domain has no publisher's association file, owner 2026-11-18).
 2. **The web's banner**, one per page, dismissible (the dismissal a per-device convenience): on the share page *Copy link
    and open the app* (the normalized link to the clipboard on that click, then `veyq://link`; the password is not
-   copied); on the four mailed pages after their step succeeded, `veyq://open`.
+   copied); on the four mailed pages after their step succeeded, `veyq://open`; on every other page `veyq://open` with
+   the page's origin and the place on screen where there is one (`openInApp.ts`' `placeHref`: the open scope's and node's
+   ids from `SpaceView`, the section from the settings page; none on a person's page) — a value not of its shape gives
+   plain `veyq://open`.
 3. **The registrations:** Android's intent filter on `MainActivity`; `CFBundleURLTypes` on Apple; the `.desktop`'s
-   `x-scheme-handler/veyq` with `HANDLES_OPEN` on Linux; the MSIX's `windows.protocol` on Windows.
-4. **What the server sees:** nothing — a `veyq:` navigation leaves the browser for the system. **Residual:** on the share
-   page the click puts the link on the clipboard and opens whichever app holds `veyq:`; an app that claimed the scheme and
-   reads the clipboard when opened learns the link — the share dialog's copy's exposure plus the launch.
+   `x-scheme-handler/veyq` with `HANDLES_OPEN` on Linux; the MSIX's `windows.protocol` on Windows (the unpackaged debug
+   build claims no scheme).
+4. **What the server sees:** nothing — a `veyq:` navigation leaves the browser for the system, and a place opens over
+   the lists the shell already read. **Residuals:** on the share page the click puts the link on the clipboard and opens
+   whichever app holds `veyq:`; an app that claimed the scheme and reads the clipboard when opened learns the link — the
+   share dialog's copy's exposure plus the launch. And an app that claimed `veyq:` learns from a place's link the
+   instance's domain and the place's opaque ids — phishing material, no content and no key (owner 2026-11-27).
+5. **A place reached from outside only navigates** (inbox #1415): the web's *Open in the app* (decision 2), a member's
+   web URL shared into the app (§ S, `SharedText.linkIn`) or pasted into *Open a link* — the latter two read in the
+   web's route form (`PlaceLink.ofWeb`: `<origin>/` with the fragment's scope token and slug segments, resolved on the
+   device against the decrypted tree by the core's port of `location.ts`' `segmentsOf`/`resolveSlugPath`; or
+   `<origin>/settings[/<section>]`). Four rules: (1) only over the tenant open in the app — the link's origin equal to
+   `TenantSession.base`; an unknown origin, or another signed-in tenant, starts no sign-in, no switch and no fetch (*Open
+   a link* says `link_problem_not_open_here`; a `veyq:` link moves nothing); (2) only a view of the allow-list — a
+   space, a folder, an application's page, a Settings section; never a query, a token, an action, an invite, a recovery
+   or confirm link, a person's page or a share link `/s/…` (that keeps its own path); (3) it only navigates, through the
+   shell's own open over what is listed (`ShellModel.arrive`, as a search's hit: a space not listed moves nothing, a node
+   not listed opens the nearest listed ancestor its path names, else the space's root; Settings is the platform's to
+   open, `Arrived.Settings`); (4) the link is never stored or logged — a `veyq:` link that arrives before a shell is open
+   (the sign-in, the unlock) waits in memory and is opened over the next shell, a Settings one then opening the shell
+   alone; a member's link pasted or shared while the unlock shows (or the start still decides) waits the same way
+   (`Arrived.Waiting`), and on the sign-in, with no account to open it, it is refused in the field.
+6. **The app reopens where the person left** (inbox #1415): each move of the shell is kept per account and tenant as a
+   `KeptPlace` (the space's id and the node on screen with its ancestors' ids, nearest first) — an entry of kind `place`
+   in the account's own offline store, sealed as every entry is, so no id is in clear on disk; never evicted, cleared or
+   swept, kept by "Remove all offline content" (it is no content) and by a rotation's carry, wiped with the store
+   (sign-out, Stop trusting, removing the device). Kept: a space's root, a folder, an object's page, a kept link's page;
+   a person's profile and an application's list keep the place below them, and a lightbox, a dialog, Settings or a
+   screen showing a secret are no place of the shell. After the unlock `ShellModel.load` opens it through the same open
+   as decision 5, with nothing behind it; a node gone opens its nearest listed ancestor, a space gone Home. An account
+   without a store on the device (not trusted, a TV) opens on Home. The device-wide `RecentUses` no longer decides where
+   the app opens — it did, and on Android a second account that joined the same tenant opened on the Memory the first had
+   open (2026-11-27); it still orders the drawer's Recent (inbox #1423).
 
 ### S — A link shared into the app from another app (inbox #1015)
 
@@ -283,6 +321,17 @@ A handover without the clipboard: the share sheet of the chat or the browser the
   placement write re-parents the row (bitten: a Pot offered a move, the trail rooted above the link, a name sealed under
   the node's own key each turned it red) and `ReceivedBridgeTest`. **Not clicked on any app** (inbox #1063 holds the
   passes).
+- **§ O5–O6 built 2026-11-27** (cr-apps-reopen-and-deep-links): the web's `placeHref`, the core's `navigation/Place.kt`
+  (`PlaceLink`, `RoutePath`, `KeptPlace`, `Arrived`), `ShellModel.arrive` and the reopen in `load`, `OpenLink.openPlace`,
+  the kind `place` in `AccountOffline`; Android, Apple and the bridge's `Call.DeepLink` / `Received.Open`
+  (`DeepScreen.SETTINGS`). Held by `PlaceLinkTest` (the allow-list, each refusal bitten), `ReopenTest` (the reopen, the
+  nearest parent, two accounts on one device, nothing in clear on disk, a link of another origin asking nothing — each
+  bitten) and `DispatchTest.aMembersLinkWaitsForTheShellOrIsNotOpenHere`. Passed as throwaways on Android and Linux; the
+  rest is #1424. **Found while building:** the web's route form names folders and Memories by their slugs, so the
+  `veyq:` link carries ids (decision 1); and the device-wide `RecentUses` had been deciding where the app opened, so a
+  second account on the device opened on the first one's Memory (decision 6; the drawer's Recent is #1423). On a dev
+  instance the web (Vite, 8081) and the app's tenant (8080) are two origins, so the web's banner names a place the dev app
+  does not open; in production they are one.
 - **What the passes proved** (each as a throwaway owner and member, made and erased by the pass; the links minted by the
   owner through the core or the bridge, not the web). *Android* (a throwaway API 36 emulator): signed out — a READ
   Memory; a READ_WRITE folder (named, a file replaced); a password Pot (a wrong password refused, an entry added as the
