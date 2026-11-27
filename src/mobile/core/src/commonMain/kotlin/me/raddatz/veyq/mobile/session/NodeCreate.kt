@@ -135,8 +135,11 @@ object NodeCreate {
     /** A fresh UUID v4 from the suite's randomness. */
     @PlatformApi
     @HiddenFromObjC
-    fun uuid(account: VeyqAccount): String {
-        val b = account.primitives.randomBytes(16)
+    fun uuid(account: VeyqAccount): String = uuidOf(account.primitives)
+
+    /** A fresh UUID v4 from [primitives]' randomness: an id minted before any account exists (a join's new account). */
+    internal fun uuidOf(primitives: me.raddatz.veyq.mobile.crypto.Primitives): String {
+        val b = primitives.randomBytes(16)
         b[6] = ((b[6].toInt() and 0x0f) or 0x40).toByte()
         b[8] = ((b[8].toInt() and 0x3f) or 0x80).toByte()
         val h = hex(b)

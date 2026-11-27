@@ -109,6 +109,24 @@ internal class Anchoring(
         }
     }
 
+    /** Whether this account holds a pin for [userId]. */
+    suspend fun pinned(userId: String): Boolean = lock.withLock { pins.load().pins[userId] != null }
+
+    /**
+     * A key whose chain is served beside it rather than read through `getKeyChain` (`anchorServedChain`): an invite's
+     * inviting owner, whom the invitee is no co-member of yet. The served [chain] is walked against the pin, must end at
+     * [served] byte for byte, and a first use pins the walked head at its index. ANOMALY for anything else.
+     */
+    suspend fun anchorServedChain(userId: String, chain: KeyChain, served: ServedIdentity): Anchor = lock.withLock {
+        val store = pins.load()
+        val pin = store.pins[userId]
+        val servedFingerprint = fingerprintOrNull(served.identityPublicKey) ?: return@withLock Anchor.ANOMALY
+        val reading = readChain(pin, userId, chain)
+        if (reading == null || !endsAt(reading, served, servedFingerprint)) return@withLock Anchor.ANOMALY
+        pins.mutate(store) { recordReading(it, userId, pin, reading) }
+        reading.anchor
+    }
+
     private fun endsAt(r: Reading, served: ServedIdentity, servedFingerprint: String) =
         r.head == served.keyChainHead && r.fingerprints.last() == servedFingerprint
 

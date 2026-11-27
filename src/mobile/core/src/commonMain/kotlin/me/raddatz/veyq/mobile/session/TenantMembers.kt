@@ -25,7 +25,14 @@ class TenantMembers internal constructor(private val tenant: TenantSession) {
 
     /** The roster as a page draws it: [rows] in the server's order, or [said] in their place (with *Try again* where [retry]). */
     @Serializable
-    data class Roster(val rows: List<RosterMember>, val owner: Boolean, val said: Msg?, val retry: Boolean)
+    data class Roster(
+        val rows: List<RosterMember>,
+        val owner: Boolean,
+        val said: Msg?,
+        val retry: Boolean,
+        /** The owners' pending invites (uc.spaces.manage-member-invites); empty for a member. */
+        val invites: List<TenantInvites.PendingInvite> = emptyList(),
+    )
 
     /** A member's role in the tenant. */
     enum class MemberRole { OWNER, MEMBER }
@@ -81,7 +88,9 @@ class TenantMembers internal constructor(private val tenant: TenantSession) {
         } catch (e: Exception) {
             return FAILED
         } == MyTenant.Role.OWNER
-        return assemble(members, owner) { m -> People.realName(JoinRecords(tenant.account.suite), tenantId, key, epoch.toLong(), m) }
+        val roster = assemble(members, owner) { m -> People.realName(JoinRecords(tenant.account.suite), tenantId, key, epoch.toLong(), m) }
+        // only an owner may read the pending list (the server refuses anyone else)
+        return if (owner) roster.copy(invites = tenant.invites.pending()) else roster
     }
 
     /** Makes [userId] an owner ([owner]) or a member again; the server's last-owner guard refuses the last owner's demotion. */

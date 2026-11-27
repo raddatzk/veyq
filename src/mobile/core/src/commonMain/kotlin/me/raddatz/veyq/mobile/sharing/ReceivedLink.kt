@@ -56,6 +56,30 @@ object ReceivedLink {
     // character class is read in JavaScript's `u` mode there, where `^\\[[0-9a-f:.]+]$` — the IPv6 host's pattern this
     // replaced — is no valid expression at all: the web's first call threw.
 
+    /**
+     * A member's or an owner's invite as a person received it (`<origin>/tenant/accept#<token>[.<sealed>[.<code>]]`, ADR
+     * 0111 decision 1, ADR 0129 decision 1): its server's [origin] and the [fragment] the join reads. [fragment] holds the
+     * invite's secret parts; this object lives in the join's model only, and its [toString] names the origin alone.
+     */
+    class InviteLink internal constructor(val origin: String, @PlatformApi @HiddenFromObjC val fragment: String) {
+        val host: String get() = hostOf(origin)
+        override fun toString(): String = "InviteLink($origin)"
+    }
+
+    /**
+     * [input] as an invite link, or null: an `https` URL (`http` on a development host) without credentials whose path
+     * is `/tenant/accept` and whose fragment is not empty. What the fragment holds is the join's to read
+     * (`Invites.parseFragment`); the server sees only its token.
+     */
+    fun inviteOf(input: String): InviteLink? {
+        val text = trim(input)
+        if (text.isEmpty() || text.length > MAX_LINK_LENGTH) return null
+        val url = Url.of(text) ?: return null
+        if (url.scheme != "https" && !(url.scheme == "http" && devHost(url.host))) return null
+        if (url.credentials || url.path != "/tenant/accept" || url.fragment.isEmpty()) return null
+        return InviteLink(url.origin, url.fragment)
+    }
+
     /** The web's `parseShareLink`: a moderator's review is [Problem.NO_KEY] here, as a bookmark's parse calls it. */
     fun parse(input: String): Parsed {
         val text = trim(input)

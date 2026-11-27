@@ -50,3 +50,28 @@ the app: an owner invite, a mailed member invite, or a link invite with an exist
 
 - **Split from cr-apps-members-and-terms-editing** (2026-11-27): the roster and the terms need no new crypto, but this
   needs the invite's whole suite. Porting the suite first and holding it to the vectors is the sound order.
+- **The crypto is `crypto/Invites.kt`, beside `JoinRecords`** (2026-11-27, implement): ported line for line from
+  `invite.ts`; `invite-accept` added to the statements' schema; `Conformance.inviteLink` runs `#invite_key`'s derivation,
+  `#invite_link` whole (the KEK at production cost only) and `#join_record`'s accept proof and signing on all three
+  runners; `InviteCheckTest` ports `inviteCheck.test.ts`. A sealed part with another profile is refused as
+  `InviteLinkInvalid("profile")` (the web's `KdfProfileRefused`): the same refusal before any derivation.
+- **The invite link and code are not covered as "secrets on screen"** (corrects the invariant): they are made to be handed
+  on through another app, as a share link and its password are, which § Secrets on screen leaves out on purpose. They are
+  answered once, to the call that made them (`Answer.Invited`), never in an update, never kept by the core; the join's
+  typed password and Secret Key fields are masked as the sign-in's are.
+- **An invite link enters the app through *Open a link*, never through `veyq:`** (phase 3's question, decided now because
+  the core decides it): `ReceivedLink.inviteOf` reads `<origin>/tenant/accept#…`, `OpenLink` offers it as an invite
+  (`State.invite`, `invite()`), `SharedText.linkIn` counts it, `Received.Open` answers `JoinOpened`. A `veyq:` link carries
+  nothing (ADR 0150 § O1), and #1415's deep links exclude invites (owner 2026-11-27). So a signed-out person pastes it on
+  the sign-in screen, and any person shares it into the app (Android, iOS) — the desktops' signed-in way in is a sign-out
+  or the share sheet they do not have: the residual is named in ADR 0129.
+- **The join signs in on its own, then hands over** (2026-11-27): an existing account is signed in by the join itself
+  (cold, password and Secret Key, as the web's page) to accept and to hold the accepted key, then let go (`retire`); a new
+  account is registered in one request and signed in once after it to hold the key (ADR 0111 decision 23) and, for a link
+  invite, to ask for its confirmation mail. *Open the space* then signs in through the app's own `SessionModel` with what
+  the join holds in memory (`TenantJoin.openSpace`), so the account opens as any sign-in does. Rejected: handing the
+  join's account to the session (the session model is generic over its door; one more sign-in costs a second Argon2id).
+- **No picture at the join** (2026-11-27): the web's optional join picture is set afterwards in Settings' profile, which
+  the apps have; the real name is sealed at the join as on the web.
+- **The inviting owner is pinned from the served chain** (`Anchoring.anchorServedChain`, the web's `anchorServedChain`),
+  a pinned foreign granter judged against its own chain (`anchorChainKey`), as `memberInviteAnchored` does.

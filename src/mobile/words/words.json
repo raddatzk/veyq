@@ -7811,5 +7811,442 @@
     "note": "a TV's settings: the account stays on this TV without its PIN from now on (tv_stay_no_pin)",
     "en": "PIN removed. You stay signed in on this TV without a PIN.",
     "de": "PIN entfernt. Du bleibst auf diesem Fernseher ohne PIN angemeldet."
+  },
+  "members_invite": {
+    "en": "Invite member",
+    "de": "Mitglied einladen"
+  },
+  "members_invite_intro": {
+    "en": "Invite someone by email. The link opens only with a code you pass on to them yourself — they then join with access to the shared space at once.",
+    "de": "Lade jemanden per E-Mail ein. Der Link öffnet sich nur mit einem Code, den du selbst weitergibst — dann tritt die Person bei und hat sofort Zugang zum geteilten Bereich."
+  },
+  "members_way_link": {
+    "en": "Share a link",
+    "de": "Link teilen"
+  },
+  "members_way_mail": {
+    "en": "Invite by email",
+    "de": "Per E-Mail einladen"
+  },
+  "members_email": {
+    "en": "Email address",
+    "de": "E-Mail-Adresse"
+  },
+  "members_invite_password_label": {
+    "en": "Password for the invitation",
+    "de": "Passwort für die Einladung"
+  },
+  "members_invite_password_note": {
+    "en": "Tell them this password yourself, not by email.",
+    "de": "Sag der Person dieses Passwort selbst, nicht per E-Mail."
+  },
+  "members_invite_use_code": {
+    "en": "Use a generated code",
+    "de": "Einen erzeugten Code verwenden"
+  },
+  "members_invite_use_password": {
+    "en": "Choose a password instead",
+    "de": "Stattdessen ein Passwort wählen"
+  },
+  "members_invite_submit": {
+    "en": "Send invite",
+    "de": "Einladung senden"
+  },
+  "members_invite_securing": {
+    "en": "Securing the invitation on this device…",
+    "de": "Einladung wird auf diesem Gerät gesichert…"
+  },
+  "members_invite_sending": {
+    "en": "Sending the invitation by email…",
+    "de": "Einladung wird per E-Mail versendet…"
+  },
+  "members_invite_sent": {
+    "en": "Invite sent.",
+    "de": "Einladung gesendet."
+  },
+  "members_invite_sent_to": {
+    "note": "the web's members.inviteSentTo (email)",
+    "en": "Invitation sent to {1}.",
+    "de": "Einladung an {1} gesendet."
+  },
+  "members_invite_sent_intro": {
+    "en": "The invitation went to them by email. The link alone does not open it: pass on the code below yourself.",
+    "de": "Die Einladung ging per E-Mail an die Person. Der Link allein öffnet sie nicht: Gib den Code unten selbst weiter."
+  },
+  "members_invite_sent_password_intro": {
+    "en": "The invitation went to them by email. The link alone does not open it: tell them the password you chose yourself.",
+    "de": "Die Einladung ging per E-Mail an die Person. Der Link allein öffnet sie nicht: Sag ihr das gewählte Passwort selbst."
+  },
+  "members_invite_code_label": {
+    "en": "Code for the invitation",
+    "de": "Code für die Einladung"
+  },
+  "members_invite_code_note": {
+    "en": "Send this code to them yourself — by message or in person, not by email. It is shown only now.",
+    "de": "Gib diesen Code selbst weiter — per Nachricht oder persönlich, nicht per E-Mail. Er wird nur jetzt angezeigt."
+  },
+  "members_invite_code_copy": {
+    "en": "Copy code",
+    "de": "Code kopieren"
+  },
+  "members_invite_failed": {
+    "en": "Could not send the invite. Please try again.",
+    "de": "Einladung konnte nicht gesendet werden. Bitte erneut versuchen."
+  },
+  "members_invite_rate_limited": {
+    "en": "Too many invites just now — please try again in a bit.",
+    "de": "Gerade zu viele Einladungen — bitte versuch es gleich noch einmal."
+  },
+  "members_invite_revoked": {
+    "en": "Invite cancelled.",
+    "de": "Einladung zurückgezogen."
+  },
+  "members_already_member": {
+    "en": "That email is already a member of this space.",
+    "de": "Diese E-Mail ist bereits Mitglied dieses Bereichs."
+  },
+  "members_not_owner": {
+    "en": "Only the space owner can invite members.",
+    "de": "Nur wer den Bereich besitzt, kann Mitglieder einladen."
+  },
+  "members_mail_unavailable": {
+    "en": "This space can’t send email yet, so invitations can’t go out. An owner needs to set up email in the space settings.",
+    "de": "Dieser Bereich kann noch keine E-Mails senden, deshalb können keine Einladungen rausgehen. Eine besitzende Person muss E-Mail in den Bereichseinstellungen einrichten."
+  },
+  "members_mail_send_failed": {
+    "en": "The email couldn’t be sent, so no invitation was created. Please try again.",
+    "de": "Die E-Mail konnte nicht gesendet werden, deshalb wurde keine Einladung erstellt. Bitte versuch es noch einmal."
+  },
+  "members_link_intro": {
+    "en": "Create a link and pass it on yourself — in a message, by email or in person. Whoever opens it can join, once.",
+    "de": "Erstelle einen Link und gib ihn selbst weiter — per Nachricht, E-Mail oder persönlich. Wer ihn öffnet, kann einmal beitreten."
+  },
+  "members_link_label": {
+    "en": "Label (optional)",
+    "de": "Bezeichnung (optional)"
+  },
+  "members_link_label_hint": {
+    "en": "Only the owners of this space see it.",
+    "de": "Nur die Inhaber dieses Bereichs sehen sie."
+  },
+  "members_link_create": {
+    "en": "Create link",
+    "de": "Link erstellen"
+  },
+  "members_link_creating": {
+    "en": "Creating the link…",
+    "de": "Link wird erstellt…"
+  },
+  "members_link_created": {
+    "en": "Link created. It is shown only now.",
+    "de": "Link erstellt. Er wird nur jetzt angezeigt."
+  },
+  "members_link_failed": {
+    "en": "Could not create the link. Please try again.",
+    "de": "Der Link konnte nicht erstellt werden. Bitte erneut versuchen."
+  },
+  "members_link_reissued": {
+    "en": "New link created. The old one no longer works.",
+    "de": "Neuer Link erstellt. Der alte funktioniert nicht mehr."
+  },
+  "members_link_result_title": {
+    "en": "Invitation link",
+    "de": "Einladungslink"
+  },
+  "members_link_warning": {
+    "en": "Whoever has this link can join. Give it only to the person you invite.",
+    "de": "Wer diesen Link hat, kann beitreten. Gib ihn nur der Person, die du einlädst."
+  },
+  "members_link_message_label": {
+    "en": "Message with the link",
+    "de": "Nachricht mit dem Link"
+  },
+  "members_link_message": {
+    "note": "the web's members.linkMessage (space, expiry, link)",
+    "en": "You are invited to “{1}”. Open this link to join — it works once, until {2}:\n{3}",
+    "de": "Du bist zu „{1}“ eingeladen. Öffne diesen Link, um beizutreten — er funktioniert einmal, bis {2}:\n{3}"
+  },
+  "members_link_copy": {
+    "en": "Copy",
+    "de": "Kopieren"
+  },
+  "members_link_copied": {
+    "en": "Copied",
+    "de": "Kopiert"
+  },
+  "members_link_share": {
+    "en": "Share…",
+    "de": "Teilen…"
+  },
+  "members_link_mail": {
+    "en": "Open in email",
+    "de": "In E-Mail öffnen"
+  },
+  "members_link_mail_subject": {
+    "note": "the web's members.linkMailSubject (space)",
+    "en": "Invitation to “{1}”",
+    "de": "Einladung zu „{1}“"
+  },
+  "members_pending_title": {
+    "en": "Pending invites",
+    "de": "Ausstehende Einladungen"
+  },
+  "members_pending_sub": {
+    "en": "People you invited who have not joined yet. Send their invitation again or cancel it.",
+    "de": "Eingeladene Personen, die noch nicht beigetreten sind. Schicke die Einladung erneut oder zieh sie zurück."
+  },
+  "members_pending_link": {
+    "en": "Link invitation",
+    "de": "Einladung per Link"
+  },
+  "members_pending_expires": {
+    "note": "the web's members.pendingExpires (date)",
+    "en": "Valid until {1}",
+    "de": "Gültig bis {1}"
+  },
+  "members_status_invited": {
+    "en": "Invited",
+    "de": "Eingeladen"
+  },
+  "members_reissue": {
+    "en": "Send again",
+    "de": "Erneut senden"
+  },
+  "members_reissue_link": {
+    "en": "New link",
+    "de": "Neuer Link"
+  },
+  "members_revoke": {
+    "en": "Cancel invite",
+    "de": "Einladung zurückziehen"
+  },
+  "members_revoke_confirm": {
+    "en": "Cancel this invite? Its link stops working.",
+    "de": "Diese Einladung zurückziehen? Ihr Link wird ungültig."
+  },
+  "members_revoke_confirm_title": {
+    "en": "Cancel invite",
+    "de": "Einladung zurückziehen"
+  },
+  "members_label_edit": {
+    "en": "Rename",
+    "de": "Umbenennen"
+  },
+  "members_label_title": {
+    "en": "Label of this invitation",
+    "de": "Bezeichnung dieser Einladung"
+  },
+  "members_label_failed": {
+    "en": "The label could not be saved. Please try again.",
+    "de": "Die Bezeichnung konnte nicht gespeichert werden. Bitte erneut versuchen."
+  },
+  "join_already_member": {
+    "en": "You are already a member of this space.",
+    "de": "Du bist schon Mitglied dieses Bereichs."
+  },
+  "join_code": {
+    "en": "Code",
+    "de": "Code"
+  },
+  "join_code_sub": {
+    "en": "Enter the code the person who invited you passed on to you.",
+    "de": "Gib den Code ein, den dir die einladende Person weitergegeben hat."
+  },
+  "join_code_wrong": {
+    "en": "That code does not open this invitation. Check it and try again.",
+    "de": "Dieser Code öffnet die Einladung nicht. Prüfe ihn und versuche es noch einmal."
+  },
+  "join_confirmation_sent": {
+    "note": "the web's tenant.join.confirmationSent (email)",
+    "en": "A confirmation is on its way to {1} — open its link to confirm your address.",
+    "de": "Eine Bestätigung ist unterwegs an {1} — öffne ihren Link, um deine Adresse zu bestätigen."
+  },
+  "join_continue": {
+    "en": "Continue",
+    "de": "Weiter"
+  },
+  "join_done": {
+    "note": "the web's tenant.join.done (tenant)",
+    "en": "“{1}” is now active and yours.",
+    "de": "„{1}“ ist jetzt aktiv und gehört dir."
+  },
+  "join_done_handover": {
+    "note": "the web's tenant.join.doneHandover (tenant)",
+    "en": "You own “{1}” now.",
+    "de": "„{1}“ gehört jetzt dir."
+  },
+  "join_done_member": {
+    "note": "the web's tenant.join.doneMember (tenant)",
+    "en": "You’ve joined “{1}”.",
+    "de": "Du bist „{1}“ beigetreten."
+  },
+  "join_done_note": {
+    "en": "Sign in to start using your space.",
+    "de": "Melde dich an, um deinen Bereich zu nutzen."
+  },
+  "join_done_note_handover": {
+    "en": "Its owner settings are yours, under Settings.",
+    "de": "Seine Einstellungen für besitzende Personen findest du unter Einstellungen."
+  },
+  "join_done_note_member": {
+    "en": "Sign in to open it — the shared space is yours to see right away.",
+    "de": "Melde dich an, um ihn zu öffnen — du siehst den geteilten Bereich sofort."
+  },
+  "join_email_invalid": {
+    "en": "That is not an email address.",
+    "de": "Das ist keine E-Mail-Adresse."
+  },
+  "join_email_taken": {
+    "en": "That email already has an account — sign in instead.",
+    "de": "Diese E-Mail hat bereits ein Konto — bitte stattdessen anmelden."
+  },
+  "join_expired": {
+    "en": "This invitation is no longer valid. Ask whoever invited you for a new one.",
+    "de": "Diese Einladung ist nicht mehr gültig. Bitte die Person, die dich eingeladen hat, um eine neue."
+  },
+  "join_failed": {
+    "en": "Could not accept the invitation. Please try again.",
+    "de": "Einladung konnte nicht angenommen werden. Bitte erneut versuchen."
+  },
+  "join_have_account": {
+    "en": "I already have an account",
+    "de": "Ich habe schon ein Konto"
+  },
+  "join_invalid": {
+    "en": "This invitation link is invalid.",
+    "de": "Dieser Einladungslink ist ungültig."
+  },
+  "join_invite_password": {
+    "en": "Password for the invitation",
+    "de": "Passwort für die Einladung"
+  },
+  "join_invite_uncheckable": {
+    "en": "This invitation can’t be checked — ask for a new one.",
+    "de": "Diese Einladung lässt sich nicht prüfen — bitte um eine neue."
+  },
+  "join_invited_to": {
+    "note": "the web's tenant.join.invitedTo (tenant, domain)",
+    "en": "You have been invited to own “{1}” ({2}).",
+    "de": "Du wurdest eingeladen, „{1}“ ({2}) zu besitzen."
+  },
+  "join_invited_to_handover": {
+    "note": "the web's tenant.join.invitedToHandover (tenant, domain)",
+    "en": "You have been asked to own “{1}” ({2}), which you are a member of.",
+    "de": "Du wurdest gebeten, „{1}“ ({2}) zu besitzen, dessen Mitglied du bist."
+  },
+  "join_invited_to_member": {
+    "note": "the web's tenant.join.invitedToMember (tenant, domain)",
+    "en": "You have been invited to join “{1}” ({2}).",
+    "de": "Du wurdest eingeladen, „{1}“ ({2}) beizutreten."
+  },
+  "join_join": {
+    "en": "Accept & activate",
+    "de": "Annehmen & aktivieren"
+  },
+  "join_join_handover": {
+    "en": "Accept & take ownership",
+    "de": "Annehmen & übernehmen"
+  },
+  "join_join_member": {
+    "en": "Accept & join",
+    "de": "Annehmen & beitreten"
+  },
+  "join_loading": {
+    "en": "Checking your invitation…",
+    "de": "Einladung wird geprüft…"
+  },
+  "join_name_hint": {
+    "en": "Optional — your real name, which only members can read. You can change it later in settings.",
+    "de": "Optional — dein echter Name, nur für Mitglieder lesbar. Du kannst ihn später in den Einstellungen ändern."
+  },
+  "join_new_account": {
+    "en": "Create a new account instead",
+    "de": "Stattdessen ein neues Konto anlegen"
+  },
+  "join_not_member_handover": {
+    "en": "You are no longer a member of this space, so you cannot take it over. Ask the Server Owner for a new invitation.",
+    "de": "Du bist kein Mitglied dieses Bereichs mehr und kannst ihn deshalb nicht übernehmen. Bitte die Person, die den Server betreibt, um eine neue Einladung."
+  },
+  "join_open_space": {
+    "en": "Open the space",
+    "de": "Bereich öffnen"
+  },
+  "join_password_sub": {
+    "en": "Enter the password the person who invited you told you.",
+    "de": "Gib das Passwort ein, das dir die einladende Person gesagt hat."
+  },
+  "join_password_wrong": {
+    "en": "That password does not open this invitation. Check it and try again.",
+    "de": "Dieses Passwort öffnet die Einladung nicht. Prüfe es und versuche es noch einmal."
+  },
+  "join_redeemed": {
+    "en": "This invitation link has already been used. Tell whoever invited you — they can send you a new one.",
+    "de": "Dieser Einladungslink wurde schon benutzt. Sag es der Person, die dich eingeladen hat — sie kann dir einen neuen schicken."
+  },
+  "join_register_sub": {
+    "note": "the web's tenant.join.registerSub (email)",
+    "en": "Create your account for {1} to take ownership.",
+    "de": "Lege dein Konto für {1} an, um die Inhaberschaft zu übernehmen."
+  },
+  "join_register_sub_link": {
+    "en": "Create your account to join.",
+    "de": "Lege dein Konto an, um beizutreten."
+  },
+  "join_register_sub_member": {
+    "note": "the web's tenant.join.registerSubMember (email)",
+    "en": "Create your account for {1} to join.",
+    "de": "Lege dein Konto für {1} an, um beizutreten."
+  },
+  "join_save_kit_sub": {
+    "en": "Your Secret Key recovers your account if you forget your password. If someone else may have it, you get a new one by securing your account. Download your Emergency Kit and keep it somewhere safe before you continue.",
+    "de": "Dein Secret Key stellt dein Konto wieder her, falls du dein Passwort vergisst. Könnte ihn jemand anderes haben, bekommst du einen neuen, indem du dein Konto absicherst. Lade dein Notfall-Kit herunter und bewahre es sicher auf, bevor du fortfährst."
+  },
+  "join_save_kit_title": {
+    "en": "Save your Emergency Kit",
+    "de": "Notfall-Kit sichern"
+  },
+  "join_signin_sub": {
+    "note": "the web's tenant.join.signinSub (email)",
+    "en": "Sign in as {1} to take ownership.",
+    "de": "Melde dich als {1} an, um die Inhaberschaft zu übernehmen."
+  },
+  "join_signin_sub_handover": {
+    "note": "the web's tenant.join.signinSubHandover (email)",
+    "en": "Sign in as {1} to take ownership.",
+    "de": "Melde dich als {1} an, um die Inhaberschaft zu übernehmen."
+  },
+  "join_signin_sub_link": {
+    "en": "Sign in with your account to join.",
+    "de": "Melde dich mit deinem Konto an, um beizutreten."
+  },
+  "join_signin_sub_member": {
+    "note": "the web's tenant.join.signinSubMember (email)",
+    "en": "Sign in as {1} to join.",
+    "de": "Melde dich als {1} an, um beizutreten."
+  },
+  "join_title": {
+    "en": "Accept your invitation",
+    "de": "Einladung annehmen"
+  },
+  "join_username": {
+    "en": "Username",
+    "de": "Benutzername"
+  },
+  "join_username_hint": {
+    "en": "Your handle in this space (letters, digits, . _ -), unique here.",
+    "de": "Dein Handle in diesem Bereich (Buchstaben, Ziffern, . _ -), hier eindeutig."
+  },
+  "join_username_taken": {
+    "en": "That username is already taken in this space.",
+    "de": "Dieser Benutzername ist in diesem Bereich bereits vergeben."
+  },
+  "join_wrong_owner": {
+    "en": "You are signed in as a different user than the one invited.",
+    "de": "Du bist mit einem anderen Konto angemeldet als dem, das eingeladen wurde."
+  },
+  "members_label_saved": {
+    "note": "a link invite's label saved (the web closes its dialog silently)",
+    "en": "Label saved.",
+    "de": "Bezeichnung gespeichert."
   }
 }

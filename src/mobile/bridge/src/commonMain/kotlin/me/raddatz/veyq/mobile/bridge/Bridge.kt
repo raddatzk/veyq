@@ -185,6 +185,8 @@ internal class Composition<A : Connection, T : Any>(
         /** The player a guest's Memory plays its music with (#1034): the open tenant's, where one plays. */
         music: me.raddatz.veyq.mobile.audio.PageMusic?,
     ) -> me.raddatz.veyq.mobile.sharing.GuestView? = { _, _, _, _ -> null },
+    /** The join of a received invite link (`TenantJoin.of`): the real one in the library; a test has none (`Received.Open` then refuses an invite). */
+    val join: (invite: me.raddatz.veyq.mobile.sharing.ReceivedLink.InviteLink) -> me.raddatz.veyq.mobile.session.TenantJoin? = { null },
     /**
      * What is asked before [loss] deletes account [account]'s writes made offline ([Call.QueuedAskFor]): `QueuedTray.ask`
      * over that account in the library; a test plays one, or has none (nothing asked).
@@ -778,6 +780,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val keyRotations = Registry<HeldFlow<me.raddatz.veyq.mobile.session.rotation.KeyRotation>>()
     private val erasures = Registry<HeldFlow<me.raddatz.veyq.mobile.session.AccountErasure>>()
     private val kits = Registry<HeldFlow<me.raddatz.veyq.mobile.account.KitStep>>()
+    private val joins = Registry<HeldFlow<me.raddatz.veyq.mobile.session.TenantJoin>>()
 
     /** The searches the host opened (ADR 0146 decision 13), the tenant's: each disposed when it closes. */
     private val searches = Registry<HeldSearch>()
@@ -892,7 +895,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.SessionSignInLocked, Call.SessionSignOutEverywhere, Call.SessionLockedBack, is Call.SessionForgotPassword,
             is Call.SessionRequestRecovery, Call.SessionBackToSignIn, Call.LockedPlan, is Call.RecoverPlan,
             Call.SessionAcceptTerms, Call.SettingsTerms -> signInEntries(call, session)
-            Call.SettingsTermsEditing, is Call.SettingsTermsEdit, is Call.SettingsTermsSave, Call.SettingsMembers, is Call.SettingsMemberRole, is Call.SettingsMemberRemove -> members(call)
+            Call.SettingsTermsEditing, is Call.SettingsTermsEdit, is Call.SettingsTermsSave, Call.SettingsMembers, is Call.SettingsMemberRole, is Call.SettingsMemberRemove,
+            is Call.SettingsInviteLink, is Call.SettingsInviteMail, is Call.SettingsInviteReissue, is Call.SettingsInviteRevoke, is Call.SettingsInviteLabel -> members(call)
+            is Call.JoinCode, is Call.JoinChoose, is Call.JoinCheckPassword, is Call.JoinUseAnyway, is Call.JoinRegister, is Call.JoinFinish, is Call.JoinSignIn, is Call.JoinOpen, is Call.JoinClose -> joining(call)
             is Call.SessionForgetDevice -> {
                 val account = session.accounts.firstOrNull { it.key == call.connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
                 session.forgetDevice(account)
@@ -2496,6 +2501,13 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      * holds the key, goes no further than the core's parse and the link's model.
      */
     private suspend fun openReceived(parts: Composition<A, T>, text: String): Answer {
+        // an invite opens its join, not a guest view (ADR 0111, ADR 0129): its fragment stays in the join's model
+        me.raddatz.veyq.mobile.sharing.ReceivedLink.inviteOf(text)?.let { invite ->
+            val join = parts.join(invite) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+            val id = ids.incrementAndFetch().also { joins.put(it, HeldFlow(join, "") { j -> j.close() }) }
+            scope.launch { join.load() }
+            return Answer.JoinOpened(id)
+        }
         val r = me.raddatz.veyq.mobile.sharing.ReceivedLink.open(text)
         if (r is me.raddatz.veyq.mobile.sharing.ReceivedLink.Parsed.Refused) {
             val word = me.raddatz.veyq.mobile.sharing.BookmarkCreate.wordOf(r.problem) ?: Msg.LINK_PROBLEM_NOT_A_URL
@@ -2777,7 +2789,43 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         Call.SettingsMembers -> tenant.value?.models?.session?.let { Answer.Members(it.members.read()) } ?: noTenant
         is Call.SettingsMemberRole -> tenant.value?.models?.session?.let { it.members.setRole(call.userId, call.owner).let { o -> Answer.MembersChanged(o.done, o.notice) } } ?: noTenant
         is Call.SettingsMemberRemove -> tenant.value?.models?.session?.let { it.members.remove(call.userId, call.revokeLinks).let { o -> Answer.MembersChanged(o.done, o.notice) } } ?: noTenant
+        is Call.SettingsInviteLink -> tenant.value?.models?.session?.let { Answer.Invited(it.invites.inviteByLink(call.label)) } ?: noTenant
+        is Call.SettingsInviteMail -> tenant.value?.models?.session?.let { Answer.Invited(it.invites.inviteByMail(call.email, call.password)) } ?: noTenant
+        is Call.SettingsInviteReissue -> tenant.value?.models?.session?.let { Answer.Invited(it.invites.reissue(call.invite)) } ?: noTenant
+        is Call.SettingsInviteRevoke -> tenant.value?.models?.session?.let { Answer.Invited(it.invites.revoke(call.inviteId)) } ?: noTenant
+        is Call.SettingsInviteLabel -> tenant.value?.models?.session?.let { Answer.Invited(it.invites.setLabel(call.inviteId, call.label)) } ?: noTenant
         else -> error("not a members' call: $call")
+    }
+
+    /**
+     * A join from an invite (`TenantJoin`, ADR 0111, ADR 0129): its acts, its kit step held as every flow's ([kits]), and
+     * *Open the space* opened as any sign-in is ([opened]). Dispatched apart: the dispatch's one method is at the JVM's size limit.
+     */
+    private suspend fun joining(call: Call): Answer {
+        val noJoin = Answer.Refused(Answer.Why.NO_SUCH_FLOW)
+        return when (call) {
+            is Call.JoinCode -> joins[call.join]?.model?.let { it.code(call.code); Answer.Done } ?: noJoin
+            is Call.JoinChoose -> joins[call.join]?.model?.let { it.choose(call.register); Answer.Done } ?: noJoin
+            is Call.JoinCheckPassword -> joins[call.join]?.model?.let { it.checkPassword(call.password); Answer.Done } ?: noJoin
+            is Call.JoinUseAnyway -> joins[call.join]?.model?.let { it.useAnyway(call.on); Answer.Done } ?: noJoin
+            is Call.JoinRegister -> joins[call.join]?.model?.let { j ->
+                j.register(call.username, call.firstName, call.lastName, call.email, call.password)
+                // the kit step is the join's: it closes with the join, never on its own `Kit.Close`
+                val step = j.kit ?: return Answer.Done
+                Answer.KitOpened(ids.incrementAndFetch().also { kits.put(it, HeldFlow(step, "")) })
+            } ?: noJoin
+            is Call.JoinFinish -> joins[call.join]?.model?.let { it.finishRegistration(); Answer.Done } ?: noJoin
+            is Call.JoinSignIn -> joins[call.join]?.model?.let {
+                it.signInAndAccept(call.username, call.firstName, call.lastName, call.email, call.password, call.secretKey)
+                Answer.Done
+            } ?: noJoin
+            is Call.JoinOpen -> joins[call.join]?.model?.let { j ->
+                val o = j.openSpace(parts.await().session) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                opened(o).also { managed(parts.await()) }
+            } ?: noJoin
+            is Call.JoinClose -> joins.remove(call.join)?.close().done(Answer.Why.NO_SUCH_FLOW)
+            else -> error("not a join's call: $call")
+        }
     }
 
     private suspend fun selecting(call: Call): Answer = when (call) {
@@ -3093,6 +3141,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         } ?: flowOf(Update.KitRenewal(w.flow, null))
         is Watched.Kit -> kits[w.kit]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.Kit(w.kit, s.takeIf { open }) } }
             ?: flowOf(Update.Kit(w.kit, null))
+        is Watched.Join -> joins[w.join]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.Join(w.join, s.takeIf { open }) } }
+            ?: flowOf(Update.Join(w.join, null))
         is Watched.Person -> persons[w.person]?.let { held ->
             val pictures = tenant.value?.models?.pictures ?: flowOf(emptyMap())
             val section = held.memories?.state ?: flowOf(null)
@@ -3934,6 +3984,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 },
                 squarePicture = squarePicture,
                 queuedAsk = { account, loss -> me.raddatz.veyq.mobile.offline.QueuedTray(account).ask(loss) },
+                join = { invite -> me.raddatz.veyq.mobile.session.TenantJoin.of(primitives, device, client, invite) },
                 received = { link, queue, password, music ->
                     me.raddatz.veyq.mobile.sharing.GuestView.open(
                         primitives, link, client, store, guestSessions, { config.language }, handedPassword = password, queue = queue,

@@ -201,6 +201,55 @@ internal sealed class Call {
     /** *Remove member* after its question, every link of the space off too where [revokeLinks] (`TenantMembers.remove`): [Answer.MembersChanged]. */
     @Serializable @SerialName("Settings.MemberRemove") data class SettingsMemberRemove(val userId: String, val revokeLinks: Boolean) : Call()
 
+    /** *Invite member* by link (`TenantInvites.inviteByLink`, ADR 0129 decision 1): the owners' optional [label]. [Answer.Invited], its link once. */
+    @Serializable @SerialName("Settings.InviteLink") data class SettingsInviteLink(val label: String? = null) : Call()
+
+    /** *Invite member* by mail to [email], under a generated code or a [password] the owner chose (`TenantInvites.inviteByMail`). [Answer.Invited], its code once. */
+    @Serializable @SerialName("Settings.InviteMail") data class SettingsInviteMail(val email: String, val password: String? = null) : Call()
+
+    /** *Send again* / *New link* on a pending [invite] (`TenantInvites.reissue`): [Answer.Invited], the new link or code once. */
+    @Serializable @SerialName("Settings.InviteReissue") data class SettingsInviteReissue(val invite: me.raddatz.veyq.mobile.session.TenantInvites.PendingInvite) : Call()
+
+    /** *Cancel invite* on [inviteId], after its question (`TenantInvites.revoke`): [Answer.Invited]. */
+    @Serializable @SerialName("Settings.InviteRevoke") data class SettingsInviteRevoke(val inviteId: String) : Call()
+
+    /** A link invite's label set, or cleared when [label] is empty (`TenantInvites.setLabel`): [Answer.Invited]. */
+    @Serializable @SerialName("Settings.InviteLabel") data class SettingsInviteLabel(val inviteId: String, val label: String? = null) : Call()
+
+    /** A join's member invite opened with the [code] (or password) typed (`TenantJoin.code`). Inward once, never back. */
+    @Serializable @SerialName("Join.Code") data class JoinCode(val join: Long, val code: String) : Call()
+
+    /** A link invite's invitee switches to a new account ([register]) or one they have (`TenantJoin.choose`). */
+    @Serializable @SerialName("Join.Choose") data class JoinChoose(val join: Long, val register: Boolean) : Call()
+
+    /** The new account's password left its field (`TenantJoin.checkPassword`): the breach check's state follows in [Update.Join]. */
+    @Serializable @SerialName("Join.CheckPassword") data class JoinCheckPassword(val join: Long, val password: String) : Call()
+
+    /** *Use it anyway* on a breached password (`TenantJoin.useAnyway`). */
+    @Serializable @SerialName("Join.UseAnyway") data class JoinUseAnyway(val join: Long, val on: Boolean) : Call()
+
+    /**
+     * Register step 1 (`TenantJoin.register`): the account built on this device. [Answer.KitOpened] with its Emergency Kit's
+     * step (`Kit.Save`, `Kit.Confirm`) once built; [Answer.Done] where it was not (the state's `error` says why).
+     */
+    @Serializable @SerialName("Join.Register") data class JoinRegister(
+        val join: Long, val username: String, val firstName: String, val lastName: String, val email: String, val password: String,
+    ) : Call()
+
+    /** Register step 2, once the kit is saved and confirmed (`TenantJoin.finishRegistration`). */
+    @Serializable @SerialName("Join.Finish") data class JoinFinish(val join: Long) : Call()
+
+    /** An existing account signs in and accepts (`TenantJoin.signInAndAccept`). Every field inward once, never back. */
+    @Serializable @SerialName("Join.SignIn") data class JoinSignIn(
+        val join: Long, val username: String, val firstName: String, val lastName: String, val email: String, val password: String, val secretKey: String,
+    ) : Call()
+
+    /** *Open the space* (`TenantJoin.openSpace`): the app signs in as any sign-in does; the join stays until `Join.Close`. */
+    @Serializable @SerialName("Join.Open") data class JoinOpen(val join: Long) : Call()
+
+    /** The join's screen closed: every secret it held zeroed. */
+    @Serializable @SerialName("Join.Close") data class JoinClose(val join: Long) : Call()
+
     /**
      * "Manage servers" opened: [Watched.Manage] delivers every server with its trust from now on, each tenant's spaces as
      * they read; [ManageClose] ends it (null again).
@@ -2095,6 +2144,12 @@ internal sealed class Answer {
     /** [Call.SettingsMembers]: the roster, or the one line said in its place. */
     @Serializable @SerialName("Members") data class Members(val roster: me.raddatz.veyq.mobile.session.TenantMembers.Roster) : Answer()
 
+    /** [Call.SettingsInviteLink], [Call.SettingsInviteMail], [Call.SettingsInviteReissue], [Call.SettingsInviteRevoke], [Call.SettingsInviteLabel]: what it came to, the link or code once. */
+    @Serializable @SerialName("Invited") data class Invited(val outcome: me.raddatz.veyq.mobile.session.TenantInvites.Outcome) : Answer()
+
+    /** [Call.ReceivedOpen] of an invite link: its join (`TenantJoin`, ADR 0111, ADR 0129), watched as [Watched.Join]. */
+    @Serializable @SerialName("JoinOpened") data class JoinOpened(val join: Long) : Answer()
+
     /** [Call.SettingsMemberRole], [Call.SettingsMemberRemove]: whether it went through ([done]: read the roster anew), and what is said. */
     @Serializable @SerialName("MembersChanged") data class MembersChanged(val done: Boolean, val notice: Notice) : Answer()
 
@@ -2656,6 +2711,7 @@ internal sealed class Watched {
     @Serializable @SerialName("KeyRotation") data class KeyRotation(val flow: Long) : Watched()
     @Serializable @SerialName("Erasure") data class Erasure(val flow: Long) : Watched()
     @Serializable @SerialName("Kit") data class Kit(val kit: Long) : Watched()
+    @Serializable @SerialName("Join") data class Join(val join: Long) : Watched()
     @Serializable @SerialName("KitRenewal") data class KitRenewal(val flow: Long) : Watched()
 
     /** A search opened by [Call.SearchOpen]. */
@@ -2845,6 +2901,8 @@ internal sealed class Update {
     ) : Update()
     @Serializable @SerialName("Erasure") data class Erasure(val flow: Long, val shown: me.raddatz.veyq.mobile.session.AccountErasure.State?) : Update()
     @Serializable @SerialName("Kit") data class Kit(val kit: Long, val shown: me.raddatz.veyq.mobile.account.KitStep.State?) : Update()
+    /** A join's state (`TenantJoin.State`): words, phases and flags, never a key, the code or a password; null once closed. */
+    @Serializable @SerialName("Join") data class Join(val join: Long, val shown: me.raddatz.veyq.mobile.session.TenantJoin.State?) : Update()
     @Serializable @SerialName("KitRenewal") data class KitRenewal(
         val flow: Long,
         val shown: me.raddatz.veyq.mobile.session.KitRenewal.State?,

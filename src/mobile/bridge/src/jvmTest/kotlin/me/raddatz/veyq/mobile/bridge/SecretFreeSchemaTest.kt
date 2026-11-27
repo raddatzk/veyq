@@ -57,12 +57,18 @@ class SecretFreeSchemaTest {
         "PasswordChange.Check.newPassword" to "the new password as the person left its field, on its way to the core's breached-password check (only a 5-hex prefix of its SHA-1 leaves the device)",
         "KeyRotation.Check.newPassword" to "the rotation's new password as the person left its field, on its way to the core's breached-password check",
         "Received.Password.password" to "the password a received link asks for, as the person typed it, on its way to the core",
+        "Settings.InviteMail.password" to "the password the owner chose for a mailed invite, on its way to the core, which stretches the link's key from it",
+        "Join.CheckPassword.password" to "a new account's password as the person left its field at the join, on its way to the core's breached-password check",
+        "Join.Register.password" to "a new account's password the person chose at the join, on its way to the core's cold birth",
+        "Join.SignIn.password" to "the password of the account the person joins with, on its way to the core's cold sign-in",
+        "Join.SignIn.secretKey" to "the Secret Key of the account the person joins with, on its way to the core's cold sign-in",
         "Bookmark.Create.password" to "a kept link's password as the person typed it into the bookmark dialog, on its way to the core, which seals it",
         "Erasure.Run.password" to "the password the person typed to erase the account, on its way to the core's proof",
     )
     /** The outward fields that carry a guest link's address, its key in the fragment, each with why. */
     private val linkAddresses = mapOf(
         "me.raddatz.veyq.mobile.bridge.ShareShown.ShownLink.address" to "an open link's address, which the person copies or shares from its row",
+        "me.raddatz.veyq.mobile.session.TenantInvites.Outcome.address" to "a link invite's link just minted, its code in the fragment, shown once to copy or share (ADR 0129 decision 1)",
         "me.raddatz.veyq.mobile.bridge.ShareShown.freshAddress" to "the address just minted or renewed, shown once to copy or share",
     )
     /** The outward fields that carry the address of a public page, no key in it, each with why. */

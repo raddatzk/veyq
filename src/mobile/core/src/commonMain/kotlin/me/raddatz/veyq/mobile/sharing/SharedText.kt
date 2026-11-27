@@ -36,10 +36,11 @@ object SharedText {
 
     fun linkIn(text: String): Found {
         val whole = text.trim()
-        if (ReceivedLink.open(whole) is ReceivedLink.Parsed.Ok) return Found.One(whole)
+        if (ReceivedLink.open(whole) is ReceivedLink.Parsed.Ok || ReceivedLink.inviteOf(whole) != null) return Found.One(whole)
         val candidates = whole.split(Regex("\\s+")).mapNotNull(::candidate)
         if (candidates.isEmpty()) return Found.None
-        val opened = candidates.mapNotNull { c -> (ReceivedLink.open(c) as? ReceivedLink.Parsed.Ok)?.let { c to it.link } }
+        // an invite opens too (its join, not a guest view): counted by its own text, so two invites are two links
+        val opened = candidates.mapNotNull { c -> (ReceivedLink.open(c) as? ReceivedLink.Parsed.Ok)?.let { c to it.link.link } ?: ReceivedLink.inviteOf(c)?.let { c to c } }
         return when (opened.distinctBy { it.second }.size) {
             0 -> Found.One(candidates.first())
             1 -> Found.One(opened.first().first)

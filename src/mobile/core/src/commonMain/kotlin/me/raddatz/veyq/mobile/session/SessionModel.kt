@@ -1305,6 +1305,9 @@ class AccountDoor(
 
     override suspend fun resume(record: TrustedDevice): VeyqAccount = VeyqAccount.resume(primitives, record, device, client)
 
+    /** The join of a received [invite] (`TenantJoin`), its cold sign-ins through this door's device and client. */
+    fun join(invite: me.raddatz.veyq.mobile.sharing.ReceivedLink.InviteLink): TenantJoin = TenantJoin.of(primitives, device, client, invite)
+
     override suspend fun trust(account: VeyqAccount, password: String) {
         runCatching { account.trustThisDevice(password, level = null) }
             .onFailure { if (it is CancellationException) throw it; println("veyq: this device could not be trusted with the account: $it") }

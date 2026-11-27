@@ -147,6 +147,26 @@ class DispatchTest {
         b.shutdown()
     }
 
+    /**
+     * An invite link pasted into *Open a link* goes to its join, never to the share page's refusal (ADR 0111, ADR 0129):
+     * with no join to open (this composition has none) it is refused as not offered, where a share's check would have
+     * said `NOT_A_SHARE`; the owner's invite calls need a tenant and the join's calls a join. Bitten by a `Received.Open`
+     * that does not look for an invite first (red: the share's `ReceivedProblem`).
+     */
+    @Test
+    fun anInviteLinkGoesToItsJoinAndTheInviteCallsNeedATenant() = runBlocking {
+        val b = bridge()
+        assertEquals(Answer.Refused(Answer.Why.NOT_OFFERED), b.ask(Call.ReceivedOpen("https://veyq.localhost/tenant/accept#tok.sealed.R0SE1N7AKE")))
+        assertTrue(b.ask(Call.ReceivedOpen("https://veyq.localhost/tenant/other#tok")) is Answer.ReceivedProblem, "a path that is no invite is the share check's")
+        for (c in listOf(Call.SettingsInviteLink("Oma"), Call.SettingsInviteMail("sam@veyq.localhost"), Call.SettingsInviteRevoke("i"), Call.SettingsInviteLabel("i", "x"))) {
+            assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(c), "$c")
+        }
+        for (c in listOf(Call.JoinCode(9, "x"), Call.JoinFinish(9), Call.JoinOpen(9), Call.JoinClose(9))) {
+            assertEquals(Answer.Refused(Answer.Why.NO_SUCH_FLOW), b.ask(c), "$c")
+        }
+        b.shutdown()
+    }
+
     private fun bridge() = Bridge {
         val hidden = Hidden({}, emptySet())
         Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { null }

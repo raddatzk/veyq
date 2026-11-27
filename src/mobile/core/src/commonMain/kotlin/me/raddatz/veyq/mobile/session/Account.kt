@@ -2307,6 +2307,9 @@ class TenantSession internal constructor(
     /** Settings' *Members* of this tenant: the roster, an owner's role changes and removals ([TenantMembers]). */
     val members: TenantMembers by lazy { TenantMembers(this) }
 
+    /** The owner's invites: by link or mail, the pending list, re-issue, revoke and label (uc.spaces.add-member). */
+    val invites: TenantInvites by lazy { TenantInvites(this) }
+
     /** One's own profile in this tenant (ADR 0148 decision 2): a new model each time a place opens it; the host closes it. Android, whose core target has no libwebp, hands its own [encoder]. */
     fun profile(encoder: me.raddatz.veyq.mobile.media.WebpEncoder? = me.raddatz.veyq.mobile.media.coreWebpEncoder): ProfileModel = ProfileModel(TenantProfileDoor(this), account.suite, encoder)
 

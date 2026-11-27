@@ -24,13 +24,23 @@ class OpenLink(private val opener: (ReceivedLink.ShareLink, report: Boolean) -> 
         /** The link as received, offered to the system browser where the app does not open it ([Msg.LINK_OPEN_IN_BROWSER]). */
         val browser: String? = null,
         val canOpen: Boolean = false,
+        /** The text is an invite: [canOpen] opens its join ([invite]), not a guest view. */
+        val invite: Boolean = false,
     )
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
     private var parsed: ReceivedLink.Parsed.Ok? = null
+    private var invited: ReceivedLink.InviteLink? = null
 
     fun text(value: String) {
+        // an invite pasted with the owner's message around it (the invite dialog's *Copy* copies the whole message)
+        invited = ReceivedLink.inviteOf(value) ?: (SharedText.linkIn(value) as? SharedText.Found.One)?.text?.let(ReceivedLink::inviteOf)
+        if (invited != null) {
+            parsed = null
+            _state.value = State(text = value, canOpen = true, invite = true)
+            return
+        }
         val r = ReceivedLink.open(value)
         parsed = r as? ReceivedLink.Parsed.Ok
         val problem = (r as? ReceivedLink.Parsed.Refused)?.problem
@@ -58,7 +68,19 @@ class OpenLink(private val opener: (ReceivedLink.ShareLink, report: Boolean) -> 
 
     private fun refuse(problem: Msg) {
         parsed = null
+        invited = null
         _state.value = State(problem = problem)
+    }
+
+    /**
+     * The invite the field holds, handed to its join (`AccountDoor.join`) once: the field is emptied, since the text holds
+     * the invite's secret parts. Null while the text is no invite.
+     */
+    fun invite(): ReceivedLink.InviteLink? {
+        val i = invited ?: return null
+        invited = null
+        _state.update { State() }
+        return i
     }
 
     /** The link opened as its guest: a fresh guest view, not loaded yet ([GuestScreen.load]). Null while the text is no link. */

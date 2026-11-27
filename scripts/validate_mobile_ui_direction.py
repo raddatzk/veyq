@@ -263,7 +263,7 @@ WIRE_APPLICATIONS: dict[str, tuple[str, ...]] = {
     "depot": ("File", "DropBox"),
 }
 WIRE_PLATFORM = (
-    "AddressChange", "Audio", "Avatar", "Bookmark", "Controls", "Cover", "Erasure", "Header", "Home", "Import", "KeyRotation",
+    "AddressChange", "Audio", "Avatar", "Bookmark", "Controls", "Cover", "Erasure", "Header", "Home", "Import", "Invited", "Join", "KeyRotation",
     "Kit", "Link", "Manage", "Map", "MapState", "Media", "Move", "Net", "Notice", "PasswordChange", "Pdf", "Person",
     "Picture", "Player", "Profile", "Queued", "Reader", "Received", "Report", "Row", "Save", "Scan", "Search", "SecretKey",
     "Select", "Selection", "Session", "Settings", "Share", "Shell", "SignIn", "Store", "Trash", "Trust", "Unlock", "Upload",
