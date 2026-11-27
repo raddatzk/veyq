@@ -268,6 +268,22 @@ class CaptureTimeShiftTest {
         assertEquals(listOf(Notice(Msg.MEMORY_RESTORE_REFUSED, Joined(listOf("p2.jpg"), ", "), Notice(Msg.MEMORY_REFUSED_CHANGED))), shift.current.refused)
         assertFalse(shift.current.undoable)
         assertNull(shift.current.done)
+        assertFalse(shift.current.closed, "a refused line is still to read")
+    }
+
+    @Test
+    fun aCleanUndoClosesTheDialog() = runTest {
+        val s = Server()
+        val c = open(s)
+        c.toggle("p4"); c.toggle("p1")
+        val shift = assertNotNull(c.shift())
+        assertTrue(shift.propose(at("2024-06-01T13:00:00Z")))
+        shift.all()
+        assertFalse(shift.current.closed)
+        shift.undo()
+        assertNull(s.metas.getValue("p1").capturedAtOverride)
+        assertEquals(emptyList(), shift.current.refused)
+        assertTrue(shift.current.closed, "a clean Undo left an empty dialog")
     }
 
     @Test

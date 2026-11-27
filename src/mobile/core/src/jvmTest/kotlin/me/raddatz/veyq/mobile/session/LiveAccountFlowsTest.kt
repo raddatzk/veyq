@@ -1,5 +1,6 @@
 package me.raddatz.veyq.mobile.session
 
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.media.WebpEncoder
@@ -170,6 +171,49 @@ class LiveAccountFlowsTest {
             } finally {
                 model.close()
             }
+        }
+    }
+
+    /**
+     * uc.account.renew-emergency-kit (ADR 0157 decisions 4-6): the account's kit read from its server's record — a throwaway
+     * is born by a script that sends none, so its first pass reads the earlier layout —, a wrong password refused, then a
+     * new kit made from the right one, saved and kept, its record written, and a fresh session reading the kit as current.
+     */
+    @Test
+    fun aNewKitIsRecordedOnTheServerAndAFreshSessionReadsItCurrent() {
+        val origin = Throwaway.origin()
+        val t = Throwaway.accounts()
+        runTest(timeout = 3.minutes) {
+            val owner = session(origin, t, "VEYQ")
+            owner.account.kitStatus.ensure()
+            val before = owner.account.kitStatus.current.standing
+            println("veyq-live: the throwaway's kit before: $before")
+            assertTrue(before == me.raddatz.veyq.mobile.account.KitStatus.Standing.OLDER || before == me.raddatz.veyq.mobile.account.KitStatus.Standing.CURRENT, "read: $before")
+            val renewal = owner.account.kitRenewal()
+            try {
+                assertNull(renewal.kit("not the password", t.env.getValue("VEYQ_SECRET_KEY")))
+                assertEquals(me.raddatz.veyq.mobile.words.Msg.KIT_RENEW_REFUSED, renewal.current.refusal, "a wrong password was not refused as such")
+                val step = assertNotNull(renewal.kit(t.env.getValue("VEYQ_PASSWORD"), t.env.getValue("VEYQ_SECRET_KEY")), "the right key: ${renewal.current.refusal}")
+                try {
+                    var pdf = ByteArray(0)
+                    // the head alone: the core zeroes the bytes after the write
+                    assertTrue(step.saveInto("en", 20_785L) { pdf = it.copyOfRange(0, 5) })
+                    assertEquals("%PDF-", pdf.decodeToString(0, 5))
+                    step.confirm(true)
+                    val kept = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                        kotlinx.coroutines.withTimeout(30_000) { step.state.first { it.recorded != null } }
+                    }
+                    assertEquals(true, kept.recorded, "the record was not written: ${kept.refusal}")
+                } finally {
+                    step.close()
+                }
+            } finally {
+                renewal.close()
+            }
+            assertEquals(me.raddatz.veyq.mobile.account.KitStatus.Standing.CURRENT, owner.account.kitStatus.current.standing)
+            val fresh = session(origin, t, "VEYQ")
+            fresh.account.kitStatus.ensure()
+            assertEquals(me.raddatz.veyq.mobile.account.KitStatus.Standing.CURRENT, fresh.account.kitStatus.current.standing, "a fresh session does not read the record")
         }
     }
 

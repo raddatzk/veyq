@@ -166,7 +166,7 @@ class SelectionShift internal constructor(
         val refused: List<Notice> = emptyList(),
         /** The Undo is offered: something was shifted and not yet taken back. */
         val undoable: Boolean = false,
-        /** Only the anchor was written and it landed: the platform closes. */
+        /** Only the anchor was written and it landed, or an Undo put everything back: the platform closes. */
         val closed: Boolean = false,
     )
 
@@ -269,7 +269,9 @@ class SelectionShift internal constructor(
         written = emptyList()
         reread()
         _state.update {
-            it.copy(progress = null, done = null, undoable = false, refused = it.refused + refusedLines(Msg.MEMORY_RESTORE_REFUSED, refused))
+            val lines = it.refused + refusedLines(Msg.MEMORY_RESTORE_REFUSED, refused)
+            // a clean Undo leaves nothing to say: the dialog closes, as the web's Undo leaves no toast behind
+            it.copy(progress = null, done = null, undoable = false, refused = lines, closed = lines.isEmpty())
         }
     }
 
