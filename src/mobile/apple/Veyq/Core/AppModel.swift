@@ -541,6 +541,11 @@ final class AppModel {
         try await tenantSession?.members.remove(userId: userId, revokeLinks: revokeLinks)
     }
 
+    // MARK: Groups (core's `TenantGroups`, en.spaces.group-scope, uc.spaces.consent-group-add)
+
+    /// Settings' Groups and Group invitations: the open tenant's groups, every act on them core's; nil without a tenant.
+    var groups: TenantGroups? { tenantSession?.groups }
+
     // MARK: Invites (core's `TenantInvites`, uc.spaces.add-member, uc.spaces.manage-member-invites)
 
     /// *Invite member* by link, with the owners' optional label: the link shown once (`outcome.address`).

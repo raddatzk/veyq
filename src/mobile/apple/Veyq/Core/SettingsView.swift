@@ -90,6 +90,10 @@ struct SettingsView: View {
     @State private var showingMembers = false
     /// Settings' Who's who open over the page on a Mac (core's `SettingsSection.WHOS_WHO`); iOS pushes it.
     @State private var showingWhosWho = false
+    /// Settings' Groups open over the page on a Mac (core's `SettingsSection.GROUPS`); iOS pushes it.
+    @State private var showingGroups = false
+    /// Settings' Group invitations open over the page on a Mac (core's `SettingsSection.GROUP_INVITATIONS`); iOS pushes it.
+    @State private var showingInvitations = false
     @State private var askPassword = false
     @State private var password = ""
     @State private var trustSaid: String?
@@ -224,6 +228,28 @@ struct SettingsView: View {
                 #endif
             }
         }
+        .sheet(isPresented: $showingGroups) {
+            if let model = maps {
+                NavigationStack {
+                    GroupsView(model: model)
+                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { showingGroups = false } } }
+                }
+                #if os(macOS)
+                .frame(minWidth: 520, minHeight: 480)
+                #endif
+            }
+        }
+        .sheet(isPresented: $showingInvitations) {
+            if let model = maps {
+                NavigationStack {
+                    GroupInvitationsView(model: model)
+                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { showingInvitations = false } } }
+                }
+                #if os(macOS)
+                .frame(minWidth: 520, minHeight: 480)
+                #endif
+            }
+        }
         .sheet(isPresented: $showingTerms) {
             if let model = maps {
                 NavigationStack {
@@ -339,6 +365,38 @@ struct SettingsView: View {
                     Text(say(.termsSettingsTitle))
                 } footer: {
                     Text(say(.termsEditorSub))
+                }
+            }
+        case .groups:
+            // the caller's groups in the open space (the web's `groups` category), each one's page behind its row
+            if let model = maps {
+                Section {
+                    #if os(iOS)
+                    NavigationLink { GroupsView(model: model) } label: { Label(say(.groupsTitle), systemImage: "person.3") }
+                        .accessibilityIdentifier("settings-groups")
+                    #else
+                    Button { showingGroups = true } label: { Label(say(.groupsTitle), systemImage: "person.3") }
+                        .accessibilityIdentifier("settings-groups")
+                    #endif
+                } header: {
+                    Text(say(.groupsTitle))
+                }
+            }
+        case .groupInvitations:
+            // the groups the caller was asked to join (the web's `/invitations`)
+            if let model = maps {
+                Section {
+                    #if os(iOS)
+                    NavigationLink { GroupInvitationsView(model: model) } label: { Label(say(.invitationsTitle), systemImage: "envelope") }
+                        .accessibilityIdentifier("settings-group-invitations")
+                    #else
+                    Button { showingInvitations = true } label: { Label(say(.invitationsTitle), systemImage: "envelope") }
+                        .accessibilityIdentifier("settings-group-invitations")
+                    #endif
+                } header: {
+                    Text(say(.invitationsTitle))
+                } footer: {
+                    Text(say(.invitationsSub))
                 }
             }
         case .signOut:
