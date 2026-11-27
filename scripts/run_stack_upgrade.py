@@ -286,6 +286,8 @@ def suite(installed: lane.Installed, tree: Path, test: str, workdir: Path, stamp
     web = repo_layout.surface_in(tree, repo_layout.WEB).relative_to(tree).as_posix()
     workdir_in = f"{SUITE_MOUNT}/{web}"
     env = [a for k, v in suite_env(stamp).items() for a in ("-e", f"{k}={v}")]
+    # Read-write, as a host run has the tree: vite writes `node_modules/.vite-temp` and vitest
+    # `node_modules/.vitest-cache`, and both refuse a read-only mount (measured 2026-11-27).
     cmd = [*installed.compose, "run", "--rm", "--no-deps", "-T", "-v", f"{tree}:{SUITE_MOUNT}", "-w", workdir_in,
            "--entrypoint", "node", *env, "browser", f"{workdir_in}/node_modules/vitest/vitest.mjs", "run", test,
            "--testTimeout", SUITE_TEST_MS]

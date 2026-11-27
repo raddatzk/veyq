@@ -5,7 +5,8 @@
   cannot compare, and lane L2's predecessor when it moved, instead — and the snapshot retention job, decision 6's
   archive and L3, decision 7; lane L2 is built as decision 6's amendment of 2026-11-26 decides it —
   `scripts/run_stack_upgrade.py`, checks.yml's `stack-upgrade`, attested per leg with the release it upgraded from and
-  required by the promotion (cr-stack-lane-l2-upgrade-in-place); decision 5's snapshot —
+  required by the promotion, first attested by the Publish of `d5ce223da` (run 46018703012: v1.318 and v0.2480);
+  decision 5's snapshot —
   weekly and by dispatch since its amendment of 2026-11-07, per green push before — its attestations, its `snapshot-`
   tag, the staging retention (first run 2026-11-23) and the promotion `release.yml` are built, and since its amendment of 2026-11-22 the release draft Publish writes — v1.312
   and v1.318 were released from such drafts)
@@ -301,6 +302,15 @@ several, or one on another tag is refused (`scripts/promote.py` check 1). A save
         is lane L1's, on every architecture the build publishes. Decision 4's rule that what is published for an
         architecture has passed on it holds through L1; a data-path lane runs on a published architecture, never on
         one L1 did not boot (`scripts/validate_release_identity.py`, `snapshot.py`, `promote.py`).
+     - **L2 as built (2026-11-27).** A leg with no release to start from still records — the candidate's asset set
+       and `predecessor: null` — so the predicate expects every leg of the matrix and a promotion tells "had none"
+       from "lost". The promotion compares each leg's **tag** with the one it resolves now
+       (`run_stack_upgrade.py --leg X --resolve` at the snapshot's commit); the digests beside it are recorded, not
+       compared, since a tag names an immutable release. The rollback of item 2 runs after a green read only: a red
+       upgrade leaves the instance as `veyqctl` left it, and the recovery `veyqctl` names on that path is not run
+       (inbox #869). Measured on GitHub: both legs green on pull request 111 and on the push of `d5ce223da`, and
+       that commit's Publish (run 46018703012) attested L2 on amd64 with v1.318 and v0.2480, verified with
+       `cosign verify-attestation` under `publish.yml`'s identity.
 
 7. **The jar-level upgrade proof retires when L2 and L3 gate.** They prove the same data path on the artifact that
    ships; ADR 0057 §7 then names them. The API end-to-end suites stay: fast, fresh per file, and where a wire defect is
