@@ -529,6 +529,7 @@ internal sealed class AccountSettingsPage : IDisposable
                 SettingsSection.Security => () => FlowSection(AccountFlow.Security),
                 SettingsSection.Profile => () => FlowSection(AccountFlow.Profile),
                 SettingsSection.Erase => () => FlowSection(AccountFlow.Erase),
+                SettingsSection.WhosWho => DrawWhosWho,
                 SettingsSection.Terms => DrawTerms,
                 SettingsSection.SignOut => DrawSignOut,
             };
@@ -669,6 +670,21 @@ internal sealed class AccountSettingsPage : IDisposable
     }
 
     /// <summary>A section that opens one of the account's flows: its rubric, what it is for, the button that opens it.</summary>
+    /// <summary>Who's who in the open space (the web's tenant section `tenant-people`, inbox #967): opened over the page; a
+    /// member chosen there leaves Settings for their profile, which the shell shows.</summary>
+    private void DrawWhosWho()
+    {
+        _sections.Children.Add(Anchor("tenant-people", Heading(Words.WhosWhoTitle())));
+        var open = TextButton(Words.WhosWhoTitle(), "settings-open:tenant-people");
+        open.Click += (_, _) => WhosWhoDialog.Open(_window, userId =>
+        {
+            Act.Send(new Call.ShellOpenPerson { userId = userId });
+            // the person shows in the content, which Settings gives way to (as a search's person result does)
+            _closedByCore();
+        });
+        _sections.Children.Add(Card("\uE716", Words.WhosWhoTitle(), [Words.WhosWhoSub()], "settings-whos-who", open));
+    }
+
     /// <summary>The open space's terms, read-only (uc.account.accept-terms): opened over the page.</summary>
     private void DrawTerms()
     {
