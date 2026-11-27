@@ -77,12 +77,16 @@ class TenantGroups internal constructor(private val tenant: TenantSession) {
         val remove: Boolean,
         /** *Withdraw*: a pending proposal, removed by a delete. */
         val rescind: Boolean,
+        /** The identity-trust badge ([MemberBadge.of]), as the tenant's roster shows it; null where none shows. */
+        val badge: MemberBadge? = null,
     ) {
         val title: String = realName ?: "@$username"
         val usernameLine: String? = realName?.let { "@$username" }
         val roleWord: Msg = if (owner) Msg.MEMBERS_ROLE_OWNER else Msg.MEMBERS_ROLE_MEMBER
         val statusWord: Msg = if (pendingConsent) Msg.MEMBERS_STATUS_PENDING_CONSENT else Msg.MEMBERS_STATUS_ACTIVE
         val pendingWord: Msg? = if (pending) Msg.MEMBERS_PENDING else null
+        val badgeWord: Msg? = badge?.word
+        val badgeNote: Msg? = badge?.note
     }
 
     /** A group's page: its name, the caller's role, its members, and the owner's acts; [said] in their place. */
@@ -99,6 +103,9 @@ class TenantGroups internal constructor(private val tenant: TenantSession) {
     ) {
         /** A member's page is read-only (the web's `groups.readonlyNote`). */
         val readonlyNote: Msg? = if (!owner && said == null) Msg.GROUPS_READONLY_NOTE else null
+
+        /** The *Links* and *New lock* sections: an owner's, not while the group is being deleted (it is read-only then). */
+        val wholeActs: Boolean = owner && said != Msg.MEMBERS_LOAD_FAILED && !deleted
     }
 
     /** A pending consent proposal to the caller, its name opened with the caller's own identity. */
@@ -240,7 +247,8 @@ class TenantGroups internal constructor(private val tenant: TenantSession) {
         val members = runCatching { account.members(tenant.base, tenantId, scopeId) }.getOrNull() ?: return failed.copy(name = name, owner = owner)
         val (tenantKey, tenantEpoch) = tenant.scopeKey(tenantId) ?: (null to 0)
         val joins = JoinRecords(suite)
-        val rows = assemble(members, owner, account.userId) { m -> tenantKey?.let { People.realName(joins, tenantId, it, tenantEpoch.toLong(), m) } }
+        val badges = MemberBadge.of(tenant.personTrust.whosWho())
+        val rows = assemble(members, owner, account.userId, badges) { m -> tenantKey?.let { People.realName(joins, tenantId, it, tenantEpoch.toLong(), m) } }
         return GroupPage(scopeId, name, owner, listed.deletedAt != null, rows, if (rows.isEmpty()) Msg.MEMBERS_EMPTY else null, deletionOf(listed))
     }
 
@@ -308,6 +316,21 @@ class TenantGroups internal constructor(private val tenant: TenantSession) {
         runCatching { tenant.reopenMoved() }.onFailure { if (it is CancellationException) throw it }
         tenant.resumeRekeys()
         Outcome(true)
+    }
+
+    /**
+     * *Give it a new lock* for a lost device (ADR 0025 § 2; the web's group page): the group's next epoch to every member
+     * this device anchors, nobody removed — a removal already rotates by itself — then its nodes re-keyed here at once.
+     */
+    @Throws(Exception::class)
+    suspend fun newLock(scopeId: String): Outcome = attempt(Msg.SPACE_LOCK_FAILED) {
+        Locks.newLock(tenant, scopeId, excluding = null).let { Outcome(it.done, it.notice) }
+    }
+
+    /** *Turn off every link* of the group (ADR 0075 point 5); how many went off is said. */
+    @Throws(Exception::class)
+    suspend fun revokeAllLinks(scopeId: String): Outcome = attempt(Msg.SPACE_LINKS_REVOKE_ALL_FAILED) {
+        Locks.revokeLinks(tenant, scopeId).let { Outcome(it.done, it.notice) }
     }
 
     /** *Withdraw* a pending consent proposal (a delete: the proposal held the key, so nothing else needs it). */
@@ -384,13 +407,14 @@ class TenantGroups internal constructor(private val tenant: TenantSession) {
          * **Load-bearing:** only an owner's page offers an act; *Remove* (the rotation) never on an owner, on the caller,
          * or on a pending proposal, which is *Withdraw*n instead; a proposal is neither promoted nor demoted.
          */
-        fun assemble(members: List<ScopeMember>, owner: Boolean, me: String, name: (ScopeMember) -> String?): List<GroupMember> = members.map { m ->
+        fun assemble(members: List<ScopeMember>, owner: Boolean, me: String, badges: Map<String, MemberBadge> = emptyMap(), name: (ScopeMember) -> String?): List<GroupMember> = members.map { m ->
             val isOwner = m.role == ScopeMember.Role.OWNER
             val consent = m.pendingConsent == true
             GroupMember(
                 m.userId, m.username, name(m), isOwner, m.pending, consent,
                 promote = owner && !consent && !isOwner, demote = owner && isOwner && !consent,
                 remove = owner && !consent && !isOwner && m.userId != me, rescind = owner && consent,
+                badge = badges[m.userId],
             )
         }
 

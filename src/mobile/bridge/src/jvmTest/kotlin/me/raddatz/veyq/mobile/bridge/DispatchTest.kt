@@ -141,7 +141,11 @@ class DispatchTest {
         assertTrue(template.draft.texts.single().text.startsWith("# Nutzungsbedingungen"))
         val removed = b.ask(Call.SettingsTermsEdit(template.draft, TermsChange.REMOVE, "de")) as Answer.TermsDrafted
         assertEquals(emptyList(), removed.draft.texts)
-        for (c in listOf(Call.SettingsMembers, Call.SettingsMemberRole("u2", true), Call.SettingsMemberRemove("u2", true), Call.SettingsTermsEditing, Call.SettingsTermsSave(none))) {
+        for (c in listOf(
+            Call.SettingsMembers, Call.SettingsMemberRole("u2", true), Call.SettingsMemberRemove("u2", true), Call.SettingsMemberRemove("u2", false, newLock = true),
+            Call.SettingsMembersNewLock, Call.SettingsMembersRevokeLinks, Call.SettingsIcon("s"), Call.SettingsIconSet("s", "/p.jpg", me.raddatz.veyq.mobile.session.CoverFrame.Pose(1.0, 0.5, 0.5)),
+            Call.SettingsIconClear("s"), Call.SettingsTermsEditing, Call.SettingsTermsSave(none),
+        )) {
             assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(c), "$c")
         }
         b.shutdown()
@@ -159,10 +163,10 @@ class DispatchTest {
         assertEquals(Answer.Refused(Answer.Why.NOT_OFFERED), b.ask(Call.ReceivedOpen("https://veyq.localhost/tenant/accept#tok.sealed.R0SE1N7AKE")))
         assertEquals(Answer.Refused(Answer.Why.NOT_OFFERED), b.ask(Call.ReceivedOpen("You are invited to “F”. Open this link to join:\nhttps://veyq.localhost/tenant/accept#tok.s.R0SE1N7AKE")), "the whole message pasted")
         assertTrue(b.ask(Call.ReceivedOpen("https://veyq.localhost/tenant/other#tok")) is Answer.ReceivedProblem, "a path that is no invite is the share check's")
-        for (c in listOf(Call.SettingsInviteLink("Oma"), Call.SettingsInviteMail("sam@veyq.localhost"), Call.SettingsInviteRevoke("i"), Call.SettingsInviteLabel("i", "x"), Call.SettingsGroups, Call.SettingsGroupCreate("g"), Call.SettingsGroupRemove("g", "u"), Call.SettingsGroupInvitations)) {
+        for (c in listOf(Call.SettingsInviteLink("Oma"), Call.SettingsInviteMail("sam@veyq.localhost"), Call.SettingsInviteRevoke("i"), Call.SettingsInviteLabel("i", "x"), Call.SettingsGroups, Call.SettingsGroupCreate("g"), Call.SettingsGroupRemove("g", "u"), Call.SettingsGroupInvitations, Call.SettingsGroupNewLock("g"), Call.SettingsGroupRevokeLinks("g"))) {
             assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(c), "$c")
         }
-        for (c in listOf(Call.JoinCode(9, "x"), Call.JoinFinish(9), Call.JoinOpen(9), Call.JoinClose(9))) {
+        for (c in listOf(Call.JoinCode(9, "x"), Call.JoinFinish(9), Call.JoinOpen(9), Call.JoinClose(9), Call.JoinRemovePicture(9), Call.JoinPictureBytes(9), Call.JoinPicture(9, "/p.jpg", me.raddatz.veyq.mobile.session.CoverFrame.Pose(1.0, 0.5, 0.5)))) {
             assertEquals(Answer.Refused(Answer.Why.NO_SUCH_FLOW), b.ask(c), "$c")
         }
         b.shutdown()

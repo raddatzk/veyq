@@ -4594,6 +4594,11 @@
     "en": "Shown instead of your initial to the members of this space.",
     "de": "Wird den Mitgliedern dieses Bereichs statt deines Anfangsbuchstabens gezeigt."
   },
+  "profile_picture_join_hint": {
+    "note": "under the join's optional picture (the web's profilePicture.joinHint)",
+    "en": "Optional — shown instead of your initial; only members can see it. You can change it later in settings.",
+    "de": "Optional — wird statt deines Anfangsbuchstabens gezeigt; nur Mitglieder können es sehen. Du kannst es später in den Einstellungen ändern."
+  },
   "profile_picture_no_key_yet": {
     "en": "A picture can be added once your access to the shared space is ready.",
     "de": "Ein Bild kannst du hinterlegen, sobald dein Zugang zum geteilten Bereich bereit ist."
@@ -6833,6 +6838,152 @@
   "members_action_failed": {
     "en": "That action failed. Please try again.",
     "de": "Die Aktion ist fehlgeschlagen. Bitte erneut versuchen."
+  },
+  "space_lock_title": {
+    "note": "the web's spaceLock.title",
+    "en": "New lock",
+    "de": "Neues Schloss"
+  },
+  "space_lock_sub": {
+    "note": "the web's spaceLock.sub",
+    "en": "If a member’s device was lost, or someone who left may have kept a copy of this space’s key, give the space a new lock. After that the old key opens nothing here — neither what is added nor what is already here. What was already seen stays seen.",
+    "de": "Ist das Gerät eines Mitglieds verloren gegangen, oder könnte jemand, der den Bereich verlassen hat, eine Kopie seines Schlüssels behalten haben, gib dem Bereich ein neues Schloss. Danach öffnet der alte Schlüssel hier nichts mehr – weder was dazukommt noch was schon da ist. Was schon gesehen wurde, bleibt gesehen."
+  },
+  "space_lock_sub_group": {
+    "note": "the web's spaceLock.subGroup",
+    "en": "If a member’s device was lost, give the space a new lock. Removing a member already does this by itself. After that the old key opens nothing here — neither what is added nor what is already here. What was already seen stays seen.",
+    "de": "Ist das Gerät eines Mitglieds verloren gegangen, gib dem Bereich ein neues Schloss. Das Entfernen eines Mitglieds baut von selbst eins ein. Danach öffnet der alte Schlüssel hier nichts mehr – weder was dazukommt noch was schon da ist. Was schon gesehen wurde, bleibt gesehen."
+  },
+  "space_lock_action": {
+    "note": "the web's spaceLock.action",
+    "en": "Give it a new lock",
+    "de": "Neues Schloss einbauen",
+    "apple_en": "Give It a New Lock"
+  },
+  "space_lock_confirm_title": {
+    "note": "the web's spaceLock.confirmTitle",
+    "en": "Give this space a new lock?",
+    "de": "Diesem Bereich ein neues Schloss geben?"
+  },
+  "space_lock_confirm": {
+    "note": "the web's spaceLock.confirm",
+    "en": "Every member and every open invitation gets the new key from this device. Whoever holds only the old key, a removed member or a lost device, can’t read anything here any more — neither what is added nor what is already here. What they already saw stays seen, and links made before keep working until they are renewed or turned off.",
+    "de": "Jedes Mitglied und jede offene Einladung bekommt den neuen Schlüssel von diesem Gerät. Wer nur den alten Schlüssel hat, ein entferntes Mitglied oder ein verlorenes Gerät, kann hier nichts mehr lesen – weder was dazukommt noch was schon da ist. Was schon gesehen wurde, bleibt gesehen, und vorher erstellte Links funktionieren weiter, bis sie erneuert oder abgeschaltet werden."
+  },
+  "space_lock_confirm_group": {
+    "note": "the web's spaceLock.confirmGroup",
+    "en": "Every member gets the new key from this device. Whoever holds only the old key, such as a lost device, can’t read anything here any more — neither what is added nor what is already here. What they already saw stays seen, and links made before keep working until they are renewed or turned off.",
+    "de": "Jedes Mitglied bekommt den neuen Schlüssel von diesem Gerät. Wer nur den alten Schlüssel hat, etwa ein verlorenes Gerät, kann hier nichts mehr lesen – weder was dazukommt noch was schon da ist. Was schon gesehen wurde, bleibt gesehen, und vorher erstellte Links funktionieren weiter, bis sie erneuert oder abgeschaltet werden."
+  },
+  "space_lock_done": {
+    "note": "the web's spaceLock.done",
+    "en": "This space has its new lock.",
+    "de": "Dieser Bereich hat sein neues Schloss."
+  },
+  "space_lock_failed": {
+    "note": "the web's spaceLock.failed",
+    "en": "The new lock could not be put in. Nothing was changed. Please try again.",
+    "de": "Das neue Schloss konnte nicht eingebaut werden. Es wurde nichts geändert. Bitte versuch es erneut."
+  },
+  "space_lock_remove_option": {
+    "note": "the web's spaceLock.removeOption",
+    "en": "Also give this space a new lock",
+    "de": "Auch ein neues Schloss einbauen"
+  },
+  "space_lock_remove_option_hint": {
+    "note": "the web's spaceLock.removeOptionHint",
+    "en": "The removal already shuts them out of the app. A new lock also keeps a copy of the key they may have kept from opening anything here.",
+    "de": "Die Entfernung sperrt die Person in der App schon aus. Mit einem neuen Schloss öffnet auch eine Kopie des Schlüssels, die sie behalten haben könnte, hier nichts mehr."
+  },
+  "space_lock_removed_not_rekeyed": {
+    "note": "the web's spaceLock.removedNotRekeyed",
+    "en": "The member was removed, but the new lock could not be put in. Try again with “Give it a new lock” below.",
+    "de": "Das Mitglied wurde entfernt, aber das neue Schloss konnte nicht eingebaut werden. Versuch es unten mit „Neues Schloss einbauen“ noch einmal."
+  },
+  "space_links_title": {
+    "note": "the web's spaceLinks.title",
+    "en": "Links",
+    "de": "Links"
+  },
+  "space_links_sub": {
+    "note": "the web's spaceLinks.sub",
+    "en": "Every public link in this space — to folders, files, drop boxes and Memories. If one may have reached the wrong hands, turn them all off at once.",
+    "de": "Jeder öffentliche Link in diesem Bereich — zu Ordnern, Dateien, Briefkästen und Erinnerungen. Wenn einer in falsche Hände geraten sein könnte, schalte alle auf einmal ab."
+  },
+  "space_links_revoke_all": {
+    "note": "the web's spaceLinks.revokeAll",
+    "en": "Turn off every link",
+    "de": "Alle Links abschalten",
+    "apple_en": "Turn Off Every Link"
+  },
+  "space_links_revoke_all_confirm": {
+    "note": "the web's spaceLinks.revokeAllConfirm",
+    "en": "Turn off every public link in this space? They stop working at once and come back only as new links — each link’s owner renews the ones still needed. Guests keep what they added.",
+    "de": "Alle öffentlichen Links in diesem Bereich abschalten? Sie funktionieren sofort nicht mehr und kommen nur als neue Links zurück — wem ein Link gehört, erneuert die noch benötigten. Gäste behalten, was sie hinzugefügt haben."
+  },
+  "space_links_revoke_all_failed": {
+    "note": "the web's spaceLinks.revokeAllFailed",
+    "en": "The links could not be turned off. Please try again.",
+    "de": "Die Links konnten nicht abgeschaltet werden. Bitte erneut versuchen."
+  },
+  "space_icon_change": {
+    "note": "the web's spaceIcon.change",
+    "en": "Change icon",
+    "de": "Icon ändern",
+    "apple_en": "Change Icon"
+  },
+  "space_icon_add": {
+    "note": "the web's spaceIcon.add",
+    "en": "Add icon",
+    "de": "Icon hinzufügen",
+    "apple_en": "Add Icon"
+  },
+  "space_icon_remove": {
+    "note": "the web's spaceIcon.remove",
+    "en": "Remove icon",
+    "de": "Icon entfernen",
+    "apple_en": "Remove Icon"
+  },
+  "space_icon_remove_confirm": {
+    "note": "the web's spaceIcon.removeConfirm",
+    "en": "Remove this space’s icon? It falls back to its initial for everyone.",
+    "de": "Icon dieses Bereichs entfernen? Für alle erscheint dann wieder der Anfangsbuchstabe."
+  },
+  "space_icon_saved": {
+    "note": "the web's spaceIcon.saved",
+    "en": "Icon updated.",
+    "de": "Icon aktualisiert."
+  },
+  "space_icon_removed": {
+    "note": "the web's spaceIcon.removed",
+    "en": "Icon removed.",
+    "de": "Icon entfernt."
+  },
+  "space_icon_failed": {
+    "note": "the web's spaceIcon.failed",
+    "en": "Could not update the icon. Please try again.",
+    "de": "Das Icon konnte nicht aktualisiert werden. Bitte erneut versuchen."
+  },
+  "space_icon_stale": {
+    "note": "the web's spaceIcon.stale",
+    "en": "This space changed just now (a key rotation). Please reopen and try again.",
+    "de": "Der Bereich hat sich gerade geändert (eine Schlüsselrotation). Bitte erneut öffnen und versuchen."
+  },
+  "space_links_revoked": {
+    "note": "the web's spaceLinks.revokedAll (one and more), toasted after Turn off every link",
+    "en": {
+      "one": "One link turned off.",
+      "other": "{1:int} links turned off."
+    },
+    "de": {
+      "one": "Ein Link abgeschaltet.",
+      "other": "{1:int} Links abgeschaltet."
+    }
+  },
+  "space_links_revoked_none": {
+    "note": "the web's spaceLinks.revokedAll at zero",
+    "en": "No link was on.",
+    "de": "Es war kein Link aktiv."
   },
   "search_words_members": {
     "en": "members, people, roles, owner, co-owner, remove",

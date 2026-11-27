@@ -68,8 +68,12 @@ class InvitesLiveTest {
             val stamp = System.currentTimeMillis() % 1_000_000_000
             val email = "tw-join-$stamp@veyq.localhost"
             val password = "join-live-$stamp-pass"
-            val join = TenantJoin.of(p, run.device(), client, assertNotNull(ReceivedLink.inviteOf(link)))
+            // the optional picture at the join (the JVM has no WebP encoder: a test one hands bytes a WebP's header starts)
+            val picture = "RIFF\u0000\u0000\u0000\u0000WEBPVP8 app-join-picture".encodeToByteArray()
+            val join = TenantJoin.of(p, run.device(), client, assertNotNull(ReceivedLink.inviteOf(link))) { _, _, _, _ -> picture.copyOf() }
             join.load()
+            assertTrue(join.choosePicture(ByteArray(ProfileModel.EDGE * ProfileModel.EDGE * 4)), "the picture chosen")
+            assertTrue(join.current.picture && join.current.asksPicture)
             assertEquals(TenantJoin.Phase.REGISTER, join.current.phase, "the link carries its code: straight to the account step, ${join.current}")
             assertTrue(join.current.linkInvite && join.current.role == TenantJoin.Role.MEMBER)
             join.register("joiner$stamp", "Jo", "Iner", email, password)
@@ -93,6 +97,8 @@ class InvitesLiveTest {
             val roster = owner.members.read()
             val joined = roster.rows.single { it.username == "joiner$stamp" }
             assertEquals("Jo Iner", joined.realName, "the name sealed at the join opens for the owner")
+            owner.avatars.sync(assertNotNull(owner.readPeople()).values)
+            kotlin.test.assertContentEquals(picture, owner.avatars.pictureOf(joined.userId), "the picture sealed at the join opens for the owner")
             assertTrue(roster.invites.none { it.link }, "the link invite is spent")
 
             val mailed = owner.invites.inviteByMail("tw-mailed-$stamp@veyq.localhost", null)

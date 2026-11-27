@@ -121,17 +121,21 @@ class ScopeRotation(
      * With [removes] it is a removal-rotation (the web's `rotateGroupForRemoval`): that member is carried in no grant and
      * the server deletes the membership with the commit (`removesUserId`); [revokeLinks] turns off every link of the scope
      * in the same transaction (ADR 0075).
+     *
+     * [excluding] (the web's `excluding`, a tenant's new lock after a removal) is dropped from the list and from every
+     * re-read by the caller's own choice, however the server lists them, but never sent as a `removesUserId`: the new
+     * epoch is never wrapped to them, and a server that kept their membership meets the rotation's cover check.
      */
     suspend fun commitRotation(
         scopeId: String, members: List<ScopeMember>, open: RotationOpener, openTenant: RotationOpener,
-        removes: String? = null, revokeLinks: Boolean = false,
+        removes: String? = null, revokeLinks: Boolean = false, excluding: String? = null,
     ): Long {
         var attempt = 0
         var base: String? = null
         while (true) {
             // the rebuild reads the directory again: the answer that sent it here may be a membership the list lacks
             val listed = (if (attempt == 0) members else sent(account) { ScopesApi(base!!, account.http).listScopeMembers(scopeId) }.body())
-                .filter { it.userId != removes }
+                .let { listedFor(it, removes, excluding) }
             val opened = open(scopeId) ?: throw IllegalStateException("cannot open scope to rotate")
             base = account.originOfTenant(opened.tenantId)
             val newKey = p.randomBytes(32)
@@ -419,6 +423,11 @@ class ScopeRotation(
         const val STAGE_BATCH = 256
 
         /** A rotation built on a superseded epoch, a member list or invites a join changed, or a lagging grant's listing. */
+        /** Who a rotation grants to: the list read, without the member it [removes] and the one it is [excluding] — every row
+         *  of either, a duplicate included. **Load-bearing:** the new epoch is never wrapped to them. */
+        internal fun listedFor(members: List<ScopeMember>, removes: String?, excluding: String?): List<ScopeMember> =
+            members.filter { it.userId != removes && it.userId != excluding }
+
         fun isRebuildable(e: Exception): Boolean = e is RotationRefused && (
             (e.status == 409 && (e.code == "stale_epoch" || e.code == "rotation_incomplete")) || (e.status == 403 && e.code == "grant_behind")
             )

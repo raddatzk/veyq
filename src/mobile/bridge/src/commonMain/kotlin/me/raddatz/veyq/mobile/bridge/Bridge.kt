@@ -897,10 +897,13 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.SessionRequestRecovery, Call.SessionBackToSignIn, Call.LockedPlan, is Call.RecoverPlan,
             Call.SessionAcceptTerms, Call.SettingsTerms -> signInEntries(call, session)
             Call.SettingsTermsEditing, is Call.SettingsTermsEdit, is Call.SettingsTermsSave, Call.SettingsMembers, is Call.SettingsMemberRole, is Call.SettingsMemberRemove,
-            is Call.SettingsInviteLink, is Call.SettingsInviteMail, is Call.SettingsInviteReissue, is Call.SettingsInviteRevoke, is Call.SettingsInviteLabel -> members(call)
+            Call.SettingsMembersNewLock, Call.SettingsMembersRevokeLinks, is Call.SettingsIcon, is Call.SettingsIconSet, is Call.SettingsIconClear,
+            is Call.SettingsInviteLink, is Call.SettingsInviteMail, is Call.SettingsInviteReissue, is Call.SettingsInviteRevoke, is Call.SettingsInviteLabel -> members(call, payload)
             Call.SettingsGroups, is Call.SettingsGroupCreate, is Call.SettingsGroup, is Call.SettingsGroupRename, is Call.SettingsGroupDelete, is Call.SettingsGroupAdd,
-            is Call.SettingsGroupRole, is Call.SettingsGroupRemove, Call.SettingsGroupInvitations, is Call.SettingsGroupInvitationAnswer -> grouping(call)
-            is Call.JoinCode, is Call.JoinChoose, is Call.JoinCheckPassword, is Call.JoinUseAnyway, is Call.JoinRegister, is Call.JoinFinish, is Call.JoinSignIn, is Call.JoinOpen, is Call.JoinClose -> joining(call)
+            is Call.SettingsGroupRole, is Call.SettingsGroupRemove, Call.SettingsGroupInvitations, is Call.SettingsGroupInvitationAnswer,
+            is Call.SettingsGroupNewLock, is Call.SettingsGroupRevokeLinks -> grouping(call)
+            is Call.JoinCode, is Call.JoinChoose, is Call.JoinCheckPassword, is Call.JoinUseAnyway, is Call.JoinRegister, is Call.JoinFinish, is Call.JoinSignIn, is Call.JoinOpen, is Call.JoinClose,
+            is Call.JoinPicture, is Call.JoinRemovePicture, is Call.JoinPictureBytes -> joining(call, payload)
             is Call.SessionForgetDevice -> {
                 val account = session.accounts.firstOrNull { it.key == call.connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
                 session.forgetDevice(account)
@@ -2778,7 +2781,13 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      * Settings' Members and the owner's terms editor (uc.spaces.remove-tenant-member, uc.admin.tenant-terms), dispatched
      * apart: the dispatch's one method is at the JVM's size limit. Every rule is the core's (`TenantMembers`, `MemberTerms`).
      */
-    private suspend fun members(call: Call): Answer = when (call) {
+    /** The picture at [path] cropped square by the host at [pose] ([ProfileModel.EDGE] RGBA), or null: a profile's, an icon's, the join's. */
+    private suspend fun squared(path: String, pose: me.raddatz.veyq.mobile.session.CoverFrame.Pose): ByteArray? {
+        val edge = me.raddatz.veyq.mobile.session.ProfileModel.EDGE
+        return parts.await().squarePicture(path, pose, edge)?.takeIf { it.size == edge * edge * 4 }
+    }
+
+    private suspend fun members(call: Call, payload: (ByteArray) -> Unit): Answer = when (call) {
         Call.SettingsTermsEditing -> tenant.value?.models?.session?.let { Answer.TermsEditing(me.raddatz.veyq.mobile.session.MemberTerms.editing(it, parts.await().language)) } ?: noTenant
         is Call.SettingsTermsEdit -> {
             val d = call.draft
@@ -2793,7 +2802,23 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         is Call.SettingsTermsSave -> tenant.value?.models?.session?.let { me.raddatz.veyq.mobile.session.MemberTerms.save(it, call.draft).let { s -> Answer.TermsSaved(s.draft, s.notice) } } ?: noTenant
         Call.SettingsMembers -> tenant.value?.models?.session?.let { Answer.Members(it.members.read()) } ?: noTenant
         is Call.SettingsMemberRole -> tenant.value?.models?.session?.let { it.members.setRole(call.userId, call.owner).let { o -> Answer.MembersChanged(o.done, o.notice) } } ?: noTenant
-        is Call.SettingsMemberRemove -> tenant.value?.models?.session?.let { it.members.remove(call.userId, call.revokeLinks).let { o -> Answer.MembersChanged(o.done, o.notice) } } ?: noTenant
+        is Call.SettingsMemberRemove -> tenant.value?.models?.session?.let { it.members.remove(call.userId, call.revokeLinks, call.newLock).let { o -> Answer.MembersChanged(o.done, o.notice) } } ?: noTenant
+        Call.SettingsMembersNewLock -> tenant.value?.models?.session?.let { it.members.newLock().let { o -> Answer.MembersChanged(o.done, o.notice) } } ?: noTenant
+        Call.SettingsMembersRevokeLinks -> tenant.value?.models?.session?.let { it.members.revokeAllLinks().let { o -> Answer.MembersChanged(o.done, o.notice) } } ?: noTenant
+        is Call.SettingsIcon -> tenant.value?.models?.session?.let { t ->
+            val picture = t.icons().icon(call.scopeId) ?: return Answer.Refused(Answer.Why.NO_PICTURE)
+            payload(picture)
+            Answer.Bytes(Sniff.image(picture)?.mime)
+        } ?: noTenant
+        is Call.SettingsIconSet -> tenant.value?.models?.session?.let { t ->
+            val rgba = squared(call.path, call.pose) ?: return Answer.Refused(Answer.Why.NOT_A_PICTURE)
+            try {
+                t.icons().set(call.scopeId, rgba).let { o -> Answer.IconChanged(o.done, o.notice) }
+            } finally {
+                rgba.fill(0)
+            }
+        } ?: noTenant
+        is Call.SettingsIconClear -> tenant.value?.models?.session?.let { t -> t.icons().clear(call.scopeId).let { o -> Answer.IconChanged(o.done, o.notice) } } ?: noTenant
         is Call.SettingsInviteLink -> tenant.value?.models?.session?.let { Answer.Invited(it.invites.inviteByLink(call.label)) } ?: noTenant
         is Call.SettingsInviteMail -> tenant.value?.models?.session?.let { Answer.Invited(it.invites.inviteByMail(call.email, call.password)) } ?: noTenant
         is Call.SettingsInviteReissue -> tenant.value?.models?.session?.let { Answer.Invited(it.invites.reissue(call.invite)) } ?: noTenant
@@ -2806,7 +2831,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      * A join from an invite (`TenantJoin`, ADR 0111, ADR 0129): its acts, its kit step held as every flow's ([kits]), and
      * *Open the space* opened as any sign-in is ([opened]). Dispatched apart: the dispatch's one method is at the JVM's size limit.
      */
-    private suspend fun joining(call: Call): Answer {
+    private suspend fun joining(call: Call, payload: (ByteArray) -> Unit): Answer {
         val noJoin = Answer.Refused(Answer.Why.NO_SUCH_FLOW)
         return when (call) {
             is Call.JoinCode -> joins[call.join]?.model?.let { it.code(call.code); Answer.Done } ?: noJoin
@@ -2829,6 +2854,20 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 opened(o).also { managed(parts.await()) }
             } ?: noJoin
             is Call.JoinClose -> joins.remove(call.join)?.close().done(Answer.Why.NO_SUCH_FLOW)
+            is Call.JoinPicture -> joins[call.join]?.model?.let { j ->
+                val rgba = squared(call.path, call.pose) ?: return Answer.Refused(Answer.Why.NOT_A_PICTURE)
+                try {
+                    if (j.choosePicture(rgba)) Answer.Done else Answer.Refused(Answer.Why.NOT_A_PICTURE)
+                } finally {
+                    rgba.fill(0)
+                }
+            } ?: noJoin
+            is Call.JoinRemovePicture -> joins[call.join]?.model?.let { it.removePicture(); Answer.Done } ?: noJoin
+            is Call.JoinPictureBytes -> joins[call.join]?.model?.let { j ->
+                val picture = j.picture() ?: return Answer.Refused(Answer.Why.NO_PICTURE)
+                payload(picture)
+                Answer.Bytes(Sniff.image(picture)?.mime)
+            } ?: noJoin
             else -> error("not a join's call: $call")
         }
     }
@@ -2849,6 +2888,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.SettingsGroupRemove -> Answer.GroupChanged((if (call.rescind) g.rescind(call.scopeId, call.userId) else g.remove(call.scopeId, call.userId, call.revokeLinks)).shown())
             Call.SettingsGroupInvitations -> Answer.GroupInvitations(g.invitations())
             is Call.SettingsGroupInvitationAnswer -> Answer.GroupChanged((if (call.accept) g.accept(call.scopeId) else g.decline(call.scopeId)).shown())
+            is Call.SettingsGroupNewLock -> Answer.GroupChanged(g.newLock(call.scopeId))
+            is Call.SettingsGroupRevokeLinks -> Answer.GroupChanged(g.revokeAllLinks(call.scopeId))
             else -> error("not a group's call: $call")
         }
     }

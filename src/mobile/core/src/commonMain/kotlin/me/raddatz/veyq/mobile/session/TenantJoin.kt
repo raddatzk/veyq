@@ -42,6 +42,7 @@ import me.raddatz.veyq.mobile.crypto.IdentityPrivate
 import me.raddatz.veyq.mobile.crypto.Invites
 import me.raddatz.veyq.mobile.crypto.JoinRecords
 import me.raddatz.veyq.mobile.crypto.OpenRefused
+import me.raddatz.veyq.mobile.crypto.Pad
 import me.raddatz.veyq.mobile.crypto.Primitives
 import me.raddatz.veyq.mobile.crypto.SecretKeyText
 import me.raddatz.veyq.mobile.crypto.Trust
@@ -84,6 +85,8 @@ class TenantJoin internal constructor(
     private val client: (block: HttpClientConfig<*>.() -> Unit) -> HttpClient,
     /** A cold sign-in for the accept and the key's hold: the account door's `signInWithKey`. */
     private val signIn: suspend (server: String, email: String, password: String, secretKey: ByteArray) -> VeyqAccount,
+    /** The optional picture's encoder ([ProfileModel]'s: libwebp's on a native target, the host's on Android). */
+    private val encoder: me.raddatz.veyq.mobile.media.WebpEncoder? = me.raddatz.veyq.mobile.media.coreWebpEncoder,
 ) {
     enum class Phase { LOADING, INVALID, EXPIRED, REDEEMED, CODE, REGISTER, KIT, SIGNIN, DONE }
 
@@ -111,6 +114,8 @@ class TenantJoin internal constructor(
         val confirmationSentTo: String? = null,
         /** *Open the space* is offered: the join is done and this flow still holds the sign-in. */
         val canOpen: Boolean = false,
+        /** An optional picture is chosen ([TenantJoin.picture] its bytes), sealed with the name at the accept (ADR 0084). */
+        val picture: Boolean = false,
     ) {
 
         /** The invitation's line: to own, to join, or to take over. */
@@ -133,6 +138,12 @@ class TenantJoin internal constructor(
 
         /** A handover keeps the member's own handle: no username asked. */
         val asksUsername: Boolean = !handover
+
+        /** The name and the optional picture are asked beside the username (the web's `JoinPicturePicker`), never at a handover. */
+        val asksPicture: Boolean = !handover
+
+        /** The picture's button: *Choose picture* or *Change picture*; *Remove* only once one is chosen. */
+        @Serializable(with = MsgKey::class) val pictureWord: Msg = if (picture) Msg.PROFILE_PICTURE_CHANGE else Msg.PROFILE_PICTURE_CHOOSE
 
         /** The address field: a link invite's, typed; else the invite's, shown. */
         val asksEmail: Boolean = linkInvite
@@ -235,6 +246,36 @@ class TenantJoin internal constructor(
         set { copy(phase = if (register) Phase.REGISTER else Phase.SIGNIN, error = null) }
     }
 
+    /** The picked picture's encoded bytes, kept only in this flow until the accept seals it; null for none. */
+    private var pictureBytes: ByteArray? = null
+
+    /**
+     * The optional picture: [rgba], the platform's square crop ([ProfileModel.EDGE] on a side), encoded by the web's ladder
+     * and kept in memory until the accept seals it (`member-avatar`, under the key the accept holds, bound to the tenant
+     * scope and the new member). False where it does not encode; the state says so.
+     */
+    suspend fun choosePicture(rgba: ByteArray): Boolean {
+        val encoded = ProfileModel.encodeLadder(encoder, rgba)
+        if (encoded == null) {
+            set { copy(error = Msg.PROFILE_PICTURE_FAILED) }
+            return false
+        }
+        pictureBytes?.fill(0)
+        pictureBytes = encoded
+        set { copy(picture = true, error = null) }
+        return true
+    }
+
+    /** *Remove* the chosen picture. */
+    fun removePicture() {
+        pictureBytes?.fill(0)
+        pictureBytes = null
+        set { copy(picture = false) }
+    }
+
+    /** The chosen picture's encoded bytes, a copy for a preview; null for none. */
+    fun picture(): ByteArray? = pictureBytes?.copyOf()
+
     /** The new account's password left its field: checked once against the range service. */
     suspend fun checkPassword(password: String) = passwordCheck.check(password).also { set { copy(breach = passwordCheck.current) } }
 
@@ -288,6 +329,7 @@ class TenantJoin internal constructor(
                     val born = if (o == null) bornTenant(userId, b.identity, identityPub) else null
                     val key = o?.let { it.checked.epochKey to it.checked.grantedEpoch } ?: (born!!.key to 0L)
                     val name = sealedName(key.first, key.second, userId, p.firstName, p.lastName)
+                    val avatar = sealedAvatar(key.first, key.second, userId)
                     val r = TenantsApi(origin, http).registerAndAcceptTenantInvite(
                         RegisterAndAcceptRequest(
                             userId = userId, bootstrapSecret = fragment.token, username = p.username, account = b.material,
@@ -297,6 +339,7 @@ class TenantJoin internal constructor(
                             selfGrant = join?.selfGrant, inviteProof = join?.inviteProof, sealedJoinRecord = join?.sealedJoinRecord,
                             wrappedJoinRecordValueKey = join?.wrappedJoinRecordValueKey, signerIdentityDigest = join?.signerIdentityDigest,
                             sealedName = name?.let { b64(it.sealed) }, wrappedNameValueKey = name?.let { b64(it.wrappedValueKey) },
+                            sealedAvatar = avatar?.let { b64(it.sealed) }, wrappedAvatarValueKey = avatar?.let { b64(it.wrappedValueKey) },
                             epoch = key.second.toInt(), kitRecord = kitRecord,
                         ),
                     )
@@ -342,6 +385,7 @@ class TenantJoin internal constructor(
                                 val born = if (c == null) bornTenant(account.userId, identity, account.myPublic) else null
                                 val key = c?.let { it.checked.epochKey to it.checked.grantedEpoch } ?: (born!!.key to 0L)
                                 val name = sealedName(key.first, key.second, account.userId, firstName, lastName)
+                                val avatar = sealedAvatar(key.first, key.second, account.userId)
                                 val r = account.respond {
                                     TenantsApi(origin, account.http).acceptTenantInvite(
                                         AcceptInviteRequest(
@@ -351,6 +395,7 @@ class TenantJoin internal constructor(
                                             selfGrant = join?.selfGrant, inviteProof = join?.inviteProof, sealedJoinRecord = join?.sealedJoinRecord,
                                             wrappedJoinRecordValueKey = join?.wrappedJoinRecordValueKey, signerIdentityDigest = join?.signerIdentityDigest,
                                             sealedName = name?.let { b64(it.sealed) }, wrappedNameValueKey = name?.let { b64(it.wrappedValueKey) },
+                                            sealedAvatar = avatar?.let { b64(it.sealed) }, wrappedAvatarValueKey = avatar?.let { b64(it.wrappedValueKey) },
                                             epoch = key.second.toInt(),
                                         ),
                                     )
@@ -398,6 +443,8 @@ class TenantJoin internal constructor(
     fun close() {
         opened?.forget()
         opened = null
+        pictureBytes?.fill(0)
+        pictureBytes = null
         built?.zero()
         built = null
         pending = null
@@ -590,6 +637,19 @@ class TenantJoin internal constructor(
     }
 
     /** The OPTIONAL real name sealed under a fresh value key the tenant key wraps, bound to (tenant, member); null when both are empty. */
+    /** The chosen picture sealed as `setMyAvatar` stores it (the web's `sealAvatar`): padded to the one constant length under a
+     *  fresh value key wrapped by the tenant key of [epoch], bound to (tenant scope, [userId]); null for none or a handover. */
+    private fun sealedAvatar(key: ByteArray, epoch: Long, userId: String): JoinRecords.SealedValue? {
+        val bytes = pictureBytes ?: return null
+        if (current.handover) return null
+        val padded = Pad.padTo(bytes, MemberAvatars.PADDED_LEN)
+        try {
+            return joins.sealValueField(tenantId, epoch, key, MemberAvatars.context(tenantId, userId), padded)
+        } finally {
+            padded.fill(0)
+        }
+    }
+
     private fun sealedName(key: ByteArray, epoch: Long, userId: String, first: String, last: String): JoinRecords.SealedValue? {
         if (first.isBlank() && last.isBlank()) return null
         val text = buildJsonObject {
@@ -677,6 +737,8 @@ class TenantJoin internal constructor(
     private fun finish(email: String, password: String, secretKey: String, confirmationSentTo: String?) {
         opened?.forget()
         opened = null
+        pictureBytes?.fill(0)
+        pictureBytes = null
         built?.zero()
         built = null
         pending = null
@@ -739,9 +801,10 @@ class TenantJoin internal constructor(
             device: ThisDevice,
             client: (block: HttpClientConfig<*>.() -> Unit) -> HttpClient,
             invite: me.raddatz.veyq.mobile.sharing.ReceivedLink.InviteLink,
-        ): TenantJoin = TenantJoin(primitives, invite.origin, Invites.parseFragment(invite.fragment), client) { s, e, p, k ->
+            encoder: me.raddatz.veyq.mobile.media.WebpEncoder? = me.raddatz.veyq.mobile.media.coreWebpEncoder,
+        ): TenantJoin = TenantJoin(primitives, invite.origin, Invites.parseFragment(invite.fragment), client, { s, e, p, k ->
             VeyqAccount.signInWithKey(primitives, s, e, p, k, device, client)
-        }
+        }, encoder)
 
         private val ATOM = Regex("^[A-Za-z0-9!#$%&'*+\\-/=?^_`{|}~]+$")
         private val LABEL = Regex("^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")

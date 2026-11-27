@@ -280,15 +280,7 @@ class ProfileModel(
     }
 
     /** The web's `renderSpaceIcon` ladder: the first quality whose encode fits [BUDGET]; null when none does. */
-    private suspend fun encode(rgba: ByteArray): ByteArray? {
-        require(rgba.size == EDGE * EDGE * 4) { "a picture is $EDGE × $EDGE RGBA" }
-        val e = encoder ?: return null
-        for (q in QUALITY_STEPS) {
-            val bytes = e.encode(rgba, EDGE, EDGE, q) ?: continue
-            if (bytes.size <= BUDGET) return bytes
-        }
-        return null
-    }
+    private suspend fun encode(rgba: ByteArray): ByteArray? = encodeLadder(encoder, rgba)
 
     // ---- the key ----
 
@@ -339,6 +331,18 @@ class ProfileModel(
         /** `spaceIconImage.ts`'s ladder: stepped down only when an encode overflows [BUDGET]. */
         val QUALITY_STEPS = listOf(0.9, 0.82, 0.72, 0.62, 0.5, 0.4)
         internal const val STALE_EPOCH = "stale_epoch"
+
+        /** [rgba] ([EDGE] × [EDGE]) encoded by [encoder] at the first of [QUALITY_STEPS] that fits [BUDGET]; null when none
+         *  does or there is no encoder. A profile picture's, a space icon's and the join's picture alike (one pad, 16 KiB). */
+        internal suspend fun encodeLadder(encoder: WebpEncoder?, rgba: ByteArray): ByteArray? {
+            require(rgba.size == EDGE * EDGE * 4) { "a picture is $EDGE × $EDGE RGBA" }
+            val e = encoder ?: return null
+            for (q in QUALITY_STEPS) {
+                val bytes = e.encode(rgba, EDGE, EDGE, q) ?: continue
+                if (bytes.size <= BUDGET) return bytes
+            }
+            return null
+        }
         internal const val USERNAME_TAKEN = "username_taken"
     }
 }

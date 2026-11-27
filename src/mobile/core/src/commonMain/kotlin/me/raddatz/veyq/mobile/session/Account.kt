@@ -2317,6 +2317,9 @@ class TenantSession internal constructor(
     /** One's own profile in this tenant (ADR 0148 decision 2): a new model each time a place opens it; the host closes it. Android, whose core target has no libwebp, hands its own [encoder]. */
     fun profile(encoder: me.raddatz.veyq.mobile.media.WebpEncoder? = me.raddatz.veyq.mobile.media.coreWebpEncoder): ProfileModel = ProfileModel(TenantProfileDoor(this), account.suite, encoder)
 
+    /** The icons of the tenant and its groups (uc.spaces.set-space-icon): opened here, set and removed by an owner; [encoder] as [profile]'s. */
+    fun icons(encoder: me.raddatz.veyq.mobile.media.WebpEncoder? = me.raddatz.veyq.mobile.media.coreWebpEncoder): ScopeIcons = ScopeIcons(this, encoder)
+
     /** The kept time each of this tenant's pages shows offline (a Pot, a gallery): the shell's banner names the open page's. */
     val pagesOffline: me.raddatz.veyq.mobile.offline.PagesOffline = me.raddatz.veyq.mobile.offline.PagesOffline()
 

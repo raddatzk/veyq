@@ -198,8 +198,26 @@ internal sealed class Call {
     /** *Make co-owner* ([owner]) or *Remove co-owner* on [userId]'s row (`TenantMembers.setRole`): [Answer.MembersChanged]. */
     @Serializable @SerialName("Settings.MemberRole") data class SettingsMemberRole(val userId: String, val owner: Boolean) : Call()
 
-    /** *Remove member* after its question, every link of the space off too where [revokeLinks] (`TenantMembers.remove`): [Answer.MembersChanged]. */
-    @Serializable @SerialName("Settings.MemberRemove") data class SettingsMemberRemove(val userId: String, val revokeLinks: Boolean) : Call()
+    /**
+     * *Remove member* after its question, every link of the space off too where [revokeLinks] and the space given a new
+     * lock after it where [newLock] (`TenantMembers.remove`): [Answer.MembersChanged].
+     */
+    @Serializable @SerialName("Settings.MemberRemove") data class SettingsMemberRemove(val userId: String, val revokeLinks: Boolean, val newLock: Boolean = false) : Call()
+
+    /** *Give it a new lock* on the open tenant, after its question (`TenantMembers.newLock`): [Answer.MembersChanged]. */
+    @Serializable @SerialName("Settings.MembersNewLock") data object SettingsMembersNewLock : Call()
+
+    /** *Turn off every link* of the open tenant, after its question (`TenantMembers.revokeAllLinks`): [Answer.MembersChanged]. */
+    @Serializable @SerialName("Settings.MembersRevokeLinks") data object SettingsMembersRevokeLinks : Call()
+
+    /** The icon of [scopeId] (the tenant's or a group's, `ScopeIcons.icon`): [Answer.Bytes] with the picture as the payload, or `NO_PICTURE`. */
+    @Serializable @SerialName("Settings.Icon") data class SettingsIcon(val scopeId: String) : Call()
+
+    /** *Add icon* / *Change icon*: the picture at [path] cropped square by the host at [pose] (`HostRequest.PictureSquare`), set as [scopeId]'s icon: [Answer.IconChanged]. */
+    @Serializable @SerialName("Settings.IconSet") data class SettingsIconSet(val scopeId: String, val path: String, val pose: me.raddatz.veyq.mobile.session.CoverFrame.Pose) : Call()
+
+    /** *Remove icon* after its question: [Answer.IconChanged]. */
+    @Serializable @SerialName("Settings.IconClear") data class SettingsIconClear(val scopeId: String) : Call()
 
     /** *Invite member* by link (`TenantInvites.inviteByLink`, ADR 0129 decision 1): the owners' optional [label]. [Answer.Invited], its link once. */
     @Serializable @SerialName("Settings.InviteLink") data class SettingsInviteLink(val label: String? = null) : Call()
@@ -246,6 +264,12 @@ internal sealed class Call {
     /** *Accept* ([accept]) or *Decline* an invitation (`TenantGroups.accept`/`decline`): [Answer.GroupChanged]. */
     @Serializable @SerialName("Settings.GroupInvitationAnswer") data class SettingsGroupInvitationAnswer(val scopeId: String, val accept: Boolean) : Call()
 
+    /** *Give it a new lock* on a group, after its question (`TenantGroups.newLock`): [Answer.GroupChanged]. */
+    @Serializable @SerialName("Settings.GroupNewLock") data class SettingsGroupNewLock(val scopeId: String) : Call()
+
+    /** *Turn off every link* of a group, after its question (`TenantGroups.revokeAllLinks`): [Answer.GroupChanged]. */
+    @Serializable @SerialName("Settings.GroupRevokeLinks") data class SettingsGroupRevokeLinks(val scopeId: String) : Call()
+
     /** A join's member invite opened with the [code] (or password) typed (`TenantJoin.code`). Inward once, never back. */
     @Serializable @SerialName("Join.Code") data class JoinCode(val join: Long, val code: String) : Call()
 
@@ -279,6 +303,15 @@ internal sealed class Call {
 
     /** The join's screen closed: every secret it held zeroed. */
     @Serializable @SerialName("Join.Close") data class JoinClose(val join: Long) : Call()
+
+    /** The join's optional picture: the picture at [path] cropped square by the host at [pose] (`TenantJoin.choosePicture`): [Answer.Done] or `NOT_A_PICTURE`. */
+    @Serializable @SerialName("Join.Picture") data class JoinPicture(val join: Long, val path: String, val pose: me.raddatz.veyq.mobile.session.CoverFrame.Pose) : Call()
+
+    /** *Remove* the join's chosen picture (`TenantJoin.removePicture`). */
+    @Serializable @SerialName("Join.RemovePicture") data class JoinRemovePicture(val join: Long) : Call()
+
+    /** The join's chosen picture for its preview: [Answer.Bytes], or `NO_PICTURE`. */
+    @Serializable @SerialName("Join.PictureBytes") data class JoinPictureBytes(val join: Long) : Call()
 
     /**
      * "Manage servers" opened: [Watched.Manage] delivers every server with its trust from now on, each tenant's spaces as
@@ -2194,6 +2227,9 @@ internal sealed class Answer {
 
     /** [Call.SettingsMemberRole], [Call.SettingsMemberRemove]: whether it went through ([done]: read the roster anew), and what is said. */
     @Serializable @SerialName("MembersChanged") data class MembersChanged(val done: Boolean, val notice: Notice) : Answer()
+
+    /** [Call.SettingsIconSet], [Call.SettingsIconClear]: whether it went through ([done]: ask `Settings.Icon` anew), and what is said. */
+    @Serializable @SerialName("IconChanged") data class IconChanged(val done: Boolean, val notice: Notice) : Answer()
 
     /** *Reset your password*'s entries in their order ([Call.RecoverPlan]). */
     @Serializable @SerialName("RecoverPlan") data class RecoverPlan(val entries: List<me.raddatz.veyq.mobile.session.RecoverEntry>) : Answer()

@@ -32,7 +32,12 @@ class TenantMembers internal constructor(private val tenant: TenantSession) {
         val retry: Boolean,
         /** The owners' pending invites (uc.spaces.manage-member-invites); empty for a member. */
         val invites: List<TenantInvites.PendingInvite> = emptyList(),
-    )
+        /** The tenant's name, the identity header's (server-visible metadata, as the web's header shows it). */
+        val tenantName: String = "",
+    ) {
+        /** *Add icon* / *Change icon* and *Remove icon*, the *Links* and *New lock* sections: an owner's (the web's panel). */
+        val ownerActs: Boolean = owner && said == null
+    }
 
     /** A member's role in the tenant. */
     enum class MemberRole { OWNER, MEMBER }
@@ -54,6 +59,8 @@ class TenantMembers internal constructor(private val tenant: TenantSession) {
         val demote: Boolean,
         /** *Remove member*: the caller owns the tenant and this is no owner (owners are managed by co-ownership, as on the web). */
         val remove: Boolean,
+        /** The identity-trust badge ([MemberBadge.of], the web's `MemberTrustBadge`); null where the row shows none. */
+        val badge: MemberBadge? = null,
     ) {
         // the fields below are carried by the bridge as they are (its JSON encodes defaults), so a host decides none of them
         /** The row's title: the real name, else `@username` (the web's `fullName || '@' + username`). */
@@ -70,6 +77,12 @@ class TenantMembers internal constructor(private val tenant: TenantSession) {
 
         /** The pending badge's word; null where the member is current. */
         val pendingWord: Msg? = if (pending) Msg.MEMBERS_PENDING else null
+
+        /** The trust badge's word; null where none shows. */
+        val badgeWord: Msg? = badge?.word
+
+        /** The anomaly's note beside its badge; null otherwise. */
+        val badgeNote: Msg? = badge?.note
     }
 
     /** How a role change or a removal ended: [done] where it went through, [notice] what is said either way. */
@@ -81,14 +94,18 @@ class TenantMembers internal constructor(private val tenant: TenantSession) {
         val tenantId = tenant.tenant.tenantId
         val (key, epoch) = tenant.scopeKey(tenantId) ?: return NOT_AUTHORIZED
         val members = tenant.account.members(tenant.base, tenantId, tenantId) ?: return FAILED
-        val owner = try {
-            myRole() ?: return FAILED
+        val mine = try {
+            myTenant() ?: return FAILED
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             return FAILED
-        } == MyTenant.Role.OWNER
-        val roster = assemble(members, owner) { m -> People.realName(JoinRecords(tenant.account.suite), tenantId, key, epoch.toLong(), m) }
+        }
+        val owner = mine.role == MyTenant.Role.OWNER
+        // the badges are display only: a trust read that fails leaves every row without one, never the roster unread
+        val badges = MemberBadge.of(tenant.personTrust.whosWho())
+        val roster = assemble(members, owner, badges) { m -> People.realName(JoinRecords(tenant.account.suite), tenantId, key, epoch.toLong(), m) }
+            .copy(tenantName = mine.name)
         // only an owner may read the pending list (the server refuses anyone else)
         return if (owner) roster.copy(invites = tenant.invites.pending()) else roster
     }
@@ -116,20 +133,46 @@ class TenantMembers internal constructor(private val tenant: TenantSession) {
      * decision 9; the web's `rekeyClosedScopes`).
      */
     @Throws(Exception::class)
-    suspend fun remove(userId: String, revokeLinks: Boolean): Outcome = attempt(Msg.MEMBERS_ACTION_FAILED) {
+    suspend fun remove(userId: String, revokeLinks: Boolean, newLock: Boolean = false): Outcome = attempt(Msg.MEMBERS_ACTION_FAILED) {
         val r = tenant.account.respond {
             TenantsApi(tenant.base, tenant.account.http).removeTenantMember(tenant.tenant.tenantId, userId, if (revokeLinks) true else null)
         }
         if (!r.success) return@attempt Outcome(false, Notice(Msg.MEMBERS_ACTION_FAILED))
+        // LOAD-BEARING ORDER (the web's): the removal first, the new lock only once it landed, so the rotation's member set
+        // is one the member is no longer in — and they are excluded from it by the owner's choice however the server lists them
+        if (newLock) {
+            val locked = newLock(excluding = userId)
+            if (!locked.done) return@attempt Outcome(true, Notice(Msg.SPACE_LOCK_REMOVED_NOT_REKEYED))
+            return@attempt Outcome(true, Notice(Msg.MEMBERS_REMOVED))
+        }
         runCatching { tenant.reopenMoved() }.onFailure { if (it is CancellationException) throw it }
         tenant.resumeRekeys()
         Outcome(true, Notice(Msg.MEMBERS_REMOVED))
     }
 
-    private suspend fun myRole(): MyTenant.Role? {
+    /**
+     * *Give it a new lock* (ADR 0025 § 2; the web's `rekeySpace`): the tenant's next epoch, the one rotation every rotation is
+     * ([ScopeRotation.commitRotation]) — every member this device anchors and every open invite it vouches for re-granted,
+     * the rest declared pending — over the directory read now, [excluding] (the member a removal just took out) dropped
+     * from it. Never a `removesUserId`: a tenant member leaves only by the removal cascade. Then the nodes are re-keyed on
+     * this device at once (ADR 0109); where that does not finish, the space re-keys on and the notice says so.
+     */
+    @Throws(Exception::class)
+    suspend fun newLock(excluding: String? = null): Outcome = attempt(Msg.SPACE_LOCK_FAILED) {
+        val tenantId = tenant.tenant.tenantId
+        Locks.newLock(tenant, tenantId, excluding).let { Outcome(it.done, it.notice) }
+    }
+
+    /** *Turn off every link* of the space (ADR 0075 point 5): how many went off is said; the closes' re-keys run in the background. */
+    @Throws(Exception::class)
+    suspend fun revokeAllLinks(): Outcome = attempt(Msg.SPACE_LINKS_REVOKE_ALL_FAILED) {
+        Locks.revokeLinks(tenant, tenant.tenant.tenantId).let { Outcome(it.done, it.notice) }
+    }
+
+    private suspend fun myTenant(): MyTenant? {
         val r = tenant.account.respond { ScopesApi(tenant.base, tenant.account.http).listMyTenants() }
         if (!r.success) return null
-        return r.body().firstOrNull { it.tenantId == tenant.tenant.tenantId }?.role
+        return r.body().firstOrNull { it.tenantId == tenant.tenant.tenantId }
     }
 
     private inline fun attempt(failed: Msg, block: () -> Outcome): Outcome = try {
@@ -151,7 +194,7 @@ class TenantMembers internal constructor(private val tenant: TenantSession) {
          * [name] each member's real name. **Load-bearing:** only an owner's roster offers an act, and *Remove member* never
          * on an owner's row.
          */
-        fun assemble(members: List<ScopeMember>, owner: Boolean, name: (ScopeMember) -> String?): Roster {
+        fun assemble(members: List<ScopeMember>, owner: Boolean, badges: Map<String, MemberBadge> = emptyMap(), name: (ScopeMember) -> String?): Roster {
             if (members.isEmpty()) return Roster(emptyList(), owner, Msg.MEMBERS_EMPTY, retry = false)
             val rows = members.map { m ->
                 val role = if (m.role == ScopeMember.Role.OWNER) MemberRole.OWNER else MemberRole.MEMBER
@@ -165,6 +208,7 @@ class TenantMembers internal constructor(private val tenant: TenantSession) {
                     promote = owner && role == MemberRole.MEMBER,
                     demote = owner && role == MemberRole.OWNER,
                     remove = owner && role != MemberRole.OWNER,
+                    badge = badges[m.userId],
                 )
             }
             return Roster(rows, owner, null, retry = false)
