@@ -1340,11 +1340,12 @@ class AccountDoor(
         account.open(tenant).also { it.rekeyRules = me.raddatz.veyq.mobile.AppKinds.rules }
 
     /**
-     * The tenant shown: the scopes served as re-keying are finished in the background ([TenantSession.resumeRekeys]), and
-     * the account's pins synced by the build's kinds ([AppKinds.pins], ADR 0140 decision 9) — at each open, online.
+     * The tenant shown: the scopes served as re-keying are finished in the background ([TenantSession.resumeRekeys]), the
+     * task queue's jobs run while it stays open (`TaskQueue`), and the account's pins synced by the build's kinds ([AppKinds.pins], ADR 0140 decision 9) — at each open, online.
      */
     override fun opened(session: TenantSession) {
         session.resumeRekeys()
+        session.tasks.start()
         session.account.offlinePins?.start(session, me.raddatz.veyq.mobile.AppKinds.pins)
     }
     override suspend fun spaces(session: TenantSession): List<SpaceRef> = session.spaces()

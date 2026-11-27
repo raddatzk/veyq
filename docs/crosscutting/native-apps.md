@@ -146,6 +146,13 @@ The bridge carries `Trust.WhosWho`. No TV draws it. Held by `WhosWhoTest` (bitte
 (API 36 emulator, English and German, a row into the profile), iOS (an iPhone 18 Pro simulator, German, a row into the
 profile), Linux (Broadway, a row into the profile) and Windows (the VM, German: *Not verified* and *New* with *Compare safety
 numbers* into the profile); macOS and tvOS built, the Mac's sheet never clicked (the coordinator's).
+**The task queue's jobs, in the core** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) § The task queue's jobs, built
+2026-11-28; ADR 0021): while a tenant is open, every 45 s, the core claims each open shared scope's `grant-delivery` jobs
+and, on a scope the account owns, its `scope-rotation` jobs, and completes them as the web's workers do
+(`session/tasks/TaskQueue`); never in an OS-scheduled run. No platform code, nothing shown. Held by `TaskPassTest` and
+`TaskTagsTest`, and live as a throwaway with its member by `LiveTaskQueueTest` (a queued rotation completed). No device
+pass shows anything; the five builds carry it.
+
 **Groups, on all four apps** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) § Groups, built
 2026-11-27): a group's name opens on the device and names it in the switcher (`session/GroupNames`); Settings' **Groups**
 lists the caller's groups with *Create group*, and a group's page renames it, adds members by username (a proposal where
@@ -786,7 +793,7 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   the Members panel's and a group page's status lines (the re-keying and resealing hints, a stuck compromise rotation's
   notice), a space's picture in the switcher and the drawer (the apps show it on the Members header and a group's page
   only), finishing a recovery (the apps ask for the reset link; the web finishes it), the trust reset,
-  the moderation key (#965), the task queue's jobs (#966), and an in-app choice of appearance and language (the apps follow the system's; the desktops
+  the moderation key (#965), and an in-app choice of appearance and language (the apps follow the system's; the desktops
   have no per-app language of their own).
 - Reopening where the person left and a place reached from outside (ADR 0150 § O5–O6, built 2026-11-27; passed on Android
   and Linux as throwaways and by the core's tests): Apple, Windows, a real browser's `veyq://open` and the Mac's `open` (#1424);

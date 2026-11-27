@@ -366,6 +366,40 @@ Consequences: proved by `GroupNamesTest`, `TenantGroupsTest`, `ShellWordsTest`, 
 `WireTest` and `DispatchTest`, and live as a throwaway with its member by `GroupsLiveTest`. The passes are in
 native-apps § Built, by area.
 
+## The task queue's jobs (inbox #966, built 2026-11-28)
+
+The web's workers of the operator-blind task queue (ADR 0021; `grantDeliveryWorker.ts`, `scopeRotationWorker.ts`;
+uc.spaces.complete-queued-rotation) run in the apps too (owner 2026-11-26), so a person who uses only an app no longer
+leaves a queued rotation (a proposal declined or withdrawn, a member removed from the tenant while sharing a group) or a
+behind member's grant undone. It was decided as follows:
+
+1. **The rules are the core's** (`session/tasks/TaskQueue.kt`): `TaskPass` ports both workers case for case — a
+   delivery anchored in the scope's tenant (an anomaly declined `identity_unanchored`, a refused pin store pausing the
+   scope and declining nothing), sealed to the target at the epoch held and completed stating it, `409 stale_epoch` /
+   `recipient_key_not_current` ending the scope; a rotation re-keyed and completed where an earlier lease committed it,
+   else the directory read **after** the claim and the next epoch committed (`ScopeRotation.commitRotation`, removing and
+   excluding nobody), the nodes re-keyed, the job completed, its lease renewed every 30 s; `stale_epoch` and
+   `not_scope_owner` declined, any other failure failed back (`rotate-failed`), a job of another tag failed back. The
+   capability tags are the registry's (`TaskTagsTest`).
+2. **Claimed per open shared scope, the scope named.** The web delivers for its one active scope and claims rotations
+   account-wide; the apps have no active scope, and a rotation claimed account-wide may lie in a tenant this device has not
+   open, whose key it cannot use (failing it spends an attempt). So each open TENANT and GROUP scope is claimed with its id
+   — `grant-delivery`, and `scope-rotation` where this account owns it, in one claim —, one request per scope and pass; a
+   PERSONAL scope is never claimed. A rotation in a tenant no device of the owner opens waits, as on the web it waits for a
+   tab on that tenant.
+3. **While the tenant is open, every 45 s** (the web's poll): started where the tenant is shown (`AccountDoor.opened`,
+   beside the re-key resume), stopped by `TenantSession.close()`, each pass only while the account is online, not opened
+   offline and not closed. **Never in an OS-scheduled background run** (`BackgroundRun`, ADR 0153 decision 8): a job is the
+   open tenant's work, as on the web the open tab's; a phone in the background runs on only as long as its process is
+   left. No platform code: nothing is shown, as on the web.
+
+Consequences: a tenant with many groups sends one claim per group every 45 s while it is open (a `204` without a body).
+Proved by `TaskPassTest` (every rule above bitten: an anomaly sealed, a refusal declined, a stale epoch drained on, a key
+copy left unzeroed, a member claiming rotations, a stale rotation failed, no renewal, a pass while not working, a stop
+that keeps the loop — each red) and `TaskTagsTest`, and live as a throwaway with its member by `LiveTaskQueueTest`
+(`:composition`: a member removed from the tenant while in the owner's group; the queued rotation completed by the
+owner's core, the group at its next epoch; bitten by leaving the commit out: red).
+
 ## Alternatives considered
 
 - **A separate "Trusted devices" screen** — a second list of the same families, which the web does not have.

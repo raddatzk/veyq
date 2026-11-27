@@ -657,6 +657,9 @@ class VeyqAccount private constructor(
     /** Whether this account is closed: its keys zeroed, nothing sent any more. */
     internal val isClosed: Boolean get() = closed
 
+    /** Whether this account's background work may send now: online, not opened offline with nothing sent yet, not closed. */
+    internal val works: Boolean get() = reach.value == Reach.Online && !sendsNothing && !closed
+
     /**
      * The account rotation's finish (`finishRotation`): run once at every unlock — every path that hands out an account
      * online ([finish]) and every reconnect after an offline unlock — and every [RotationFinisher.EVERY] while the account is
@@ -664,7 +667,7 @@ class VeyqAccount private constructor(
      */
     @PlatformApi
     @HiddenFromObjC
-    val rotations = me.raddatz.veyq.mobile.session.rotation.RotationFinisher(background, { reach.value == Reach.Online && !sendsNothing && !closed }) {
+    val rotations = me.raddatz.veyq.mobile.session.rotation.RotationFinisher(background, { works }) {
         me.raddatz.veyq.mobile.session.rotation.finishOnce(this)
     }
 
@@ -2368,6 +2371,9 @@ class TenantSession internal constructor(
     @HiddenFromObjC
     fun scopeKind(scopeId: String): String? = scopes.firstOrNull { it.summary.id == scopeId }?.summary?.kind?.value
 
+    /** The ids of the open scopes, in the order they opened. */
+    internal fun openScopeIds(): List<String> = scopes.map { it.summary.id }
+
     /** The summary [scopeId]'s open scope was read with; null where it is not open. */
     internal fun summaryOf(scopeId: String): ScopeSummary? = scopes.firstOrNull { it.summary.id == scopeId }?.summary
 
@@ -2421,7 +2427,18 @@ class TenantSession internal constructor(
      * The tenant closes — a switch, a lock, a sign-out: the tree read and everything derived from it ([fromTree]) are
      * dropped now, not whenever this session is collected. A read after it reads anew.
      */
-    fun close() = forgetTree()
+    fun close() {
+        tasks.stop()
+        forgetTree()
+    }
+
+    /**
+     * The task queue's jobs this device runs for the tenant while it is open (inbox #966, the web's `grantDeliveryWorker`
+     * and `scopeRotationWorker`): started when the tenant is shown (`AccountDoor.opened`), stopped by [close].
+     */
+    @PlatformApi
+    @HiddenFromObjC
+    val tasks: me.raddatz.veyq.mobile.session.tasks.TaskQueue by lazy { me.raddatz.veyq.mobile.session.tasks.TaskQueue.of(this) }
 
     /**
      * What is derived from the tree as last read ([trees]) and held in memory only — never on disk (a person's index,

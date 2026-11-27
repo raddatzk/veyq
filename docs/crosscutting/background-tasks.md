@@ -16,7 +16,9 @@ reference; the decisions + rationale live in [ADR 0021](../decisions/0021-operat
   commit a rotation ([ADR 0021](../decisions/0021-operator-blind-background-tasks.md) §4). **Capability = opaque
   tags** the worker can process.
 - **A worker is a member's own device** — the web tab, an app while idle, or a headless host the member runs, never a
-  part of the instance ([ADR 0132](../decisions/0132-a-content-job-runs-on-a-members-own-device-and-adds-its-result-to-the-object-later.md) decisions 1 and 8). **Planned, not built:** each worker holds its lease
+  part of the instance. **Built:** the web's two workers (`features/tasks/`) and the apps' port of them in the Kotlin core
+  (`session/tasks/TaskQueue`, ADR 0148 § The task queue's jobs: each open shared scope claimed by its id every 45 s while
+  a tenant is open, never in an OS-scheduled run) ([ADR 0132](../decisions/0132-a-content-job-runs-on-a-members-own-device-and-adds-its-result-to-the-object-later.md) decisions 1 and 8). **Planned, not built:** each worker holds its lease
   under an id of its own, not the account's, and a decline excludes that worker unless its tag says the account
   (decision 2); a content job is enqueued once per object and its done row kept while the object lives (decision 3);
   its result is a derived blob added to the object later (decision 5).
@@ -54,7 +56,7 @@ sequenceDiagram
 
 - **Claim / lease.** Atomic: a compare-and-set on `status` ([§ Persistence](#persistence)). Every claim leases with a
   **TTL**; expensive jobs **heartbeat** to keep it. The TTL is `veyq.tasks.lease.ttl`, **2 min** by default, and the
-  web worker renews it every **30 s** while it works, so a hidden tab whose timers the browser throttles to one a
+  web worker (and the apps' core) renews it every **30 s** while it works, so a hidden tab whose timers the browser throttles to one a
   minute still keeps it; a Server Owner who sets it below about **60 s** defeats the renewal, and such a tab loses a
   job it is still working on. A worker that stops — a tab closed, reloaded or navigated away — frees its job only when
   the lease runs out: there is **no release endpoint** on `pagehide`, and a holder does not take over its own valid

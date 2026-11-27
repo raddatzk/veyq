@@ -38,7 +38,7 @@ gradle.taskGraph.whenReady {
 fun Project.isCoreModule() = path == ":core" || path == ":composition" || path == ":testing" || path.startsWith(":apps:")
 
 /** The platform's specs, the ones a member's app calls; an application's are every spec in `contracts/api/<application>/`. */
-val coreSpecs = listOf("setup", "auth", "account", "scopes", "content", "favorites", "tenants", "blob", "sharing", "moderation")
+val coreSpecs = listOf("setup", "auth", "account", "scopes", "content", "favorites", "tenants", "blob", "sharing", "moderation", "tasks")
 val contracts = rootDir.resolve("../../contracts/api").canonicalFile
 // The conformance suite reads the vectors from where every client reads them: contracts/crypto/vectors/v1.json.
 val vectors = rootDir.resolve("../../contracts/crypto/vectors/v1.json").canonicalFile

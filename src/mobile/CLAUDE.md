@@ -114,7 +114,10 @@ A Gradle build of its own, run through its own wrapper.
   write; Android writes into `CreateDocument`'s stream by `KitStep.saveInto`; Apple's `appleMain` `AppleAccount`). The
   rotation, `session/rotation/`: `AccountRotation` (`rotateKeys` ported, `resumeCommitted`), `KeyRotation` (the web's
   order as one model, a moderator sent to the web), `ScopeRotation` and `FinishRotation` (`commitRotation`, run at
-  every unlock and every 45 s by `RotationFinisher`), `VeyqAccount.swapKeys` (the keys replaced in place, the offline
+  every unlock and every 45 s by `RotationFinisher`), the task queue's jobs (`session/tasks/TaskQueue`: the web's
+  grant-delivery and scope-rotation workers, run while a tenant is open — started by `AccountDoor.opened`, stopped by
+  `TenantSession.close()` —, never in an OS-scheduled run; `TaskPassTest`, `TaskTagsTest`, live `LiveTaskQueueTest` in
+  `:composition`), `VeyqAccount.swapKeys` (the keys replaced in place, the offline
   store wiped and opened anew), Memories' item marks through `AppKinds.masterKeyRotated`
   (`memories/ItemMarksRotation`). The bridge carries each as a model with an id, typed secrets inbound only
   (`SecretFreeSchemaTest`'s `typedIn`), the kit's save as `Kit.Save` by path; `closeTenant` drops every flow. The
