@@ -335,7 +335,8 @@ check is logged and retried with a back-off, and blocks nothing.
 - **Lane L3 and the backup archive** (ADR 0091 decisions 3 and 6, amended 2026-11-26): one archived backup per schema
   state of the major, with its object pool, restored into the candidate, each written by its starting release's own API
   seeder and read by the candidate's reader. The archive is written per release by a workflow of its own after the
-  promotion; none of the releases before it has one yet. Lane L2 — the newest release and the major entry installed
+  promotion (`.github/workflows/archive.yml`, built; a dispatch writes it for a release already out); no release is
+  archived yet. Lane L2 — the newest release and the major entry installed
   from their signed releases, upgraded in place by their own `veyqctl upgrade` and rolled back — is built
   (`scripts/run_stack_upgrade.py`, checks.yml's `stack-upgrade`). When L2 and L3 both gate, the jar-level upgrade proof
   retires (decision 7; replaces ADR 0057 § 7).

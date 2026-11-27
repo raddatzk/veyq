@@ -123,6 +123,12 @@ jobs:
       - name: Promotion self-test
         run: .venv/bin/python scripts/promote_selftest.py
 
+      # The backup archive's decisions (scripts/archive_backup.py, run by archive.yml): its reference and the refs it
+      # writes from, the registry's answers, one tar for the same files, archive.json, the manifest and the pull's
+      # refusals — proven on every commit, before a release archives anything.
+      - name: Archive self-test
+        run: .venv/bin/python scripts/archive_backup_selftest.py
+
       # Which staging images publish.yml's weekly retention deletes (scripts/staging_retention.py): proven on every
       # commit that could change it, before its next run deletes anything.
       - name: Staging retention self-test
