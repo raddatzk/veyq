@@ -65,6 +65,9 @@ fun AppRoot(model: AppModel) {
     val termsPage by model.termsPage.collectAsStateWithLifecycle()
     val whosWho by model.whosWho.collectAsStateWithLifecycle()
     val members by model.members.collectAsStateWithLifecycle()
+    val groups by model.groups.collectAsStateWithLifecycle()
+    val group by model.group.collectAsStateWithLifecycle()
+    val invitations by model.invitations.collectAsStateWithLifecycle()
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         // the tenant's terms gate (uc.account.accept-terms) stands in place of the shell, the offer behind it
         val gate = terms
@@ -106,6 +109,23 @@ fun AppRoot(model: AppModel) {
                 invites = InviteActions(model::inviteMember, model::setInviteLabel, model::reissueInvite, model::revokeInvite, model::inviteShownSeen),
                 spaceName = model.tenantName(), onClose = model::closeMembers,
             )
+        }
+        // Settings' Groups (core's `SettingsSection.GROUPS`), over the page; a group's page over the list
+        if (terms == null) groups?.let { GroupsDialog(it, onRetry = model::openGroups, onOpen = model::openGroup, onCreate = model::createGroup, onClose = model::closeGroups) }
+        if (terms == null) group?.let {
+            GroupPageDialog(
+                it,
+                GroupActions(
+                    retry = { model.openGroup(it.scopeId) }, rename = model::renameGroup, add = model::addGroupMember,
+                    setRole = model::setGroupRole, remove = model::removeGroupMember, rescind = model::rescindGroupMember,
+                    delete = model::deleteGroup, restore = model::restoreGroup,
+                ),
+                onClose = model::closeGroup,
+            )
+        }
+        // Settings' Group invitations (core's `SettingsSection.GROUP_INVITATIONS`), over the page
+        if (terms == null) invitations?.let {
+            GroupInvitationsDialog(it, onRetry = model::openGroupInvitations, onAccept = model::acceptGroupInvitation, onDecline = model::declineGroupInvitation, onClose = model::closeGroupInvitations)
         }
         // Settings' Who's who (core's `SettingsSection.WHOS_WHO`), over the page; a row opens the person's profile
         if (terms == null) whosWho?.let { WhosWhoDialog(it, onRetry = model::openWhosWho, onOpen = model::openPersonFromWhosWho, onClose = model::closeWhosWho) }

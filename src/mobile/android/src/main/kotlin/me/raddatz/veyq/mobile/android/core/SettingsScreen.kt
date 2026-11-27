@@ -30,6 +30,8 @@ import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Gavel
 import androidx.compose.material.icons.outlined.Group
+import androidx.compose.material.icons.outlined.GroupAdd
+import androidx.compose.material.icons.outlined.Groups
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Edit
@@ -162,6 +164,12 @@ interface SettingsActions {
 
     /** The open space's terms, read or edited by an owner (core's `SettingsSection.TERMS`, uc.admin.tenant-terms). */
     fun openTerms() {}
+
+    /** The caller's groups in the open space (core's `SettingsSection.GROUPS`, en.spaces.group-scope). */
+    fun openGroups() {}
+
+    /** The caller's group invitations (core's `SettingsSection.GROUP_INVITATIONS`, uc.spaces.consent-group-add). */
+    fun openGroupInvitations() {}
 }
 
 /** A step the page asks to be confirmed first, as the web's `SessionsPanel` does: what it says and what it does. */
@@ -301,6 +309,8 @@ fun SettingsScreen(
                 me.raddatz.veyq.mobile.search.SettingsSection.MEMBERS -> members(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.WHOS_WHO -> whosWho(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.TERMS -> terms(state, actions)
+                me.raddatz.veyq.mobile.search.SettingsSection.GROUPS -> groups(state, actions)
+                me.raddatz.veyq.mobile.search.SettingsSection.GROUP_INVITATIONS -> groupInvitations(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.SIGN_OUT -> signOut(state, actions)
             }
         }
@@ -433,6 +443,33 @@ private fun LazyListScope.terms(state: AccountSettings.State, actions: SettingsA
             leadingContent = { Icon(Icons.Outlined.Gavel, null) },
             colors = listColors(),
             modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openTerms).testTag("settings-terms"),
+        )
+    }
+}
+
+/** The caller's groups in the open space (the web's `groups` category): one row opening the list over Settings. */
+private fun LazyListScope.groups(state: AccountSettings.State, actions: SettingsActions) {
+    header(me.raddatz.veyq.mobile.search.SettingsSection.GROUPS.id, { stringResource(R.string.groups_title) })
+    item(key = "groups") {
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.groups_title)) },
+            leadingContent = { Icon(Icons.Outlined.Groups, null) },
+            colors = listColors(),
+            modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openGroups).testTag("settings-groups"),
+        )
+    }
+}
+
+/** The caller's group invitations (the web's `/invitations` page): one row opening them over Settings. */
+private fun LazyListScope.groupInvitations(state: AccountSettings.State, actions: SettingsActions) {
+    header(me.raddatz.veyq.mobile.search.SettingsSection.GROUP_INVITATIONS.id, { stringResource(R.string.invitations_title) })
+    item(key = "group-invitations") {
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.invitations_title)) },
+            supportingContent = { Text(stringResource(R.string.invitations_sub)) },
+            leadingContent = { Icon(Icons.Outlined.GroupAdd, null) },
+            colors = listColors(),
+            modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openGroupInvitations).testTag("settings-group-invitations"),
         )
     }
 }

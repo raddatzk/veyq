@@ -360,6 +360,152 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         _members.update { it?.copy(shown = null) }
     }
 
+    // ---- the groups (core's `TenantGroups`, en.spaces.group-scope) ----
+
+    private val _groups = MutableStateFlow<GroupsPage?>(null)
+
+    /** Settings' Groups while it is open (core's `TenantGroups.list`); null when closed. */
+    internal val groups: StateFlow<GroupsPage?> = _groups.asStateFlow()
+
+    private val _group = MutableStateFlow<GroupPageState?>(null)
+
+    /** One group's page while it is open, over the list (core's `TenantGroups.page`); null when closed. */
+    internal val group: StateFlow<GroupPageState?> = _group.asStateFlow()
+
+    /** Settings' Groups: the caller's groups, read anew at each open, each *Try again* and after each act that went through. */
+    fun openGroups() {
+        val g = tenantSession?.groups ?: return
+        _groups.value = GroupsPage(loading = true)
+        viewModelScope.launch {
+            val read = g.list()
+            _groups.update { it?.copy(loading = false, read = read) }
+        }
+    }
+
+    fun closeGroups() {
+        closeGroup()
+        _groups.value = null
+    }
+
+    /** The list read anew where it is open (after an act on a group changed what it shows). */
+    private suspend fun relistGroups(g: me.raddatz.veyq.mobile.session.TenantGroups) {
+        if (_groups.value == null) return
+        val read = g.list()
+        _groups.update { it?.copy(read = read) }
+    }
+
+    /** *New group* named [name] (core's `TenantGroups.create`): once made, the list reads anew and the group's page opens. */
+    fun createGroup(name: String) {
+        val t = tenantSession ?: return
+        _groups.update { it?.copy(working = true) }
+        viewModelScope.launch {
+            val o = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { t.groups.create(name) }
+            if (o.done) {
+                relistGroups(t.groups)
+                runCatching { refreshLists(t) }
+            }
+            _groups.update { p -> p?.copy(working = false, said = o.notice ?: p.said, round = if (o.notice != null) p.round + 1 else p.round) }
+            if (o.done) o.scopeId?.let(::openGroup)
+        }
+    }
+
+    /** A group's page (core's `TenantGroups.page`), read anew at each open, each *Try again* and after each act that went through. */
+    fun openGroup(scopeId: String) {
+        val g = tenantSession?.groups ?: return
+        _group.value = GroupPageState(scopeId, loading = true)
+        viewModelScope.launch {
+            val page = g.page(scopeId)
+            _group.update { if (it?.scopeId == scopeId) it.copy(loading = false, page = page) else it }
+        }
+    }
+
+    fun closeGroup() {
+        _group.value = null
+    }
+
+    /**
+     * An act on the open group's page: what it said shows on the page; one that went through reads the page and the list
+     * anew, and where [moves] the shell's lists too (the drawer names the group by the name opened here).
+     */
+    private fun groupAct(moves: Boolean = false, done: (Boolean) -> Unit = {}, act: suspend (me.raddatz.veyq.mobile.session.TenantGroups, String) -> me.raddatz.veyq.mobile.session.TenantGroups.Outcome) {
+        val t = tenantSession ?: return
+        val scopeId = _group.value?.scopeId ?: return
+        _group.update { it?.copy(working = true) }
+        viewModelScope.launch {
+            val o = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { act(t.groups, scopeId) }
+            val page = if (o.done) t.groups.page(scopeId) else null
+            _group.update { p ->
+                if (p?.scopeId != scopeId) p
+                else p.copy(working = false, page = page ?: p.page, said = o.notice ?: p.said, round = if (o.notice != null) p.round + 1 else p.round)
+            }
+            if (o.done) {
+                relistGroups(t.groups)
+                if (moves) runCatching { refreshLists(t) }
+            }
+            done(o.done)
+        }
+    }
+
+    /** *Rename* the open group (core's `TenantGroups.rename`). */
+    fun renameGroup(name: String) = groupAct(moves = true) { g, id -> g.rename(id, name) }
+
+    /** *Add member* by [username] (core's `TenantGroups.add`); [done] hears whether it went through. */
+    fun addGroupMember(username: String, done: (Boolean) -> Unit) = groupAct(done = done) { g, id -> g.add(id, username) }
+
+    /** A row's *Make co-owner* ([owner]) or *Remove co-owner* (core's `TenantGroups.setRole`). */
+    fun setGroupRole(userId: String, owner: Boolean) = groupAct { g, id -> g.setRole(id, userId, owner) }
+
+    /** A row's *Remove*, after its question: the group's removal-rotation (core's `TenantGroups.remove`). */
+    fun removeGroupMember(userId: String, revokeLinks: Boolean) = groupAct(moves = true) { g, id -> g.remove(id, userId, revokeLinks) }
+
+    /** A pending proposal's *Withdraw* (core's `TenantGroups.rescind`). */
+    fun rescindGroupMember(userId: String) = groupAct { g, id -> g.rescind(id, userId) }
+
+    /** *Delete group*, after its question (core's `TenantGroups.delete`): its grace period starts. */
+    fun deleteGroup() = groupAct(moves = true) { g, id -> g.delete(id) }
+
+    /** *Restore group* in its grace period (core's `TenantGroups.restore`). */
+    fun restoreGroup() = groupAct(moves = true) { g, id -> g.restore(id) }
+
+    private val _invitations = MutableStateFlow<InvitationsPage?>(null)
+
+    /** Settings' Group invitations while it is open (core's `TenantGroups.invitations`); null when closed. */
+    internal val invitations: StateFlow<InvitationsPage?> = _invitations.asStateFlow()
+
+    /** Settings' Group invitations: the proposals to the caller, read anew at each open, *Try again* and answer. */
+    fun openGroupInvitations() {
+        val g = tenantSession?.groups ?: return
+        _invitations.value = InvitationsPage(loading = true)
+        viewModelScope.launch {
+            val read = g.invitations()
+            _invitations.update { it?.copy(loading = false, read = read) }
+        }
+    }
+
+    fun closeGroupInvitations() {
+        _invitations.value = null
+    }
+
+    private fun answerInvitation(scopeId: String, accept: Boolean) {
+        val t = tenantSession ?: return
+        _invitations.update { it?.copy(busy = scopeId) }
+        viewModelScope.launch {
+            val o = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                if (accept) t.groups.accept(scopeId) else t.groups.decline(scopeId)
+            }
+            val read = if (o.done) t.groups.invitations() else null
+            _invitations.update { p -> p?.copy(busy = null, read = read ?: p.read, said = o.notice ?: p.said, round = if (o.notice != null) p.round + 1 else p.round) }
+            // an accepted group opens in the session with its next read (core's): the drawer names it
+            if (o.done && accept) runCatching { refreshLists(t) }
+        }
+    }
+
+    /** *Accept* (core's `TenantGroups.accept`): the caller joins the group. */
+    fun acceptGroupInvitation(scopeId: String) = answerInvitation(scopeId, accept = true)
+
+    /** *Decline* (core's `TenantGroups.decline`). */
+    fun declineGroupInvitation(scopeId: String) = answerInvitation(scopeId, accept = false)
+
     /** The open space's name (the invite mail's subject); empty where none is open. */
     fun tenantName(): String = tenantSession?.tenant?.name.orEmpty()
 
@@ -546,6 +692,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         if (g !is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed) _termsPage.value = null
         if (g !is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed) _whosWho.value = null
         if (g !is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed) _members.value = null
+        if (g !is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed) {
+            _group.value = null
+            _groups.value = null
+            _invitations.value = null
+        }
         trustLog("gate ${g::class.simpleName}" + when (g) {
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed -> ", offer: ${g.offer?.levels}, terms: ${g.terms?.let { "r${it.shown.revision}" } ?: "none"}"
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Unlock -> ", ${g.record.method}, level: ${g.record.unlockLevel}"
@@ -1108,6 +1259,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         override fun openTerms() = this@AppModel.openTerms()
         override fun openWhosWho() = this@AppModel.openWhosWho()
         override fun openMembers() = this@AppModel.openMembers()
+        override fun openGroups() = this@AppModel.openGroups()
+        override fun openGroupInvitations() = this@AppModel.openGroupInvitations()
         override fun openPasswordChange() = this@AppModel.openPasswordChange()
         override fun openAddressChange() = this@AppModel.openAddressChange()
         override fun openKeyRotation() = this@AppModel.openKeyRotation()
