@@ -211,6 +211,8 @@ class TenantJoin internal constructor(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            // the server not reached (an origin nothing serves, no network): the web's catch-all, never "Checking…" for good
+            set { copy(phase = Phase.INVALID) }
             null
         } ?: return@withLock
         tenantId = p.tenantId
