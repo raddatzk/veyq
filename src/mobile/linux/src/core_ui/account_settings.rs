@@ -429,6 +429,8 @@ impl Page {
                 SettingsSection::Members => ("tenant-members", vec![self.members()]),
                 SettingsSection::WhosWho => ("tenant-people", vec![self.whos_who()]),
                 SettingsSection::Terms => ("terms", vec![self.terms()]),
+                SettingsSection::Groups => ("groups", vec![self.groups()]),
+                SettingsSection::GroupInvitations => ("group-invitations", vec![self.group_invitations()]),
                 SettingsSection::SignOut => ("sign-out", vec![self.sign_out()]),
             };
             for (i, g) in drawn.into_iter().flatten().enumerate() {
@@ -527,6 +529,32 @@ impl Page {
             if let Some(p) = weak.upgrade() {
                 let dialog = p.dialog.clone();
                 p.dialog.push_subpage(&crate::core_ui::terms::page(std::rc::Rc::new(move |t| dialog.add_toast(t))));
+            }
+        });
+        group.add(&row);
+        Some(group)
+    }
+
+    /// The caller's groups (the web's `groups` category): a subpage listing them, each group's page pushed over it.
+    fn groups(self: &Rc<Self>) -> Option<adw::PreferencesGroup> {
+        self.subpage("settings-groups-open", &words::groups_title(), crate::core_ui::groups::page)
+    }
+
+    /// The caller's group invitations (the web's `/invitations`): a subpage with *Accept* and *Decline*.
+    fn group_invitations(self: &Rc<Self>) -> Option<adw::PreferencesGroup> {
+        self.subpage("settings-group-invitations-open", &words::invitations_title(), crate::core_ui::groups::invitations)
+    }
+
+    /// A section that is one row opening a subpage of the dialog ([make] over the dialog's toasts and subpages).
+    fn subpage(self: &Rc<Self>, name: &str, title: &str, make: fn(crate::core_ui::groups::Host) -> adw::NavigationPage) -> Option<adw::PreferencesGroup> {
+        let group = adw::PreferencesGroup::builder().title(title).build();
+        let row = adw::ActionRow::builder().title(title).activatable(true).build();
+        row.set_widget_name(name);
+        row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+        let weak = Rc::downgrade(self);
+        row.connect_activated(move |_| {
+            if let Some(p) = weak.upgrade() {
+                p.dialog.push_subpage(&make(crate::core_ui::groups::Host::of(&p.dialog)));
             }
         });
         group.add(&row);

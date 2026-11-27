@@ -27,6 +27,7 @@ pub mod dev_scan;
 pub mod dev_settings;
 pub mod device_link;
 pub mod drop;
+pub mod groups;
 pub mod header;
 pub mod home;
 pub mod import_dialog;
