@@ -311,6 +311,96 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** A row's *Remove member*, after its question (core's `TenantMembers.remove`). */
     fun removeMember(userId: String, revokeLinks: Boolean) = memberAct { it.remove(userId, revokeLinks) }
 
+    /**
+     * The owner's invite (core's `TenantInvites`, the web's `InviteMemberDialog`): a link with its optional [label], or a
+     * mail to [email] under a generated code or the [password] the owner chose. [done] hears what it came to; one that went
+     * through is shown once ([MembersPage.shown]: the link or the code, never kept past it) and the roster is read anew.
+     */
+    fun inviteMember(way: me.raddatz.veyq.mobile.session.TenantInvites.Way, label: String?, email: String, password: String?, done: (me.raddatz.veyq.mobile.session.TenantInvites.Outcome) -> Unit) {
+        val t = tenantSession ?: return
+        _members.update { it?.copy(working = true) }
+        viewModelScope.launch {
+            val o = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                when (way) {
+                    me.raddatz.veyq.mobile.session.TenantInvites.Way.LINK -> t.invites.inviteByLink(label)
+                    me.raddatz.veyq.mobile.session.TenantInvites.Way.MAIL -> t.invites.inviteByMail(email, password)
+                }
+            }
+            val read = if (o.done) t.members.read() else null
+            _members.update { p -> p?.copy(working = false, roster = read ?: p.roster, shown = if (o.done) o else p.shown) }
+            done(o)
+        }
+    }
+
+    /** A pending invite's acts (core's `TenantInvites`): what it said shows as Members' acts do, a re-issue's secret once. */
+    private fun inviteAct(act: suspend (me.raddatz.veyq.mobile.session.TenantInvites) -> me.raddatz.veyq.mobile.session.TenantInvites.Outcome) {
+        val t = tenantSession ?: return
+        _members.update { it?.copy(working = true) }
+        viewModelScope.launch {
+            val o = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { act(t.invites) }
+            val read = if (o.done) t.members.read() else null
+            val secret = o.done && (o.address != null || o.code != null)
+            _members.update { p ->
+                p?.copy(working = false, roster = read ?: p.roster, said = if (secret) p.said else o.notice, round = if (secret) p.round else p.round + 1, shown = if (secret) o else p.shown)
+            }
+        }
+    }
+
+    /** A link invite's *Rename* (core's `TenantInvites.setLabel`); an empty [label] clears it. */
+    fun setInviteLabel(inviteId: String, label: String) = inviteAct { it.setLabel(inviteId, label) }
+
+    /** *Send again* / *New link* (core's `TenantInvites.reissue`): its new code or link shown once. */
+    fun reissueInvite(invite: me.raddatz.veyq.mobile.session.TenantInvites.PendingInvite) = inviteAct { it.reissue(invite) }
+
+    /** *Cancel invite*, after its question (core's `TenantInvites.revoke`). */
+    fun revokeInvite(inviteId: String) = inviteAct { it.revoke(inviteId) }
+
+    /** The invite's result left: its link or code is let go. */
+    fun inviteShownSeen() {
+        _members.update { it?.copy(shown = null) }
+    }
+
+    /** The open space's name (the invite mail's subject); empty where none is open. */
+    fun tenantName(): String = tenantSession?.tenant?.name.orEmpty()
+
+    // ---- joining a space from an invite (core's `TenantJoin`) ----
+
+    /** The door the join's cold sign-ins go through: this device and its client, as the session's own door. */
+    private val joinDoor by lazy { me.raddatz.veyq.mobile.session.AccountDoor(BouncyCastlePrimitives, device, { block -> Network.client(block) }) }
+
+    private val _join = MutableStateFlow<me.raddatz.veyq.mobile.session.TenantJoin?>(null)
+
+    /** The join of a received invite, above everything (as a link's guest view is); null while none is open. */
+    val join: StateFlow<me.raddatz.veyq.mobile.session.TenantJoin?> = _join.asStateFlow()
+
+    /** A received invite ([OpenLink.invite]) opened as its join, which reads it at once; one open before is closed. */
+    fun openJoin(invite: me.raddatz.veyq.mobile.sharing.ReceivedLink.InviteLink) {
+        _join.value?.close()
+        val j = joinDoor.join(invite)
+        _join.value = j
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) { j.load() }
+    }
+
+    /** One of the join's steps, off the main thread (the account's build hashes the password). */
+    fun joinStep(j: me.raddatz.veyq.mobile.session.TenantJoin, step: suspend (me.raddatz.veyq.mobile.session.TenantJoin) -> Unit) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) { step(j) }
+    }
+
+    /** *Open the space*: the app's own sign-in with what the join holds, opened as any sign-in's ([show]); the join closes. */
+    fun openJoinedSpace(j: me.raddatz.veyq.mobile.session.TenantJoin) {
+        viewModelScope.launch {
+            val opened = j.openSpace(session) ?: return@launch
+            closeJoin(j)
+            show(opened)
+        }
+    }
+
+    /** The join left (its ✕, Back or the space opened): every secret it held zeroed. */
+    fun closeJoin(j: me.raddatz.veyq.mobile.session.TenantJoin) {
+        j.close()
+        if (_join.value === j) _join.value = null
+    }
+
     private val _whosWho = MutableStateFlow<WhosWhoPage?>(null)
 
     /** Settings' Who's who while it is open (core's `PersonTrust.whosWho`, inbox #967); null when closed. */
@@ -2220,7 +2310,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     val guests: GuestLinks by lazy {
-        GuestLinks(viewModelScope, PreferencesStore(getApplication()), AndroidGuestSessions(deviceKeys), uploads, guestDeriver, { shellModel?.tenant }, ::appLanguage, ::guestMusic)
+        GuestLinks(viewModelScope, PreferencesStore(getApplication()), AndroidGuestSessions(deviceKeys), uploads, guestDeriver, { shellModel?.tenant }, ::appLanguage, ::guestMusic, onInvite = ::openJoin)
     }
 
     /**

@@ -100,7 +100,13 @@ fun AppRoot(model: AppModel) {
         // Settings' Terms (core's `SettingsSection.TERMS`), over the page
         if (terms == null) termsPage?.let { TermsPageDialog(it, model.appLanguage(), model.termsEdits, onClose = model::closeTerms) }
         // Settings' Members (core's `SettingsSection.MEMBERS`), over the page
-        if (terms == null) members?.let { MembersDialog(it, onRetry = model::openMembers, onRole = model::setMemberRole, onRemove = model::removeMember, onClose = model::closeMembers) }
+        if (terms == null) members?.let {
+            MembersDialog(
+                it, onRetry = model::openMembers, onRole = model::setMemberRole, onRemove = model::removeMember,
+                invites = InviteActions(model::inviteMember, model::setInviteLabel, model::reissueInvite, model::revokeInvite, model::inviteShownSeen),
+                spaceName = model.tenantName(), onClose = model::closeMembers,
+            )
+        }
         // Settings' Who's who (core's `SettingsSection.WHOS_WHO`), over the page; a row opens the person's profile
         if (terms == null) whosWho?.let { WhosWhoDialog(it, onRetry = model::openWhosWho, onOpen = model::openPersonFromWhosWho, onClose = model::closeWhosWho) }
         // the account was erased here: the sign-in says so once (the web's `explainEnding('erased')`)
@@ -117,6 +123,9 @@ fun AppRoot(model: AppModel) {
         guest?.let { GuestLinkScreen(it, model) }
         val asking by model.guests.asking.collectAsStateWithLifecycle()
         asking?.let { OpenLinkDialog(it, onOpen = model.guests::openAsked, onCancel = model.guests::cancelAsk) }
+        // a received invite's join (core's `TenantJoin`), above everything as a link's guest view is
+        val join by model.join.collectAsStateWithLifecycle()
+        join?.let { JoinScreen(it, model) }
     }
 }
 

@@ -37,7 +37,8 @@ class AndroidGuestSessions(private val keys: DeviceKeys) : GuestSessions {
  * store (the terms' and the note's acceptances), the Keystore-wrapped [sessions] and its one upload queue. Nothing of a
  * link is kept here once it is left: the core's model holds the key and zeroes it ([GuestScreen.leave]) — once the
  * guest's uploads still under way are in, which go on with the link left as a member's do (`UploadWork.kt`'s worker
- * follows them, inbox #1016).
+ * follows them, inbox #1016). An invite's link (`/tenant/accept#…`) the field holds is handed to its join instead
+ * ([onInvite], core's `TenantJoin`).
  */
 class GuestLinks(
     private val scope: CoroutineScope,
@@ -50,6 +51,8 @@ class GuestLinks(
     private val language: () -> String,
     /** The player a guest's Memory plays its music with (#1034): the tenant's, or the app's own signed out. */
     private val music: () -> me.raddatz.veyq.mobile.audio.PageMusic? = { null },
+    /** An invite the field holds (`OpenLink.State.invite`): opened as its join, not a guest view. */
+    private val onInvite: (ReceivedLink.InviteLink) -> Unit = {},
 ) {
     private val _asking = MutableStateFlow<OpenLink?>(null)
 
@@ -97,6 +100,13 @@ class GuestLinks(
     /** The field's link opened as its guest (the field closes; the text, which holds the key, is not kept). */
     fun openAsked() {
         val field = _asking.value ?: return
+        if (field.state.value.invite) {
+            // the field empties itself as it hands the invite over: its text holds the invite's secret parts
+            val invite = field.invite() ?: return
+            _asking.value = null
+            onInvite(invite)
+            return
+        }
         val view = field.open() ?: return
         _asking.value = null
         show(GuestScreen(view, tenant(), reportAsked = report))

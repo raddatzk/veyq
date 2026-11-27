@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.PersonRemove
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -52,6 +53,17 @@ internal data class MembersPage(
     val said: Notice? = null,
     val round: Int = 0,
     val working: Boolean = false,
+    /** What an invite or a re-issue made, shown once over the page (its link or its code); null where none is. */
+    val shown: me.raddatz.veyq.mobile.session.TenantInvites.Outcome? = null,
+)
+
+/** The owner's acts on invites (core's `TenantInvites` through the app's model). */
+internal class InviteActions(
+    val invite: (me.raddatz.veyq.mobile.session.TenantInvites.Way, String?, String, String?, (me.raddatz.veyq.mobile.session.TenantInvites.Outcome) -> Unit) -> Unit,
+    val setLabel: (String, String) -> Unit,
+    val reissue: (me.raddatz.veyq.mobile.session.TenantInvites.PendingInvite) -> Unit,
+    val revoke: (String) -> Unit,
+    val shownSeen: () -> Unit,
 )
 
 /**
@@ -59,6 +71,8 @@ internal data class MembersPage(
  * uc.spaces.remove-tenant-member): every member with their role and state, in a full-screen window over the page as
  * Who's who is. A row's acts — *Make co-owner*, *Remove co-owner*, *Remove member* — are its overflow menu, offered as core
  * says; the removal asks first, with the option to turn off every link of the space. What an act says shows as a snackbar.
+ * An owner also invites (*Invite member*, [InviteDialog]) and sees the pending invites under the roster ([PendingInvites],
+ * uc.spaces.manage-member-invites), each with its acts in its overflow menu.
  */
 @Composable
 internal fun MembersDialog(
@@ -66,8 +80,11 @@ internal fun MembersDialog(
     onRetry: () -> Unit,
     onRole: (String, Boolean) -> Unit,
     onRemove: (String, Boolean) -> Unit,
+    invites: InviteActions,
+    spaceName: String,
     onClose: () -> Unit,
 ) {
+    var inviting by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
     val said = page.said?.let { say(it) }
     LaunchedEffect(page.round) { said?.let { snackbar.showSnackbar(it) } }
@@ -84,14 +101,26 @@ internal fun MembersDialog(
                 Text(say(roster.said!!), modifier = Modifier.testTag("members-said"))
                 if (roster.retry) TextButton(onClick = onRetry, modifier = Modifier.testTag("members-retry")) { Text(stringResource(R.string.people_retry)) }
             }
-            else -> Column(Modifier.testTag("members-list")) {
-                roster.rows.forEachIndexed { i, row ->
-                    if (i > 0) HorizontalDivider()
-                    MemberRow(row, enabled = !page.working, onRole = onRole, onRemove = { removing = row })
+            else -> {
+                if (roster.owner) androidx.compose.material3.FilledTonalButton(
+                    onClick = { inviting = true }, enabled = !page.working, modifier = Modifier.testTag("members-invite"),
+                ) {
+                    Icon(Icons.Outlined.PersonAdd, null, Modifier.size(18.dp))
+                    androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
+                    Text(stringResource(R.string.members_invite))
                 }
+                Column(Modifier.testTag("members-list")) {
+                    roster.rows.forEachIndexed { i, row ->
+                        if (i > 0) HorizontalDivider()
+                        MemberRow(row, enabled = !page.working, onRole = onRole, onRemove = { removing = row })
+                    }
+                }
+                if (roster.owner && roster.invites.isNotEmpty()) PendingInvites(roster.invites, enabled = !page.working, invites)
             }
         }
     }
+    if (inviting) InviteDialog(working = page.working, onInvite = invites.invite, onClose = { inviting = false })
+    page.shown?.let { InviteResultDialog(it, spaceName, onClose = invites.shownSeen) }
     removing?.let { row -> RemoveMemberDialog(onConfirm = { links -> removing = null; onRemove(row.userId, links) }, onDismiss = { removing = null }) }
 }
 
@@ -145,7 +174,7 @@ private fun MemberRow(row: TenantMembers.RosterMember, enabled: Boolean, onRole:
 }
 
 @Composable
-private fun Badge(label: String, tag: String) {
+internal fun Badge(label: String, tag: String) {
     SuggestionChip(onClick = {}, enabled = false, label = { Text(label) }, modifier = Modifier.testTag(tag))
 }
 

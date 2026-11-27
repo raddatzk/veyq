@@ -201,6 +201,8 @@ internal fun FlowKeyField(
 internal fun NewPasswordField(
     breach: BreachCheck, value: String, onValue: (String) -> Unit, label: String, tag: String, enabled: Boolean,
     check: suspend (String) -> Unit, model: AppModel,
+    /** *Use it anyway*: the check's own, or the flow's that mirrors the verdict in its state (the join's). */
+    onAnyway: (Boolean) -> Unit = breach::useAnyway,
 ) {
     val state by breach.state.collectAsStateWithLifecycle()
     val notice = when (state.kind) {
@@ -218,7 +220,7 @@ internal fun NewPasswordField(
     )
     if (state.kind == BreachCheck.BreachKind.HIT || state.kind == BreachCheck.BreachKind.ACCEPTED) {
         CheckRow(state.kind == BreachCheck.BreachKind.ACCEPTED, enabled = enabled, label = stringResource(R.string.password_pwned_anyway), tag = "$tag-anyway") {
-            breach.useAnyway(it)
+            onAnyway(it)
         }
     }
 }
