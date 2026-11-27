@@ -95,10 +95,13 @@ class MembersPageRestLiveTest {
                 assertEquals(Notice(Msg.SPACE_LINKS_REVOKED_NONE), owner.groups.revokeAllLinks(scopeId).notice)
                 assertTrue(owner.groups.delete(scopeId).done)
                 assertTrue(!owner.groups.page(scopeId).wholeActs, "not while the group is being deleted")
+                assertContentEquals(webp, session("VEYQ").icons().icon(scopeId), "a deleted group's icon opens from its own grant")
             }
 
             if (System.getenv("VEYQ_LIVE_MEMBERS_REMOVE") == "1") {
                 val e = owner.scopeKey(tenantId)!!.second
+                // the member's devices come off while it can still sign in: after the removal it opens no tenant
+                runs.remove("VEYQ_USER2")?.removeAll()
                 assertEquals(Notice(Msg.MEMBERS_REMOVED), owner.members.remove(memberId, revokeLinks = false, newLock = true).notice)
                 assertEquals(e + 1, owner.scopeKey(tenantId)!!.second, "the removal's new lock")
             }

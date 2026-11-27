@@ -73,9 +73,22 @@ class ScopeIcons internal constructor(private val tenant: TenantSession, private
         val r = account.respond { ScopesApi(tenant.base, account.http).listMyScopes() }
         val s = if (r.success) r.body().firstOrNull { it.id == scopeId } else null
         val sealed = s?.sealedIcon
-        val held = tenant.scopeKey(scopeId)
-        if (sealed == null || held == null) null
-        else SpaceIcons.open(account.suite, scopeId, held.second.toLong(), held.first, s.iconEpoch.toLong(), sealed, s.wrappedIconValueKey)
+        if (sealed == null) null
+        else {
+            // the open scope's key, else its own grant opened (a deleted group is not open; the web's `openGroupIcon`)
+            val held = tenant.scopeKey(scopeId)
+            if (held != null) SpaceIcons.open(account.suite, scopeId, held.second.toLong(), held.first, s.iconEpoch.toLong(), sealed, s.wrappedIconValueKey)
+            else {
+                val opened = account.openOwnGrant(s, null, false) as? GrantOutcome.Opened
+                opened?.let {
+                    try {
+                        SpaceIcons.open(account.suite, scopeId, s.grantedEpoch.toLong(), it.key, s.iconEpoch.toLong(), sealed, s.wrappedIconValueKey)
+                    } finally {
+                        it.key.fill(0)
+                    }
+                }
+            }
+        }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
