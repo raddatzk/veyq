@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // The *Open in the app* banner (ADR 0150 § O2; the rule in `openInApp.ts`): one line, one per page — `AppShell.vue` draws
 // it on the signed-in app's and the public card's pages, `ShareView.vue` on a link's page (not in a review) —, dismissible,
-// the dismissal kept in this browser. Its link is a real link with a constant href (`veyq://open` or `veyq://link`), so
+// the dismissal kept in this browser. Its link is a real link (`veyq://link`, or `veyq://open` with the place on screen as
+// opaque ids, never a name), so
 // the browser's own handling of a click opens the app (or says it cannot); on the share page the same click first puts
 // the page's link on the clipboard, for the app's *Open a link*. Hidden where Safari draws Apple's Smart App Banner.
 // It calls no client.
@@ -9,7 +10,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import VeyqButton from '../../shared/ui/VeyqButton.vue'
-import { bannerForm, hrefOf, linkToCopy, mailedStepDone } from './openInApp'
+import { bannerForm, hrefOf, linkToCopy, mailedStepDone, shownPlace } from './openInApp'
 import { dismissOpenInApp, openInAppDismissed } from './openInAppDismissal'
 import { APP_STORE_ID, safariDrawsItsBanner } from './smartAppBanner'
 
@@ -19,7 +20,7 @@ const route = useRoute()
 const dismissed = ref(openInAppDismissed())
 const safari = typeof navigator !== 'undefined' && safariDrawsItsBanner(APP_STORE_ID, navigator.userAgent, navigator.maxTouchPoints ?? 0)
 const form = computed(() => (dismissed.value || safari ? null : bannerForm(route.name, route.hash, mailedStepDone())))
-const href = computed(() => (form.value ? hrefOf(form.value) : ''))
+const href = computed(() => (form.value ? hrefOf(form.value, window.location.origin, shownPlace()) : ''))
 
 /**
  * On the share page: the link onto the clipboard, started inside the click so the browser grants it, before the link's own

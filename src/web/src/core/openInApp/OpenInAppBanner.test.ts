@@ -12,7 +12,7 @@ import { RouterView, createRouter, createWebHistory, type Router } from 'vue-rou
 vi.mock('../../api/client', async (orig) => (await import('../../test/guestMode')).guardedClients(await orig<object>()))
 
 import OpenInAppBanner from './OpenInAppBanner.vue'
-import { afterTheStep } from './openInApp'
+import { afterTheStep, showsPlace, type AppPlace } from './openInApp'
 import { forgetOpenInAppDismissalForTest } from './openInAppDismissal'
 import { authenticatedCalls } from '../../test/guestMode'
 import { realI18n, t } from '../../test/i18n'
@@ -30,6 +30,16 @@ const MailedPage = defineComponent({
   },
 })
 
+const SCOPE = '0b9e2a52-6a3e-4f3c-9d55-0d1f7e6f2a10'
+const NODE = '7c1d8e4f-2b3a-4c5d-8e9f-0a1b2c3d4e5f'
+const shown = ref<AppPlace | null>({ scopeId: SCOPE, nodeId: NODE })
+const PlacePage = defineComponent({
+  setup() {
+    showsPlace(shown)
+    return () => h('p', 'a place')
+  },
+})
+
 const mounted: VueWrapper[] = []
 
 function routerAt(): Router {
@@ -41,6 +51,7 @@ function routerAt(): Router {
       { path: '/s/:shareId', name: 'share', component: blank },
       { path: '/confirm-email-change', name: 'confirm-email-change', component: MailedPage },
       { path: '/moderation', name: 'moderation', component: blank },
+      { path: '/place', name: 'place', component: PlacePage },
     ],
   })
 }
@@ -126,6 +137,20 @@ describe('OpenInAppBanner', () => {
     expect(link.attributes('href')).toBe('veyq://open')
     ;(link.element as HTMLAnchorElement).click()
     expect(writeText).not.toHaveBeenCalled()
+  })
+
+  it('on a page that shows a place: veyq://open with the origin and its ids, never the fragment (inbox #1415)', async () => {
+    shown.value = { scopeId: SCOPE, nodeId: NODE }
+    const w = await mountAt('/place#~me/reisen-2026/memories/rom')
+    const href = w.find(LINK).attributes('href')
+    expect(href).toBe(`veyq://open?i=${encodeURIComponent(window.location.origin)}&s=${SCOPE}&n=${NODE}`)
+    expect(href).not.toMatch(/reisen|rom|~me|#/)
+    shown.value = null
+    await flushPromises()
+    expect(w.find(LINK).attributes('href')).toBe('veyq://open')
+    w.unmount()
+    mounted.splice(mounted.indexOf(w), 1)
+    expect((await mountAt('/')).find(LINK).attributes('href')).toBe('veyq://open') // the place left with its page
   })
 
   it('a mailed page: nothing before its step, veyq://open once it is done', async () => {

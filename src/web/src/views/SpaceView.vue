@@ -47,6 +47,7 @@ import { provideNodeHost, type NodeHost } from '../core/node/nodeHost'
 import { provideSearchContributions } from '../core/search/contribution'
 import LevelView from '../core/node/LevelView.vue'
 import { useReturnTo } from '../core/node/returnTo'
+import { showsPlace } from '../core/openInApp/openInApp'
 import PersonProfile from '../core/people/PersonProfile.vue'
 import { loadTenantPeople, personOfTokenNow, profileHash } from '../core/people/directory'
 import { registry } from '../core/applications/registry'
@@ -92,6 +93,11 @@ watch(
   },
 )
 const currentNode = computed(() => nodeById(treeStore.nodes, currentNodeId.value))
+// *Open in the app* opens the app on this place (inbox #1415): the open scope's id and the node's, never the fragment's
+// slugs (names folded); none on a person's page, which is no place the app opens from outside.
+showsPlace(() =>
+  activeSpace.status === 'ready' && activeSpace.scopeId && !place.value.person ? { scopeId: activeSpace.scopeId, nodeId: currentNodeId.value } : null,
+)
 // Folders and the scope root browse (core's `LevelView`); any other node OPENS, to the detail component its kind
 // registered. A kind with no registered detail is not guessed at: the host shows an explicit unsupported state.
 const isOpenable = computed(() => !!currentNode.value && currentNode.value.kind !== FOLDER_KIND)

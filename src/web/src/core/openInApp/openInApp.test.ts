@@ -2,19 +2,46 @@
 // two links are constants that carry nothing; what the share page copies is the page's link normalized as a bookmark's.
 // Apple's Smart App Banner: no tag without an App Store id, and Safari on iOS alone draws it.
 import { describe, expect, it } from 'vitest'
-import { APP_LINK, APP_OPEN, MAILED_PAGES, bannerForm, hrefOf, linkToCopy } from './openInApp'
+import { APP_LINK, APP_OPEN, MAILED_PAGES, bannerForm, hrefOf, linkToCopy, placeHref } from './openInApp'
 import { safariDrawsItsBanner, smartAppBannerContent } from './smartAppBanner'
 
 const SHARE_ID = 'Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_2'
 const KEY = 'S2V5S2V5S2V5S2V5S2V5S2V5S2V5S2V5S2V5S2V5S2U'
 
 describe('the two links', () => {
-  it('are exactly veyq://open and veyq://link and hold no fragment, query or key', () => {
+  it('are veyq://open and veyq://link; without a place neither holds a fragment, query or key', () => {
     expect(APP_OPEN).toBe('veyq://open')
     expect(APP_LINK).toBe('veyq://link')
     expect(hrefOf('open')).toBe('veyq://open')
     expect(hrefOf('link')).toBe('veyq://link')
     for (const href of [hrefOf('open'), hrefOf('link')]) expect(href).not.toMatch(/[#?@]|k=/)
+  })
+
+  it('Open a link never carries the place', () => {
+    expect(hrefOf('link', ORIGIN, { scopeId: SCOPE, nodeId: NODE })).toBe('veyq://link')
+  })
+})
+
+const ORIGIN = 'https://photos.example.org'
+const SCOPE = '0b9e2a52-6a3e-4f3c-9d55-0d1f7e6f2a10'
+const NODE = '7c1d8e4f-2b3a-4c5d-8e9f-0a1b2c3d4e5f'
+
+describe('the place veyq://open carries (inbox #1415)', () => {
+  it('the origin and the opaque ids, nothing else', () => {
+    expect(placeHref(ORIGIN, { scopeId: SCOPE, nodeId: NODE })).toBe(`veyq://open?i=${encodeURIComponent(ORIGIN)}&s=${SCOPE}&n=${NODE}`)
+    expect(placeHref(ORIGIN, { scopeId: SCOPE, nodeId: null })).toBe(`veyq://open?i=${encodeURIComponent(ORIGIN)}&s=${SCOPE}`)
+    expect(placeHref('http://veyq.localhost:8081', { section: 'tenant-members' })).toBe('veyq://open?i=http%3A%2F%2Fveyq.localhost%3A8081&settings=tenant-members')
+    expect(hrefOf('open', ORIGIN, { scopeId: SCOPE, nodeId: NODE })).toBe(placeHref(ORIGIN, { scopeId: SCOPE, nodeId: NODE }))
+  })
+
+  it('a value not of its shape gives plain veyq://open: no name, slug or key can ride it', () => {
+    expect(placeHref(ORIGIN, null)).toBe('veyq://open')
+    expect(placeHref(ORIGIN, { scopeId: 'reisen-2026', nodeId: null })).toBe('veyq://open')
+    expect(placeHref(ORIGIN, { scopeId: SCOPE, nodeId: 'rom' })).toBe('veyq://open')
+    expect(placeHref(ORIGIN, { section: 'Members & more' })).toBe('veyq://open')
+    expect(placeHref(`${ORIGIN}/s/x#k=key`, { scopeId: SCOPE, nodeId: NODE })).toBe('veyq://open')
+    expect(placeHref('https://user:pw@photos.example.org', { scopeId: SCOPE, nodeId: NODE })).toBe('veyq://open')
+    expect(placeHref('javascript:alert(1)', { scopeId: SCOPE, nodeId: NODE })).toBe('veyq://open')
   })
 })
 

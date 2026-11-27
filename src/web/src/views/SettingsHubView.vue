@@ -33,6 +33,7 @@ import { useCapabilities } from '../shared/state/useCapabilities'
 import { CORE_GROUP_SPACE } from '../features/platform/capabilities'
 import { OWNER_ONLY_SECTIONS, useSettingsSections, type SettingsCategory } from '../features/settings/sections'
 import VeyqIcon from '../shared/ui/VeyqIcon.vue'
+import { showsPlace } from '../core/openInApp/openInApp'
 
 type NavCategory = SettingsCategory & { create?: { label: string; run: () => void } }
 
@@ -73,6 +74,8 @@ const contextualId = computed(() =>
 const defaultId = computed(() => (settled.value && isHidden(contextualId.value) ? 'appearance' : contextualId.value))
 const activeId = computed(() => (route.params.section as string | undefined) || defaultId.value)
 const hasSection = computed(() => Boolean(route.params.section))
+// *Open in the app* opens the app's Settings at the section on screen (inbox #1415): its id, nothing of the account.
+showsPlace(() => (hasSection.value ? { section: activeId.value } : null))
 
 // A section the caller may not see is not offered in the rail, and its address does not open it either: it leads back to
 // /settings (which, on a wide screen, opens the default section). Judged only once the answers are in (`isHidden`).
