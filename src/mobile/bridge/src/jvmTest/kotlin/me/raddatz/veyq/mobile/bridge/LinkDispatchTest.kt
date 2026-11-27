@@ -11,7 +11,6 @@ import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.crypto.PairingGrant
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.qr.QrScan
@@ -111,7 +110,7 @@ class LinkDispatchTest {
     private fun bridge(account: Acc) = Bridge {
         val hidden = Hidden({}, emptySet())
         Composition(
-            SessionModel(Door(account), hidden, RecentUses({}, emptyList())), hidden,
+            SessionModel(Door(account), hidden), hidden,
             trustedLink = { _, role, decode ->
                 val g = LockedAccount().also { granted += it }
                 when (role) {

@@ -34,11 +34,9 @@ import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.Home
 import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.navigation.ObjectRef
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.Shell
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
-import me.raddatz.veyq.mobile.navigation.UseKey
 import me.raddatz.veyq.mobile.navigation.arrange
 import me.raddatz.veyq.mobile.navigation.drawerApplications
 import me.raddatz.veyq.mobile.session.LivePoll
@@ -165,8 +163,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         app.cacheDir.listFiles { f -> f.name.startsWith("view-") }?.forEach { runCatching { it.delete() } }
     }
 
-    private val prefs = app.getSharedPreferences("veyq-recent", Context.MODE_PRIVATE)
-    private val recent = RecentUses(persist = ::persistRecent, initial = loadRecent())
+    /** This device's hidden spaces (the file's name is older than they: it once held the device-wide Recent too). */
+    private val prefs = app.getSharedPreferences("veyq-recent", Context.MODE_PRIVATE).also {
+        // Recent is each account's, sealed in its store (inbox #1423): the device-wide list of before goes unread
+        it.edit().remove("uses").commit()
+    }
     private val hidden = Hidden(persist = { prefs.edit().putStringSet("hidden", it).apply() }, initial = prefs.getStringSet("hidden", emptySet()).orEmpty())
     /** The device's keys in the Keystore: its wraps, its unlock keys, its sealed secrets (a link's guest sessions among them). */
     private val deviceKeys = AndroidDevice.keys(app)
@@ -175,7 +176,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /** The way in (core's `SessionModel`): the start, the sign-in, the unlock, the switcher, the sign-out. */
     private val session = me.raddatz.veyq.mobile.session.SessionModel.accounts(
-        BouncyCastlePrimitives, device, { block -> Network.client(block) }, hidden, recent,
+        BouncyCastlePrimitives, device, { block -> Network.client(block) }, hidden,
         language = { appLanguage() },
     )
 
@@ -1617,7 +1618,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         // what each application held open of the tenant before closes (its pages, its dialogs, a profile's section)
         eachHolding { it.leave() }
         rows = me.raddatz.veyq.mobile.navigation.RowDetails.Read.EMPTY
-        val model = me.raddatz.veyq.mobile.navigation.ShellModel(t, hidden, recent, System::currentTimeMillis)
+        val model = me.raddatz.veyq.mobile.navigation.ShellModel(t, hidden, System::currentTimeMillis)
         shellWatch?.cancel()
         shellModel = model
         _shell.value = model
@@ -2545,12 +2546,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     private fun updateShell(f: (Shell) -> Shell) {
         shellModel?.update(f)
     }
-
-    private fun persistRecent(keys: List<UseKey>) {
-        prefs.edit().putString("uses", keys.joinToString("\n") { it.encode() }).apply()
-    }
-
-    private fun loadRecent(): List<UseKey> = prefs.getString("uses", "").orEmpty().lines().mapNotNull(UseKey::decode)
 
     // ---- a received link opened as its guest, and a kept one (ADR 0150) ----
 

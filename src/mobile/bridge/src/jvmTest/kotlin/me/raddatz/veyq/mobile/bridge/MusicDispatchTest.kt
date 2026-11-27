@@ -24,7 +24,6 @@ import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeRef
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.NodeReport
@@ -218,7 +217,7 @@ class MusicDispatchTest {
 
     private fun bridge(played: PlayedMemory, host: PlayedHost) = Bridge {
         val hidden = Hidden({}, emptySet())
-        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles, audio = HostAudio(host.host)) { _ ->
+        Composition(SessionModel(Door(), hidden), hidden, JvmFiles, audio = HostAudio(host.host)) { _ ->
             Tenant(
                 shell = null, pot = null, me = "u1", pictures = MutableStateFlow(emptyMap()), loadPictures = {},
                 mediaUploads = { queue, _, _ -> played.uploads(queue) },

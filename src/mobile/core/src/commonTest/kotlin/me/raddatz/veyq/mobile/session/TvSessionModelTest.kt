@@ -5,7 +5,6 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.SessionModel.Gate
@@ -112,7 +111,7 @@ class TvSessionModelTest {
         override suspend fun stayWithPin(account: Acc, pin: String): TrustChange { pinsSet += account.key to pin; return TrustChange.DONE }
     }
 
-    private fun model(door: Door) = SessionModel(door, Hidden({}, emptySet()), RecentUses({}, emptyList()))
+    private fun model(door: Door) = SessionModel(door, Hidden({}, emptySet()))
 
     @Test
     fun aTvStartsAtItsPickerAndResumesNothing() = runTest {

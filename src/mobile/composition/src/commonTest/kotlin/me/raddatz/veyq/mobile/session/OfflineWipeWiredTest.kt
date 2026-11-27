@@ -18,7 +18,6 @@ import me.raddatz.veyq.mobile.crypto.b64
 import me.raddatz.veyq.mobile.crypto.concat
 import me.raddatz.veyq.mobile.crypto.lp
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.offline.EntryKey
 import me.raddatz.veyq.mobile.offline.OfflineStores
 import me.raddatz.veyq.mobile.offline.SizedVolume
@@ -127,7 +126,7 @@ class OfflineWipeWiredTest {
         val (one, oneDir) = resumed("u1")
         val model = SessionModel.accounts(
             p, device, { block -> HttpClient(MockEngine { respond("", HttpStatusCode.ServiceUnavailable) }, block) },
-            Hidden({}, emptySet()), RecentUses({}, emptyList()),
+            Hidden({}, emptySet()),
         )
         // the wipe stopped after its first step, as a crash there leaves it
         assertFailsWith<IllegalStateException> {

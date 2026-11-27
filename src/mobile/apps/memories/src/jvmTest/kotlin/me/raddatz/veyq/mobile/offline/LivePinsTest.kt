@@ -18,7 +18,6 @@ import me.raddatz.veyq.mobile.memories.MediaUpload
 import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.Home
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.AccountDoor
 import me.raddatz.veyq.mobile.session.FolderCreate
@@ -119,7 +118,7 @@ class LivePinsTest {
         var account = VeyqAccount.signIn(p, origin!!, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), device, client)
         assertEquals(VeyqAccount.TrustOutcome.REMEMBERED, account.trustThisDevice(null, StaySignedIn.LOGIN), "the dev instance does not let a device stay signed in")
         var tenant = door.open(account, account.defaultTenant!!)
-        val shell = ShellModel(tenant, Hidden({}, emptySet()), RecentUses({}, emptyList())) { System.currentTimeMillis() }
+        val shell = ShellModel(tenant, Hidden({}, emptySet())) { System.currentTimeMillis() }
         shell.load(openLastUsed = false)
         val scopeId = assertNotNull(Home.defaultSpace(shell.state.first { it != null }!!.lists.spaces)?.scopeId, "no space")
         val n = System.currentTimeMillis() % 100_000

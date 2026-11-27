@@ -6,7 +6,6 @@ import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.search.ApplicationSearch
@@ -103,7 +102,7 @@ class SearchDispatchTest {
 
     private fun bridge(played: PlayedTenant, requests: OpenRequests) = Bridge {
         val hidden = Hidden({}, emptySet())
-        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles, words = words) { _ ->
+        Composition(SessionModel(Door(), hidden), hidden, JvmFiles, words = words) { _ ->
             Tenant(
                 shell = null, pot = null, me = "u1", pictures = kotlinx.coroutines.flow.MutableStateFlow(emptyMap()), loadPictures = {},
                 search = { w -> SearchModel(played, AppKinds.search, w, requests, SearchContributions(), { 1_763_208_000_000L }) },

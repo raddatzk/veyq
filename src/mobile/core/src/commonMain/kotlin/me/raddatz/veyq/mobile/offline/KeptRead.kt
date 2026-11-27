@@ -75,18 +75,28 @@ class KeptRead(val kind: String, @PlatformApi @HiddenFromObjC val model: KSerial
          */
         const val PLACE = "place"
 
+        /**
+         * The drawer's Recent in a tenant (ADR 0122 decision 6, inbox #1423): the opened objects' ids and times only
+         * ([me.raddatz.veyq.mobile.navigation.UseKey] lines), the entry of id `""` per tenant, sealed as every entry is.
+         * Kept as [PLACE] is: never evicted, cleared or swept, carried by a rotation; dropped by a wipe.
+         */
+        const val RECENT = "recent"
+
         /** The outbox's kinds: never evicted, never cleared, never swept — only sent, discarded or wiped. */
         internal val QUEUED = setOf(OUTBOX, OUTBOX_FRAMES)
+
+        /** The shell's own kinds, no content: kept by "Remove all offline content", the sweep and a rotation's carry. */
+        internal val SHELL = setOf(PLACE, RECENT)
 
         /** The reads an account opens with: never evicted (an offline unlock needs them), dropped only by a wipe. */
         @PlatformApi
         @HiddenFromObjC
         val OPENING = setOf(KEY_MATERIAL.kind, MY_TENANTS.kind, MY_SCOPES.kind)
 
-        /** What neither the limit, "Clear cache" nor the sweep drops: the opening answers, the pins' record, the outbox and the places. */
+        /** What neither the limit, "Clear cache" nor the sweep drops: the opening answers, the pins' record, the outbox, the places and Recent. */
         @PlatformApi
         @HiddenFromObjC
-        val PROTECTED = OPENING + PINS + QUEUED + PLACE
+        val PROTECTED = OPENING + PINS + QUEUED + PLACE + RECENT
 
         /** The listings below a scope: what a pin reaches through — core's and each application's ([ApplicationKept.listings]). */
         internal val LISTINGS: Set<String>

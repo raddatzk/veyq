@@ -57,7 +57,7 @@ class MemoryUploadLiveTest {
         // a throwaway's pass has none yet: made in the account's default space where no Memory of that name exists
         val memory = tenant.nodes().firstOrNull { it.kind == "MEMORY" && it.name == name } ?: run {
             val shell = me.raddatz.veyq.mobile.navigation.ShellModel(
-                tenant, me.raddatz.veyq.mobile.navigation.Hidden({}, emptySet()), me.raddatz.veyq.mobile.navigation.RecentUses({}, emptyList()),
+                tenant, me.raddatz.veyq.mobile.navigation.Hidden({}, emptySet()),
             ) { System.currentTimeMillis() }
             shell.load(openLastUsed = false)
             val scopeId = assertNotNull(me.raddatz.veyq.mobile.navigation.Home.defaultSpace(shell.state.first { it != null }!!.lists.spaces)?.scopeId, "no space")

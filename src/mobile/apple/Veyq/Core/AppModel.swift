@@ -161,7 +161,6 @@ final class AppModel {
         }
         return dir.path
     }
-    private let recent: RecentUses
     private let hidden: Hidden
 
     /// The current tenant as read, before what this device hides is taken out.
@@ -194,19 +193,15 @@ final class AppModel {
         AppComposition.shared.install()
         self.inExtension = inExtension
         device = inExtension ? Self.makeDevice(inExtension: true) : Self.appDevice
-        let stored = Shared.defaults.stringArray(forKey: "veyq.recent") ?? []
-        recent = RecentUses(
+        // Recent is each account's, sealed in its store (inbox #1423): the device-wide list of before goes unread
+        Shared.defaults.removeObject(forKey: "veyq.recent")
+        hidden = Hidden(
             // called on core's threads (a sign-out of the last account clears it there): @Sendable, never main-actor
             // isolated, or Swift 6 traps (src/mobile/CLAUDE.md § Traps)
-            persist: { @Sendable keys in Shared.defaults.set(keys.map { $0.encode() }, forKey: "veyq.recent") },
-            initial: stored.compactMap { UseKey.companion.decode(line: $0) },
-            keep: 50
-        )
-        hidden = Hidden(
             persist: { @Sendable keys in Shared.defaults.set(Array(keys), forKey: "veyq.hidden") },
             initial: Set(Shared.defaults.stringArray(forKey: "veyq.hidden") ?? [])
         )
-        session = AppleSessions.shared.sessionModel(device: device, hidden: hidden, recent: recent, signInElsewhere: inExtension)
+        session = AppleSessions.shared.sessionModel(device: device, hidden: hidden, signInElsewhere: inExtension)
         // a copy sent or a download handed to the save sheet in an earlier run has been read by now (or never will be)
         if !inExtension { Self.sweepTemporary() } else { try? FileManager.default.removeItem(at: Self.pickedDir) }
         gateWatch = session.watch { @Sendable _ in
@@ -927,7 +922,7 @@ final class AppModel {
         tenantSession = t
         // what was open of the tenant before closes (each application's pages), then the new shell's models are built
         eachHolding { $0.leave() }
-        let model = ShellModel(tenant: t, hidden: hidden, recent: recent, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) })
+        let model = ShellModel(tenant: t, hidden: hidden, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) })
         closeSearch()
         shellWatch?.stop()
         shellModel = model

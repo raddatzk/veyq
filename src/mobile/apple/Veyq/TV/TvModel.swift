@@ -61,7 +61,6 @@ final class TvModel {
 
     @ObservationIgnored private let device: ThisDevice
     @ObservationIgnored private let session: SessionModel<VeyqAccount, TenantSession>
-    @ObservationIgnored private let recent: RecentUses
     @ObservationIgnored private let hidden: Hidden
     @ObservationIgnored private var gateWatch: SessionModelWatch?
     @ObservationIgnored private var followWatch: SessionModelWatch?
@@ -79,16 +78,13 @@ final class TvModel {
             defaults.set(true, forKey: "veyq.installed")
         }
         device = AppleSessions.shared.tvDevice(keychain: keychain, label: UIDevice.current.name, prompt: say(.deviceUnlockPrompt), defaults: defaults)
-        recent = RecentUses(
-            persist: { @Sendable keys in UserDefaults.standard.set(keys.map { $0.encode() }, forKey: "veyq.recent") },
-            initial: (defaults.stringArray(forKey: "veyq.recent") ?? []).compactMap { UseKey.companion.decode(line: $0) },
-            keep: 50
-        )
+        // Recent is each account's, in memory on a TV (no store, inbox #1423): the device-wide list of before goes unread
+        defaults.removeObject(forKey: "veyq.recent")
         hidden = Hidden(
             persist: { @Sendable keys in UserDefaults.standard.set(Array(keys), forKey: "veyq.hidden") },
             initial: Set(defaults.stringArray(forKey: "veyq.hidden") ?? [])
         )
-        session = AppleSessions.shared.sessionModel(device: device, hidden: hidden, recent: recent, signInElsewhere: false)
+        session = AppleSessions.shared.sessionModel(device: device, hidden: hidden, signInElsewhere: false)
         gateWatch = session.watch { @Sendable [weak self] _ in Task { @MainActor in self?.gateChanged() } }
         followWatch = session.watchFollowed { @Sendable [weak self] _ in Task { @MainActor in self?.follow() } }
     }
@@ -220,7 +216,7 @@ final class TvModel {
         let t = opened.session
         if let was = tenantSession, was !== t { closeTenant() }
         tenantSession = t
-        let model = ShellModel(tenant: t, hidden: hidden, recent: recent, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) })
+        let model = ShellModel(tenant: t, hidden: hidden, now: { @Sendable in KotlinLong(value: Int64(Date().timeIntervalSince1970 * 1000)) })
         shellModel = model
         openMusic(model)
         try? await model.load(openLastUsed: false)

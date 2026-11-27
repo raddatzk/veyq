@@ -40,7 +40,6 @@ import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeRef
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.MemoryDeviceStore
@@ -196,7 +195,7 @@ class MapDispatchTest {
 
     private fun bridge(p: Played) = Bridge {
         val hidden = Hidden({}, emptySet())
-        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles, language = "de") { _ ->
+        Composition(SessionModel(Door(), hidden), hidden, JvmFiles, language = "de") { _ ->
             Tenant(
                 shell = null, pot = null, me = "u1", pictures = MutableStateFlow(emptyMap()), loadPictures = {},
                 mediaUploads = { queue, _, _ -> p.memory.uploads(queue) },

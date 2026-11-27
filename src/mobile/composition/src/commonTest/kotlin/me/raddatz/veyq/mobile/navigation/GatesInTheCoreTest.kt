@@ -66,7 +66,7 @@ class GatesInTheCoreTest {
         t.remember()
         val account = t.resume()
         val tenant = account.open(account.tenants.first())
-        val shell = ShellModel(tenant, Hidden({}, emptySet()), RecentUses({}, emptyList())) { 0L }
+        val shell = ShellModel(tenant, Hidden({}, emptySet())) { 0L }
         shell.load(openLastUsed = false)
         shell.update { Shell.start(null, s.id) }
         return Opened(t, account, tenant, shell)

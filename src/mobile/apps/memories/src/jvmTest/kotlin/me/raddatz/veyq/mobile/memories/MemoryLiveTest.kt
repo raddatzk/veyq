@@ -53,7 +53,7 @@ class MemoryLiveTest {
         ) { block -> LiveHttp.client(block) }
         val tenant = account.open(account.defaultTenant!!)
         val shell = me.raddatz.veyq.mobile.navigation.ShellModel(
-            tenant, me.raddatz.veyq.mobile.navigation.Hidden({}, emptySet()), me.raddatz.veyq.mobile.navigation.RecentUses({}, emptyList()),
+            tenant, me.raddatz.veyq.mobile.navigation.Hidden({}, emptySet()),
         ) { System.currentTimeMillis() }
         shell.load(openLastUsed = false)
         val memory = tenant.nodes().first { it.kind == "MEMORY" && it.name == name }

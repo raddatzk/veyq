@@ -6,7 +6,6 @@ import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.blob.UploadQueue
 import me.raddatz.veyq.mobile.blob.UploadSource
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.offline.PlayedTenant
 import me.raddatz.veyq.mobile.offline.removeAll
@@ -43,7 +42,7 @@ class GalleryFollowsTheTreeTest {
         t.remember()
         val account = t.resume()
         val tenant = account.open(account.tenants.first())
-        val shell = ShellModel(tenant, Hidden({}, emptySet()), RecentUses({}, emptyList())) { 0L }
+        val shell = ShellModel(tenant, Hidden({}, emptySet())) { 0L }
         shell.load(openLastUsed = false)
         val uploads = shell.mediaUploads(UploadQueue(), object : Derivation.Deriver {
             override fun derive(source: UploadSource, type: String, done: (Derivation.Derived) -> Unit) = Unit

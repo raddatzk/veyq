@@ -22,7 +22,6 @@ import me.raddatz.veyq.mobile.crypto.Primitives
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Connections
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.qr.QrDecoder
@@ -51,7 +50,6 @@ import me.raddatz.veyq.mobile.words.MsgKey
 class SessionModel<A : Connection, T : Any>(
     private val door: Door<A, T>,
     private val hidden: Hidden,
-    private val recent: RecentUses,
     /** The share extension (ADR 0138): it resumes and unlocks, but never signs in — the app does. */
     private val signInElsewhere: Boolean = false,
     /** The viewer's language (the platform's words'), in which the terms gate shows a tenant's terms ([Gate.Signed.terms]). */
@@ -1085,8 +1083,8 @@ class SessionModel<A : Connection, T : Any>(
 
     /**
      * Signs out of one server; if it was current, another one held becomes current, else the unlock of an account this
-     * device still trusts with the password, or the sign-in — and the device forgets what was opened and hidden once no
-     * account is left on it. Staying signed in ends with the sign-out; the password trust stays (as on the web).
+     * device still trusts with the password, or the sign-in — and the device forgets what was hidden once no account is
+     * left on it (what was opened is each account's, wiped with its store, inbox #1423). Staying signed in ends with the sign-out; the password trust stays (as on the web).
      */
     suspend fun signOut(account: A): SignedOut<A, T> {
         val wasCurrent = connections.current?.first == account
@@ -1098,7 +1096,6 @@ class SessionModel<A : Connection, T : Any>(
         val next = connections.current
         return when {
             next == null -> {
-                recent.clear()
                 hidden.clear()
                 SignedOut(wasCurrent, locked())
             }
@@ -1273,11 +1270,10 @@ class SessionModel<A : Connection, T : Any>(
             device: ThisDevice,
             client: (block: HttpClientConfig<*>.() -> Unit) -> HttpClient,
             hidden: Hidden,
-            recent: RecentUses,
             signInElsewhere: Boolean = false,
             /** The platform's words' language: the terms gate's ([Gate.Signed.terms]). */
             language: () -> String = { "en" },
-        ): SessionModel<VeyqAccount, TenantSession> = SessionModel(AccountDoor(primitives, device, client), hidden, recent, signInElsewhere, language)
+        ): SessionModel<VeyqAccount, TenantSession> = SessionModel(AccountDoor(primitives, device, client), hidden, signInElsewhere, language)
     }
 }
 

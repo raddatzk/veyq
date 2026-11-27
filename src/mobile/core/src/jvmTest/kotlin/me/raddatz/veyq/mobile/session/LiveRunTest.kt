@@ -3,7 +3,6 @@ package me.raddatz.veyq.mobile.session
 import kotlinx.coroutines.runBlocking
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import org.junit.Assume.assumeTrue
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -46,7 +45,7 @@ class LiveRunTest {
 
         try {
             val case = run.device()
-            val model = SessionModel.accounts(p, case, client, Hidden({}, emptySet()), RecentUses({}, emptyList()))
+            val model = SessionModel.accounts(p, case, client, Hidden({}, emptySet()))
             model.start()
             val opened = assertNotNull(
                 model.signIn(origin!!, run.env.getValue("VEYQ_EMAIL"), run.env.getValue("VEYQ_PASSWORD"), run.env.getValue("VEYQ_SECRET_KEY")),

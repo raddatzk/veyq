@@ -9,7 +9,6 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeoutOrNull
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.qr.QrScan
 import me.raddatz.veyq.mobile.words.Msg
 import kotlin.test.assertIs
@@ -134,7 +133,7 @@ class LiveDeviceLinkTest {
             val env = env()
             val trusted = VeyqAccount.signIn(p, origin, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), device(), client)
             val trustedPage = page(trusted)
-            val model = SessionModel.accounts(p, device(), client, Hidden({}, emptySet()), RecentUses({}, emptyList()))
+            val model = SessionModel.accounts(p, device(), client, Hidden({}, emptySet()))
             model.start()
             val label = "Live link ${if (addDevice) "add" else "sign-in"} ${System.currentTimeMillis()}"
             var linkedFamily: String? = null

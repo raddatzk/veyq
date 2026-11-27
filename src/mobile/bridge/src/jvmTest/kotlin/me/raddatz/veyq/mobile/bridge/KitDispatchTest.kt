@@ -8,7 +8,6 @@ import me.raddatz.veyq.mobile.account.KitImport
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.qr.QrEncoder
@@ -108,7 +107,7 @@ class KitDispatchTest {
     private fun kitBridge(host: PlayedHost?, decode: suspend (QrFrame) -> String? = { null }) = Bridge {
         val hidden = Hidden({}, emptySet())
         Composition(
-            SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, files, decode = decode,
+            SessionModel(Door(), hidden), hidden, files, decode = decode,
             pictures = { path -> host?.let { HostPictures(it.host, path) } ?: NoPictures },
         ) { null }
     }

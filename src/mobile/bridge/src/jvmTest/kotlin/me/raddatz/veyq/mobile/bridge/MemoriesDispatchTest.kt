@@ -26,7 +26,6 @@ import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeHeaderModel
 import me.raddatz.veyq.mobile.navigation.NodeRef
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
@@ -272,7 +271,7 @@ class MemoriesDispatchTest {
         contributions: ((GalleryModel) -> me.raddatz.veyq.mobile.memories.Contributions)? = null,
     ) = Bridge {
         val hidden = Hidden({}, emptySet())
-        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles, tiers = HostTiers(host.host)) { _ ->
+        Composition(SessionModel(Door(), hidden), hidden, JvmFiles, tiers = HostTiers(host.host)) { _ ->
             Tenant(
                 shell = null, pot = null, me = "u1", pictures = MutableStateFlow(emptyMap()), loadPictures = {},
                 header = { node, facts, _ -> NodeHeaderModel(node, facts, Header) },

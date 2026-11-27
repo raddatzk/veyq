@@ -12,6 +12,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import me.raddatz.veyq.mobile.navigation.RecentUses
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
@@ -300,6 +301,37 @@ class VeyqAccount private constructor(
         runCatching { o.store.sweep() }
         // an account opened online with writes waiting from before (a reconnect never came): they go now
         if (send && _reach.value == Reach.Online && !sendsNothing) startSending()
+    }
+
+    // ---- the drawer's Recent (ADR 0122 decision 6, inbox #1423)
+
+    private val recentLock = Mutex()
+    private val recentWrites = Mutex()
+    private val recents = HashMap<String, RecentUses>()
+
+    /**
+     * This account's Recent in [tenant] on this device, one per tenant for as long as this account is open: what its offline
+     * store keeps (merged in each time a store is open, so a store opened after the first shell joins in), and every use
+     * then kept there sealed — no id in clear on disk, wiped with the store, carried by a rotation. An account without a
+     * store on the device (not trusted, a TV) holds it in memory only, for this session. Never another account's.
+     */
+    @PlatformApi
+    @HiddenFromObjC
+    suspend fun recentUses(tenant: String): RecentUses = recentLock.withLock {
+        val held = recents.getOrPut(tenant) {
+            lateinit var r: RecentUses
+            r = RecentUses(persist = { keepRecent(tenant, r) }, initial = emptyList())
+            r
+        }
+        offline?.let { o -> runCatching { o.recent(tenant) }.getOrNull()?.let(held::merge) }
+        held
+    }
+
+    /** [uses] as they stand when the write runs (a later use's write keeps the latest), into the store open then; none: nothing. */
+    private fun keepRecent(tenant: String, uses: RecentUses) {
+        background.launch {
+            recentWrites.withLock { runCatching { offline?.keepRecent(tenant, uses.kept) } }
+        }
     }
 
     /** The answers an offline unlock opens with: the key material (its wraps and sealed identity only) and the tenants. */
@@ -1080,7 +1112,7 @@ class VeyqAccount private constructor(
 
     /**
      * This account's store at a Master Key rotation this device holds both keys of (ADR 0153 decision 2 — its own rotation,
-     * or one made elsewhere taken while this account still holds the old key): the waiting writes (and where the shell stood, #1415) carried under a fresh
+     * or one made elsewhere taken while this account still holds the old key): the waiting writes (and where the shell stood and Recent, #1415, #1423) carried under a fresh
      * `K_off` wrapped by [newMasterKey], everything kept beside them gone as ADR 0140 decision 2 has it. Where the carry fails
      * (or no store is open) the store is wiped, as before the outbox. The caller opens it anew ([ensureOffline]).
      */
@@ -1090,7 +1122,7 @@ class VeyqAccount private constructor(
         if (o == null || stores == null) return wipeOffline()
         pinsHeld?.stop()
         pinsHeld = null
-        val carried = runCatching { stores.rekey(key, o.store, newMasterKey) { it.kind in KeptRead.QUEUED || it.kind == KeptRead.PLACE } }
+        val carried = runCatching { stores.rekey(key, o.store, newMasterKey) { it.kind in KeptRead.QUEUED || it.kind in KeptRead.SHELL } }
             .onFailure { println("veyq: the outbox was not carried across the rotation: $it") }.isSuccess
         runCatching { o.closeForWipe() }
         offline = null

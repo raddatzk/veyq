@@ -8,7 +8,6 @@ import me.raddatz.veyq.mobile.media.ByteSource
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.memories.place.MemoryFacts
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.LiveRun
 import me.raddatz.veyq.mobile.session.NodeTrash
@@ -61,7 +60,7 @@ class CurationLiveTest {
             VeyqAccount.signIn(p, origin!!, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), device, client)
         val one = signIn("live curation test")
         val tenant = one.open(one.defaultTenant!!)
-        val shell = ShellModel(tenant, Hidden({}, emptySet()), RecentUses({}, emptyList())) { System.currentTimeMillis() }
+        val shell = ShellModel(tenant, Hidden({}, emptySet())) { System.currentTimeMillis() }
         shell.load(openLastUsed = false)
         val spaces = shell.state.first { it != null }!!.lists.spaces
         val scopeId = assertNotNull(spaces.firstOrNull { it.kind == "TENANT" }?.scopeId, "no tenant space")

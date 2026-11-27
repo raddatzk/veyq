@@ -10,7 +10,6 @@ import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.crypto.SecretKeyText
 import me.raddatz.veyq.mobile.crypto.hex
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.qr.QrFrame
 import org.junit.Assume.assumeTrue
 import java.io.File
@@ -71,7 +70,7 @@ class LiveSignInTest {
             val env = env()
             val email = env.getValue("VEYQ_EMAIL")
             val file = kitPdf(email, env.getValue("VEYQ_SECRET_KEY"), origin)
-            val model = SessionModel.accounts(p, liveRun.device(), client, Hidden({}, emptySet()), RecentUses({}, emptyList()))
+            val model = SessionModel.accounts(p, liveRun.device(), client, Hidden({}, emptySet()))
             model.start()
             assertTrue(model.readKit(file, NothingDrawn), "the kit was not read")
             val form = assertIs<SessionModel.Gate.SignIn>(model.current)

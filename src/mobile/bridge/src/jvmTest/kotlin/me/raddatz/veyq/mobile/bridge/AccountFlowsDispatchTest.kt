@@ -23,7 +23,6 @@ import me.raddatz.veyq.mobile.crypto.concat
 import me.raddatz.veyq.mobile.crypto.lp
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.AccountErasure
@@ -163,7 +162,7 @@ class AccountFlowsDispatchTest {
     ) = Bridge {
         val hidden = Hidden({}, emptySet())
         Composition(
-            SessionModel(door, hidden, RecentUses({}, emptyList())), hidden, JvmFiles,
+            SessionModel(door, hidden), hidden, JvmFiles,
             settings = { session, account, separator ->
                 if (settings) AccountSettings(Page(), HeldBy(session, account), played.email, separator) { 0L } else null
             },

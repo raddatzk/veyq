@@ -14,7 +14,6 @@ import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.navigation.ApplicationId
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.ObjectRef
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.OfflineAsOf
 import me.raddatz.veyq.mobile.session.TenantSession
@@ -48,7 +47,7 @@ class OfflineBannerTest {
 
     private suspend fun tenantOf(a: VeyqAccount): TenantSession = a.open(a.tenants.first())
 
-    private fun shellOf(tenant: TenantSession) = ShellModel(tenant, Hidden({}, emptySet()), RecentUses({}, emptyList())) { 0L }
+    private fun shellOf(tenant: TenantSession) = ShellModel(tenant, Hidden({}, emptySet())) { 0L }
 
     /** [read]'s first non-null answer, the models' watches running on their own thread: at most two seconds. */
     private suspend fun <R : Any> waitFor(read: () -> R?): R? {

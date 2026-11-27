@@ -11,7 +11,6 @@ import me.raddatz.veyq.mobile.map.MapState
 import me.raddatz.veyq.mobile.memories.people.PersonMemories
 import me.raddatz.veyq.mobile.memories.place.MemoryFacts
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.LiveRun
 import me.raddatz.veyq.mobile.session.NodeTrash
@@ -59,7 +58,7 @@ class PersonProfileLiveTest {
 
     private val client: (HttpClientConfig<*>.() -> Unit) -> HttpClient = { block -> LiveHttp.client { block(); install(cut) } }
 
-    private fun shellOf(tenant: TenantSession) = ShellModel(tenant, Hidden({}, emptySet()), RecentUses({}, emptyList())) { System.currentTimeMillis() }
+    private fun shellOf(tenant: TenantSession) = ShellModel(tenant, Hidden({}, emptySet())) { System.currentTimeMillis() }
 
     private suspend fun section(shell: ShellModel, userId: String): PersonMemories.State =
         shell.personMemories(userId).also { it.load() }.current

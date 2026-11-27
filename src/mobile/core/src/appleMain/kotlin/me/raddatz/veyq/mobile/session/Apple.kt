@@ -299,10 +299,9 @@ object AppleSessions {
     fun sessionModel(
         device: ThisDevice,
         hidden: me.raddatz.veyq.mobile.navigation.Hidden,
-        recent: me.raddatz.veyq.mobile.navigation.RecentUses,
         signInElsewhere: Boolean,
     ): SessionModel<VeyqAccount, TenantSession> =
-        SessionModel.accounts(LibsodiumPrimitives, device, client, hidden, recent, signInElsewhere, language = ::appLanguage)
+        SessionModel.accounts(LibsodiumPrimitives, device, client, hidden, signInElsewhere, language = ::appLanguage)
 
     /**
      * The language the app's words are shown in (the bundle's localization chosen for this person, the per-app language

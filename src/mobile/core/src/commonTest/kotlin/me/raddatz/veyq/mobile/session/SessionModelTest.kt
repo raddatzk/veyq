@@ -18,10 +18,8 @@ import me.raddatz.veyq.mobile.crypto.SecretKeyText
 import me.raddatz.veyq.mobile.crypto.hex
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
-import me.raddatz.veyq.mobile.navigation.UseKey
 import me.raddatz.veyq.mobile.qr.QrFrame
 import me.raddatz.veyq.mobile.qr.QrScan
 import me.raddatz.veyq.mobile.session.SessionModel.Gate
@@ -146,15 +144,13 @@ class SessionModelTest {
         TrustedDevice(server, "p@$server", userId, method, "w", "alias")
 
     private val hidden = Hidden({}, emptySet())
-    private var recentKept: List<UseKey>? = null
-    private val recent = RecentUses({ recentKept = it }, listOf(UseKey("s", "n", 1)))
 
     private fun door() = Door().apply {
         accounts["https://a.example"] = a
         accounts["https://b.example"] = b
     }
 
-    private fun model(door: Door, elsewhere: Boolean = false) = SessionModel(door, hidden, recent, elsewhere)
+    private fun model(door: Door, elsewhere: Boolean = false) = SessionModel(door, hidden, elsewhere)
 
     @Test
     fun with_no_trusted_account_the_start_is_the_sign_in_and_in_the_extension_the_app() = runTest {
@@ -291,7 +287,6 @@ class SessionModelTest {
         assertEquals(Gate.SignIn(), m.current)
         assertEquals(listOf(a.key, b.key), d.signedOut)
         assertTrue(!hidden.isSpaceHidden("s1"))
-        assertEquals(emptyList(), recentKept)
     }
 
     /** [read]'s first non-null answer, the model's watches running on their own thread: at most two seconds. */

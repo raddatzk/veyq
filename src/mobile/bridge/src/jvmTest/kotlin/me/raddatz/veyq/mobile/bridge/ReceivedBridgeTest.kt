@@ -12,7 +12,6 @@ import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.session.MemoryDeviceStore
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.session.SessionModel
 import me.raddatz.veyq.mobile.session.SignInFailure
 import me.raddatz.veyq.mobile.session.StaySignedIn
@@ -69,7 +68,7 @@ class ReceivedBridgeTest {
     private fun bridge(share: PlayedShare) = Bridge {
         val hidden = Hidden({}, emptySet())
         Composition(
-            SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, files = JvmFiles,
+            SessionModel(Door(), hidden), hidden, files = JvmFiles,
             received = { link, queue, password, music ->
                 GuestView.open(
                     p, link, { block -> HttpClient(MockEngine(share.handler), block) }, MemoryDeviceStore(), MemoryGuestSessions(), { "en" },

@@ -36,7 +36,7 @@ class ShellModelTest {
         t.scope("s1")
         t.remember()
         val a = t.resume()
-        val shell = ShellModel(a.open(a.tenants.first()), Hidden({}, emptySet()), RecentUses({}, emptyList())) { 0L }
+        val shell = ShellModel(a.open(a.tenants.first()), Hidden({}, emptySet())) { 0L }
         // a kept link (ADR 0150 decision 6): no "it and everything in it" beside its name — the backend refuses a NODE report
         val bookmark = shell.reportSheet(NodeAt("s1", "b", AppKinds.BOOKMARK_KIND, "Link"))
         assertFalse(bookmark.offersName, "a kept link's sheet offers the whole beside its name")
@@ -57,7 +57,7 @@ class ShellModelTest {
         t.node(s, "f", kind = NodeRef.FOLDER, name = "Trips")
         t.remember()
         val a = t.resume()
-        val shell = ShellModel(a.open(a.tenants.first()), Hidden({}, emptySet()), RecentUses({}, emptyList())) { 0L }
+        val shell = ShellModel(a.open(a.tenants.first()), Hidden({}, emptySet())) { 0L }
         shell.load(openLastUsed = false)
         shell.switchSpace(s.id)
         val home = kotlin.test.assertNotNull(shell.shell)
@@ -89,7 +89,7 @@ class ShellModelTest {
         t.node(s, "c", kind = NodeRef.FOLDER, parent = alpha, name = "Gamma")
         t.remember()
         val a = t.resume()
-        val shell = ShellModel(a.open(a.tenants.first()), Hidden({}, emptySet()), RecentUses({}, emptyList())) { 0L }
+        val shell = ShellModel(a.open(a.tenants.first()), Hidden({}, emptySet())) { 0L }
         shell.load(openLastUsed = false)
         shell.switchSpace(s.id)
         assertNull(shell.current?.selection, "no Select mode before Select")

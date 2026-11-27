@@ -14,7 +14,6 @@ import me.raddatz.veyq.mobile.blob.deviceFiles
 import me.raddatz.veyq.mobile.memories.MediaUpload
 import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.Reach
 import me.raddatz.veyq.mobile.words.Msg
@@ -70,12 +69,12 @@ class AppleQueuedTest {
         val first = t.resume()
         val online = first.open(first.tenants.first())
         assertNotNull(MemoryMedia.list(online, s.id, m.id))
-        ShellModel(online, Hidden({}, emptySet()), RecentUses({}, emptyList())) { 0L }.load(openLastUsed = false)
+        ShellModel(online, Hidden({}, emptySet())) { 0L }.load(openLastUsed = false)
         first.retire()
         t.reachable = false
         val a = t.resume()
         assertIs<Reach.Offline>(a.reach.value)
-        val shell = ShellModel(a.open(a.tenants.first()), Hidden({}, emptySet()), RecentUses({}, emptyList())) { 0L }
+        val shell = ShellModel(a.open(a.tenants.first()), Hidden({}, emptySet())) { 0L }
         shell.load(openLastUsed = false)
         shell.switchSpace(s.id)
         val q = AppleQueued(shell)

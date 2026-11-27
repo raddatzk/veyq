@@ -14,7 +14,6 @@ import me.raddatz.veyq.mobile.memories.music.MusicUpload
 import me.raddatz.veyq.mobile.memories.music.TrackLabel
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.Home
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.offline.KeptRead
 import me.raddatz.veyq.mobile.offline.Pin
@@ -95,7 +94,7 @@ class MusicLiveTest {
             VeyqAccount.signIn(p, origin!!, env.getValue("VEYQ_EMAIL"), env.getValue("VEYQ_PASSWORD"), env.getValue("VEYQ_SECRET_KEY"), device, client)
         val one = signIn("live music test")
         val tenant = one.open(one.defaultTenant!!)
-        val shell = ShellModel(tenant, Hidden({}, emptySet()), RecentUses({}, emptyList())) { System.currentTimeMillis() }
+        val shell = ShellModel(tenant, Hidden({}, emptySet())) { System.currentTimeMillis() }
         shell.load(openLastUsed = false)
         val scopeId = assertNotNull(Home.defaultSpace(shell.state.first { it != null }!!.lists.spaces)?.scopeId, "no space")
         val n = System.currentTimeMillis() % 100_000

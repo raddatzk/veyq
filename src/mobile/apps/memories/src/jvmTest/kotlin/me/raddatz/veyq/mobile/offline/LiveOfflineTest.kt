@@ -13,7 +13,6 @@ import me.raddatz.veyq.mobile.memories.MediaUpload
 import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.Home
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.LiveRun
 import me.raddatz.veyq.mobile.session.NodeTrash
@@ -84,7 +83,7 @@ class LiveOfflineTest {
         assertEquals(VeyqAccount.TrustOutcome.REMEMBERED, account.trustThisDevice(null, StaySignedIn.LOGIN), "the dev instance does not let a device stay signed in")
         assertNotNull(account.offline, "a remembered account on a device with a store directory keeps no store")
         val tenant = account.open(account.defaultTenant!!)
-        val shell = ShellModel(tenant, Hidden({}, emptySet()), RecentUses({}, emptyList())) { System.currentTimeMillis() }
+        val shell = ShellModel(tenant, Hidden({}, emptySet())) { System.currentTimeMillis() }
         shell.load(openLastUsed = false)
         val scopeId = assertNotNull(Home.defaultSpace(shell.state.first { it != null }!!.lists.spaces)?.scopeId, "no space")
         val made = shell.createMemory(scopeId, null, "Offline memory ${System.currentTimeMillis() % 100_000}")

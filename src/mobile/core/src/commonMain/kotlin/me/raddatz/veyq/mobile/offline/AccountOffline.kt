@@ -339,9 +339,9 @@ class AccountOffline internal constructor(
         val reached = HashSet<EntryKey>()
         reached += key(KeptRead.KEY_MATERIAL)
         reached += pinsKey
-        // the person's unsent writes (ADR 0153 decision 2) and where the shell stood (#1415): no listing reaches them, and no
-        // sweep drops them
-        store.entries().filter { it.key.kind in KeptRead.QUEUED || it.key.kind == KeptRead.PLACE }.mapTo(reached) { it.key }
+        // the person's unsent writes (ADR 0153 decision 2), where the shell stood (#1415) and Recent (#1423): no listing reaches
+        // them, and no sweep drops them
+        store.entries().filter { it.key.kind in KeptRead.QUEUED || it.key.kind in KeptRead.SHELL }.mapTo(reached) { it.key }
         val tenantsKey = key(KeptRead.MY_TENANTS)
         reached += tenantsKey
         val tenants = json(tenantsKey).flatMap { it.array() }.mapNotNull { it.text("tenantId") }.toSet()
@@ -596,12 +596,12 @@ class AccountOffline internal constructor(
     }
 
     /**
-     * "Remove all offline content": every entry but the answers an account opens with and where the shell stood (no content),
+     * "Remove all offline content": every entry but the answers an account opens with, where the shell stood and Recent (no content),
      * the pins with them (asked first).
      */
     suspend fun removeAll() {
         pinLock.withLock { save(PinRecord()) }
-        store.removeAll(store.entries().filter { it.key.kind !in KeptRead.OPENING && it.key.kind != KeptRead.PLACE }.map { it.key })
+        store.removeAll(store.entries().filter { it.key.kind !in KeptRead.OPENING && it.key.kind !in KeptRead.SHELL }.map { it.key })
     }
 
     // ---- where the shell stood (inbox #1415)
@@ -615,6 +615,19 @@ class AccountOffline internal constructor(
     /** [place] kept as where the shell stands in [tenant], sealed as every entry is (no id in clear on disk). */
     suspend fun keepPlace(tenant: String, place: me.raddatz.veyq.mobile.navigation.KeptPlace) {
         store.put(placeKey(tenant), JSON.encodeToString(me.raddatz.veyq.mobile.navigation.KeptPlace.serializer(), place).encodeToByteArray())
+    }
+
+    // ---- the drawer's Recent (inbox #1423)
+
+    private fun recentKey(tenant: String) = EntryKey(server, tenant, "", KeptRead.RECENT, "")
+
+    /** The uses this account keeps for [tenant] on this device (ids and times only); empty where none or the entry does not open. */
+    suspend fun recent(tenant: String): List<me.raddatz.veyq.mobile.navigation.UseKey> =
+        store.get(recentKey(tenant))?.decodeToString()?.lines()?.mapNotNull(me.raddatz.veyq.mobile.navigation.UseKey::decode).orEmpty()
+
+    /** [uses] kept as this account's Recent in [tenant], sealed as every entry is (no id in clear on disk). */
+    suspend fun keepRecent(tenant: String, uses: List<me.raddatz.veyq.mobile.navigation.UseKey>) {
+        store.put(recentKey(tenant), uses.joinToString("\n") { it.encode() }.encodeToByteArray())
     }
 
     /**

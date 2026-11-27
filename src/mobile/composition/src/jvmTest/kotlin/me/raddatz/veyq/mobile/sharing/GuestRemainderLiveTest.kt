@@ -19,7 +19,6 @@ import me.raddatz.veyq.mobile.depot.FileModel
 import me.raddatz.veyq.mobile.expenses.Ledger
 import me.raddatz.veyq.mobile.expenses.PotCreate
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.FolderCreate
 import me.raddatz.veyq.mobile.session.LiveRun
@@ -156,7 +155,7 @@ class GuestRemainderLiveTest {
             val personal = owner.spaces().first { it.kind == "PERSONAL" }.scopeId
             val link = (ReceivedLink.open(rwUrl) as ReceivedLink.Parsed.Ok).link
             val kept = assertIs<NodeCreate.Result.Done>(BookmarkCreate.into(owner, personal, null).create("Kept $stamp", link, null)).created.nodeId
-            val shell = ShellModel(owner, Hidden({}, emptySet()), RecentUses({}, emptyList())) { System.currentTimeMillis() }
+            val shell = ShellModel(owner, Hidden({}, emptySet())) { System.currentTimeMillis() }
             shell.load(openLastUsed = false)
             val node = assertNotNull(shell.state.first { it != null }!!.lists.nodes.firstOrNull { it.nodeId == kept }?.asBookmark(), "the bookmark is not listed")
             shell.openBookmark(node)

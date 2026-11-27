@@ -88,11 +88,23 @@ data class UseKey(val scopeId: String, val nodeId: String, val lastUsedEpochMs: 
 }
 
 /**
- * Recent (ADR 0122 decision 6): per install, never synced, never sent. The platform persists [UseKey]s only; the names
- * come from the library each time the list is shown, and a use whose object is gone is dropped.
+ * Recent (ADR 0122 decision 6, inbox #1423): one account's in one tenant on this device, never synced, never sent — held by
+ * its account ([me.raddatz.veyq.mobile.session.VeyqAccount.recentUses]), kept sealed in that account's offline store where
+ * it has one, in memory for the account's session where it has none. [persist] is handed the [UseKey]s only; the names come
+ * from the library each time the list is shown, and a use whose object is gone is dropped.
  */
 class RecentUses(private val persist: (List<UseKey>) -> Unit, initial: List<UseKey>, private val keep: Int = 50) {
+    @kotlin.concurrent.Volatile
     private var keys: List<UseKey> = initial.sortedByDescending { it.lastUsedEpochMs }.take(keep)
+
+    /** The uses as kept, the latest first. */
+    val kept: List<UseKey> get() = keys
+
+    /** [more] (the uses a store kept) joined in, each object once at its latest use; not persisted — it is what was kept. */
+    fun merge(more: List<UseKey>) {
+        keys = (keys + more).groupBy { it.scopeId to it.nodeId }.map { (_, u) -> u.maxBy { it.lastUsedEpochMs } }
+            .sortedByDescending { it.lastUsedEpochMs }.take(keep)
+    }
 
     fun record(ref: ObjectRef, atEpochMs: Long) {
         keys = (listOf(UseKey(ref.scopeId, ref.nodeId, atEpochMs)) + keys.filterNot { it.scopeId == ref.scopeId && it.nodeId == ref.nodeId })
@@ -103,12 +115,5 @@ class RecentUses(private val persist: (List<UseKey>) -> Unit, initial: List<UseK
     fun resolve(objects: Collection<ObjectRef>): List<Use> {
         val byKey = objects.associateBy { it.scopeId to it.nodeId }
         return keys.mapNotNull { k -> byKey[k.scopeId to k.nodeId]?.let { Use(it, k.lastUsedEpochMs) } }
-    }
-
-    fun lastUsed(objects: Collection<ObjectRef>): ObjectRef? = resolve(objects).firstOrNull()?.ref
-
-    fun clear() {
-        keys = emptyList()
-        persist(keys)
     }
 }

@@ -6,7 +6,6 @@ import me.raddatz.veyq.mobile.blob.DeviceFiles
 import me.raddatz.veyq.mobile.blob.deviceFiles
 import me.raddatz.veyq.mobile.memories.MemoryMedia
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.Reach
 import me.raddatz.veyq.mobile.session.SignInFailure
@@ -256,13 +255,13 @@ class OfflineReadPathTest {
         val (t, node, _) = gallery()
         val a = t.resume()
         val tenant = tenantOf(a)
-        val shell = ShellModel(tenant, Hidden({}, emptySet()), RecentUses({}, emptyList())) { 0L }
+        val shell = ShellModel(tenant, Hidden({}, emptySet())) { 0L }
         shell.load(openLastUsed = false)
         assertNull(shell.current!!.offline)
         a.retire()
         t.reachable = false
         val offline = t.resume()
-        val shellOffline = ShellModel(tenantOf(offline), Hidden({}, emptySet()), RecentUses({}, emptyList())) { 0L }
+        val shellOffline = ShellModel(tenantOf(offline), Hidden({}, emptySet())) { 0L }
         shellOffline.load(openLastUsed = false)
         val state = assertNotNull(shellOffline.current)
         assertNotNull(state.offline, "the shell offline does not say so")

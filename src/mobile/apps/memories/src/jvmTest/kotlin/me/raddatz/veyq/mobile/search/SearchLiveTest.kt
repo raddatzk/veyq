@@ -24,7 +24,6 @@ import me.raddatz.veyq.mobile.memories.place.MemoryFacts
 import me.raddatz.veyq.mobile.memories.place.MemoryLocation
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.NodeAt
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.LiveRun
 import me.raddatz.veyq.mobile.session.NodeRename
@@ -111,7 +110,7 @@ class SearchLiveTest {
     fun theWholeTenantIsSearchedFromAnotherSpace_aPhotoOpensInItsMemory_andAnIdleFocusIsOne304EachSpaceAndListing() = runBlocking {
         org.junit.Assume.assumeTrue("VEYQ_LIVE is not set: a live case", liveRun.origin != null)
         val tenant = signIn()
-        val shell = ShellModel(tenant, Hidden({}, emptySet()), RecentUses({}, emptyList())) { System.currentTimeMillis() }
+        val shell = ShellModel(tenant, Hidden({}, emptySet())) { System.currentTimeMillis() }
         shell.load(openLastUsed = false)
         val spaces = shell.state.first { it != null }!!.lists.spaces
         val tenantSpace = assertNotNull(spaces.firstOrNull { it.kind == "TENANT" }?.scopeId, "no tenant space")

@@ -11,7 +11,6 @@ import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeHeader
 import me.raddatz.veyq.mobile.navigation.NodeHeaderModel
 import me.raddatz.veyq.mobile.navigation.NodeRef
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.session.AccountSettings
 import me.raddatz.veyq.mobile.session.OfflineAsOf
@@ -245,7 +244,7 @@ class OfflineScreensTest {
         val pins = assertNotNull(a.offlinePins).also { it.use(AppKinds.pins) }
         pins.pin(tenant, s.id, held.id)
         pins.sync()
-        val shell = ShellModel(tenant, Hidden({}, emptySet()), RecentUses({}, emptyList())) { 0L }
+        val shell = ShellModel(tenant, Hidden({}, emptySet())) { 0L }
         shell.load(openLastUsed = false)
         assertEquals(listOf("Summer"), shell.current!!.lists.nodes.map(NodeRef::name))
 

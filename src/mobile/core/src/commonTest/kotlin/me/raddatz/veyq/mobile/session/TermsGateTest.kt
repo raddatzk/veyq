@@ -6,7 +6,6 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.SessionModel.Gate
@@ -82,7 +81,7 @@ class TermsGateTest {
     }
 
     private fun model(door: Door, language: String = "en") =
-        SessionModel(door, Hidden({}, emptySet()), RecentUses({}, emptyList()), language = { language })
+        SessionModel(door, Hidden({}, emptySet()), language = { language })
 
     private fun gateOf(m: SessionModel<Acc, String>): SessionModel.TermsGate? = (m.current as Gate.Signed).terms
 

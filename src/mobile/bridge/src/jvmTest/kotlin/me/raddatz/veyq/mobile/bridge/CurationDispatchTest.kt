@@ -31,7 +31,6 @@ import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.navigation.NodeRef
 import me.raddatz.veyq.mobile.navigation.ObjectRef
 import me.raddatz.veyq.mobile.navigation.PersonProfile
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.Person
@@ -215,7 +214,7 @@ class CurationDispatchTest {
 
     private fun bridge(played: PlayedMemory, host: PlayedHost) = Bridge {
         val hidden = Hidden({}, emptySet())
-        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles, bannerPictures = HostBannerPictures(host.host)) { _ ->
+        Composition(SessionModel(Door(), hidden), hidden, JvmFiles, bannerPictures = HostBannerPictures(host.host)) { _ ->
             Tenant(
                 shell = null, pot = null, me = "u1", pictures = MutableStateFlow(mapOf("u2" to byteArrayOf(1))), loadPictures = {},
                 mediaUploads = { queue, _, _ -> me.raddatz.veyq.mobile.memories.MediaUploads(queue, NoUploads) },

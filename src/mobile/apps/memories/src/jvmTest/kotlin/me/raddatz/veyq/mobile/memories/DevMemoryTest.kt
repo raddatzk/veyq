@@ -54,7 +54,7 @@ class DevMemoryTest {
                 return@runBlocking
             }
             val shell = me.raddatz.veyq.mobile.navigation.ShellModel(
-                tenant, me.raddatz.veyq.mobile.navigation.Hidden({}, emptySet()), me.raddatz.veyq.mobile.navigation.RecentUses({}, emptyList()),
+                tenant, me.raddatz.veyq.mobile.navigation.Hidden({}, emptySet()),
             ) { System.currentTimeMillis() }
             shell.load(openLastUsed = false)
             val scopeId = assertNotNull(Home.defaultSpace(shell.state.first { it != null }!!.lists.spaces)?.scopeId, "no space")

@@ -7,7 +7,6 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.test.runTest
 import me.raddatz.veyq.mobile.crypto.V1
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.offline.Queued
 import me.raddatz.veyq.mobile.offline.QueuedWrite
 import me.raddatz.veyq.mobile.offline.SizedVolume
@@ -50,7 +49,7 @@ class UnlockForgetTest {
     @AfterTest
     fun cleanUp() = removeAll(root)
 
-    private fun model() = SessionModel(AccountDoor(p, device, client), Hidden({}, emptySet()), RecentUses({}, emptyList()))
+    private fun model() = SessionModel(AccountDoor(p, device, client), Hidden({}, emptySet()))
 
     /** [userId] on [host] trusted here by [method]: its record, bind key, refresh token, kept wrap and a store with [waiting] writes. */
     private suspend fun trusted(host: String, userId: String, method: TrustedDevice.Method, waiting: Int): TrustedDevice {
@@ -130,7 +129,7 @@ class UnlockForgetTest {
     @Test
     fun theShareExtensionForgetsNothing() = runTest {
         val record = trusted("a.example", "u-1", TrustedDevice.Method.DEVICE, waiting = 0)
-        val m = SessionModel(AccountDoor(p, device, client), Hidden({}, emptySet()), RecentUses({}, emptyList()), signInElsewhere = true)
+        val m = SessionModel(AccountDoor(p, device, client), Hidden({}, emptySet()), signInElsewhere = true)
         m.start()
         assertIs<Gate.Unlock>(m.current)
         assertFalse(m.forgetUnlocked())

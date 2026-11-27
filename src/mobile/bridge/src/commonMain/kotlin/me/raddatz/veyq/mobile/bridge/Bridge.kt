@@ -77,11 +77,9 @@ import me.raddatz.veyq.mobile.words.Notices
 import me.raddatz.veyq.mobile.words.Notice
 import me.raddatz.veyq.mobile.words.Msg
 import me.raddatz.veyq.mobile.session.TenantGroups.Outcome as GroupsOutcome
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.ShellModel
 import me.raddatz.veyq.mobile.navigation.ShellWords
 import me.raddatz.veyq.mobile.navigation.TenantRef
-import me.raddatz.veyq.mobile.navigation.UseKey
 import me.raddatz.veyq.mobile.session.AccountSettings
 import me.raddatz.veyq.mobile.session.DeviceKeys
 import me.raddatz.veyq.mobile.session.DeviceLink
@@ -4049,10 +4047,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
              */
             guestSessions: me.raddatz.veyq.mobile.sharing.GuestSessions = me.raddatz.veyq.mobile.sharing.MemoryGuestSessions(),
         ): Bridge<VeyqAccount, TenantSession> = Bridge {
-            val recent = RecentUses(
-                persist = { keys -> store.write(RECENT, keys.joinToString("\n") { it.encode() }) },
-                initial = store.read(RECENT)?.lines()?.mapNotNull(UseKey::decode).orEmpty(),
-            )
+            // Recent is each account's, sealed in its store (inbox #1423): the device-wide list of before goes unread
+            runCatching { store.remove(LEGACY_RECENT) }
             val hidden = Hidden(
                 persist = { ids -> store.write(HIDDEN, ids.joinToString("\n")) },
                 initial = store.read(HIDDEN)?.lines()?.filter { it.isNotEmpty() }?.toSet().orEmpty(),
@@ -4065,7 +4061,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 backgroundRuns = false,
             )
             Composition(
-                SessionModel.accounts(primitives, device, client, hidden, recent, language = { config.language }), hidden, files, pictures = pictures,
+                SessionModel.accounts(primitives, device, client, hidden, language = { config.language }), hidden, files, pictures = pictures,
                 settings = { session, account, separator -> AccountSettings.of(session, account, separator) }, tiers = tiers, audio = audio,
                 bannerPictures = bannerPictures, language = config.language, webp = webp, words = words,
                 trustedLink = { account, role, decode ->
@@ -4091,7 +4087,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     )
                 },
             ) { t ->
-                val shell = ShellModel(t, hidden, recent, now)
+                val shell = ShellModel(t, hidden, now)
                 Tenant(
                     shell, { PotModel(t, now) }, t.account.userId, t.pictures.state, t.pictures::load, t.pictures.held.map { it.round },
                     ownProfile = { t.profile(profileEncoder) }, trust = t.personTrust, spaces = { t.spaces() }, session = t,
@@ -4100,8 +4096,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             }
         }
 
-        /** The device store's names for what the bridge itself keeps there (the others are the core's). */
-        const val RECENT = "veyq.recent"
+        /** The device store's names for what the bridge itself keeps there (the others are the core's); [LEGACY_RECENT] the
+         *  device-wide Recent of before inbox #1423, removed at the start and never read. */
+        const val LEGACY_RECENT = "veyq.recent"
         const val HIDDEN = "veyq.hidden"
     }
 }

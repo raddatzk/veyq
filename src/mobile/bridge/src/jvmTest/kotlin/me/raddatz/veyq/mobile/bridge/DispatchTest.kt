@@ -21,7 +21,6 @@ import me.raddatz.veyq.mobile.navigation.NodeAt
 import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.navigation.Hidden
 import me.raddatz.veyq.mobile.navigation.ObjectRef
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.SessionModel
@@ -108,7 +107,7 @@ class DispatchTest {
         }
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
-            Composition(SessionModel(door, hidden, RecentUses({}, emptyList()), language = { "de" }), hidden, language = "de") { null }
+            Composition(SessionModel(door, hidden, language = { "de" }), hidden, language = "de") { null }
         }
         val gate = b.watching(Watched.Session)
         assertEquals(Answer.Done, b.ask(Call.SessionStart))
@@ -190,7 +189,7 @@ class DispatchTest {
 
     private fun bridge() = Bridge {
         val hidden = Hidden({}, emptySet())
-        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { null }
+        Composition(SessionModel(Door(), hidden), hidden) { null }
     }
 
     /** The pictures the played tenant's core holds, and how often the bridge asked them read. */
@@ -200,7 +199,7 @@ class DispatchTest {
     /** A bridge whose session opens a tenant: no shell, no Pot, the member "u1" and [pictures]. */
     private fun bridgeWithTenant() = Bridge {
         val hidden = Hidden({}, emptySet())
-        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { _ ->
+        Composition(SessionModel(Door(), hidden), hidden) { _ ->
             Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = { picturesLoaded.incrementAndGet() })
         }
     }
@@ -226,7 +225,7 @@ class DispatchTest {
         val seen = mutableListOf<List<Byte>>()
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
-            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, webp = { bytes ->
+            Composition(SessionModel(Door(), hidden), hidden, webp = { bytes ->
                 seen += bytes.toList()
                 if (bytes.contentEquals(webp)) png else null
             }) { null }
@@ -417,7 +416,7 @@ class DispatchTest {
     /** The app started over what [kept] holds. */
     private fun started(kept: Kept) = Bridge {
         val hidden = Hidden({}, emptySet())
-        Composition(SessionModel(TrustingDoor(kept), hidden, RecentUses({}, emptyList())), hidden) { null }
+        Composition(SessionModel(TrustingDoor(kept), hidden), hidden) { null }
     }
 
     private val both = listOf(StaySignedIn.PRESENCE, StaySignedIn.LOGIN)
@@ -620,7 +619,7 @@ class DispatchTest {
         val kept = mutableListOf<Set<String>>()
         val b = Bridge {
             val hidden = Hidden({ kept += it }, emptySet())
-            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { null }
+            Composition(SessionModel(Door(), hidden), hidden) { null }
         }
         b.signedIn()
         val manage = b.watching(Watched.Manage)
@@ -690,7 +689,7 @@ class DispatchTest {
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
             Composition(
-                SessionModel(TrustingDoor(kept), hidden, RecentUses({}, emptyList())), hidden,
+                SessionModel(TrustingDoor(kept), hidden), hidden,
                 settings = { session, account, separator -> me.raddatz.veyq.mobile.session.AccountSettings(played, HeldBy(session, account), "p@a.example", separator) { 0L } },
             ) { _ -> Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {}) }
         }
@@ -798,7 +797,7 @@ class DispatchTest {
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
             Composition(
-                SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden,
+                SessionModel(Door(), hidden), hidden,
                 settings = { session, account, separator -> me.raddatz.veyq.mobile.session.AccountSettings(played, HeldBy(session, account), "p@a.example", separator) { 0L } },
             ) { _ -> Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {}) }
         }
@@ -855,7 +854,7 @@ class DispatchTest {
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
             Composition(
-                SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden,
+                SessionModel(Door(), hidden), hidden,
                 settings = { session, account, separator -> me.raddatz.veyq.mobile.session.AccountSettings(played, HeldBy(session, account), "p@a.example", separator) { 0L } },
             ) { _ -> Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {}) }
         }
@@ -928,7 +927,7 @@ class DispatchTest {
     /** A bridge whose tenant's header, trash and new folder are played over [played]. */
     private fun bridgeWithHeader(played: Played) = Bridge {
         val hidden = Hidden({}, emptySet())
-        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { _ ->
+        Composition(SessionModel(Door(), hidden), hidden) { _ ->
             Tenant(
                 shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
                 header = { node, facts, closeOpen ->
@@ -1113,7 +1112,7 @@ class DispatchTest {
     /** A bridge whose tenant's move sheets and download are played over [played], its files the JVM's. */
     private fun bridgeWithMove(played: PlayedMove, written: ByteArray, leftOut: List<me.raddatz.veyq.mobile.export.NodeExport.Skipped>) = Bridge {
         val hidden = Hidden({}, emptySet())
-        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles) { _ ->
+        Composition(SessionModel(Door(), hidden), hidden, JvmFiles) { _ ->
             Tenant(
                 shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
                 header = { node, facts, _ -> me.raddatz.veyq.mobile.navigation.NodeHeaderModel(node, facts, Played()) },
@@ -1286,7 +1285,7 @@ class DispatchTest {
         val headerFacts = java.util.concurrent.CopyOnWriteArrayList<AppKinds.Facts?>()
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
-            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { _ ->
+            Composition(SessionModel(Door(), hidden), hidden) { _ ->
                 Tenant(
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
                     header = { node, facts, _ -> headerFacts += facts; me.raddatz.veyq.mobile.navigation.NodeHeaderModel(node, facts, played) },
@@ -1389,7 +1388,7 @@ class DispatchTest {
         played.links += played.link("a", true, "2026-11-01")
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
-            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { _ ->
+            Composition(SessionModel(Door(), hidden), hidden) { _ ->
                 Tenant(
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
                     share = { node -> me.raddatz.veyq.mobile.navigation.ShareSheet(node, played, { 1_700_000_000_000L }) },
@@ -1487,7 +1486,7 @@ class DispatchTest {
         }
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
-            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { _ ->
+            Composition(SessionModel(Door(), hidden), hidden) { _ ->
                 Tenant(
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
                     report = { node -> me.raddatz.veyq.mobile.navigation.ReportSheet(node, door) },
@@ -1543,7 +1542,7 @@ class DispatchTest {
         val writes = java.util.concurrent.CopyOnWriteArrayList<String>()
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
-            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles) { _ ->
+            Composition(SessionModel(Door(), hidden), hidden, JvmFiles) { _ ->
                 Tenant(
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
                     header = { node, facts, _ ->
@@ -1648,7 +1647,7 @@ class DispatchTest {
         val played = PlayedFiles(mapOf("a.webm" to (webm to "video/webm"), "a.png" to (png to "image/png")))
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
-            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles) { _ ->
+            Composition(SessionModel(Door(), hidden), hidden, JvmFiles) { _ ->
                 Tenant(
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
                     header = { node, facts, _ -> me.raddatz.veyq.mobile.navigation.NodeHeaderModel(node, facts, Played()) },
@@ -1706,7 +1705,7 @@ class DispatchTest {
         ))
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
-            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles) { _ ->
+            Composition(SessionModel(Door(), hidden), hidden, JvmFiles) { _ ->
                 Tenant(
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
                     header = { node, facts, _ -> me.raddatz.veyq.mobile.navigation.NodeHeaderModel(node, facts, Played()) },
@@ -1905,7 +1904,7 @@ class DispatchTest {
         }
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
-            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles) { _ ->
+            Composition(SessionModel(Door(), hidden), hidden, JvmFiles) { _ ->
                 Tenant(
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
                     takesUpload = { scopeId, _ -> scopeId == "s" },
@@ -1976,7 +1975,7 @@ class DispatchTest {
         val judged = java.util.Collections.synchronizedList(ArrayList<Pair<String, String?>>())
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
-            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, files) { _ ->
+            Composition(SessionModel(Door(), hidden), hidden, files) { _ ->
                 Tenant(
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
                     // the core offers space "s", but never the guest's identity folder "identity" in it
@@ -2024,7 +2023,7 @@ class DispatchTest {
         }
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
-            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles) { _ ->
+            Composition(SessionModel(Door(), hidden), hidden, JvmFiles) { _ ->
                 Tenant(
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
                     drop = { target, items, _, left, deletedName ->
@@ -2087,7 +2086,7 @@ class DispatchTest {
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
             Composition(
-                SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles,
+                SessionModel(Door(), hidden), hidden, JvmFiles,
                 queuedAsk = { account, loss -> me.raddatz.veyq.mobile.offline.QueuedShown.ask(loss, if (account.key == "a.example#u1") 2 else 0) },
             ) { _ -> Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {}) }
         }
@@ -2117,7 +2116,7 @@ class DispatchTest {
         val opened = java.util.Collections.synchronizedList(ArrayList<String>())
         val bridge = Bridge {
             val hidden = Hidden({}, emptySet())
-            Composition(SessionModel(two, hidden, RecentUses({}, emptyList())), hidden) { session ->
+            Composition(SessionModel(two, hidden), hidden) { session ->
                 opened += session
                 Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {})
             }
@@ -2151,7 +2150,7 @@ class DispatchTest {
         val level = PlayedLevel()
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
-            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles) { _ ->
+            Composition(SessionModel(Door(), hidden), hidden, JvmFiles) { _ ->
                 Tenant(
                     shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {},
                     header = { node, facts, _ -> me.raddatz.veyq.mobile.navigation.NodeHeaderModel(node, facts, Played()) },
@@ -2351,7 +2350,7 @@ class DispatchTest {
         )
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
-            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, JvmFiles) { _ ->
+            Composition(SessionModel(Door(), hidden), hidden, JvmFiles) { _ ->
                 Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {}, queued = door)
             }
         }
@@ -2406,7 +2405,7 @@ class DispatchTest {
 
     private fun bridgeWithPot(pot: PlayedPot, clock: java.util.concurrent.atomic.AtomicLong, opened: kotlinx.coroutines.CompletableDeferred<Unit>, files: DeviceFiles = JvmFiles) = Bridge {
         val hidden = Hidden({}, emptySet())
-        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, files) { _ ->
+        Composition(SessionModel(Door(), hidden), hidden, files) { _ ->
             Tenant(shell = null, pot = { me.raddatz.veyq.mobile.expenses.PotModel({ clock.get() }) { opened.await(); pot } }, me = "u1", pictures = pictures, loadPictures = {})
         }
     }
@@ -2829,7 +2828,7 @@ class DispatchTest {
         val languages = java.util.concurrent.CopyOnWriteArrayList<String>()
         val hidden = Hidden({}, emptySet())
         val b = Bridge {
-            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { _ ->
+            Composition(SessionModel(Door(), hidden), hidden) { _ ->
                 Tenant(shell = null, pot = null, me = "u1", pictures = pictures, loadPictures = {}, createPot = { language ->
                     languages += language
                     me.raddatz.veyq.mobile.expenses.PotCreateSheet.open(door, place, listOf(family, mine), language, scope, kotlinx.coroutines.Dispatchers.Default)
@@ -3094,7 +3093,7 @@ class DispatchTest {
 
     private fun scanBridge(decode: suspend (me.raddatz.veyq.mobile.qr.QrFrame) -> String?) = Bridge {
         val hidden = Hidden({}, emptySet())
-        Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden, decode = decode) { null }
+        Composition(SessionModel(Door(), hidden), hidden, decode = decode) { null }
     }
 
     private fun plane(width: Int, height: Int, stride: Int = width, first: Int = 0) = ByteArray(stride * height) { first.toByte() }
@@ -3173,7 +3172,7 @@ class DispatchTest {
         // the default composition's decoder, the core's own, over the pairing fixture the web's `qrcode` drew
         val b = Bridge {
             val hidden = Hidden({}, emptySet())
-            Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { null }
+            Composition(SessionModel(Door(), hidden), hidden) { null }
         }
         val frame = pgm(java.io.File(System.getProperty("veyq.repoRoot"), "src/mobile/core/src/commonTest/resources/qr/pair.pgm").readBytes())
         val scan = (b.ask(Call.ScanOpen(ScanKind.SCHEME)) as Answer.ScanOpened).scan

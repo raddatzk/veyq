@@ -87,7 +87,7 @@ class InvitesLiveTest {
             assertEquals(TenantJoin.Phase.DONE, join.current.phase, "joined: ${join.current.error}")
             assertTrue(join.current.canOpen)
             // *Open the space*: the app's own sign-in with what the join holds; the tenant opens under the self-grant's key
-            val model = SessionModel.accounts(p, run.device(), client, me.raddatz.veyq.mobile.navigation.Hidden({}, emptySet()), me.raddatz.veyq.mobile.navigation.RecentUses({}, emptyList()))
+            val model = SessionModel.accounts(p, run.device(), client, me.raddatz.veyq.mobile.navigation.Hidden({}, emptySet()))
             model.start()
             val opened = assertNotNull(join.openSpace(model), "the joined account opens: ${join.current.error} ${model.current}")
             join.close()

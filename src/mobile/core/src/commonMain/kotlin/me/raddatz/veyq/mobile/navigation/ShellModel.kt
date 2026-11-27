@@ -47,7 +47,7 @@ import me.raddatz.veyq.mobile.words.Notices
 
 /**
  * The shell over one tenant (ADR 0122, ADR 0161 decision 2): what it lists — its spaces, nodes, objects and favorites as
- * this device shows them ([Hidden]), the drawer's short lists ([RecentUses]), the applications and Home's filters — and
+ * this device shows them ([Hidden]), the drawer's short lists (Recent this account's, [VeyqAccount.recentUses]), the applications and Home's filters — and
  * where the person is ([Shell]), with every action on a node that changes what is listed: a favorite, the trash and its
  * undo, a rename, a move, a new folder, a copy. Each reads the lists anew and keeps the shell on what is still there: a
  * page whose node went leaves for its parent, a folder on Home's path that went or moved shows where it is now.
@@ -62,7 +62,6 @@ import me.raddatz.veyq.mobile.words.Notices
 class ShellModel(
     val tenant: TenantSession,
     private val hidden: Hidden,
-    private val recent: RecentUses,
     @PlatformApi @HiddenFromObjC val now: () -> Long,
 ) : ShellDoor {
     /** What the shell lists, this device's hidden spaces taken out. */
@@ -134,6 +133,10 @@ class ShellModel(
     private class Raw(val spaces: List<SpaceRef>, val nodes: List<NodeRef>, val favorites: List<ObjectRef>, val off: Set<String>)
 
     private var raw: Raw? = null
+
+    /** This account's Recent in this tenant (inbox #1423), the account's own from [load] on; none before. */
+    @kotlin.concurrent.Volatile
+    private var recent = RecentUses({}, emptyList())
     private val reading = Mutex()
 
     private val _state = MutableStateFlow<State?>(null)
@@ -167,6 +170,7 @@ class ShellModel(
      */
     suspend fun load(openLastUsed: Boolean) {
         reading.withLock { raw = read() }
+        recent = runCatching { tenant.account.recentUses(tenantId) }.getOrDefault(recent)
         startPlace = if (openLastUsed) runCatching { tenant.account.offline?.place(tenantId) }.getOrNull() else null
         rebuild(start = true, openLastUsed = openLastUsed)
         startPlace = null

@@ -20,7 +20,6 @@ import me.raddatz.veyq.mobile.crypto.b64
 import me.raddatz.veyq.mobile.crypto.unb64
 import me.raddatz.veyq.mobile.navigation.Connection
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import me.raddatz.veyq.mobile.navigation.SpaceRef
 import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.SessionModel.Gate
@@ -107,7 +106,7 @@ class SignInEntriesTest {
         }
     }
 
-    private fun model(door: Door) = SessionModel(door, Hidden({}, emptySet()), RecentUses({}, emptyList()))
+    private fun model(door: Door) = SessionModel(door, Hidden({}, emptySet()))
 
     private suspend fun signInGate(door: Door): SessionModel<Acc, String> = model(door).also { it.start() }
 

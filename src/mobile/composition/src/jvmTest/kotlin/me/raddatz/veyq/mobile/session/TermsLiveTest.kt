@@ -6,7 +6,6 @@ import me.raddatz.veyq.mobile.api.models.LocalizedMarkdown
 import me.raddatz.veyq.mobile.api.models.TenantTermsUpdate
 import me.raddatz.veyq.mobile.crypto.BouncyCastlePrimitives
 import me.raddatz.veyq.mobile.navigation.Hidden
-import me.raddatz.veyq.mobile.navigation.RecentUses
 import org.junit.Assume.assumeTrue
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -63,7 +62,7 @@ class TermsLiveTest {
             assertTrue(read.shown("en").operatorSection.isNotBlank(), "the operator section follows the space's text")
 
             // the real way in, over the real door: the gate stands over the tenant just opened, in German
-            val model = SessionModel(door("VEYQ"), Hidden({}, emptySet()), RecentUses({}, emptyList()), language = { "de" })
+            val model = SessionModel(door("VEYQ"), Hidden({}, emptySet()), language = { "de" })
             model.start()
             assertNotNull(model.signIn(origin, t.email(), t.env.getValue("VEYQ_PASSWORD"), t.env.getValue("VEYQ_SECRET_KEY")))
             val gated = model.current as SessionModel.Gate.Signed
