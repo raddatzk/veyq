@@ -536,6 +536,8 @@ internal sealed class AccountSettingsPage : IDisposable
                 SettingsSection.Members => DrawMembers,
                 SettingsSection.WhosWho => DrawWhosWho,
                 SettingsSection.Terms => DrawTerms,
+                SettingsSection.Groups => DrawGroups,
+                SettingsSection.GroupInvitations => DrawGroupInvitations,
                 SettingsSection.SignOut => DrawSignOut,
             };
             draw();
@@ -706,6 +708,25 @@ internal sealed class AccountSettingsPage : IDisposable
         var open = TextButton(Words.TermsSettingsTitle(), "settings-open:terms");
         open.Click += (_, _) => TermsDialog.Open(_window);
         _sections.Children.Add(Card("\uE8A5", Words.TermsSettingsTitle(), [Words.TermsEditorSub()], "settings-terms", open));
+    }
+
+    /// <summary>The caller's groups in the open space (the web's `groups` category, en.spaces.group-scope): opened over the
+    /// page, each group's page from there (GroupsDialog).</summary>
+    private void DrawGroups()
+    {
+        _sections.Children.Add(Anchor("groups", Heading(Words.GroupsTitle())));
+        var open = TextButton(Words.GroupsTitle(), "settings-open:groups");
+        open.Click += (_, _) => GroupsDialog.Open(_window);
+        _sections.Children.Add(Card("\uE902", Words.GroupsTitle(), [Words.GroupsMembersSub()], "settings-groups", open));
+    }
+
+    /// <summary>The caller's group invitations (uc.spaces.consent-group-add, the web's `/invitations`): opened over the page.</summary>
+    private void DrawGroupInvitations()
+    {
+        _sections.Children.Add(Anchor("group-invitations", Heading(Words.InvitationsTitle())));
+        var open = TextButton(Words.InvitationsTitle(), "settings-open:group-invitations");
+        open.Click += (_, _) => GroupInvitationsDialog.Open(_window);
+        _sections.Children.Add(Card("\uE715", Words.InvitationsTitle(), [Words.InvitationsSub()], "settings-group-invitations", open));
     }
 
     /// <summary>Which Emergency Kit the account has (ADR 0157 decision 5): current, or a clearer one exists — what it does
