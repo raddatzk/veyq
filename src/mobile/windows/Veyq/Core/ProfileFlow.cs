@@ -235,19 +235,15 @@ internal sealed class ProfilePage : FlowPage
         if (_id is not { } id) return;
         try
         {
-            var picker = new Windows.Storage.Pickers.FileOpenPicker { SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.PicturesLibrary, ViewMode = Windows.Storage.Pickers.PickerViewMode.Thumbnail };
-            foreach (var ext in new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".heic", ".heif" }) picker.FileTypeFilter.Add(ext);
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(Window));
-            var file = await picker.PickSingleFileAsync();
-            if (file is null || Closed) return;
-            var pose = await SquareCropDialog.Ask(Window, file.Path);
-            _pictureNotImage = pose is SquareCropDialog.NotAPicture;
-            if (pose is not SquareCropDialog.Posed posed || Closed)
+            var picked = await SquareCropDialog.Pick(Window);
+            if (Closed) return;
+            _pictureNotImage = picked is SquareCropDialog.NotAPicture;
+            if (picked is not SquareCropDialog.Picked chosen)
             {
                 if (_state is { } s) Draw(s);
                 return;
             }
-            var (answer, _) = await Core.CallAsync(new Call.ProfilePicture { profile = id, path = file.Path, pose = posed.Pose });
+            var (answer, _) = await Core.CallAsync(new Call.ProfilePicture { profile = id, path = chosen.Path, pose = chosen.Pose });
             Log.Write($"Profile.Picture answered {(answer is Answer.Refused r ? $"Refused {r.why}" : answer.GetType().Name)}");
             _pictureNotImage = answer is Answer.Refused;
             if (_state is { } now) Draw(now);
@@ -284,6 +280,21 @@ internal sealed class SquareCropDialog
     public sealed record Posed(Pose Pose) : Outcome;
     public sealed record NotAPicture : Outcome;
     public sealed record Cancelled : Outcome;
+    /// <summary>A file picked and framed: its path (the core reads it there) and the pose.</summary>
+    public sealed record Picked(string Path, Pose Pose) : Outcome;
+
+    /// <summary>The app's one square pick (one's profile picture, a space's or a group's icon, the join's picture): the open
+    /// picker for one image over <paramref name="window"/>, then this cropper; <see cref="Picked"/>, or why none.</summary>
+    public static async Task<Outcome> Pick(Window window, string? title = null)
+    {
+        var picker = new Windows.Storage.Pickers.FileOpenPicker { SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.PicturesLibrary, ViewMode = Windows.Storage.Pickers.PickerViewMode.Thumbnail };
+        foreach (var ext in new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".heic", ".heif" }) picker.FileTypeFilter.Add(ext);
+        WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(window));
+        var file = await picker.PickSingleFileAsync();
+        if (file is null) return new Cancelled();
+        var pose = await Ask(window, file.Path, title);
+        return pose is Posed posed ? new Picked(file.Path, posed.Pose) : pose;
+    }
 
     private readonly Canvas _canvas = new() { Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent) };
     private readonly Image _image = new() { Stretch = Stretch.Fill };
@@ -295,8 +306,9 @@ internal sealed class SquareCropDialog
     private long _asked;
     private bool _drawing;
 
-    /// <summary>The picture at <paramref name="path"/> framed square over <paramref name="window"/>: the pose chosen, or why none.</summary>
-    public static async Task<Outcome> Ask(Window window, string path)
+    /// <summary>The picture at <paramref name="path"/> framed square over <paramref name="window"/>, the dialog titled
+    /// <paramref name="title"/> (one's profile picture by default; a space's icon names its act): the pose chosen, or why none.</summary>
+    public static async Task<Outcome> Ask(Window window, string path, string? title = null)
     {
         SoftwareBitmap bitmap;
         try
@@ -308,10 +320,10 @@ internal sealed class SquareCropDialog
             Log.Write($"a profile picture did not decode ({e.GetType().Name})");
             return new NotAPicture();
         }
-        return await new SquareCropDialog().Show(window, bitmap);
+        return await new SquareCropDialog().Show(window, bitmap, title ?? Words.ProfilePictureLabel());
     }
 
-    private async Task<Outcome> Show(Window window, SoftwareBitmap bitmap)
+    private async Task<Outcome> Show(Window window, SoftwareBitmap bitmap, string title)
     {
         _size = ((uint)bitmap.PixelWidth, (uint)bitmap.PixelHeight);
         var body = new StackPanel { Spacing = 12 };
@@ -326,7 +338,7 @@ internal sealed class SquareCropDialog
         };
         _canvas.Children.Add(_image);
         frame.Children.Add(_canvas);
-        AutomationProperties.SetName(frame, Words.ProfilePictureLabel());
+        AutomationProperties.SetName(frame, title);
         AutomationProperties.SetAutomationId(frame, "profile-crop-frame");
         _canvas.Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(0, 0, Edge, Edge) };
         _canvas.ManipulationMode = ManipulationModes.TranslateX | ManipulationModes.TranslateY;
@@ -349,7 +361,7 @@ internal sealed class SquareCropDialog
         _image.Source = source;
         var dialog = new ContentDialog
         {
-            Title = Words.ProfilePictureLabel(),
+            Title = title,
             Content = body,
             PrimaryButtonText = Words.ProfilePictureUse(),
             CloseButtonText = Words.EntryCancel(),

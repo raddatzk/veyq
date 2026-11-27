@@ -3,11 +3,14 @@
 // caller's groups in the open space, in a ContentDialog over the page as Members is — each row its name (or *Untitled
 // group*), the caller's role and the trash's mark of a deleted group or the key's of one behind its epoch; *New group*
 // where the core says the caller may create one. A row opens the group's page, the list giving way to it (one ContentDialog
-// at a time, Dialogs.cs) and coming back when it closes — the web's GroupMembersPanel without the icon, the lock and the
-// links card: an owner's Rename in place, the members with their acts in each row's MenuFlyout (Make co-owner, Remove
-// co-owner, Remove asked in place with the turn-off-every-link option, Withdraw for a proposal), Add member by username,
-// Delete group asked in place first, and a deleted group's Restore; a member reads the page with the core's read-only
-// note. *New group* asks the name (the web's CreateGroupDialog) and opens the new group's page. What an act says is an
+// at a time, Dialogs.cs) and coming back when it closes — the web's GroupMembersPanel: the group's identity header
+// (ScopeActs.Header: its icon, which an owner adds, changes — the page giving way to the square crop and opening again
+// with what the act said — or removes) with an owner's Rename in place, the members with their trust badge and their
+// acts in each row's MenuFlyout (Make co-owner, Remove co-owner, Remove asked in place with the turn-off-every-link
+// option, Withdraw for a proposal), Add member by username, where the core says (wholeActs) the *Links* and *New lock*
+// sections with the group's words (ScopeActs.LinksAndLock), and the danger zone's Delete group asked in place first or,
+// deleted, the day it is deleted as a warning and Restore (a deleted row in the list says that day too); a member
+// reads the page with the core's read-only note. *New group* asks the name (the web's CreateGroupDialog) and opens the new group's page. What an act says is an
 // InfoBar at the dialog's top, every rule the core's. Every word is the catalog's (Words.g.cs).
 
 namespace Veyq.Core;
@@ -124,6 +127,12 @@ internal static class GroupsDialog
         AutomationProperties.SetAutomationId(name, "group-row-title");
         column.Children.Add(name);
         column.Children.Add(TermsText.Line(row.owner ? Words.MembersRoleOwner() : Words.MembersRoleMember(), true));
+        if (row.deleted && row.deletion is { } day)
+        {
+            var deletion = Badge(Said.Notice(day));
+            AutomationProperties.SetAutomationId(deletion, "group-row-deletion");
+            column.Children.Add(deletion);
+        }
         if (row.behind)
         {
             var behind = Badge(Words.MembersPending());
@@ -135,7 +144,7 @@ internal static class GroupsDialog
         {
             // the web's roster marks a group on its way out with the trash
             var trash = new FontIcon { Glyph = "\uE74D", FontSize = 16, VerticalAlignment = VerticalAlignment.Center };
-            AutomationProperties.SetName(trash, Words.GroupsPendingSub());
+            AutomationProperties.SetName(trash, row.deletion is { } when ? Said.Notice(when) : Words.GroupsPendingSub());
             AutomationProperties.SetAutomationId(trash, "group-row-deleted");
             Grid.SetColumn(trash, 2);
             grid.Children.Add(trash);
@@ -177,9 +186,11 @@ internal static class GroupsDialog
 
     // ---- a group's page ----
 
-    /// <summary>A group's page once; the list once it is closed.</summary>
-    private static async Task<Step?> Page(Window window, string scopeId)
+    /// <summary>A group's page once, saying <paramref name="opened"/> first; what it gave way to (the icon's crop), else
+    /// the list once it is closed.</summary>
+    private static async Task<Step?> Page(Window window, string scopeId, (string Said, bool Done)? opened = null)
     {
+        Step? after = null;
         var (said, outer, body) = Frame("group-notice");
         var dialog = new ContentDialog
         {
@@ -190,13 +201,25 @@ internal static class GroupsDialog
         };
         AutomationProperties.SetAutomationId(dialog, "group-page");
         // what an act says is a success where it went through ("Invitation sent"), else its failure
-        void Say(Notice n, bool done)
+        void SayText(string text, bool done)
         {
-            said.Message = Said.Notice(n);
+            said.Message = text;
             said.Severity = done ? InfoBarSeverity.Success : InfoBarSeverity.Error;
             said.IsOpen = true;
         }
-        async void Run(Call call)
+        void Say(Notice n, bool done) => SayText(Said.Notice(n), done);
+        if (opened is { } o0) SayText(o0.Said, o0.Done);
+        var asks = new ScopeActs.Asks();
+        void PickIcon(string title)
+        {
+            after = async () =>
+            {
+                var told = await ScopeActs.PickIcon(window, scopeId, title);
+                return () => Page(window, scopeId, told);
+            };
+            dialog.Hide();
+        }
+        async Task Run(Call call)
         {
             body.IsHitTestVisible = false;
             var (answer, _) = await Core.CallAsync(call);
@@ -208,11 +231,18 @@ internal static class GroupsDialog
                 else if (o.done) said.IsOpen = false;
                 if (o.done) Load();
             }
+            else if (answer is Answer.IconChanged { notice: { } icon } cleared)
+            {
+                Log.Write($"a group's icon act: done {cleared.done}");
+                Say(icon, cleared.done);
+                if (cleared.done) Load();
+            }
             else Log.Write($"a group's act answered {answer?.GetType().Name}");
         }
         async void Load()
         {
             body.Children.Clear();
+            asks.Drop();
             var ring = Loading(Words.MembersLoading());
             body.Children.Add(ring);
             var (answer, _) = await Core.CallAsync(new Call.SettingsGroup { scopeId = scopeId });
@@ -223,45 +253,35 @@ internal static class GroupsDialog
                 Line(body, Words.MembersLoadFailed(), "group-said", Load);
                 return;
             }
-            Log.Write($"group page: owner {page.owner}, deleted {page.deleted}, {page.members.Count} members, said {page.said}");
-            Draw(body, page, Run);
+            Log.Write($"group page: owner {page.owner}, deleted {page.deleted} (day {page.deletion is not null}), whole acts {page.wholeActs}, {page.members.Count} members ({System.Linq.Enumerable.Count(page.members, m => m.badgeWord is not null)} badged), said {page.said}");
+            Draw(body, page, call => _ = Run(call), Run, asks, PickIcon);
         }
         Load();
         await Dialogs.Show(window, dialog);
-        return () => List(window);
+        return after ?? (() => List(window));
     }
 
-    /// <summary>The page's content: the name with an owner's Rename, a deleted group's line and Restore, the members with
-    /// Add member, and an owner's Delete group.</summary>
-    private static void Draw(StackPanel body, GroupPage page, Action<Call> run)
+    /// <summary>The page's content: the header (the icon, the name with an owner's Rename), a deleted group's day, the
+    /// members with Add member, where the core says the Links and New lock sections, and an owner's danger zone.</summary>
+    private static void Draw(StackPanel body, GroupPage page, Action<Call> run, Func<Call, Task> running, ScopeActs.Asks asks, Action<string> pickIcon)
     {
         var title = page.name.Length > 0 ? page.name : Words.GroupsUntitled();
-        var header = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        AutomationProperties.SetAutomationId(header, "group-header");
-        var name = new TextBlock { Text = title, Style = Style("SubtitleTextBlockStyle"), TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
-        AutomationProperties.SetAutomationId(name, "group-name");
-        AutomationProperties.SetHeadingLevel(name, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level1);
-        header.Children.Add(name);
+        Button? rename = null;
         if (page.owner)
         {
-            var rename = new Button { Content = Words.GroupsRename(), VerticalAlignment = VerticalAlignment.Center };
+            rename = new Button { Content = Words.GroupsRename() };
             AutomationProperties.SetAutomationId(rename, "group-rename");
             rename.Click += (_, _) => AskRename(body, page, run);
-            header.Children.Add(rename);
         }
+        var header = ScopeActs.Header(page.scopeId, title, page.owner, asks, pickIcon, running, "group-name", rename);
+        AutomationProperties.SetAutomationId((FrameworkElement)header, "group-header");
         body.Children.Add(header);
 
         if (page.deleted)
         {
-            var pending = new InfoBar { IsOpen = true, IsClosable = false, Severity = InfoBarSeverity.Warning, Message = Words.GroupsPendingSub() };
+            // the day it is deleted, where the core knows it (the web's warning line); the danger zone keeps the line under it
+            var pending = new InfoBar { IsOpen = true, IsClosable = false, Severity = InfoBarSeverity.Warning, Message = page.deletion is { } day ? Said.Notice(day) : Words.GroupsPendingSub() };
             AutomationProperties.SetAutomationId(pending, "group-deleted");
-            if (page.owner)
-            {
-                var restore = new Button { Content = Words.GroupsRestore() };
-                AutomationProperties.SetAutomationId(restore, "group-restore");
-                restore.Click += (_, _) => run(new Call.SettingsGroupDelete { scopeId = page.scopeId, restore = true });
-                pending.ActionButton = restore;
-            }
             body.Children.Add(pending);
         }
 
@@ -288,18 +308,34 @@ internal static class GroupsDialog
             body.Children.Add(list);
         }
 
-        if (page.owner && !page.deleted)
+        if (page.wholeActs)
+        {
+            body.Children.Add(ScopeActs.LinksAndLock(Words.SpaceLockSubGroup(), Words.SpaceLockConfirmGroup(),
+                new Call.SettingsGroupRevokeLinks { scopeId = page.scopeId }, new Call.SettingsGroupNewLock { scopeId = page.scopeId }, asks, running));
+        }
+
+        if (page.owner)
         {
             var danger = new StackPanel { Spacing = 8, Margin = new Thickness(0, 16, 0, 0) };
             AutomationProperties.SetAutomationId(danger, "group-danger");
             var zone = new TextBlock { Text = Words.GroupsDangerZone(), Style = Style("BodyStrongTextBlockStyle") };
             AutomationProperties.SetHeadingLevel(zone, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
             danger.Children.Add(zone);
-            danger.Children.Add(TermsText.Line(Words.GroupsDeleteSub(), true));
-            var delete = new Button { Content = Words.GroupsDeleteGroup() };
-            AutomationProperties.SetAutomationId(delete, "group-delete");
-            delete.Click += (_, _) => AskDelete(body, page, run);
-            danger.Children.Add(delete);
+            danger.Children.Add(TermsText.Line(page.deleted ? Words.GroupsPendingSub() : Words.GroupsDeleteSub(), true));
+            if (page.deleted)
+            {
+                var restore = new Button { Content = Words.GroupsRestore(), Style = Style("AccentButtonStyle") };
+                AutomationProperties.SetAutomationId(restore, "group-restore");
+                restore.Click += (_, _) => run(new Call.SettingsGroupDelete { scopeId = page.scopeId, restore = true });
+                danger.Children.Add(restore);
+            }
+            else
+            {
+                var delete = new Button { Content = Words.GroupsDeleteGroup() };
+                AutomationProperties.SetAutomationId(delete, "group-delete");
+                delete.Click += (_, _) => AskDelete(body, page, run);
+                danger.Children.Add(delete);
+            }
             body.Children.Add(danger);
         }
     }
@@ -371,6 +407,7 @@ internal static class GroupsDialog
             badges.Children.Add(badge);
         }
         column.Children.Add(badges);
+        ScopeActs.Badge(column, row.badgeWord, row.badgeNote);
         grid.Children.Add(column);
         if (row.promote || row.demote || row.remove || row.rescind)
         {

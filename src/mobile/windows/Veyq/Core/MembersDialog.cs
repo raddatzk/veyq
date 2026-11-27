@@ -8,10 +8,15 @@
 // TenantMembersPanel): each row's title, its expiry, the *Invited* badge, and its "More" flyout — Rename (a link invite,
 // asked in place), Send again / New link (its new link or code shown once, InviteDialog.ShowResult, as the invite's is),
 // Cancel invite (asked in place as the removal is).
+// Above everything the space's identity header (ScopeActs.Header: its icon, which an owner adds, changes — the dialog giving
+// way to the square crop and opening again with what the act said — or removes, uc.spaces.set-space-icon); on each member
+// row the trust badge and its note; the removal's question offers a new lock too (unchecked, the member left out of it);
+// and an owner's *Links* and *New lock* sections close the dialog (ScopeActs.LinksAndLock).
 
 namespace Veyq.Core;
 
 using System;
+using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -25,8 +30,10 @@ internal static class MembersDialog
     {
         try
         {
-            // what the dialog gave way to (Invite member, a re-issue's result), then the dialog again
-            while (await Once(window) is { } next) await next();
+            // what the dialog gave way to (Invite member, a re-issue's result, the icon's crop), then the dialog again with
+            // what that said
+            (string, bool)? said = null;
+            while (await Once(window, said) is { } next) said = await next();
         }
         catch (Exception e)
         {
@@ -34,10 +41,10 @@ internal static class MembersDialog
         }
     }
 
-    /// <summary>The dialog once; what it gave way to, or null where it was closed.</summary>
-    private static async System.Threading.Tasks.Task<Func<System.Threading.Tasks.Task>?> Once(Window window)
+    /// <summary>The dialog once, saying <paramref name="opened"/> first; what it gave way to, or null where it was closed.</summary>
+    private static async Task<Func<Task<(string, bool)?>>?> Once(Window window, (string Said, bool Done)? opened)
     {
-        Func<System.Threading.Tasks.Task>? after = null;
+        Func<Task<(string, bool)?>>? after = null;
         {
             var said = new InfoBar { IsOpen = false, IsClosable = true };
             AutomationProperties.SetAutomationId(said, "members-notice");
@@ -53,20 +60,25 @@ internal static class MembersDialog
                 DefaultButton = ContentDialogButton.Close,
             };
             AutomationProperties.SetAutomationId(dialog, "members");
-            void Say(Notice n)
+            void SayText(string text, bool done)
             {
-                said.Message = Said.Notice(n);
-                said.Severity = n.kind == NoticeKind.Said ? InfoBarSeverity.Success : InfoBarSeverity.Error;
+                said.Message = text;
+                said.Severity = done ? InfoBarSeverity.Success : InfoBarSeverity.Error;
                 said.IsOpen = true;
             }
-            async void Run(Call call)
+            void Say(Notice n) => SayText(Said.Notice(n), n.kind == NoticeKind.Said);
+            if (opened is { } o0) SayText(o0.Said, o0.Done);
+            var asks = new ScopeActs.Asks();
+            async Task Run(Call call)
             {
                 body.IsHitTestVisible = false;
                 var (answer, _) = await Core.CallAsync(call);
                 body.IsHitTestVisible = true;
                 if (answer is Answer.MembersChanged { notice: { } n } changed)
                 {
-                    Say(n);
+                    Log.Write($"a member's act {call.GetType().Name}: done {changed.done}");
+                    // the look follows whether it went through (a new lock's notice is a held one)
+                    SayText(Said.Notice(n), changed.done);
                     if (changed.done) Load();
                 }
                 else if (answer is Answer.Invited { outcome: { } o })
@@ -75,18 +87,30 @@ internal static class MembersDialog
                     if (o.done && (o.address is not null || o.code is not null))
                     {
                         // a re-issue's new link or code, shown once over the page; the roster reads anew after
-                        after = () => InviteDialog.ShowResult(window, o, ShellView.OpenTenantName);
+                        after = async () =>
+                        {
+                            await InviteDialog.ShowResult(window, o, ShellView.OpenTenantName);
+                            return null;
+                        };
                         dialog.Hide();
                         return;
                     }
                     Say(o.notice);
                     if (o.done) Load();
                 }
+                else if (answer is Answer.IconChanged { notice: { } icon } cleared)
+                {
+                    Log.Write($"a space's icon act: done {cleared.done}");
+                    SayText(Said.Notice(icon), cleared.done);
+                    if (cleared.done) Load();
+                }
                 else Log.Write($"a member's act answered {answer?.GetType().Name}");
             }
+            void Fire(Call call) => _ = Run(call);
             async void Load()
             {
                 body.Children.Clear();
+                asks.Drop();
                 body.Children.Add(TermsText.Line(Words.MembersSub(), true));
                 var ring = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
                 ring.Children.Add(new ProgressRing { IsActive = true, Width = 20, Height = 20 });
@@ -105,6 +129,16 @@ internal static class MembersDialog
                     Line(body, ReceivedText.Said(line), roster.retry, Load);
                     return;
                 }
+                Log.Write($"members: {roster.rows.Count} rows ({System.Linq.Enumerable.Count(roster.rows, r => r.badgeWord is not null)} badged), owner acts {roster.ownerActs}, tenant {ShellView.OpenTenantId.Length > 0}");
+                if (ShellView.OpenTenantId is { Length: > 0 } tenant)
+                {
+                    // the space's identity header above the roster; the icon's crop is a dialog of its own
+                    body.Children.Insert(0, ScopeActs.Header(tenant, roster.tenantName, roster.ownerActs, asks, title =>
+                    {
+                        after = () => ScopeActs.PickIcon(window, tenant, title);
+                        dialog.Hide();
+                    }, Run, "members-tenant-name"));
+                }
                 if (roster.owner)
                 {
                     var invite = new Button { Content = Words.MembersInvite(), Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
@@ -116,16 +150,25 @@ internal static class MembersDialog
                     AutomationProperties.SetAutomationId(invite, "members-invite");
                     invite.Click += (_, _) =>
                     {
-                        after = async () => await InviteDialog.Open(window, ShellView.OpenTenantName);
+                        after = async () =>
+                        {
+                            await InviteDialog.Open(window, ShellView.OpenTenantName);
+                            return null;
+                        };
                         dialog.Hide();
                     };
                     body.Children.Add(invite);
                 }
                 var list = new StackPanel { Spacing = 4 };
                 AutomationProperties.SetAutomationId(list, "members-list");
-                foreach (var row in roster.rows) list.Children.Add(Row(row, Run, body));
+                foreach (var row in roster.rows) list.Children.Add(Row(row, Fire, body));
                 body.Children.Add(list);
-                if (roster.owner && roster.invites.Count > 0) body.Children.Add(Pending(roster.invites, Run, body));
+                if (roster.owner && roster.invites.Count > 0) body.Children.Add(Pending(roster.invites, Fire, body));
+                if (roster.ownerActs)
+                {
+                    body.Children.Add(ScopeActs.LinksAndLock(Words.SpaceLockSub(), Words.SpaceLockConfirm(),
+                        new Call.SettingsMembersRevokeLinks(), new Call.SettingsMembersNewLock(), asks, Run));
+                }
             }
             Load();
             await Dialogs.Show(window, dialog);
@@ -238,7 +281,8 @@ internal static class MembersDialog
         return ask;
     }
 
-    /// <summary>A question asked in place: one at a time, at the list's top (under the section's line).</summary>
+    /// <summary>A question asked in place: one at a time, at the list's top (over the roster, under the header and the
+    /// section's line).</summary>
     private static void Place(StackPanel body, StackPanel ask)
     {
         foreach (var child in body.Children)
@@ -249,7 +293,12 @@ internal static class MembersDialog
                 break;
             }
         }
-        body.Children.Insert(Math.Min(1, body.Children.Count), ask);
+        var at = Math.Min(1, body.Children.Count);
+        for (var i = 0; i < body.Children.Count; i++)
+        {
+            if (body.Children[i] is FrameworkElement e && AutomationProperties.GetAutomationId(e) == "members-list") at = i;
+        }
+        body.Children.Insert(at, ask);
     }
 
     private static void Line(StackPanel body, string text, bool retry, Action again)
@@ -293,6 +342,7 @@ internal static class MembersDialog
             badges.Children.Add(badge);
         }
         column.Children.Add(badges);
+        ScopeActs.Badge(column, row.badgeWord, row.badgeNote);
         grid.Children.Add(column);
         if (row.promote || row.demote || row.remove)
         {
@@ -318,7 +368,8 @@ internal static class MembersDialog
     }
 
     /// <summary>The removal's question, asked in place at the list's top (the web's askWithOptions): its words, the
-    /// opt-in to turn off every link of the space, Remove and Cancel.</summary>
+    /// opt-ins to turn off every link of the space and to give it a new lock (after the removal, the member left out of
+    /// it), each unchecked, Remove and Cancel.</summary>
     private static void AskRemove(StackPanel body, RosterMember row, Action<Call> run)
     {
         var ask = new StackPanel { Spacing = 8, Padding = new Thickness(12), CornerRadius = new CornerRadius(4), Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"] };
@@ -330,14 +381,19 @@ internal static class MembersDialog
         AutomationProperties.SetAutomationId(links, "member-remove-links");
         ask.Children.Add(links);
         ask.Children.Add(TermsText.Line(Words.MembersRemoveRevokeLinksHint(), true));
+        var newLock = new CheckBox { Content = Words.SpaceLockRemoveOption() };
+        AutomationProperties.SetAutomationId(newLock, "member-remove-lock");
+        ask.Children.Add(newLock);
+        ask.Children.Add(TermsText.Line(Words.SpaceLockRemoveOptionHint(), true));
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var remove = new Button { Content = Words.MembersRemove(), Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
         AutomationProperties.SetAutomationId(remove, "member-remove-confirm");
         var cancel = new Button { Content = Words.SigninCancel() };
+        AutomationProperties.SetAutomationId(cancel, "member-remove-cancel");
         remove.Click += (_, _) =>
         {
             body.Children.Remove(ask);
-            run(new Call.SettingsMemberRemove { userId = row.userId, revokeLinks = links.IsChecked == true });
+            run(new Call.SettingsMemberRemove { userId = row.userId, revokeLinks = links.IsChecked == true, newLock = newLock.IsChecked == true });
         };
         cancel.Click += (_, _) => body.Children.Remove(ask);
         buttons.Children.Add(remove);

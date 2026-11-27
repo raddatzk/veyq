@@ -3,7 +3,9 @@
 // screen does (MainWindow), drawing the join's phases from Watched.Join — the invite read or why not (LOADING, INVALID,
 // EXPIRED, REDEEMED), its code or password (CODE), a new account (REGISTER) with its Emergency Kit saved as every kit is
 // (KIT: KitSection over Kit.Save / Kit.Confirm, then Join.Finish), or one the person has (SIGNIN: the password and the
-// sign-in's Secret Key box with its typo line), and DONE with *Open the space* (Join.Open: the app signs in as any sign-in
+// sign-in's Secret Key box with its typo line) — both, but at a handover, with the optional picture below the name
+// (asksPicture, the web's JoinPicturePicker: the app's one square crop, SquareCropDialog.Pick, its preview the core's
+// encoded bytes, Join.PictureBytes) —, and DONE with *Open the space* (Join.Open: the app signs in as any sign-in
 // does, and the session's gate shows the shell behind this screen once it is let go). The form is built once and each
 // update sets what shows and what is enabled, so an update never takes the focus or a typed field; what the core
 // refuses stands under the form; busy disables every field and button. ✕ closes the join (Join.Close), which zeroes what
@@ -62,6 +64,14 @@ internal sealed class JoinView : IDisposable
     private readonly TextBox _firstName = new() { Header = Words.ProfileFirstName() };
     private readonly TextBox _lastName = new() { Header = Words.ProfileLastName(), Description = InviteDialog.Hint(Words.JoinNameHint()) };
     private readonly TextBox _email = new() { Header = Words.SigninEmail() };
+    private readonly PersonPicture _picture = new() { Width = 72, Height = 72 };
+    private readonly Button _pictureChoose = new();
+    private readonly Button _pictureRemove = new() { Content = Words.ProfilePictureRemove() };
+    private readonly StackPanel _pictureRow = new() { Orientation = Orientation.Horizontal, Spacing = 16 };
+    private readonly TextBlock _pictureHint = Text("join-picture-hint", secondary: true);
+    private readonly TextBlock _pictureNotImage = Text("join-picture-not-image");
+    private bool? _pictureShown;
+    private bool _picking;
     private readonly NewPasswordField _newPassword;
     private readonly PasswordBox _password;
     private readonly PasswordBox _secretKey;
@@ -98,6 +108,25 @@ internal sealed class JoinView : IDisposable
         AutomationProperties.SetAutomationId(_firstName, "join-first-name");
         AutomationProperties.SetAutomationId(_lastName, "join-last-name");
         AutomationProperties.SetAutomationId(_email, "join-email");
+        AutomationProperties.SetAutomationId(_picture, "join-picture");
+        AutomationProperties.SetAutomationId(_pictureChoose, "join-picture-choose");
+        AutomationProperties.SetAutomationId(_pictureRemove, "join-picture-remove");
+        _pictureHint.Text = Words.ProfilePictureJoinHint();
+        _pictureNotImage.Text = Words.ProfilePictureNotImage();
+        _pictureNotImage.Foreground = (Brush)Application.Current.Resources["SystemFillColorCriticalBrush"];
+        var pictureButtons = new StackPanel { Spacing = 8, VerticalAlignment = VerticalAlignment.Center };
+        pictureButtons.Children.Add(_pictureChoose);
+        pictureButtons.Children.Add(_pictureRemove);
+        _pictureRow.Children.Add(_picture);
+        _pictureRow.Children.Add(pictureButtons);
+        _pictureChoose.Click += (_, _) => ChoosePicture();
+        _pictureRemove.Click += (_, _) =>
+        {
+            _pictureNotImage.Visibility = Visibility.Collapsed;
+            Act.Send(new Call.JoinRemovePicture { join = _join });
+        };
+        _firstName.TextChanged += (_, _) => Named();
+        _lastName.TextChanged += (_, _) => Named();
         var mail = new InputScope();
         mail.Names.Add(new InputScopeName(InputScopeNameValue.EmailSmtpAddress));
         _email.InputScope = mail;
@@ -130,7 +159,11 @@ internal sealed class JoinView : IDisposable
 
         _code.TextChanged += (_, _) => Enable();
         _codeSecret.PasswordChanged += (_, _) => Enable();
-        _username.TextChanged += (_, _) => Enable();
+        _username.TextChanged += (_, _) =>
+        {
+            Named();
+            Enable();
+        };
         _email.TextChanged += (_, _) => Enable();
         _newPassword.Box.PasswordChanged += (_, _) => Enable();
         _password.PasswordChanged += (_, _) => Enable();
@@ -160,7 +193,7 @@ internal sealed class JoinView : IDisposable
         foreach (var c in new UIElement[]
                  {
                      head, _loadingRow, _said, _intro, _sub, _code, _codeSecret, _kitTitle, _kitSub, _kitSave, _username, _firstName,
-                     _lastName, _email, _newPassword.View, _password, _secretKey, _typo, _done, _confirmation, _doneNote, _error, buttons,
+                     _lastName, _pictureRow, _pictureNotImage, _pictureHint, _email, _newPassword.View, _password, _secretKey, _typo, _done, _confirmation, _doneNote, _error, buttons,
                      _switch, _busy,
                  })
         {
@@ -246,6 +279,20 @@ internal sealed class JoinView : IDisposable
         Show(_username, details && s!.asksUsername);
         Show(_firstName, details && s!.asksUsername);
         Show(_lastName, details && s!.asksUsername);
+        var asksPicture = details && s!.asksPicture;
+        Show(_pictureRow, asksPicture);
+        Show(_pictureHint, asksPicture);
+        if (!asksPicture) _pictureNotImage.Visibility = Visibility.Collapsed;
+        if (s is not null && asksPicture)
+        {
+            _pictureChoose.Content = Said.Key(s.pictureWord);
+            Show(_pictureRemove, s.picture);
+            if (_pictureShown != s.picture)
+            {
+                _pictureShown = s.picture;
+                Preview(s.picture);
+            }
+        }
         Show(_email, details && s!.asksEmail);
         Show(_newPassword.View, phase == Phase.Register);
         if (s is not null) _newPassword.Draw(s.breach);
@@ -291,10 +338,11 @@ internal sealed class JoinView : IDisposable
     {
         var s = _state;
         var on = s is { busy: false } && !_opening && !_closed;
-        foreach (var c in new Control[] { _code, _codeSecret, _username, _firstName, _lastName, _email, _newPassword.Box, _password, _secretKey, _switch })
+        foreach (var c in new Control[] { _code, _codeSecret, _username, _firstName, _lastName, _pictureChoose, _pictureRemove, _email, _newPassword.Box, _password, _secretKey, _switch })
         {
             c.IsEnabled = on;
         }
+        if (_picking) _pictureChoose.IsEnabled = _pictureRemove.IsEnabled = false;
         if (s is null) return;
         var named = !s.asksUsername || _username.Text.Trim().Length > 0;
         var addressed = !s.asksEmail || _email.Text.Trim().Length > 0;
@@ -364,6 +412,74 @@ internal sealed class JoinView : IDisposable
         finally
         {
             Enable();
+        }
+    }
+
+    /// <summary>The preview's initials: the name typed, else the handle.</summary>
+    private void Named()
+    {
+        var name = $"{_firstName.Text} {_lastName.Text}".Trim();
+        _picture.DisplayName = name.Length > 0 ? name : _username.Text.Trim();
+    }
+
+    /// <summary>The join's picture drawn on the preview: the core's encoded bytes decoded in memory where it holds one,
+    /// the initials otherwise.</summary>
+    private async void Preview(bool held)
+    {
+        if (!held)
+        {
+            _picture.ProfilePicture = null;
+            return;
+        }
+        try
+        {
+            var (answer, bytes) = await Core.CallAsync(new Call.JoinPictureBytes { join = _join });
+            if (_closed) return;
+            if (answer is not Answer.Bytes || bytes is null)
+            {
+                Log.Write($"Join.PictureBytes answered {(answer is Answer.Refused r ? $"Refused {r.why}" : answer.GetType().Name)}");
+                return;
+            }
+            _picture.ProfilePicture = await Avatars.Decode(bytes);
+            Array.Clear(bytes);
+            Log.Write("join: the picture previewed");
+        }
+        catch (Exception e)
+        {
+            Log.Write($"join: the picture did not decode ({e.GetType().Name})");
+        }
+    }
+
+    /// <summary>*Choose picture* / *Change picture*: the app's one square pick, the path and the pose to the core
+    /// (Join.Picture), which encodes and keeps it in the join until it seals it beside the name.</summary>
+    private async void ChoosePicture()
+    {
+        if (_closed || _picking) return;
+        _picking = true;
+        Enable();
+        try
+        {
+            var picked = await SquareCropDialog.Pick(_window);
+            if (_closed) return;
+            var refused = picked is SquareCropDialog.NotAPicture;
+            if (picked is SquareCropDialog.Picked chosen)
+            {
+                var (answer, _) = await Core.CallAsync(new Call.JoinPicture { join = _join, path = chosen.Path, pose = chosen.Pose });
+                Log.Write($"Join.Picture answered {(answer is Answer.Refused r ? $"Refused {r.why}" : answer.GetType().Name)}");
+                refused = answer is not Answer.Done;
+                // a picture over a picture leaves the state's flag as it was: the preview is asked anew here
+                if (!refused && !_closed) Preview(true);
+            }
+            _pictureNotImage.Visibility = refused ? Visibility.Visible : Visibility.Collapsed;
+        }
+        catch (Exception e)
+        {
+            Log.Write($"join: a picture was not chosen ({e.GetType().Name})");
+        }
+        finally
+        {
+            _picking = false;
+            if (!_closed) Enable();
         }
     }
 
