@@ -33,15 +33,15 @@ struct Held {
 
 /// A flow's dialog: its navigation, its toasts and what it holds.
 #[derive(Clone)]
-struct Flow {
-    dialog: adw::Dialog,
-    nav: adw::NavigationView,
-    toasts: adw::ToastOverlay,
+pub(crate) struct Flow {
+    pub(crate) dialog: adw::Dialog,
+    pub(crate) nav: adw::NavigationView,
+    pub(crate) toasts: adw::ToastOverlay,
     held: Rc<Held>,
 }
 
 impl Flow {
-    fn new(title: &str) -> Self {
+    pub(crate) fn new(title: &str) -> Self {
         let nav = adw::NavigationView::new();
         let toasts = { let t = adw::ToastOverlay::new(); t.set_child(Some(&nav)); t };
         let dialog = adw::Dialog::builder().title(title).content_width(560).content_height(680).child(&toasts).build();
@@ -49,7 +49,7 @@ impl Flow {
     }
 
     /// Presents the dialog over [parent]; once closed, [closing] runs, the watches go and the kits it opened close.
-    fn present(&self, parent: &gtk::Widget, closing: impl Fn() + 'static) {
+    pub(crate) fn present(&self, parent: &gtk::Widget, closing: impl Fn() + 'static) {
         let held = self.held.clone();
         self.dialog.connect_closed(move |_| {
             closing();
@@ -62,7 +62,7 @@ impl Flow {
     }
 
     /// Watches [watched]; each update goes to [draw] until it answers false.
-    fn watch(&self, watched: &Watched, draw: impl Fn(Update) -> bool + 'static) {
+    pub(crate) fn watch(&self, watched: &Watched, draw: impl Fn(Update) -> bool + 'static) {
         let Some((watch, updates)) = bridge::watch(watched) else { return };
         self.held.watches.borrow_mut().push(watch);
         glib::spawn_future_local(async move {
@@ -85,7 +85,7 @@ impl Flow {
 }
 
 /// A page of a flow: a header bar over the body, which scrolls.
-fn page(title: &str, tag: &str, body: &impl IsA<gtk::Widget>) -> adw::NavigationPage {
+pub(crate) fn page(title: &str, tag: &str, body: &impl IsA<gtk::Widget>) -> adw::NavigationPage {
     let clamp = adw::Clamp::builder().maximum_size(520).margin_top(12).margin_bottom(24).margin_start(12).margin_end(12).child(body).build();
     let scroll = gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).vexpand(true).child(&clamp).build();
     let view = adw::ToolbarView::new();
@@ -464,7 +464,7 @@ impl NewPassword {
 /// The kit step [kit] as a page: its words [sub], "Save your Emergency Kit" (the save dialog, the core writing into the
 /// file chosen), "I saved it" only once a file was written, and — for the rotation — its danger button [danger],
 /// enabled once both are done.
-fn kit_page(flow: &Flow, kit: i64, sub: Option<&str>, extra: Option<&gtk::Widget>, danger: Option<&gtk::Button>) -> adw::NavigationPage {
+pub(crate) fn kit_page(flow: &Flow, kit: i64, sub: Option<&str>, extra: Option<&gtk::Widget>, danger: Option<&gtk::Button>) -> adw::NavigationPage {
     let col = column();
     if let Some(sub) = sub {
         col.append(&text(sub));

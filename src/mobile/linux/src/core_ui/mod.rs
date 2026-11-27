@@ -2,10 +2,10 @@
 //! look alike — the words ([words], [said]), the theme ([theme]), the creating action ([create_action]), the members'
 //! pictures ([avatars]), [sign_in] with the unlock, [shell] with [home] and its [tiles], the bar's places ([places]), a
 //! node's [header] with its [move_sheet], [share_sheet], [report] and [cover] and a space's [trash], the registry the
-//! applications fill ([registry]), a received link opened as its guest ([received]) and a kept link's page
+//! applications fill ([registry]), a received link opened as its guest ([received]) or an invite's [join] and a kept link's page
 //! ([bookmark_page]) and dialog ([bookmark_create]), a person's profile ([person_page], each application's section
 //! registered), the search in the shell's sidebar ([search]), [manage] ("Manage servers", from the switcher), the account's
-//! Settings ([account_settings], from the sidebar) with the space's [whos_who] and [terms] (and the terms gate in place of the shell) with its device linking ([device_link], from the sign-in too), its map
+//! Settings ([account_settings], from the sidebar) with the space's [whos_who], [members] with its [invites] and [terms] (and the terms gate in place of the shell) with its device linking ([device_link], from the sign-in too), its map
 //! services ([map_services]) over the core's raster map ([raster_map]), the account's flows ([account_flows],
 //! [profile_edit], [safety]), the uploads ([uploads]) with drag and drop ([drop]) and a download's import
 //! ([import_dialog]), a running save's banner ([saving]), a picture held at the core's edge ([picture]), a medium played
@@ -30,6 +30,8 @@ pub mod drop;
 pub mod header;
 pub mod home;
 pub mod import_dialog;
+pub mod invites;
+pub mod join;
 pub mod kit_drawing;
 pub mod manage;
 pub mod map_services;

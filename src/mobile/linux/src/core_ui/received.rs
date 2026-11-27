@@ -1,7 +1,8 @@
 //! A received link opened in the app as its guest (ADR 0150 decisions 2–4, 7 and 8; cr-app-received-links phase 9),
 //! GNOME's way. *Open a link* ([open_link]) is an `AdwDialog` with the link's field, a Paste button that reads the
 //! clipboard on the tap only, and the core's reason where the text is no link the app opens — with *Open in the browser*
-//! for a moderator's review (`Received.Open` answers `ReceivedProblem`). It stands on the sign-in page under the sign-in
+//! for a moderator's review (`Received.Open` answers `ReceivedProblem`). A member invite's link (or the whole message
+//! around it) opens its join instead (`JoinOpened`, [crate::core_ui::join]). It stands on the sign-in page under the sign-in
 //! alone (owner 2026-11-19: not in the switcher's menu).
 //!
 //! An opened link is a [ReceivedView]: a screen above the shell (the window's content while it stands, [present]) with its
@@ -120,18 +121,23 @@ pub fn open_link(parent: &impl IsA<gtk::Widget>) {
         p.set_visible(false);
         b.set_visible(false);
     });
-    let (e, d, p, b) = (entry.clone(), dialog.clone(), problem.clone(), browser.clone());
+    let (e, d, p, b, over) = (entry.clone(), dialog.clone(), problem.clone(), browser.clone(), parent.upcast_ref::<gtk::Widget>().clone());
     let ask = Rc::new(move || {
         let text = e.text().to_string();
         if text.trim().is_empty() {
             return;
         }
-        let (d, p, b) = (d.clone(), p.clone(), b.clone());
+        let (d, p, b, over) = (d.clone(), p.clone(), b.clone(), over.clone());
         glib::spawn_future_local(async move {
             match bridge::call(&Call::ReceivedOpen { text: text.clone() }).await.map(|(a, _)| a) {
                 Ok(Answer::ReceivedOpened { received }) => {
                     d.close();
                     present(received, Some(text.trim().to_string()));
+                }
+                // an invite opens its join (ADR 0129): the link — or the whole message around it — stays in the core
+                Ok(Answer::JoinOpened { join }) => {
+                    d.close();
+                    crate::core_ui::join::present(join, &over);
                 }
                 Ok(Answer::ReceivedProblem { problem, browser }) => {
                     p.set_label(&said_msg(&problem));
