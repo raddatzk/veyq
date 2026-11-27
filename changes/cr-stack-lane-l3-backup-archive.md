@@ -102,23 +102,44 @@ below that only GitHub can show (a dispatch, a registry listing, a push's L3 run
 | Docs naming L3 or the archive as not built | `git grep -n -E "L3\|backup archive\|archived backup" -- docs/decisions docs/crosscutting infra/README.md site/src/content/docs` |
 | Guards over the workflow set and identities | `git grep -n -E "release.yml\|publish.yml" -- scripts/validate_release_identity.py` |
 
+## Delivery — two pull requests, the owner's dispatches between them (owner 2026-11-27)
+
+`workflow_dispatch` resolves against the default branch, so `archive.yml` cannot be dispatched before it is on `main`;
+and L3 gating on an empty archive would be red on every push. So:
+
+- **Pull request 1 = phase 1**: `archive.yml`, `release.yml`'s call of it, the archive's script and self-test, the new
+  identity in `validate_release_identity.py`. Nothing reads the archive yet; nothing gates on it.
+- **Between them, the owner's**: merging pull request 1, then dispatching `archive.yml` for `v1.318` (phase 1's
+  observed half) and for every other `v` tag (phase 2). The implementer dispatches nothing and writes to no registry
+  but a local one. If GHCR creates `veyq-backups` private, making it public is the owner's too (the implementer
+  measures what a first push from a workflow does, or says it could not).
+- **Pull request 2 = phases 3 and 4**, started only once phase 2 is observed.
+
+Each done-when below is written in two halves (`changes/README.md` § the done-when in two halves): **locally**, what
+the implementer proves before handing over; **observed**, what only GitHub shows after the owner's step.
+
 ## Phases
 
 ### Phase 1 — the archive workflow, run for one release
 
-Decisions 1 to 3. Done when: a dispatch of `archive.yml` for `v1.318` publishes `veyq-backups:1.318`, its `cosign
+Decisions 1 to 3. **Locally:** the archive's script, run on this Mac against the published `v1.318`, writes the capture,
+pool, key, record and `archive.json`, and pushes them as one OCI artifact to a local registry (a pinned
+`registry:2`-class image), from which a pull gives back byte-identical files; a second run for the same tag against
+that registry writes nothing and says so; `actionlint`-class checks of the new workflow and the pipeline-shape guard
+are green; `validate_release_identity.py` knows the new identity and is bitten by a workflow that signs under it without
+being listed. **Observed** (after the owner's merge and dispatch): a dispatch of `archive.yml` for `v1.318` publishes `veyq-backups:1.318`, its `cosign
 verify` under `archive.yml`'s identity passes and under `release.yml`'s fails (both outputs in the PR); a second
 dispatch for `v1.318` writes nothing and says so; `validate_release_identity.py` knows the new identity and is bitten
 by a workflow that signs under it without being listed.
 
 ### Phase 2 — backfill
 
-Decision 7. Dispatch for every release, oldest first. Done when: `veyq-backups` holds one artifact per `v` tag, each
-verifying; the run links are in the PR.
+Decision 7. **The owner's**, after pull request 1: a dispatch for every release, oldest first. **Observed:** `veyq-backups` holds one artifact per `v` tag, each
+verifying; the run links are in pull request 2. A tag whose run is red is handed back, never patched (decision 7).
 
 ### Phase 3 — the selection and lane L3
 
-Decisions 4 to 6. Done when: L3 is green on a push on amd64, restoring exactly the selection (five
+Decisions 4 to 6, in pull request 2. **Locally:** the bites below and the self-tests. **Observed:** L3 is green on pull request 2's merge push on amd64, restoring exactly the selection (five
 backups on 2026-11-26's tags: v0.2480, v1.0, v1.168, v1.248, v1.260 — v0.2480 as the entry, v1.0 as the oldest of
 the first state); **bites:** a selection whose newest state's oldest release is deleted from the registry (or its tag
 pointed at a missing artifact in a test registry) is red naming it; a candidate whose reader expects one more item is
