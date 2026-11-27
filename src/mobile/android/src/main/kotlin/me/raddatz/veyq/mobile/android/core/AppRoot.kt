@@ -63,6 +63,7 @@ fun AppRoot(model: AppModel) {
     val ended by model.ended.collectAsStateWithLifecycle()
     val terms by model.terms.collectAsStateWithLifecycle()
     val termsPage by model.termsPage.collectAsStateWithLifecycle()
+    val whosWho by model.whosWho.collectAsStateWithLifecycle()
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         // the tenant's terms gate (uc.account.accept-terms) stands in place of the shell, the offer behind it
         val gate = terms
@@ -97,6 +98,8 @@ fun AppRoot(model: AppModel) {
         if (screen is Screen.Signed) accountFlow?.let { AccountFlowDialog(it, model) }
         // Settings' Terms (core's `SettingsSection.TERMS`), over the page
         if (terms == null) termsPage?.let { TermsPageDialog(it, onClose = model::closeTerms) }
+        // Settings' Who's who (core's `SettingsSection.WHOS_WHO`), over the page; a row opens the person's profile
+        if (terms == null) whosWho?.let { WhosWhoDialog(it, onRetry = model::openWhosWho, onOpen = model::openPersonFromWhosWho, onClose = model::closeWhosWho) }
         // the account was erased here: the sign-in says so once (the web's `explainEnding('erased')`)
         ended?.let { msg ->
             androidx.compose.material3.AlertDialog(

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Gavel
+import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Fingerprint
@@ -149,6 +150,9 @@ interface SettingsActions {
     fun openAddressChange() {}
     fun openKeyRotation() {}
     fun openErasure() {}
+
+    /** The open space's Who's who (core's `SettingsSection.WHOS_WHO`, inbox #967). */
+    fun openWhosWho() {}
 
     /** The open space's terms, read-only (core's `SettingsSection.TERMS`, uc.account.accept-terms). */
     fun openTerms() {}
@@ -288,6 +292,7 @@ fun SettingsScreen(
                 me.raddatz.veyq.mobile.search.SettingsSection.SECURITY -> security(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.PROFILE -> profile(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.ERASE -> erase(state, actions)
+                me.raddatz.veyq.mobile.search.SettingsSection.WHOS_WHO -> whosWho(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.TERMS -> terms(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.SIGN_OUT -> signOut(state, actions)
             }
@@ -379,6 +384,20 @@ private fun LazyListScope.profile(state: AccountSettings.State, actions: Setting
             leadingContent = { Icon(Icons.Outlined.AccountCircle, null) },
             colors = listColors(),
             modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openProfile).testTag("settings-profile"),
+        )
+    }
+}
+
+/** Who's who in the open space (the web's tenant section `tenant-people`): one row opening the page over Settings. */
+private fun LazyListScope.whosWho(state: AccountSettings.State, actions: SettingsActions) {
+    header(me.raddatz.veyq.mobile.search.SettingsSection.WHOS_WHO.id, { stringResource(R.string.whos_who_title) })
+    item(key = "whos-who") {
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.whos_who_title)) },
+            supportingContent = { Text(stringResource(R.string.whos_who_sub)) },
+            leadingContent = { Icon(Icons.Outlined.VerifiedUser, null) },
+            colors = listColors(),
+            modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openWhosWho).testTag("settings-whos-who"),
         )
     }
 }

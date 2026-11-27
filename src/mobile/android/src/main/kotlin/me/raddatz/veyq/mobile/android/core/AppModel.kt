@@ -254,6 +254,32 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         _termsPage.value = null
     }
 
+    private val _whosWho = MutableStateFlow<WhosWhoPage?>(null)
+
+    /** Settings' Who's who while it is open (core's `PersonTrust.whosWho`, inbox #967); null when closed. */
+    internal val whosWho: StateFlow<WhosWhoPage?> = _whosWho.asStateFlow()
+
+    /** Settings' Who's who: every other member of the open space, checked anew at each open and each *Try again*. */
+    fun openWhosWho() {
+        val trust = tenantSession?.personTrust ?: return
+        _whosWho.value = WhosWhoPage(loading = true)
+        viewModelScope.launch {
+            val read = trust.whosWho()
+            if (_whosWho.value != null) _whosWho.value = WhosWhoPage(loading = false, read = read)
+        }
+    }
+
+    fun closeWhosWho() {
+        _whosWho.value = null
+    }
+
+    /** A Who's who row: Settings closes and the person's profile opens over the shell, where the compare lives (the web's link). */
+    fun openPersonFromWhosWho(userId: String) {
+        closeWhosWho()
+        closeSettings()
+        openPerson(userId)
+    }
+
     // ---- the music (ADR 0142): declared above the gate's collector in `init`, which may stop it at once ----
 
     /** The system's media controls, the media session and its foreground service, one for the app ([AndroidMusicControls]). */
@@ -371,6 +397,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         _offer.value = (g as? me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed)?.offer
         _terms.value = (g as? me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed)?.terms
         if (g !is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed) _termsPage.value = null
+        if (g !is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed) _whosWho.value = null
         trustLog("gate ${g::class.simpleName}" + when (g) {
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed -> ", offer: ${g.offer?.levels}, terms: ${g.terms?.let { "r${it.shown.revision}" } ?: "none"}"
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Unlock -> ", ${g.record.method}, level: ${g.record.unlockLevel}"
@@ -931,6 +958,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         override fun renameFamily(familyId: String, label: String) = onSettings { it.renameFamily(familyId, label); null }
         override fun openProfile() = this@AppModel.openProfile()
         override fun openTerms() = this@AppModel.openTerms()
+        override fun openWhosWho() = this@AppModel.openWhosWho()
         override fun openPasswordChange() = this@AppModel.openPasswordChange()
         override fun openAddressChange() = this@AppModel.openAddressChange()
         override fun openKeyRotation() = this@AppModel.openKeyRotation()
