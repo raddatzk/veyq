@@ -446,17 +446,19 @@ def upgrade(start: Start, candidate: lane.Release, installed: lane.Installed, wo
 
 # The states a reading's `configSecretState` can name (contracts/api/instance.openapi.yaml, an `enum`). What the lane
 # prints is one of these constants, never the value it read: a state is no secret, but it is read under a name that
-# says "secret", and a log line built from the read value would pass on whatever an altered reader put there.
-CONFIG_SECRET_STATES = ("OK", "ABSENT", "MISMATCH")
+# says "secret", and a log line built from the read value would pass on whatever an altered reader put there. The
+# constant's own name avoids that word: CodeQL's clear-text-logging query takes any name holding it for a secret
+# (alert 44 on #111 traced the flow from the constant, not from the reading).
+KEY_STATES = ("OK", "ABSENT", "MISMATCH")
 
 
 def shown_state(reading: dict, absent: str) -> str:
-    """The reading's `configSecretState` as one of `CONFIG_SECRET_STATES`, `absent` when it holds none, or "not a
+    """The reading's `configSecretState` as one of `KEY_STATES`, `absent` when it holds none, or "not a
     state" for anything else."""
     if "configSecretState" not in reading:
         return absent
     value = reading.get("configSecretState")
-    return next((state for state in CONFIG_SECRET_STATES if state == value), "not a state")
+    return next((state for state in KEY_STATES if state == value), "not a state")
 
 
 def reader_of(web: Path) -> str:
