@@ -1,7 +1,7 @@
 ---
 id: cr-stack-lane-l3-backup-archive
 title: Lane L3 and the backup archive — every release archived once by its own seeder, one backup per schema state restored into the candidate, the jar-level upgrade proof retired
-status: planned
+status: in-progress
 satisfies: ["uc.admin.back-up-and-restore-instance", "uc.admin.install-and-upgrade-instance"]
 adrs: ["0091", "0096", "0085", "0057", "0056", "0090"]
 invariants:
@@ -166,4 +166,108 @@ deleted, and #436's mention of the disabled major-entry proof is updated.
 
 ## Retrospective
 
-(filled by the implementer)
+### Phase 1 — decision log (implementer, 2026-11-27)
+
+- **The OCI tool is oras, v1.4.0** (decision 3). cosign 3.1.3 itself prints, for `attach` and `upload`, "deprecated, … will
+  be removed in v4.0.0 … please use oras" (measured: `cosign attach --help`, `cosign upload --help`); oras is the CNCF
+  project, Apache-2.0, not archived, v1.4.0 released 2026-11-17 (`gh api repos/oras-project/oras`, its releases), past
+  renovate.json5's 3-day age. Pinned as Helm is: `ORAS_VERSION`/`ORAS_SHA256` in archive.yml's `env:`, the tarball
+  checked before it is extracted; the SHA-256 agreed three ways on 2026-11-27 (the release's checksums file, the
+  tarball's hash, GitHub's asset digest). Pinning it "as the existing ones are" meant a Renovate custom manager (the
+  `pins` job is red without one, bitten below) and `pin_follow.py oras` as its `postUpgradeTask` (three sources, the
+  same shape as `helm`), with renovate.yml's allowed command.
+- **The artifact's form** (decision 2): an OCI image manifest in the 1.1 artifact form — artifact type
+  `application/vnd.veyq.backup.v1`, the empty config, two layers: `archive.json` and ONE tar of `capture/`, `pool/`,
+  `config-secret.key`, `upgrade-record.json`. The tar is deterministic (sorted, mtime 0, owner 0, each file's own mode)
+  and the manifest is written by `scripts/archive_backup.py` with no timestamp, so the digest is a function of the
+  files; oras is only the transport (`blob push`, `manifest push` by digest, `tag`, `blob fetch`). `archive.json` also
+  carries every file's SHA-256 and the release's two image digests, so a reader checks what it unpacked.
+- **"Written once" is the tag, and the tag is the last write.** Blobs and manifest are pushed by digest, untagged; the
+  workflow signs the digest, verifies it under the archive identity and refuses it under the release's, and only then
+  `archive_backup.py publish` sets the tag — reading it again first, and reading it back after. A failure before the
+  tag leaves an untagged manifest no reader names; a re-run writes again.
+- **How a registry's answer is read.** `not found` (snapshot.py's words) is absent; `denied` is unknown and the run goes
+  on, because GHCR answers an anonymous read of a repository that does not exist with `denied` (measured:
+  `oras manifest fetch ghcr.io/raddatzk/veyq-backups:1.318` → "denied: requested access to the resource is denied",
+  while `…/veyq:does-not-exist-0` → "not found"); `publish` requires a definite answer. Anything else is red.
+- **The run's ref is gated**: `check` and `archive` refuse a ref other than `main` or `release/<major>.x` before any
+  write — a dispatch from another branch would sign an identity L3 refuses, under a tag that is written once.
+- **The app's truststore is written by the release's own app image**, pulled by the digest its manifest names after
+  the release's own `veyqctl verify --release <r>` (L2 uses the candidate's; the archive has none). Every release's
+  `veyqctl` has `verify --release` (measured: `git show <tag>:src/tools/veyqctl.py` for v0.2480 and v1.318).
+- **`archive.json`'s domain is read from the capture** (`manifest.json`'s `domains`, exactly one), and its highest
+  migration from the tag's own pin file, cross-checked against the capture's Flyway `schemaVersion` (red if they
+  differ: the schema state L3's selection groups by is then the one the archive holds).
+- **The archive identity is stated in `scripts/archive_backup.py`** (`IDENTITY_REGEXP`, printed by `identity`), where
+  L3 will read it; archive.yml reads it from there and states none of its own.
+- **`validate_release_identity.py` assertion 18** (new): every workflow file that runs `cosign sign`/`sign-blob`/`attest`
+  is one of three listed identities and each listed one signs; a `uses:` job may hand `id-token: write` only to a listed
+  workflow; the archive identity accepts archive.yml on the publishing branches and rejects 37 others (release.yml and
+  publish.yml named apart), and veyqctl's identity rejects it; archive.yml's triggers, permissions, single job,
+  concurrency, ref hand-over, cosign pin and write order. `id-token: write` alone is not counted as signing:
+  site.yml's Pages deploy holds it (the first draft counted it and was red there). Assertion 14 holds release.yml's sixth
+  job (`archive`); assertions 15 and 16 read archive.yml.
+- **`pull` is built now** (it was phase 3's reader): the local round trip needs it, and it is the one place the checks
+  of what an archive must be live.
+- **release.yml's `archive` job** runs on `always() && needs.publish.outputs.published == 'true'`, as `channels`; its
+  failure leaves the release as it is. archive.yml's budget is 20 minutes (the site's no-stage line says so).
+- **The docs say only what is true after pull request 1**: ADR 0091's `Built:`, release-and-deployment.md and the
+  site's *How veyq is tested* name the archive's workflow as built and no release as archived; the rest is phase 4's.
+
+### Phase 1 — handed back
+
+- **`veyqctl backup --objects-to <directory>` fails on Docker Desktop for macOS, in every release since 2026-10-21's
+  early copy** (v0.2480 and v1.0 carry `copy_objects_early`). Measured: the first local run was red at `backup` —
+  rclone exit 6, "Timestamp mismatch between immutable objects … immutable file modified" on every key the hot early
+  copy had written. Cause, measured with the pinned rclone image: in a bind-mounted directory Docker Desktop keeps the
+  mtime rclone sets only to the whole second (`17:19:07.000000000` beside the source's `.105268669`), so the cold
+  `copy --immutable` takes each pooled object for a modified one; on the Fedora VM (podman, native bind mount) the
+  mtime keeps its nanoseconds and the second copy passes. So CI (a Linux runner) is expected unaffected (inferred, not
+  measured on GitHub), and a Server Owner on a Mac with a directory pool cannot back up. Not patched here (a tools
+  change, and outside this CR). Recommendation: an inbox row; the fix is likely `--modify-window 1s` on the directory
+  pool's copies in `instance_backup.py` (rclone's own lever for coarse-mtime filesystems), proved by the same two-copy
+  case. The local run used a scratch `docker` shim adding `RCLONE_MODIFY_WINDOW=1s` to the rclone container only —
+  never in the repository.
+- **`veyq-backups` will most likely be created private.** GitHub's docs (read, not measured): "When you first publish
+  a package that is scoped to your personal account, the default visibility is private", and a linked package inherits
+  "the access permissions (but not the visibility)" of its repository. Decision 2 says the archive is public, so making
+  it public after the first dispatch is the owner's step (below). The first push from a workflow could not be measured
+  here (no registry writes).
+
+### Phase 1 — technical observations
+
+- The local run against the published v1.318 (`archive --tag v1.318 --registry localhost:15500/l3p1 --plain-http`,
+  registry `registry:3.0.0@sha256:6c5666b8…`): green in 112 s (verify 11 s, install 27 s, start tree 44 s, seed 14 s,
+  backup 11 s, assemble and push 0.2 s); 14 files, a 1,013,760-byte tar, `archive.json` with domain `veyq.test`,
+  highest migration `V202611221402`, record version 1, both image digests. Before `publish` the repository had no tag;
+  after it `1.318` named the pushed digest. `pull` gave back `archive.json`, the tar and the manifest byte-identical
+  (`cmp`) and every unpacked file equal to the run's capture, pool, key and seeder record (`diff -r`, `cmp`). A second
+  `archive` for v1.318: 0.09 s, the notice, `written=false`, no run directory. `publish` with another digest: the
+  notice, nothing tagged. `check` from `refs/heads/feature`: red, nothing read.
+- L2's building block held unchanged: the archive imports `run_stack_upgrade`'s start release, override, install values,
+  install, start tree, seed and `predecessor_of`, and `stack_lane`'s stages; nothing of L2 was edited.
+- Bites, each red and restored (bytes compared, `git status` identical): assertion 18 six ways (an unlisted workflow that
+  signs; archive.yml dropped from the list; the identity widened to `(archive|release)\.yml`; the tag set before the
+  signature; release.yml's `archive` ungated; the archive step without the run's ref); the archive self-test four ways
+  (a tar entry keeping its file's mtime, `denied` read as anything but unknown, an unpack that follows a path outside,
+  a pull that skips a layer's digest); `pin_follow` with GitHub's digest dropped from the three-way check; and the
+  `pins` job (Renovate 44.262.1's extract-only run on a clone of the commit, then `pin_inventory.py`) without the oras
+  manager: "ORAS_VERSION: v1.4.0: no Renovate manager extracts it". With it: 332 pins, every one reached.
+- Proof on the committed tree (`e0d7d9534`): all 71 guards of the CI glob green; `archive_backup_selftest.py`,
+  `pin_follow_selftest.py` (68 checks), `snapshot`, `promote`, `staging_retention`, `pin_inventory` and `release_notes`
+  self-tests green; `actionlint` green on archive.yml, release.yml and renovate.yml (checks.yml's one finding, SC2129 at
+  its `version` step, is on `main` too); the site's `pnpm run check` green (0 errors, 217 pages); `validate_guard_gaps.py`
+  in full (a validator changed): 104 pinned cases hold.
+- Not reproduced locally: the workflow itself (GitHub's runner, the GITHUB_TOKEN push, keyless signing, `cosign verify`
+  of an OCI artifact in GHCR). That `job_workflow_ref` names archive.yml when release.yml calls it is GitHub's and
+  Fulcio's documented behaviour, remembered; the workflow's verify step is what the observed half shows.
+
+### Phase 1 — process observations
+
+- The CR's local done-when assumed `veyqctl backup --objects-to` runs on this Mac; it does not (above). The refine ran
+  L2's install-and-seed but not the one new command phase 1 hangs on — § *run the lever's first invocation at refine*
+  would have found it in a minute. Next time: a refine that adds a command to a building block runs that command once.
+- My misses: a self-test case written with `or True` (removed before it ran green); two of the self-test's first bites
+  stayed green — `info.mtime = 0` restates `TarInfo`'s default, so its removal was no lever (re-bitten with a real mtime),
+  and a `denied` case that raised instead of naming itself (rewritten to report the state it read); assertion 18's
+  first draft counted `id-token: write` as signing and was red on site.yml's Pages deploy.
