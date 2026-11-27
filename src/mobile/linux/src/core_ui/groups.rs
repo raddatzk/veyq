@@ -3,15 +3,17 @@
 //! uc.spaces.rename-group, uc.spaces.delete-group), each a subpage of the Settings dialog as its Members is.
 //!
 //! *Groups* ([page]) lists the caller's groups, an owner's first: each its name (or *Untitled group*), its role, and
-//! whether it is being deleted or behind its epoch; its "+" (`create_action`, where the core says the caller may create
+//! whether it is being deleted (the day it is, `GroupRow.deletion`) or behind its epoch; its "+" (`create_action`, where the core says the caller may create
 //! one) asks for the name in an `AdwAlertDialog` (the web's `CreateGroupDialog`) and opens the new group's page. The list
 //! is read each time it shows, so what a group's page changed is there on the way back.
 //!
-//! A group's page ([group]) is the web's `GroupMembersPanel` without the group's icon, its new lock and its links card
-//! (gaps the tenant's Members leaves to the browser too): an owner's name editable in place, *Add member* by username,
-//! the members with their menu button — *Make co-owner*, *Remove co-owner*, *Remove* (asked first in an
+//! A group's page ([group]) is the web's `GroupMembersPanel`: the group's identity header ([scope_acts::header]: its icon,
+//! which an owner adds, changes or removes), an owner's name editable in place, *Add member* by username,
+//! the members with their trust badge and their menu button — *Make co-owner*, *Remove co-owner*, *Remove* (asked first in an
 //! `AdwAlertDialog` with the option to turn off every link of the group: the group's removal-rotation) and *Withdraw* for
-//! a proposal not yet answered —, and the danger zone's *Delete group* (asked first) or, deleted, *Restore group*. A
+//! a proposal not yet answered —, where the core says (`wholeActs`) the *Links* and *New lock* sections with the group's
+//! words ([scope_acts::links_and_lock]), and the danger zone's *Delete group* (asked first) or, deleted, the day it is
+//! deleted as a warning and *Restore group*. A
 //! member who owns nothing there reads the core's read-only note. *Group invitations* ([invitations], the web's
 //! `GroupInvitationsView`) offers *Accept* and *Decline* on each. What an act says is a toast of the dialog; each page is
 //! read anew after an act that went through.
@@ -24,19 +26,21 @@ use gtk::{gio, glib};
 use crate::bridge::{self, wire::Answer, wire::Call, wire::GroupMember, wire::GroupPage, wire::GroupRow, wire::Groups, wire::Invitation, wire::Invitations, wire::Msg};
 use crate::core_ui::create_action::create_action;
 use crate::core_ui::received::said_msg;
-use crate::core_ui::{avatars, said, words};
+use crate::core_ui::{avatars, said, scope_acts, words};
 
 /// What a subpage needs of the Settings dialog: its toasts and its subpage stack.
 #[derive(Clone)]
 pub struct Host {
     pub toast: Rc<dyn Fn(adw::Toast)>,
     pub push: Rc<dyn Fn(&adw::NavigationPage)>,
+    /// The top subpage popped (the square crop's, once its picture went through).
+    pub pop: Rc<dyn Fn()>,
 }
 
 impl Host {
     /// The host over [dialog], held weakly: the pages it pushes are the dialog's own.
     pub fn of(dialog: &adw::PreferencesDialog) -> Host {
-        let (toasts, pushes) = (dialog.downgrade(), dialog.downgrade());
+        let (toasts, pushes, pops) = (dialog.downgrade(), dialog.downgrade(), dialog.downgrade());
         Host {
             toast: Rc::new(move |t| {
                 if let Some(d) = toasts.upgrade() {
@@ -46,6 +50,11 @@ impl Host {
             push: Rc::new(move |p| {
                 if let Some(d) = pushes.upgrade() {
                     d.push_subpage(p);
+                }
+            }),
+            pop: Rc::new(move || {
+                if let Some(d) = pops.upgrade() {
+                    d.pop_subpage();
                 }
             }),
         }
@@ -166,7 +175,7 @@ fn group_row(l: &Rc<List>, row: &GroupRow, i: usize) -> adw::ActionRow {
     let title = title_of(&row.name, row.title_word.as_ref());
     let mut line = vec![if row.owner { words::members_role_owner() } else { words::members_role_member() }];
     if row.deleted {
-        line.push(words::groups_pending_sub());
+        line.push(row.deletion.as_ref().map(said::notice).unwrap_or_else(words::groups_pending_sub));
     }
     let r = adw::ActionRow::builder().title(glib::markup_escape_text(&title).as_str()).subtitle(glib::markup_escape_text(&said::joined(&line)).as_str()).activatable(true).build();
     // by its place in the list, never by a name: a pass reads the rows without their content
@@ -277,16 +286,20 @@ fn draw_group(g: &Rc<Group>, read: Option<GroupPage>) {
     }
     let Some(p) = read else { return };
     eprintln!(
-        "veyq: group page: owner {}, deleted {}, {} members ({} owners, {} awaiting consent, {} pending), readonly {}",
+        "veyq: group page: owner {}, deleted {} (day {}), whole acts {}, {} members ({} owners, {} awaiting consent, {} pending, {} badged), readonly {}",
         p.owner,
         p.deleted,
+        p.deletion.is_some(),
+        p.whole_acts,
         p.members.len(),
         p.members.iter().filter(|m| m.owner).count(),
         p.members.iter().filter(|m| m.pending_consent).count(),
         p.members.iter().filter(|m| m.pending).count(),
+        p.members.iter().filter(|m| m.badge_word.is_some()).count(),
         p.readonly_note.is_some()
     );
     g.shell.page.set_title(&title_of(&p.name, None));
+    g.shell.column.append(&scope_acts::header(&g.host, &g.scope, &title_of(&p.name, None), p.owner));
     if let Some(note) = &p.readonly_note {
         let line = label(&said_msg(note), true);
         line.set_widget_name("group-readonly");
@@ -305,8 +318,19 @@ fn draw_group(g: &Rc<Group>, read: Option<GroupPage>) {
         members.add(&member_row(g, m));
     }
     g.shell.column.append(&members);
+    if p.whole_acts {
+        let g2 = g.clone();
+        let run_it: Rc<dyn Fn(Call)> = Rc::new(move |call| {
+            let what = if matches!(call, Call::SettingsGroupNewLock { .. }) { "new lock" } else { "links off" };
+            run(&g2, what, call);
+        });
+        let (links, lock) = (Call::SettingsGroupRevokeLinks { scope_id: g.scope.clone() }, Call::SettingsGroupNewLock { scope_id: g.scope.clone() });
+        for section in scope_acts::links_and_lock(&words::space_lock_sub_group(), &words::space_lock_confirm_group(), links, lock, run_it) {
+            g.shell.column.append(&section);
+        }
+    }
     if p.owner {
-        g.shell.column.append(&danger_zone(g, p.deleted));
+        g.shell.column.append(&danger_zone(g, p.deleted, p.deletion.as_ref()));
     }
 }
 
@@ -366,6 +390,7 @@ fn member_row(g: &Rc<Group>, m: &GroupMember) -> adw::ActionRow {
     status.add_css_class("caption");
     status.add_css_class(if m.pending_consent { "dim-label" } else { "success" });
     r.add_suffix(&status);
+    scope_acts::badge(&r, m.badge_word.as_ref(), m.badge_note.as_ref());
     if let Some(pending) = &m.pending_word {
         let badge = gtk::Label::new(Some(&said_msg(pending)));
         badge.add_css_class("caption");
@@ -437,13 +462,21 @@ fn ask_remove(g: &Rc<Group>, over: &adw::ActionRow, user_id: String) {
     alert.present(Some(over));
 }
 
-/// The danger zone (the web's): *Delete group* asked first, or a deleted group's *Restore group*.
-fn danger_zone(g: &Rc<Group>, deleted: bool) -> adw::PreferencesGroup {
+/// The danger zone (the web's): *Delete group* asked first, or a deleted group's day ([deletion]) as a warning beside
+/// *Restore group*.
+fn danger_zone(g: &Rc<Group>, deleted: bool, deletion: Option<&crate::bridge::wire::Notice>) -> adw::PreferencesGroup {
     let group = adw::PreferencesGroup::builder()
         .title(words::groups_danger_zone())
         .description(if deleted { words::groups_pending_sub() } else { words::groups_delete_sub() })
         .build();
     group.set_widget_name("group-danger");
+    if let (true, Some(day)) = (deleted, deletion) {
+        let line = label(&said::notice(day), false);
+        line.add_css_class("warning");
+        line.set_margin_bottom(12);
+        line.set_widget_name("group-deletion");
+        group.add(&line);
+    }
     let button = if deleted {
         let b = gtk::Button::builder().label(words::groups_restore()).halign(gtk::Align::Start).build();
         b.add_css_class("suggested-action");

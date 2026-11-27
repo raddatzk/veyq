@@ -8,6 +8,10 @@
 //! below it (uc.spaces.manage-member-invites; none: no group): each its address or label (or "Link invitation"), its
 //! validity, the *Invited* badge and its menu button — *Rename* (a link invite only), *Send again* / *New link* (its new
 //! link or code shown once, [invites::result_dialog]) and *Cancel invite* (asked first).
+//!
+//! Above everything the space's identity header ([scope_acts::header]: its icon, which an owner adds, changes or removes,
+//! uc.spaces.set-space-icon); on each member row the trust badge and its note; the removal's question offers a new lock
+//! too; and an owner's *Links* and *New lock* sections close the page ([scope_acts::links_and_lock]).
 
 use std::rc::Rc;
 
@@ -16,10 +20,12 @@ use gtk::{gio, glib};
 
 use crate::bridge::{self, wire::Answer, wire::Call, wire::PendingInvite, wire::Roster, wire::RosterMember};
 use crate::core_ui::received::said_msg;
-use crate::core_ui::{avatars, invites, said, words};
+use crate::core_ui::groups::Host;
+use crate::core_ui::{avatars, invites, said, scope_acts, words};
 
-/// The subpage, read when it opens, at each *Try again* and after each act that went through; [toast] says an act's words.
-pub fn page(toast: Rc<dyn Fn(adw::Toast)>) -> adw::NavigationPage {
+/// The subpage, read when it opens, at each *Try again* and after each act that went through; [host]'s toasts say an
+/// act's words, its subpages hold the icon's crop. [tenant]: the open tenant's id, the scope of its icon (None: no header).
+pub fn page(host: Host, tenant: Option<String>) -> adw::NavigationPage {
     let column = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(18).margin_top(24).margin_bottom(24).margin_start(12).margin_end(12).build();
     let view = adw::ToolbarView::new();
     view.add_top_bar(&adw::HeaderBar::new());
@@ -27,13 +33,15 @@ pub fn page(toast: Rc<dyn Fn(adw::Toast)>) -> adw::NavigationPage {
     view.set_content(Some(&gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).vexpand(true).child(&clamp).build()));
     let page = adw::NavigationPage::builder().title(words::members_title()).child(&view).build();
     page.set_widget_name("members");
-    load(Rc::new(Page { column, toast }));
+    load(Rc::new(Page { column, toast: host.toast.clone(), host, tenant }));
     page
 }
 
 struct Page {
     column: gtk::Box,
     toast: Rc<dyn Fn(adw::Toast)>,
+    host: Host,
+    tenant: Option<String>,
 }
 
 fn load(p: Rc<Page>) {
@@ -80,6 +88,16 @@ fn draw(p: &Rc<Page>, read: Option<Roster>) {
         return;
     }
     let Some(roster) = read else { return };
+    eprintln!(
+        "veyq: members: {} rows ({} badged), owner acts {}, tenant {}",
+        roster.rows.len(),
+        roster.rows.iter().filter(|r| r.badge_word.is_some()).count(),
+        roster.owner_acts,
+        p.tenant.is_some()
+    );
+    if let Some(tenant) = &p.tenant {
+        p.column.prepend(&scope_acts::header(&p.host, tenant, &roster.tenant_name, roster.owner_acts));
+    }
     if roster.owner {
         // the owners' *Invite member* (uc.spaces.add-member), the web's button above the roster
         let content = adw::ButtonContent::builder().icon_name("contact-new-symbolic").label(words::members_invite()).build();
@@ -107,6 +125,12 @@ fn draw(p: &Rc<Page>, read: Option<Roster>) {
             group.add(&invite_row(p, invite));
         }
         p.column.append(&group);
+    }
+    if roster.owner_acts {
+        let run_it: Rc<dyn Fn(Call)> = { let p = p.clone(); Rc::new(move |call| run(&p, call)) };
+        for g in scope_acts::links_and_lock(&words::space_lock_sub(), &words::space_lock_confirm(), Call::SettingsMembersRevokeLinks, Call::SettingsMembersNewLock, run_it) {
+            p.column.append(&g);
+        }
     }
 }
 
@@ -206,6 +230,7 @@ fn member_row(p: &Rc<Page>, row: &RosterMember) -> adw::ActionRow {
         badge.set_widget_name("member-pending");
         r.add_suffix(&badge);
     }
+    scope_acts::badge(&r, row.badge_word.as_ref(), row.badge_note.as_ref());
     if row.promote || row.demote || row.remove {
         let group = gio::SimpleActionGroup::new();
         let menu = gio::Menu::new();
@@ -239,16 +264,23 @@ fn member_row(p: &Rc<Page>, row: &RosterMember) -> adw::ActionRow {
     r
 }
 
-/// The removal's question (the web's `askWithOptions`): its words, the opt-in to turn off every link, Remove and Cancel.
+/// The removal's question (the web's `askWithOptions`): its words, the opt-ins to turn off every link and to give the
+/// space a new lock (after the removal, the member left out of it), each unchecked, Remove and Cancel.
 fn ask_remove(p: &Rc<Page>, over: &adw::ActionRow, user_id: String) {
     let alert = adw::AlertDialog::builder().heading(words::members_remove()).body(words::members_remove_confirm()).build();
     let links = gtk::CheckButton::builder().label(words::members_remove_revoke_links()).build();
     links.set_widget_name("member-remove-links");
     let hint = label(&words::members_remove_revoke_links_hint(), true);
     hint.add_css_class("caption");
+    let lock = gtk::CheckButton::builder().label(words::space_lock_remove_option()).build();
+    lock.set_widget_name("member-remove-lock");
+    let lock_hint = label(&words::space_lock_remove_option_hint(), true);
+    lock_hint.add_css_class("caption");
     let extra = gtk::Box::new(gtk::Orientation::Vertical, 6);
     extra.append(&links);
     extra.append(&hint);
+    extra.append(&lock);
+    extra.append(&lock_hint);
     alert.set_extra_child(Some(&extra));
     alert.add_responses(&[("cancel", &words::signin_cancel()), ("remove", &words::members_remove())]);
     alert.set_response_appearance("remove", adw::ResponseAppearance::Destructive);
@@ -257,7 +289,7 @@ fn ask_remove(p: &Rc<Page>, over: &adw::ActionRow, user_id: String) {
     let p2 = p.clone();
     alert.connect_response(None, move |_, response| {
         if response == "remove" {
-            run(&p2, Call::SettingsMemberRemove { user_id: user_id.clone(), revoke_links: links.is_active() });
+            run(&p2, Call::SettingsMemberRemove { user_id: user_id.clone(), revoke_links: links.is_active(), new_lock: lock.is_active() });
         }
     });
     alert.present(Some(over));
@@ -272,6 +304,7 @@ fn run(p: &Rc<Page>, call: Call) {
         p.column.set_sensitive(true);
         match answer {
             Ok(Answer::MembersChanged { done, notice }) => {
+                eprintln!("veyq: a member's act: done {done}");
                 (p.toast)(said::notice_toast(&notice));
                 if done {
                     load(p.clone());

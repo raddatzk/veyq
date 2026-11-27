@@ -4,7 +4,9 @@
 //! code (or the owner's password) typed; a new account's handle, name, address (a link invite's) and password with the
 //! breached-password check, then its Emergency Kit saved as every kit is ([account_flows::kit_page]: the save dialog, the
 //! core writing into the file chosen, *I saved it*) before *Accept & join*; an existing account's sign-in with its
-//! password and Secret Key (both masked, the key's typo said as the sign-in says it); and the outcome with *Open the
+//! password and Secret Key (both masked, the key's typo said as the sign-in says it) — both, but at a handover, with the
+//! optional picture below the name (`asksPicture`, the web's `JoinPicturePicker`: the app's one square crop,
+//! [profile_edit::pick_square], its preview the core's encoded bytes, `Join.PictureBytes`); and the outcome with *Open the
 //! space*, which signs the app in as any sign-in does (`Join.Open`; the shell follows the session's gate). The join is
 //! opened by *Open a link* (`Received.Open` answering `JoinOpened`, [crate::core_ui::received::open_link]), never by a
 //! `veyq:` link. Its error stands under the form and a busy join disables it; closing the dialog lets the join go
@@ -15,10 +17,11 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use adw::prelude::*;
-use gtk::glib;
+use gtk::{gdk, glib};
 
 use crate::bridge::{self, wire::Answer, wire::BreachKind, wire::Call, wire::Mode, wire::Phase, wire::SecretKeyProblem, wire::TenantJoinState, wire::Update, wire::Watched};
 use crate::core_ui::account_flows::{self, Flow};
+use crate::core_ui::profile_edit::{self, SquareHost};
 use crate::core_ui::{said, words};
 
 /// The least a new account's password may be, in characters (`PasswordChange.MIN_PASSWORD_LENGTH`).
@@ -73,6 +76,17 @@ struct Parts {
     spinner: Option<adw::Spinner>,
     breach: Option<Breach>,
     open: Option<gtk::Button>,
+    picture: Option<Picture>,
+}
+
+/// The join's optional picture: its preview, *Choose picture* / *Change picture*, *Remove*; [Picture::shown] what the
+/// preview drew last (whether the core held one).
+#[derive(Clone)]
+struct Picture {
+    avatar: adw::Avatar,
+    choose: gtk::Button,
+    remove: gtk::Button,
+    shown: Rc<Cell<Option<bool>>>,
 }
 
 /// A new account's password with the breached-password check (ADR 0151 decision 5): checked once the row is left, its
@@ -119,6 +133,14 @@ impl Join {
         }
         if let Some(o) = &parts.open {
             o.set_visible(s.can_open);
+        }
+        if let Some(p) = &parts.picture {
+            p.choose.set_label(&said::key(&s.picture_word));
+            p.remove.set_visible(s.picture);
+            if p.shown.get() != Some(s.picture) {
+                p.shown.set(Some(s.picture));
+                preview(self.id, &p.avatar, s.picture);
+            }
         }
         self.flow.nav.set_sensitive(!s.busy);
     }
@@ -215,7 +237,7 @@ impl Join {
         let col = column();
         col.append(&text(&said::notice(&s.intro)));
         col.append(&dim(&said::notice(&s.register_sub)));
-        let details = self.details(s, &col);
+        let details = self.details(s, &col, parts);
         let password = adw::PasswordEntryRow::builder().title(words::signin_password()).build();
         password.set_widget_name("join-password");
         col.append(&rows(&[password.upcast_ref()]));
@@ -278,7 +300,7 @@ impl Join {
         let col = column();
         col.append(&text(&said::notice(&s.intro)));
         col.append(&dim(&said::notice(&s.signin_sub)));
-        let details = self.details(s, &col);
+        let details = self.details(s, &col, parts);
         let password = adw::PasswordEntryRow::builder().title(words::signin_password()).build();
         password.set_widget_name("join-password");
         let key = adw::PasswordEntryRow::builder().title(words::signin_secret_key()).build();
@@ -379,7 +401,7 @@ impl Join {
 
     /// The handle in this space, the real name and — for a link invite — the address, as the step asks for them, each
     /// filled from what was typed before.
-    fn details(self: &Rc<Self>, s: &TenantJoinState, col: &gtk::Box) -> Details {
+    fn details(self: &Rc<Self>, s: &TenantJoinState, col: &gtk::Box, parts: &mut Parts) -> Details {
         let t = self.texts.borrow();
         let entry = |title: String, name: &str, value: &str| {
             let r = adw::EntryRow::builder().title(title).text(value).build();
@@ -405,6 +427,9 @@ impl Join {
             name.add(f);
             name.add(l);
             col.append(&name);
+            if s.asks_picture {
+                parts.picture = Some(self.picture(s, col, &d));
+            }
         }
         if let Some(e) = &d.email {
             col.append(&rows(&[e.upcast_ref()]));
@@ -418,6 +443,91 @@ impl Join {
         }));
         d
     }
+}
+
+impl Join {
+    /// The optional picture below the name: the preview (the name's initials until one is chosen), its button and *Remove*,
+    /// the hint; the button opens the app's one square crop over this dialog's pages.
+    fn picture(self: &Rc<Self>, s: &TenantJoinState, col: &gtk::Box, d: &Details) -> Picture {
+        let avatar = adw::Avatar::builder().size(80).show_initials(true).halign(gtk::Align::Center).build();
+        avatar.set_widget_name("join-picture");
+        let choose = gtk::Button::builder().label(said::key(&s.picture_word)).build();
+        choose.add_css_class("pill");
+        choose.set_widget_name("join-picture-choose");
+        let remove = gtk::Button::builder().label(words::profile_picture_remove()).visible(s.picture).build();
+        remove.add_css_class("pill");
+        remove.add_css_class("destructive-action");
+        remove.set_widget_name("join-picture-remove");
+        let buttons = gtk::Box::builder().spacing(12).halign(gtk::Align::Center).build();
+        buttons.append(&choose);
+        buttons.append(&remove);
+        col.append(&avatar);
+        col.append(&buttons);
+        col.append(&dim(&words::profile_picture_join_hint()));
+        let named = {
+            let (a, d) = (avatar.clone(), d.clone());
+            Rc::new(move || {
+                let t = d.texts();
+                let name = format!("{} {}", t.first, t.last);
+                a.set_text(Some(if name.trim().is_empty() { t.username.as_str() } else { name.trim() }));
+            })
+        };
+        named();
+        d.on_change(named);
+        let p = Picture { avatar, choose: choose.clone(), remove: remove.clone(), shown: Rc::new(Cell::new(None)) };
+        let id = self.id;
+        remove.connect_clicked(move |_| act("Join.RemovePicture", Call::JoinRemovePicture { join: id }));
+        let (me, shown) = (Rc::downgrade(self), p.clone());
+        choose.connect_clicked(move |b| {
+            let Some(j) = me.upgrade() else { return };
+            let (nav, pops, toasts) = (j.flow.nav.clone(), j.flow.nav.clone(), j.flow.toasts.clone());
+            let host = SquareHost {
+                parent: b.clone().upcast(),
+                push: Rc::new(move |page| nav.push(page)),
+                pop: Rc::new(move || {
+                    pops.pop();
+                }),
+                toast: Rc::new(move |t| toasts.add_toast(t)),
+            };
+            let (title, shown, toasts) = (b.label().map(|l| l.to_string()).unwrap_or_default(), shown.clone(), j.flow.toasts.clone());
+            profile_edit::pick_square(host, title, words::profile_picture_label(), Rc::new(move |path, pose| {
+                let (shown, toasts) = (shown.clone(), toasts.clone());
+                Box::pin(async move {
+                    let answered = bridge::call(&Call::JoinPicture { join: id, path, pose }).await.map(|(a, _)| a);
+                    eprintln!("veyq: join: Join.Picture: {}", crate::core_ui::manage::answer_kind(&answered));
+                    let done = matches!(answered, Ok(Answer::Done));
+                    if done {
+                        // a picture over a picture leaves the state's flag as it was: the preview is asked anew here
+                        preview(id, &shown.avatar, true);
+                    } else {
+                        toasts.add_toast(said::word_toast("profile_picture_not_image", &words::profile_picture_not_image()));
+                    }
+                    done
+                })
+            }));
+        });
+        p
+    }
+}
+
+/// The join's picture drawn on [avatar]: the core's encoded bytes decoded by GTK where [held], the initials otherwise.
+fn preview(join: i64, avatar: &adw::Avatar, held: bool) {
+    if !held {
+        return avatar.set_custom_image(None::<&gdk::Paintable>);
+    }
+    let avatar = avatar.clone();
+    glib::spawn_future_local(async move {
+        match bridge::call(&Call::JoinPictureBytes { join }).await {
+            Ok((Answer::Bytes { .. }, Some(bytes))) => match gdk::Texture::from_bytes(&glib::Bytes::from_owned(bytes)) {
+                Ok(t) => {
+                    eprintln!("veyq: join: the picture previewed");
+                    avatar.set_custom_image(Some(&t));
+                }
+                Err(e) => eprintln!("veyq: join: the picture did not decode ({e})"),
+            },
+            other => eprintln!("veyq: join: Join.PictureBytes: {}", crate::core_ui::manage::answer_kind(&other.map(|(a, _)| a))),
+        }
+    });
 }
 
 /// The rows [Join::details] drew.

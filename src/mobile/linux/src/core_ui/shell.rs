@@ -1038,6 +1038,14 @@ fn creates_menu(creates: &[ShownCreate], top: bool) -> gio::Menu {
     menu
 }
 
+/// The tenant the window over [widget] shows now (its `win.tenant` state, "connection\ntenant id"), for a scope act
+/// on the tenant itself (Settings' Members: its icon); None before the shell drew one.
+pub fn open_tenant(widget: &impl IsA<gtk::Widget>) -> Option<String> {
+    let window = widget.root().and_downcast::<gtk::ApplicationWindow>()?;
+    let state = window.lookup_action("tenant")?.state()?.str()?.to_owned();
+    state.split_once('\n').map(|(_, tenant)| tenant.to_owned()).filter(|t| !t.is_empty())
+}
+
 /// The view a level's toggle turns to: the other of the two it offers (`ShellShown.views`), none where it offers one.
 fn other_view(shown: &ShellShown) -> Option<ViewModeShown> {
     (shown.views.len() > 1).then(|| shown.views.iter().copied().find(|v| *v != shown.view)).flatten()

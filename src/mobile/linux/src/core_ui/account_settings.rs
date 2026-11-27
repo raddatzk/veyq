@@ -510,8 +510,8 @@ impl Page {
         let weak = Rc::downgrade(self);
         row.connect_activated(move |_| {
             if let Some(p) = weak.upgrade() {
-                let dialog = p.dialog.clone();
-                p.dialog.push_subpage(&crate::core_ui::members::page(Rc::new(move |t| dialog.add_toast(t))));
+                let tenant = crate::core_ui::shell::open_tenant(&p.window_or_dialog());
+                p.dialog.push_subpage(&crate::core_ui::members::page(crate::core_ui::groups::Host::of(&p.dialog), tenant));
             }
         });
         group.add(&row);

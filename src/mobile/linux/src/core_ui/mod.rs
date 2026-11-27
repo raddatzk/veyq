@@ -5,7 +5,7 @@
 //! applications fill ([registry]), a received link opened as its guest ([received]) or an invite's [join] and a kept link's page
 //! ([bookmark_page]) and dialog ([bookmark_create]), a person's profile ([person_page], each application's section
 //! registered), the search in the shell's sidebar ([search]), [manage] ("Manage servers", from the switcher), the account's
-//! Settings ([account_settings], from the sidebar) with the space's [whos_who], [members] with its [invites] and [terms] (and the terms gate in place of the shell) with its device linking ([device_link], from the sign-in too), its map
+//! Settings ([account_settings], from the sidebar) with the space's [whos_who], [members] with its [invites], [scope_acts] (the icon header, badges, links and lock it shares with a group's page) and [terms] (and the terms gate in place of the shell) with its device linking ([device_link], from the sign-in too), its map
 //! services ([map_services]) over the core's raster map ([raster_map]), the account's flows ([account_flows],
 //! [profile_edit], [safety]), the uploads ([uploads]) with drag and drop ([drop]) and a download's import
 //! ([import_dialog]), a running save's banner ([saving]), a picture held at the core's edge ([picture]), a medium played
@@ -56,6 +56,7 @@ pub mod received;
 pub mod registry;
 pub mod report;
 pub mod safety;
+pub mod scope_acts;
 pub mod said;
 pub mod saving;
 pub mod search;

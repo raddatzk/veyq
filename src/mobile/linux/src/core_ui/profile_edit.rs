@@ -7,6 +7,8 @@
 //! The picture is the platform's to decode and draw, the core's to encode, pad and seal (ADR 0161 decision 1): GTK decodes
 //! the picked file (`gdk::Texture`), the cropper's pose is the core's math (`Cover.Pose` with a square frame of
 //! [EDGE] × [EDGE]), and the core asks this host to draw that pose as RGBA (`Picture.Square`, [answer]) before it encodes.
+//! The pick and its cropper are the app's one square crop ([pick_square]): a space's and a group's icon
+//! ([crate::core_ui::scope_acts]) and the join's picture ([crate::core_ui::join]) take it too, over their own pages.
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -299,32 +301,72 @@ impl Inner {
         });
     }
 
-    /// "Choose a picture": GTK's file dialog (the portal's where there is one), then the square cropper over it.
+    /// "Choose a picture": [pick_square] over this dialog's pages, its picture handed to the profile.
     fn pick(self: &Rc<Self>) {
-        let w = Rc::downgrade(self);
-        glib::spawn_future_local(async move {
-            let images = gtk::FileFilter::new();
-            images.add_mime_type("image/*");
-            images.set_name(Some(&words::profile_picture_label()));
-            let filters = gio::ListStore::new::<gtk::FileFilter>();
-            filters.append(&images);
-            let dialog = gtk::FileDialog::builder().title(words::profile_picture_choose()).filters(&filters).default_filter(&images).modal(true).build();
-            let parent = w.upgrade().and_then(|i| i.dialog.root()).and_downcast::<gtk::Window>();
-            let file = match dialog.open_future(parent.as_ref()).await {
-                Ok(file) => file,
-                Err(e) => return eprintln!("veyq: profile: no picture chosen ({e})"),
-            };
-            let Some(i) = w.upgrade() else { return };
-            let (Some(path), texture) = (file.path().and_then(|p| p.to_str().map(str::to_owned)), file.path().map(gdk::Texture::from_filename)) else { return };
-            match texture {
-                Some(Ok(t)) => Cropper::push(&i, path, &t),
-                other => {
-                    eprintln!("veyq: profile: the picture did not decode ({:?})", other.map(|r| r.err()));
-                    i.toasts.add_toast(said::word_toast("profile_picture_not_image", &words::profile_picture_not_image()));
+        let (nav, pops, toasts) = (self.nav.clone(), self.nav.clone(), self.toasts.clone());
+        let host = SquareHost {
+            parent: self.dialog.clone().upcast(),
+            push: Rc::new(move |p| nav.push(p)),
+            pop: Rc::new(move || {
+                pops.pop();
+            }),
+            toast: Rc::new(move |t| toasts.add_toast(t)),
+        };
+        let (w, toasts) = (Rc::downgrade(self), self.toasts.clone());
+        pick_square(host, words::profile_picture_choose(), words::profile_picture_label(), Rc::new(move |path, pose| {
+            let (w, toasts) = (w.clone(), toasts.clone());
+            Box::pin(async move {
+                let Some(profile) = w.upgrade().and_then(|i| i.id.get()) else { return false };
+                let answered = bridge::call(&Call::ProfilePicture { profile, path, pose }).await.map(|(a, _)| a);
+                eprintln!("veyq: Profile.Picture: {}", crate::core_ui::manage::answer_kind(&answered));
+                let done = matches!(answered, Ok(Answer::Done));
+                if !done {
+                    toasts.add_toast(said::word_toast("profile_picture_not_image", &words::profile_picture_not_image()));
                 }
-            }
-        });
+                done
+            })
+        }));
     }
+}
+
+/// Where a square pick happens ([pick_square]): the widget its file dialog is modal over, the page stack the cropper is
+/// pushed on and popped from, and the toasts that say a picture did not decode.
+pub struct SquareHost {
+    pub parent: gtk::Widget,
+    pub push: Rc<dyn Fn(&adw::NavigationPage)>,
+    pub pop: Rc<dyn Fn()>,
+    pub toast: Rc<dyn Fn(adw::Toast)>,
+}
+
+/// What the cropper's "Use this picture" does with the picked file's path and the pose: true where it went through (the
+/// cropper's page is popped then); a refusal is the caller's to say.
+pub type UseSquare = Rc<dyn Fn(String, Pose) -> std::pin::Pin<Box<dyn std::future::Future<Output = bool>>>>;
+
+/// The app's one square picture pick — the profile picture's, a space's or a group's icon, the join's picture: GTK's file
+/// dialog (the portal's where there is one, [dialog_title] its title), then the square cropper pushed on [host]'s pages
+/// ([page_title] its title); "Use this picture" hands the path and the pose to [use_it].
+pub fn pick_square(host: SquareHost, dialog_title: String, page_title: String, use_it: UseSquare) {
+    glib::spawn_future_local(async move {
+        let images = gtk::FileFilter::new();
+        images.add_mime_type("image/*");
+        images.set_name(Some(&words::profile_picture_label()));
+        let filters = gio::ListStore::new::<gtk::FileFilter>();
+        filters.append(&images);
+        let dialog = gtk::FileDialog::builder().title(dialog_title).filters(&filters).default_filter(&images).modal(true).build();
+        let parent = host.parent.root().and_downcast::<gtk::Window>();
+        let file = match dialog.open_future(parent.as_ref()).await {
+            Ok(file) => file,
+            Err(e) => return eprintln!("veyq: a square picture: none chosen ({e})"),
+        };
+        let (Some(path), texture) = (file.path().and_then(|p| p.to_str().map(str::to_owned)), file.path().map(gdk::Texture::from_filename)) else { return };
+        match texture {
+            Some(Ok(t)) => Cropper::push(&host, &page_title, path, &t, use_it),
+            other => {
+                eprintln!("veyq: a square picture did not decode ({:?})", other.map(|r| r.err()));
+                (host.toast)(said::word_toast("profile_picture_not_image", &words::profile_picture_not_image()));
+            }
+        }
+    });
 }
 
 /// The square cropper (the web's `ProfilePictureDialog` around its cropper): the picture under an [EDGE] × [EDGE] frame,
@@ -342,13 +384,13 @@ struct Cropper {
 }
 
 impl Cropper {
-    fn push(profile: &Rc<Inner>, path: String, texture: &gdk::Texture) {
+    fn push(host: &SquareHost, title: &str, path: String, texture: &gdk::Texture, use_it: UseSquare) {
         let (tw, th) = (texture.width(), texture.height());
         // held at most four frames wide, which the 3× zoom still draws sharply
         let scale = (f64::from(EDGE * 4) / f64::from(tw.min(th).max(1))).min(1.0);
         let (w, h) = (((f64::from(tw) * scale).round() as i32).max(1), ((f64::from(th) * scale).round() as i32).max(1));
         let Some(surface) = crate::core_ui::cover::scaled(texture, w, h) else {
-            profile.toasts.add_toast(said::word_toast("profile_picture_not_image", &words::profile_picture_not_image()));
+            (host.toast)(said::word_toast("profile_picture_not_image", &words::profile_picture_not_image()));
             return;
         };
         let area = gtk::DrawingArea::builder().content_width(EDGE).content_height(EDGE).halign(gtk::Align::Center).build();
@@ -363,19 +405,20 @@ impl Cropper {
         zoom_row.append(&gtk::Image::from_icon_name("zoom-out-symbolic"));
         zoom_row.append(&zoom);
         zoom_row.append(&gtk::Image::from_icon_name("zoom-in-symbolic"));
-        let use_it = gtk::Button::builder().label(words::profile_picture_use()).halign(gtk::Align::Center).build();
-        use_it.add_css_class("pill");
-        use_it.add_css_class("suggested-action");
+        let use_button = gtk::Button::builder().label(words::profile_picture_use()).halign(gtk::Align::Center).build();
+        use_button.add_css_class("pill");
+        use_button.add_css_class("suggested-action");
         let col = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(18).build();
         col.append(&gtk::Label::builder().label(words::profile_picture_dialog_intro()).wrap(true).xalign(0.0).build());
         col.append(&area);
         col.append(&zoom_row);
-        col.append(&use_it);
+        col.append(&use_button);
         let clamp = adw::Clamp::builder().maximum_size(520).margin_top(12).margin_bottom(24).margin_start(12).margin_end(12).child(&col).build();
         let view = adw::ToolbarView::new();
         view.add_top_bar(&adw::HeaderBar::new());
         view.set_content(Some(&gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).vexpand(true).child(&clamp).build()));
-        let page = adw::NavigationPage::builder().title(words::profile_picture_label()).tag("crop").child(&view).build();
+        let page = adw::NavigationPage::builder().title(title).tag("crop").child(&view).build();
+        page.set_widget_name("square-crop");
         let c = Rc::new(Cropper {
             area: area.clone(),
             zoom: zoom.clone(),
@@ -419,25 +462,20 @@ impl Cropper {
             }
         });
         // the cropper lives as long as its page: its button holds it
-        let (held, p) = (c.clone(), Rc::downgrade(profile));
-        use_it.connect_clicked(move |b| {
-            let (c, Some(i)) = (&held, p.upgrade()) else { return };
-            let (Some(pose), Some(profile)) = (c.pose.borrow().clone(), i.id.get()) else { return };
+        let (held, pop) = (c.clone(), host.pop.clone());
+        use_button.connect_clicked(move |b| {
+            let Some(pose) = held.pose.borrow().clone() else { return };
             b.set_sensitive(false);
-            let (path, b) = (path.clone(), b.clone());
+            let (b, done, pop) = (b.clone(), use_it(path.clone(), pose), pop.clone());
             glib::spawn_future_local(async move {
-                let answered = bridge::call(&Call::ProfilePicture { profile, path, pose }).await.map(|(a, _)| a);
-                eprintln!("veyq: Profile.Picture: {}", crate::core_ui::manage::answer_kind(&answered));
+                let went = done.await;
                 b.set_sensitive(true);
-                match answered {
-                    Ok(Answer::Done) => {
-                        i.nav.pop();
-                    }
-                    _ => i.toasts.add_toast(said::word_toast("profile_picture_not_image", &words::profile_picture_not_image())),
+                if went {
+                    pop();
                 }
             });
         });
-        profile.nav.push(&page);
+        (host.push)(&page);
         // a fresh picture opens centred (the core's `centred`)
         c.ask(None, 0.0, 0.0, 1.0);
     }
