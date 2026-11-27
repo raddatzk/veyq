@@ -54,6 +54,15 @@ struct ContributionsView: View {
     @State private var confirm = ""
     /// What the last write was, for the words of its refusal.
     @State private var moving = false
+    /// A selection of the chosen bucket's media is being made (core's `Contributions.picked`): a tap toggles a tile.
+    @State private var selecting = false
+    @State private var shifting: ShiftShown?
+
+    /// A shift's sheet, by the model it shows.
+    struct ShiftShown: Identifiable {
+        let shift: SelectionShift
+        var id: ObjectIdentifier { ObjectIdentifier(shift) }
+    }
 
     private var s: Contributions.State { held.state.value }
     private static let margin = CGFloat(MediaGridLayout.shared.GAP)
@@ -68,6 +77,7 @@ struct ContributionsView: View {
                     Text(say(.memoryGalleryFailed)).foregroundStyle(Role.danger).padding()
                 } else {
                     picker.padding(.horizontal)
+                    if selecting { selectionBar.padding(.horizontal) }
                     if s.media.isEmpty {
                         Text(say(.memoryBucketsEmptyBucket)).foregroundStyle(Role.muted).padding()
                     } else {
@@ -96,6 +106,8 @@ struct ContributionsView: View {
         } message: {
             Text(say(.memoryBucketsDeleteBucketCopy, selectedName))
         }
+        .sheet(item: $shifting, onDismiss: { held.state.refresh() }) { shown in CaptureTimeShiftSheet(shift: shown.shift) }
+        .onChange(of: s.selected) { _, _ in selecting = false }
         .alert(say(moving ? .memoryBucketsMoveFailed : .memoryBucketsSaveFailed), isPresented: Binding(get: { s.refused != nil }, set: { if !$0 { held.model.seen(); held.state.refresh() } })) {
             Button(say(.ok), role: .cancel) {}
         }
@@ -116,6 +128,10 @@ struct ContributionsView: View {
             .labelsHidden()
             .fixedSize()
             Spacer(minLength: 0)
+            if !selecting, s.row != nil, gallery.current.offline == nil, s.media.count >= 2 {
+                Button(say(.selectAction)) { selecting = true }
+                    .fixedSize()
+            }
             if s.createsSub || s.renames, gallery.current.offline == nil {
                 Menu {
                     if s.createsSub {
@@ -131,6 +147,23 @@ struct ContributionsView: View {
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .help(say(.nodeMore))
+            }
+        }
+    }
+
+    /// The selection's bar (Photos' Select): how many are selected, *Shift Capture Time* where core offers it, Cancel.
+    private var selectionBar: some View {
+        HStack(spacing: 12) {
+            Text(say(.selectCount, Int32(s.picked.count))).foregroundStyle(Role.muted)
+            Spacer(minLength: 0)
+            Button(say(.memoryShiftAction)) {
+                if let shift = held.model.shift() { shifting = ShiftShown(shift: shift) }
+            }
+            .disabled(!s.shifts)
+            Button(say(.signinCancel)) {
+                selecting = false
+                held.model.clearPicked()
+                held.state.refresh()
             }
         }
     }
@@ -156,9 +189,22 @@ struct ContributionsView: View {
     }
 
     private func tile(_ row: GalleryModel.Row, frame: MediaGridLayout.Tile) -> some View {
-        Button { onOpen(row.mediaId) } label: {
+        Button {
+            if selecting {
+                held.model.toggle(mediaId: row.mediaId)
+                held.state.refresh()
+            } else {
+                onOpen(row.mediaId)
+            }
+        } label: {
             MediaTile(model: model, node: gallery.node, row: row, mark: marks[row.mediaId], width: CGFloat(frame.width), height: CGFloat(frame.height))
+                .overlay(alignment: .topTrailing) {
+                    if s.picked.contains(row.mediaId) {
+                        Image(systemName: "checkmark.circle.fill").symbolRenderingMode(.multicolor).font(.title3).padding(6)
+                    }
+                }
         }
+        .accessibilityAddTraits(s.picked.contains(row.mediaId) ? .isSelected : [])
         .buttonStyle(.plain)
         .offset(x: CGFloat(frame.left))
         .contextMenu {

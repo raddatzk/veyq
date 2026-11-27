@@ -1518,6 +1518,13 @@ final class AppModel {
         return account.keyRotation(open: tenantSession.flatMap { $0.account === account ? $0 : nil })
     }
     func erasureFlow() -> AccountErasure? { session.signedTo?.account.erasure() }
+    func kitRenewalFlow() -> KitRenewal? { session.signedTo?.account.kitRenewal() }
+
+    /// The open Settings page read anew (a flow that changed what it shows ended).
+    func refreshSettings() {
+        guard let m = settingsModel else { return }
+        Task { try? await m.refresh() }
+    }
 
     /// After a save of one's profile: the shell's people read again, so every name follows (core read them, and the pictures).
     func profileSaved() {

@@ -563,3 +563,92 @@ struct CaptureTimeSheet: View {
         #endif
     }
 }
+
+// MARK: A selection's capture time (uc.memory.buckets § Correct a selection's capture time)
+
+/// A selection's capture-time shift (core's `SelectionShift`) as a sheet: the anchor's day and minute with the system's
+/// picker, as the editor's, then *Only this one* or *All N, shifted by …* and how many stay undated, the progress, what it
+/// came to and its Undo. The picked `Date` goes to the core as epoch ms; the core does the arithmetic.
+struct CaptureTimeShiftSheet: View {
+    let shift: SelectionShift
+    @State private var held: CoreState<SelectionShift.State>
+    @State private var at: Date
+    @Environment(\.dismiss) private var dismiss
+
+    init(shift: SelectionShift) {
+        self.shift = shift
+        let held = CoreState({ shift.current }) { changed in ApplePlatform.shared.watch(flow: shift.state) { @Sendable _ in changed() } }
+        _held = State(initialValue: held)
+        _at = State(initialValue: Date(timeIntervalSince1970: Double(held.value.anchorAtMs) / 1000))
+    }
+
+    private var s: SelectionShift.State { held.value }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                switch s.step {
+                case .edit:
+                    Section {
+                        Text(say(notice: s.intro))
+                        DatePicker(say(.memoryFieldCaptured), selection: $at, displayedComponents: [.date, .hourAndMinute])
+                    }
+                case .choose:
+                    Section {
+                        if let all = s.all {
+                            Button(say(notice: all)) { run { try await shift.all() } }
+                        }
+                        Button(say(.memoryShiftOnlyThis)) { run { try await shift.onlyThis() } }
+                    } footer: {
+                        if let undated = s.undated { Text(say(notice: undated)) }
+                    }
+                case .run:
+                    HStack {
+                        ProgressView()
+                        if let progress = s.progress { Text(say(notice: progress)) }
+                    }
+                default:
+                    Section {
+                        if let done = s.done { Text(say(notice: done)) }
+                        ForEach(Array(s.refused.enumerated()), id: \.offset) { _, line in
+                            Text(say(notice: line)).foregroundStyle(Role.danger)
+                        }
+                        if s.undoable {
+                            Button(say(.trashUndo)) { run { try await shift.undo() } }
+                        }
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle(say(.memoryShiftAction))
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                if s.step == .edit || s.step == .choose {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(say(.signinCancel)) { if s.step == .choose { shift.back() } else { dismiss() } }
+                    }
+                }
+                if s.step == .edit {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(say(.memoryShiftNext)) { _ = shift.propose(epochMs: Int64((at.timeIntervalSince1970 * 1000).rounded())) }
+                    }
+                }
+                if s.step == .done {
+                    ToolbarItem(placement: .confirmationAction) { Button(say(.memoryClose)) { dismiss() } }
+                }
+            }
+        }
+        .interactiveDismissDisabled(s.step == .run)
+        .onChange(of: s.closed) { _, closed in if closed { dismiss() } }
+        .onDisappear { held.stop() }
+        #if os(macOS)
+        .frame(minWidth: 420, minHeight: 260)
+        #endif
+    }
+
+    private func run(_ action: @escaping () async throws -> Void) {
+        Task { try? await action() }
+    }
+}

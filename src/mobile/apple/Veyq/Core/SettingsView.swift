@@ -275,7 +275,11 @@ struct SettingsView: View {
             } footer: {
                 Text(say(.accountSettingsAddDeviceSub) + " " + say(.linkIntro))
             }
-        case .security: if let model = maps { flowSection(.security, model) }
+        case .security:
+            if let model = maps {
+                flowSection(.security, model)
+                kitSection
+            }
         case .profile: if let model = maps { flowSection(.profile, model) }
         case .erase: if let model = maps { flowSection(.erase, model) }
         case .whosWho:
@@ -315,6 +319,31 @@ struct SettingsView: View {
                 .disabled(state.working)
             } footer: {
                 Text(say(.accountSettingsSignOutHint))
+            }
+        }
+    }
+
+    /// Which Emergency Kit the account has (ADR 0157 decision 5): current, or a clearer one exists — what it does better,
+    /// that the kit the person has keeps working, *Make a New Kit* —, or that it could not be read.
+    @ViewBuilder
+    private var kitSection: some View {
+        if let kit = state.kit {
+            Section {
+                switch kit {
+                case .older:
+                    Text(say(.kitStatusOlder)).fontWeight(.semibold)
+                    Text(say(KitStatus.companion.NEWS))
+                    Text(say(.kitStatusKeepsWorking)).foregroundStyle(Role.muted)
+                    Button { flow = .kit } label: { Label(AccountFlow.kit.action, systemImage: AccountFlow.kit.symbol) }
+                        .disabled(state.working)
+                        .accessibilityIdentifier("settings-kit-make")
+                case .current: Text(say(.kitStatusCurrent))
+                default: Text(say(.kitStatusUnreadable)).foregroundStyle(Role.muted)
+                }
+            } header: {
+                Text(say(.kitStatusTitle))
+            } footer: {
+                Text(say(.kitStatusSub))
             }
         }
     }

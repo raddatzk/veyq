@@ -904,8 +904,41 @@ struct Picking: ViewModifier {
                 // how many writes made offline wait to be sent (core's `queuedBanner`), online too until they went
                 if let waiting = model.queued?.banner.value { QueuedBanner(banner: waiting) }
                 if let incoming = model.incoming { ShareBanner(model: model, incoming: incoming, onCancel: model.cancelShare) }
+                // the one-time "a clearer Emergency Kit exists" (ADR 0157 decision 5), quiet and dismissible
+                if let news = model.queued?.kitNotice.value { KitNotice(model: model, news: news) }
             }
         }
+    }
+}
+
+/// The one-time notice that a clearer Emergency Kit exists (the web's `KitRenewalPrompt`): what the newer kit does better
+/// and that the kit the person has keeps working, *Go to Your Kit* (Settings at Security) and *Not Now*. Never blocks.
+struct KitNotice: View {
+    let model: AppModel
+    let news: VeyqCore.Notice
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(say(.kitNoticeTitle)).font(.subheadline.weight(.semibold))
+            Text(say(notice: news) + " " + say(.kitStatusKeepsWorking)).font(.footnote).foregroundStyle(Role.muted)
+            HStack {
+                Spacer()
+                Button(say(.kitNoticeDismiss)) { model.queued?.queued.dismissKitNotice() }
+                    .accessibilityIdentifier("kit-notice-dismiss")
+                Button(say(.kitNoticeOpen)) {
+                    model.queued?.queued.dismissKitNotice()
+                    model.settingsAnchor = SettingsSection.security.id
+                    model.openSettings()
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("kit-notice-open")
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.bar)
+        .accessibilityIdentifier("kit-notice")
     }
 }
 

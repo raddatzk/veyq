@@ -14,6 +14,8 @@ final class QueuedHeld {
     let banner: CoreState<VeyqCore.Notice?>
     let here: CoreState<[QueuedItem]>
     let said: CoreState<[VeyqCore.Notice]>
+    /// The one-time kit notice (core's `ShellModel.kitNotice`, ADR 0157 decision 5).
+    let kitNotice: CoreState<VeyqCore.Notice?>
 
     init(_ shell: ShellModel) {
         let q = AppleQueued(shell: shell)
@@ -30,6 +32,9 @@ final class QueuedHeld {
         said = CoreState({ (q.said.value as? [VeyqCore.Notice]) ?? [] }) { changed in
             ApplePlatform.shared.watch(flow: q.said) { @Sendable _ in changed() }
         }
+        kitNotice = CoreState({ q.kitNotice.value as? VeyqCore.Notice }) { changed in
+            ApplePlatform.shared.watch(flow: q.kitNotice) { @Sendable _ in changed() }
+        }
     }
 
     func close() {
@@ -37,6 +42,7 @@ final class QueuedHeld {
         banner.stop()
         here.stop()
         said.stop()
+        kitNotice.stop()
         queued.close()
     }
 }

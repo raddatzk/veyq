@@ -13,7 +13,7 @@ import AppKit
 /// sheet is `.secretOnScreen()` (§ Secrets on screen). A kit is never on screen: it is saved through the system's dialog
 /// (`KitSaveSection`). The danger step is a destructive `.confirmationDialog` on iOS, a destructive `.alert` on a Mac.
 enum AccountFlow: String, Identifiable {
-    case profile, password, email, security, erase
+    case profile, password, email, security, erase, kit
 
     var id: String { rawValue }
 
@@ -25,6 +25,7 @@ enum AccountFlow: String, Identifiable {
         case .email: say(.accountSettingsEmail)
         case .security: say(.rotationTitle)
         case .erase: say(.erasureTitle)
+        case .kit: say(.kitRenewTitle)
         }
     }
 
@@ -35,6 +36,7 @@ enum AccountFlow: String, Identifiable {
         case .email: say(.emailChangeFormSub)
         case .security: say(.rotationSub)
         case .erase: say(.erasureSub)
+        case .kit: say(.kitRenewSub)
         }
     }
 
@@ -46,6 +48,7 @@ enum AccountFlow: String, Identifiable {
         case .email: say(.emailChangeAction)
         case .security: say(.rotationAction)
         case .erase: say(.erasureAction)
+        case .kit: say(.kitStatusMake)
         }
     }
 
@@ -56,6 +59,7 @@ enum AccountFlow: String, Identifiable {
         case .email: "envelope"
         case .security: "lock.rotation"
         case .erase: "person.crop.circle.badge.xmark"
+        case .kit: "doc.badge.plus"
         }
     }
 }
@@ -72,6 +76,7 @@ struct AccountFlowSheet: View {
         case .email: AddressChangeSheet(model: model)
         case .security: KeyRotationSheet(model: model)
         case .erase: ErasureSheet(model: model)
+        case .kit: KitRenewalSheet(model: model)
         }
     }
 }
@@ -643,6 +648,70 @@ struct AddressChangeSheet: View {
         let p = kitPassword
         kitSecretKey = ""
         kitPassword = ""
+        Task {
+            kit = try? await f.kit(password: p, secretKey: key)
+            held?.state.refresh()
+        }
+    }
+}
+
+// MARK: A clearer Emergency Kit (ADR 0157 decision 6)
+
+/// *Make a new kit*: the password and the Secret Key (typed, the old kit read or scanned) checked against the floor by the
+/// core (`KitRenewal`), then the kit saved as every kit is (`KitSaveSection`); its record written by the core once kept.
+struct KitRenewalSheet: View {
+    let model: AppModel
+    @State private var held: HeldFlow<KitRenewal, KitRenewal.State>?
+    @State private var password = ""
+    @State private var secretKey = ""
+    @State private var kitHeld = false
+    @State private var kit: KitStep?
+
+    private var state: KitRenewal.State? { held?.value }
+
+    var body: some View {
+        FlowFrame(title: say(.kitRenewTitle), done: false, working: state?.working ?? false) {
+            if let kit {
+                KitSaveSection(step: kit)
+            } else {
+                Section { Text(say(.kitRenewSub)).foregroundStyle(Role.muted) }
+                if let f = held?.model {
+                    FlowKeySection(
+                        intake: f.intake, text: $secretKey, holds: $kitHeld, label: say(.emailChangeSecretKey), hint: say(.rotationSecretKeyHint),
+                        working: state?.working ?? false, model: model
+                    ) {
+                        SecureField(say(.emailChangePassword), text: $password, prompt: Text(say(.emailChangePassword))).textContentType(.password)
+                    }
+                }
+                Section {
+                    Button(say(.kitRenewCheck)) { makeKit() }
+                        .disabled(password.isEmpty || (secretKey.isEmpty && !kitHeld) || (state?.working ?? false))
+                        .accessibilityIdentifier("kit-renew-check")
+                    Refusal(msg: state?.refusal)
+                }
+            }
+        }
+        .secretOnScreen()
+        .onAppear {
+            if held == nil, let f = model.kitRenewalFlow() { held = HeldFlow(f, current: { $0.current }, flow: { $0.state }) }
+        }
+        .onDisappear {
+            kit?.close()
+            kit = nil
+            held?.model.close()
+            held?.stop()
+            held = nil
+            // Security says which kit the account has now
+            model.refreshSettings()
+        }
+    }
+
+    private func makeKit() {
+        guard let f = held?.model else { return }
+        let key = secretKey
+        let p = password
+        secretKey = ""
+        password = ""
         Task {
             kit = try? await f.kit(password: p, secretKey: key)
             held?.state.refresh()
