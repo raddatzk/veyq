@@ -8,6 +8,14 @@ import org.kotlincrypto.hash.sha3.SHAKE256
 /** Argon2id parameters, as the wire's `kdfParams` carries them. */
 data class ArgonParams(val t: Int, val m: Int, val p: Int, val dkLen: Int)
 
+/** An epoch's public moderation bundle ([V1.moderationBundle]); [same] is the byte-for-byte comparison of both halves. */
+class ModerationBundle(val kem: ByteArray, val sign: ByteArray) {
+    fun same(kem: ByteArray, sign: ByteArray): Boolean = this.kem.contentEquals(kem) && this.sign.contentEquals(sign)
+}
+
+/** The size of an epoch's `M_n` (ADR 0099 § 2). */
+const val MODERATION_KEY_BYTES = 32
+
 /** An X-Wing key pair: the 32-byte seed is the private key (draft-connolly-cfrg-xwing-kem-11). */
 class XWingKey(val seed: ByteArray, val publicKey: ByteArray, @PlatformApi @HiddenFromObjC val mlKemDk: ByteArray, @PlatformApi @HiddenFromObjC val x25519Sk: ByteArray)
 
@@ -289,6 +297,33 @@ class V1(val p: Primitives) {
     }
 
     fun identityPublic(priv: IdentityPrivate): IdentityPublic = IdentityPublic(xwingKey(priv.kemSeed).publicKey, p.ed25519Public(priv.signSeed))
+
+    // ---- the instance moderation key (ADR 0099 § 2; `v1.ts`' `moderationBundle`) ----
+
+    /** An epoch's seed under [label] (`kem`, `sign`): HKDF-SHA256 of the 32-byte `M_n`, no salt, `veyq/v1/moderation/<label>`. */
+    internal fun moderationSeed(m: ByteArray, label: String): ByteArray {
+        require(m.size == MODERATION_KEY_BYTES) { "moderation key: not 32 bytes" }
+        return p.hkdfSha256(m, ByteArray(0), utf8("veyq/v1/moderation/$label"), 32)
+    }
+
+    /**
+     * The public bundle `M_n` derives — the X-Wing encapsulation key reports seal to and the Ed25519 key that checks a key
+     * proof — which a holder compares with the epoch's published one before using or handing on `M_n` (ADR 0099 § 3).
+     * Pinned by the `moderation_key` vector. Every seed and secret half derived here is zeroed.
+     */
+    fun moderationBundle(m: ByteArray): ModerationBundle {
+        val kemSeed = moderationSeed(m, "kem")
+        val signSeed = moderationSeed(m, "sign")
+        val kem = xwingKey(kemSeed)
+        return try {
+            ModerationBundle(kem.publicKey.copyOf(), p.ed25519Public(signSeed))
+        } finally {
+            kem.mlKemDk.fill(0)
+            kem.x25519Sk.fill(0)
+            kemSeed.fill(0)
+            signSeed.fill(0)
+        }
+    }
 
     /**
      * The grant statement a scope grant's signature covers (ADR 0028 decision 6). [recipientIdentityPublicKey] is the

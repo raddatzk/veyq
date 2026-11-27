@@ -119,9 +119,10 @@ wrote no Emergency Kit, encoded no WebP and called none of the operations these 
    store, removes its saved key, its trust marks and its remembered sign-in, and leaves the account list. The Server
    Owner is told why not (`409 server_owner_account`, the web's words).
 
-9. **What the apps cannot do yet is said, not half-done.** The core holds no moderation key. Where the rotation plan or
-   the erasure preview names one, or the account holds a sealed grant of it, the app shows the web's facts and *Do this
-   on the web* with the server's address, and sends nothing.
+9. **What the apps cannot do yet is said, not half-done.** *(Superseded for the moderation key by § The moderation key,
+   2026-11-28: a holder secures and erases the account in the app as on the web.)* Was: the core holds no moderation key;
+   where the rotation plan or the erasure preview names one, or the account holds a sealed grant of it, the app shows the
+   web's facts and *Do this on the web* with the server's address, and sends nothing.
 
 10. **Where it lives.** The Settings page gains, in the web's order, *Your profile*, *Password*, *Email address*,
     *Secure your account* and *Erase account*, each a section that opens its flow and each a section the search finds.
@@ -399,6 +400,44 @@ copy left unzeroed, a member claiming rotations, a stale rotation failed, no ren
 that keeps the loop — each red) and `TaskTagsTest`, and live as a throwaway with its member by `LiveTaskQueueTest`
 (`:composition`: a member removed from the tenant while in the owner's group; the queued rotation completed by the
 owner's core, the group at its next epoch; bitten by leaving the commit out: red).
+
+## The moderation key (inbox #965, built 2026-11-28)
+
+The two places the web's account flows touch the instance moderation key (ADR 0099 §§ 3–5, ADR 0101 decision 9) are in
+the apps too (owner 2026-11-26), so decision 9's *Do this on the web* is gone. The apps do not moderate: no case is opened,
+no moderation sign-in, no review (inbox #1014). It was decided as follows:
+
+1. **The bundle is the suite's** (`V1.moderationBundle`, `moderationSeed`): HKDF-SHA256 of the 32-byte `M_n` under
+   `veyq/v1/moderation/kem|sign`, the X-Wing and Ed25519 public halves; held to the `moderation_key` vector by the Kotlin
+   conformance run (now checked: the two seeds, the bundle, another length refused) on the JVM, Apple's libsodium and
+   `@veyq/core-js`. The seal is `moderation-grant` [epoch], already held by `seal.asym`.
+2. **A holder's key replacement re-seals their grants** (`session/ModerationKeyStage`, the web's `ModerationKeyStage`):
+   after the rooted stage, every live epoch the account holds a grant of (`listMyModerationGrants`, `403 not_moderator`
+   = none) is opened with the OUTGOING identity, checked against the epoch's published bundle and sealed to the new
+   identity — or declared (`sealedGrant: null`) where it does not open or the bundle disowns it — and staged
+   (`putRotationStageModerationGrants`, 256 at a time); a re-read after `409 rotation_plan_changed` stages only what
+   moved, a fresh stage everything. Each `M_n` is zeroed after its seal.
+3. **The last holder's erasure hands the key to the Server Owner** (`ModerationGrants.sealForServerOwner`, the web's
+   `sealForServerOwner`): only where the erasure preview names a `serverOwnerDelivery`; the Server Owner anchored by the
+   served head with no tenant (an anomaly or a refused pin store: *could not verify*, nothing sent), this account's grants
+   opened and checked (a mismatch opens nothing), each named epoch sealed to the Server Owner (one not held: *could not
+   open every key*), the upload riding in the erasure request itself — a refused erasure reappoints nobody. The web's
+   note shows above the password (`AccountErasure.State.handsOver`), and the web's refusals are said
+   (`moderation_delivery_required`, `identity_changed`). A holder who is not the last one erases as anyone does.
+4. **The platforms draw only the note**: Android a tonal surface, Apple a labelled section, Linux a heading and its
+   text, Windows an informational `InfoBar`, each between the last-owner choices and the spaces deleted along, as the
+   web places it. The *on the web* steps and their words are removed from the core and the four apps.
+
+Consequences: proved by the conformance run's `moderation_key` (bitten: another HKDF label, red), `ModerationGrantsTest`
+(over real seals: a re-seal only where it opens and its bundle is its own, the stage's delta, chunks and fresh start,
+the hand-over only for held epochs and nothing opened on a mismatch — each rule removed in turn red) and
+`CredentialFlowsTest` (the note, the upload in the request, a refused hand-over sending nothing, the server's refusals —
+bitten by dropping the upload and by swallowing the refusal). **Not proved live**: no throwaway account can be a
+moderator (inbox #992), and appointing one is the Server Owner's act on the principal; the stage's wiring into the
+rotation and the hand-over against a real server wait in inbox #1426. A non-moderator's rotation and erasure ran live as
+throwaways (`LiveRotationTest`, `LiveErasureTest`, 2026-11-28); `LiveRotationTest` had failed in `:core` since the module
+split (`AppKinds read before the applications were installed`, inbox #1191) and now installs every application inert
+(`TestApplications.installInert`).
 
 ## Alternatives considered
 

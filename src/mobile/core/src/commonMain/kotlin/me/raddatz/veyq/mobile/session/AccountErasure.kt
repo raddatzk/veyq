@@ -23,8 +23,9 @@ import me.raddatz.veyq.mobile.words.MsgKey
  * Erase one's own account (uc.account.erase-account, ADR 0101, ADR 0148 decisions 8 and 9): a port of the web's
  * `eraseAccount.ts`. [load] reads the preview — the tenants this account is the last owner of (one with other members
  * needs a choice: delete it along, or one of its members as the new owner; one without is deleted along) —; the Server
- * Owner is told why not (`409 server_owner_account`); a holder of the moderation key is sent to the web
- * ([State.onTheWeb], #965: the apps cannot hand the key on), and so is the last holder the preview names.
+ * Owner is told why not (`409 server_owner_account`); the last holder of the moderation key the preview names is told that
+ * the key goes to the Server Owner first ([State.handsOver]), and the request carries it ([CredentialDoor.sealForServerOwner],
+ * #965) — one transaction, so a refused erasure reappoints nobody.
  *
  * [erase] proves the PASSWORD only (no Secret Key: erasing re-wraps nothing): the auth key, derived as sign-in derives
  * it, signs `[userId, nonce]` of a fresh login challenge the request spends. A `200` ends every session of the account,
@@ -51,8 +52,9 @@ class AccountErasure(
         val working: Boolean = false,
         /** The Server Owner's account: [Msg.ERASURE_SERVER_OWNER], no form. */
         val serverOwner: Boolean = false,
-        /** The account holds the moderation key: [Msg.ERASURE_MODERATOR_WEB] and [Msg.ACCOUNT_ON_THE_WEB] with [server]. */
-        val onTheWeb: Boolean = false,
+        /** The account holds the moderation key alone: it goes to the Server Owner first ([Msg.ERASURE_KEY_DELIVERY_TITLE],
+         *  [Msg.ERASURE_KEY_DELIVERY_BODY], the web's note). */
+        val handsOver: Boolean = false,
         val server: String = "",
         val tenants: List<Tenant> = emptyList(),
         /** The account is erased and this device forgot it: [Msg.ERASURE_ENDED]; the host signs out to the start. */
@@ -67,6 +69,9 @@ class AccountErasure(
     val state: StateFlow<State> = _state.asStateFlow()
     val current: State get() = _state.value
     private val acting = Mutex()
+
+    /** The preview's hand-over, when this account is the last holder of an epoch the Server Owner misses. */
+    private var delivery: me.raddatz.veyq.mobile.api.models.ServerOwnerKeyDelivery? = null
 
     class Watch internal constructor(private val job: kotlinx.coroutines.Job) {
         fun stop() = job.cancel()
@@ -85,12 +90,12 @@ class AccountErasure(
                 _state.value = State(loaded = true, server = door.server, refusal = Msg.ERASURE_LOAD_FAILED)
                 return@withLock
             }
-            val moderator = preview.serverOwnerDelivery != null || door.holdsModerationKey()
+            delivery = preview.serverOwnerDelivery
             val tenants = preview.tenants.map { t ->
                 val names = if (t.otherMemberIds.isEmpty()) emptyMap() else door.memberNames(t.tenantId, t.otherMemberIds)
                 Tenant(t.tenantId, t.name, t.otherMemberIds.map { Member(it, names[it] ?: it) })
             }
-            _state.value = State(loaded = true, onTheWeb = moderator, server = door.server, tenants = tenants)
+            _state.value = State(loaded = true, handsOver = delivery != null, server = door.server, tenants = tenants)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -109,10 +114,10 @@ class AccountErasure(
         )
     }
 
-    /** Erases the account with [password]; refused before any request without every choice, and for a moderator. */
+    /** Erases the account with [password]; refused before any request without every choice, or where the hand-over could not be built. */
     suspend fun erase(password: String) = acting.withLock {
         val s = current
-        if (!s.loaded || s.serverOwner || s.onTheWeb || s.erased) return@withLock
+        if (!s.loaded || s.serverOwner || s.erased) return@withLock
         if (!s.choicesMade) {
             _state.value = s.copy(refusal = Msg.ERASURE_ERROR_CHOICE_REQUIRED)
             return@withLock
@@ -120,13 +125,19 @@ class AccountErasure(
         _state.value = s.copy(working = true, refusal = null)
         val choices = s.tenants.filter { it.members.isNotEmpty() }.map { LastOwnerChoice(it.tenantId, it.newOwnerId) }
         var seed: ByteArray? = null
+        var handOver: Msg? = null
         val reply = try {
+            // sealed first, before the challenge: a hand-over that cannot be built sends nothing (the web's order)
+            val upload = delivery?.let { door.sealForServerOwner(it) }
             val challenge = door.challenge(door.email)
             seed = suite.authSeed(password, suite.authSalt(unb64(challenge.instanceSalt), door.email))
             val signature = primitives.ed25519Sign(seed, proofs.eraseAccountAttestationStatement(door.userId, unb64(challenge.nonce)))
-            door.erase(EraseOwnAccountRequest(challenge.nonce, me.raddatz.veyq.mobile.crypto.b64(signature), choices))
+            door.erase(EraseOwnAccountRequest(challenge.nonce, me.raddatz.veyq.mobile.crypto.b64(signature), choices, upload))
         } catch (e: CancellationException) {
             throw e
+        } catch (e: ModerationGrants.DeliveryRefused) {
+            handOver = if (e.reason == ModerationGrants.DeliveryRefused.Reason.UNANCHORED) Msg.ERASURE_ERROR_KEY_UNANCHORED else Msg.ERASURE_ERROR_KEY_NOT_HELD
+            null
         } catch (e: Exception) {
             null
         } finally {
@@ -138,13 +149,15 @@ class AccountErasure(
             return@withLock
         }
         val refusal = when {
+            handOver != null -> handOver
             reply == null -> Msg.ERASURE_ERROR_FAILED
             reply.status == 403 -> Msg.ERASURE_ERROR_PASSWORD
             reply.status == 409 && reply.code == "last_owner_choice_required" -> Msg.ERASURE_ERROR_CHOICE_REQUIRED
             reply.status == 409 && reply.code == "server_owner_account" -> Msg.ERASURE_SERVER_OWNER
-            reply.status == 409 && reply.code == "moderation_delivery_required" -> Msg.ERASURE_MODERATOR_WEB
+            reply.status == 409 && reply.code == "moderation_delivery_required" -> Msg.ERASURE_ERROR_KEY_DELIVERY
+            reply.status == 409 && reply.code == "identity_changed" -> Msg.ERASURE_ERROR_KEY_IDENTITY_CHANGED
             else -> Msg.ERASURE_ERROR_FAILED
         }
-        _state.value = current.copy(working = false, refusal = refusal, onTheWeb = current.onTheWeb || refusal == Msg.ERASURE_MODERATOR_WEB)
+        _state.value = current.copy(working = false, refusal = refusal)
     }
 }

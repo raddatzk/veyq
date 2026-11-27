@@ -744,14 +744,9 @@ struct KeyRotationSheet: View {
     private var state: KeyRotation.State? { held?.value }
 
     var body: some View {
-        FlowFrame(title: say(.rotationTitle), done: state?.step == .done || state?.step == .onTheWeb, working: state?.step == .working || state?.step == .loading) {
+        FlowFrame(title: say(.rotationTitle), done: state?.step == .done, working: state?.step == .working || state?.step == .loading) {
             if let state {
                 switch state.step {
-                case .onTheWeb:
-                    Section {
-                        Text(say(.rotationModeratorWeb))
-                        Text(say(.accountOnTheWeb, state.server)).foregroundStyle(Role.muted)
-                    }
                 case .gate: gate(state)
                 case .kit: kitStep(state)
                 case .done: done(state)
@@ -945,15 +940,10 @@ struct ErasureSheet: View {
     private var state: AccountErasure.State? { held?.value }
 
     var body: some View {
-        FlowFrame(title: say(.erasureTitle), done: state?.serverOwner == true || state?.onTheWeb == true, working: !(state?.loaded ?? false) || (state?.working ?? false)) {
+        FlowFrame(title: say(.erasureTitle), done: state?.serverOwner == true, working: !(state?.loaded ?? false) || (state?.working ?? false)) {
             if let state, state.loaded {
                 if state.serverOwner {
                     Section { Text(say(.erasureServerOwner)) }
-                } else if state.onTheWeb {
-                    Section {
-                        Text(say(.erasureModeratorWeb)).fontWeight(.semibold)
-                        Text(say(.accountOnTheWeb, state.server)).foregroundStyle(Role.muted)
-                    }
                 } else {
                     form(state)
                 }
@@ -998,6 +988,19 @@ struct ErasureSheet: View {
                 Text(say(.erasureChoiceTitle))
             } footer: {
                 Text(say(.erasureChoiceSub))
+            }
+        }
+        if state.handsOver {
+            // the last holder's hand-over to the Server Owner (#965), the web's note between the choices and the sole spaces
+            Section {
+                Label {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(say(.erasureKeyDeliveryTitle)).fontWeight(.semibold)
+                        Text(say(.erasureKeyDeliveryBody))
+                    }
+                } icon: {
+                    Image(systemName: "key")
+                }
             }
         }
         if !sole.isEmpty {

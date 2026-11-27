@@ -22,6 +22,10 @@ import kotlin.time.Duration.Companion.minutes
  * still signs in. Destructive: run alone, on a throwaway of its own (its Secret Key in the file is stale afterwards).
  */
 class LiveRotationTest {
+    // the rotation reads the registry (its scope-level re-key, the Master-Key hooks): a throwaway's spaces hold no
+    // application's content, so every application inert (in `:core` without it: "AppKinds read before …", inbox #1191)
+    init { me.raddatz.veyq.mobile.TestApplications.installInert() }
+
     private val p = BouncyCastlePrimitives
     private val client = { block: io.ktor.client.HttpClientConfig<*>.() -> Unit -> LiveHttp.client(block) }
     private fun device() = ThisDevice(MemoryDeviceStore(), SoftwareDeviceKeys(p), "live rotation device", p)

@@ -117,7 +117,7 @@ class AccountFlowsDispatchTest {
         override suspend fun writeKitRecord(sealed: String): Boolean = kitRecords.add(sealed)
         override suspend fun erasurePreview() = FlowReply(200) to AccountErasurePreview(listOf(ErasureTenant("ta", "A", emptyList())))
         override suspend fun memberNames(tenantId: String, userIds: List<String>) = emptyMap<String, String>()
-        override suspend fun holdsModerationKey() = false
+        override suspend fun sealForServerOwner(delivery: me.raddatz.veyq.mobile.api.models.ServerOwnerKeyDelivery) = error("no hand-over played")
         override suspend fun erase(body: EraseOwnAccountRequest) = FlowReply(200)
         override suspend fun erased() { erased++ }
         fun typedKey() = SecretKeyText.format(p, secretKey)
@@ -128,7 +128,6 @@ class AccountFlowsDispatchTest {
     /** The rotation's engine as the test plays it: the gate passes for [Played]'s key, the publish answers every scope secured. */
     private class Engine(private val right: ByteArray) : KeyRotation.Engine {
         var published = 0
-        override suspend fun holdsModerationKey() = false
         override suspend fun prove(password: String, secretKey: ByteArray) = if (secretKey.contentEquals(right)) null else ColdCredential.Refusal.REJECTED
         override suspend fun resume(password: String, secretKey: ByteArray) = emptyList<RotationScopeState>()
         override suspend fun publish(password: String, secretKey: ByteArray, newSecretKey: ByteArray, newPassword: String?): KeyRotation.Published {

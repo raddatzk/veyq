@@ -146,6 +146,13 @@ The bridge carries `Trust.WhosWho`. No TV draws it. Held by `WhosWhoTest` (bitte
 (API 36 emulator, English and German, a row into the profile), iOS (an iPhone 18 Pro simulator, German, a row into the
 profile), Linux (Broadway, a row into the profile) and Windows (the VM, German: *Not verified* and *New* with *Compare safety
 numbers* into the profile); macOS and tvOS built, the Mac's sheet never clicked (the coordinator's).
+**The moderation key, on all four apps** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) § The moderation key, built
+2026-11-28; ADR 0099 §§ 3–5): a holder's *Secure your account* stages every live epoch's grant re-sealed to the new
+identity or declared (`session/ModerationKeyStage`); the last holder's *Erase account* shows the web's note and hands
+every epoch the Server Owner misses to them inside the erasure (`ModerationGrants.sealForServerOwner`). The apps open no
+case and moderate nothing (#1014). Held by the conformance's `moderation_key`, `ModerationGrantsTest` and
+`CredentialFlowsTest`; not live (no throwaway moderator, #992) — owed with the note's passes in inbox #1426.
+
 **The task queue's jobs, in the core** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) § The task queue's jobs, built
 2026-11-28; ADR 0021): while a tenant is open, every 45 s, the core claims each open shared scope's `grant-delivery` jobs
 and, on a scope the account owns, its `scope-rotation` jobs, and completes them as the web's workers do
@@ -793,7 +800,7 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   the Members panel's and a group page's status lines (the re-keying and resealing hints, a stuck compromise rotation's
   notice), a space's picture in the switcher and the drawer (the apps show it on the Members header and a group's page
   only), finishing a recovery (the apps ask for the reset link; the web finishes it), the trust reset,
-  the moderation key (#965), and an in-app choice of appearance and language (the apps follow the system's; the desktops
+  and an in-app choice of appearance and language (the apps follow the system's; the desktops
   have no per-app language of their own).
 - Reopening where the person left and a place reached from outside (ADR 0150 § O5–O6, built 2026-11-27; passed on Android
   and Linux as throwaways and by the core's tests): Apple, Windows, a real browser's `veyq://open` and the Mac's `open` (#1424);

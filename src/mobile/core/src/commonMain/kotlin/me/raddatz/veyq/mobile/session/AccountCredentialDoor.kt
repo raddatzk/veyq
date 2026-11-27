@@ -4,7 +4,6 @@ import me.raddatz.veyq.mobile.api.apis.AccountEmailApi
 import me.raddatz.veyq.mobile.api.apis.AccountEmailChangeApi
 import me.raddatz.veyq.mobile.api.apis.AccountErasureApi
 import me.raddatz.veyq.mobile.api.apis.AccountPasswordApi
-import me.raddatz.veyq.mobile.api.apis.ModerationApi
 import me.raddatz.veyq.mobile.api.infrastructure.HttpResponse
 import me.raddatz.veyq.mobile.api.models.AccountErasurePreview
 import me.raddatz.veyq.mobile.api.models.AccountKeyMaterial
@@ -76,12 +75,8 @@ internal class AccountCredentialDoor(
         return members.filter { it.userId in userIds }.associate { it.userId to it.username }
     }
 
-    override suspend fun holdsModerationKey(): Boolean {
-        val r = account.respond { ModerationApi(account.server, account.http).listMyModerationGrants() }
-        if (r.status == 403) return false
-        if (!r.success) throw VeyqAccount.Refused(r.status, account.errorCode(r))
-        return r.body().epochs.any { it.sealedGrant != null }
-    }
+    override suspend fun sealForServerOwner(delivery: me.raddatz.veyq.mobile.api.models.ServerOwnerKeyDelivery) =
+        ModerationGrants.sealForServerOwner(account, delivery)
 
     override suspend fun erase(body: EraseOwnAccountRequest): FlowReply =
         reply { AccountErasureApi(account.server, account.http).eraseOwnAccount(body) }

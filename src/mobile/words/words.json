@@ -6233,15 +6233,35 @@
     "en": "Your account is being erased, and you are signed out. You cannot sign in again; until the erasure completes, only the Server Owner can stop it.",
     "de": "Dein Konto wird gelöscht, und du bist abgemeldet. Du kannst dich nicht mehr anmelden; bis die Löschung abgeschlossen ist, kann nur die Person, die den Server betreibt, sie aufhalten."
   },
-  "account_on_the_web": {
-    "note": "The apps' own (CR owner question 4, ADR 0148 decision 9): {1} the server's address. A step the apps cannot do yet (the moderation key, #965).",
-    "en": "Do this on the web: {1}",
-    "de": "Erledige das im Web: {1}"
-  },
-  "erasure_moderator_web": {
-    "note": "The web's erasure.keyDeliveryTitle: the last holder of the moderation key, whom the apps send to the web (ADR 0148 decision 9).",
+  "erasure_key_delivery_title": {
+    "note": "The web's erasure.keyDeliveryTitle (#965: the last holder's hand-over to the Server Owner).",
     "en": "You hold the moderation key alone",
     "de": "Du hältst den Moderationsschlüssel allein"
+  },
+  "erasure_key_delivery_body": {
+    "note": "The web's erasure.keyDeliveryBody (#965: the last holder's hand-over to the Server Owner).",
+    "en": "When you erase your account, this device first hands every moderation key you hold to the Server Owner, so the reports and held copies sealed to it stay readable. The Server Owner is a moderator again from then on.",
+    "de": "Wenn du dein Konto löschst, übergibt dieses Gerät zuerst jeden Moderationsschlüssel, den du hältst, an die Person, die den Server betreibt – so bleiben die Meldungen und gesicherten Kopien, die mit ihm versiegelt sind, lesbar. Diese Person moderiert von da an wieder."
+  },
+  "erasure_error_key_delivery": {
+    "note": "The web's erasure.errorKeyDelivery (#965: the last holder's hand-over to the Server Owner).",
+    "en": "The moderation key could not be handed to the Server Owner whole. Nothing was erased — please try again.",
+    "de": "Der Moderationsschlüssel ließ sich nicht vollständig an die Person übergeben, die den Server betreibt. Es wurde nichts gelöscht – bitte erneut versuchen."
+  },
+  "erasure_error_key_identity_changed": {
+    "note": "The web's erasure.errorKeyIdentityChanged (#965: the last holder's hand-over to the Server Owner).",
+    "en": "The Server Owner’s account keys changed in the meantime. Nothing was erased — please try again.",
+    "de": "Die Kontoschlüssel der Person, die den Server betreibt, haben sich inzwischen geändert. Es wurde nichts gelöscht – bitte erneut versuchen."
+  },
+  "erasure_error_key_unanchored": {
+    "note": "The web's erasure.errorKeyUnanchored (#965: the last holder's hand-over to the Server Owner).",
+    "en": "This device could not verify the Server Owner’s key, so it did not hand them the moderation key. Nothing was erased. You can ask the Server Owner to erase your account in their console instead.",
+    "de": "Dieses Gerät konnte den Schlüssel der Person, die den Server betreibt, nicht prüfen und hat ihr den Moderationsschlüssel deshalb nicht übergeben. Es wurde nichts gelöscht. Du kannst sie stattdessen bitten, dein Konto in ihrer Konsole zu löschen."
+  },
+  "erasure_error_key_not_held": {
+    "note": "The web's erasure.errorKeyNotHeld (#965: the last holder's hand-over to the Server Owner).",
+    "en": "This device could not open every moderation key you hold, so it could not hand them on. Nothing was erased — please try again.",
+    "de": "Dieses Gerät konnte nicht jeden Moderationsschlüssel öffnen, den du hältst, und ihn deshalb nicht übergeben. Es wurde nichts gelöscht – bitte erneut versuchen."
   },
   "rotation_title": {
     "note": "The web's rotation.title.",
@@ -6381,11 +6401,6 @@
     "note": "The web's rotation.errorTrustState.",
     "en": "This device can’t open your list of trusted keys or your device names. Nothing was changed. Start that list over first, under “Start a list over”.",
     "de": "Dieses Gerät kann deine Liste vertrauter Schlüssel oder deine Gerätenamen nicht öffnen. Es wurde nichts geändert. Beginne die Liste zuerst neu, unter „Liste neu beginnen“."
-  },
-  "rotation_moderator_web": {
-    "note": "The apps' own (ADR 0148 decision 9, #965): why a moderator secures the account on the web.",
-    "en": "You hold the moderation key. Securing your account carries it to your new keys, which only the web can do for now.",
-    "de": "Du hältst den Moderationsschlüssel. Beim Absichern deines Kontos wird er an deine neuen Schlüssel übergeben, und das geht vorerst nur im Web."
   },
   "rotation_done_old_kit": {
     "note": "The web's rotation.doneOldKit.",

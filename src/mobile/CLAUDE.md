@@ -113,7 +113,8 @@ A Gradle build of its own, run through its own wrapper.
   and `account/KitStep` (written straight into the path the platform's save dialog gave, `KitFile`; "saved" only after a
   write; Android writes into `CreateDocument`'s stream by `KitStep.saveInto`; Apple's `appleMain` `AppleAccount`). The
   rotation, `session/rotation/`: `AccountRotation` (`rotateKeys` ported, `resumeCommitted`), `KeyRotation` (the web's
-  order as one model, a moderator sent to the web), `ScopeRotation` and `FinishRotation` (`commitRotation`, run at
+  order as one model; a holder of the moderation key stages it re-sealed, `session/ModerationKeyStage`, and the last
+  holder's erasure hands it to the Server Owner, `ModerationGrants.sealForServerOwner`, #965), `ScopeRotation` and `FinishRotation` (`commitRotation`, run at
   every unlock and every 45 s by `RotationFinisher`), the task queue's jobs (`session/tasks/TaskQueue`: the web's
   grant-delivery and scope-rotation workers, run while a tenant is open — started by `AccountDoor.opened`, stopped by
   `TenantSession.close()` —, never in an OS-scheduled run; `TaskPassTest`, `TaskTagsTest`, live `LiveTaskQueueTest` in

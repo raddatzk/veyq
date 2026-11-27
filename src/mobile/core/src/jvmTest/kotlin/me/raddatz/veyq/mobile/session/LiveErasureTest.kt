@@ -36,7 +36,7 @@ class LiveErasureTest {
             val erasure = account.erasure()
             erasure.load()
             assertTrue(erasure.current.loaded && erasure.current.refusal == null, "the preview: ${erasure.current}")
-            assertTrue(!erasure.current.serverOwner && !erasure.current.onTheWeb)
+            assertTrue(!erasure.current.serverOwner && !erasure.current.handsOver)
             erasure.erase("not the password")
             assertEquals(me.raddatz.veyq.mobile.words.Msg.ERASURE_ERROR_PASSWORD, erasure.current.refusal)
             erasure.erase(password)

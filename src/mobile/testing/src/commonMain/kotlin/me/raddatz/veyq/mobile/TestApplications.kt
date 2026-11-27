@@ -15,6 +15,9 @@ object TestApplications {
     /** [own] and an inert part for every other application; the same again is no change. */
     fun install(own: ApplicationKinds) = AppKinds.install(ApplicationId.entries.map { if (it == own.application) own else inert.getValue(it) })
 
+    /** An inert part for every application: a core test that reaches the registry over content no application made. */
+    fun installInert() = AppKinds.install(ApplicationId.entries.map { inert.getValue(it) })
+
     private class Inert(override val application: ApplicationId) : ApplicationKinds {
         override val kinds: List<String> = emptyList()
         override val word: Msg = Msg.NOT_BUILT

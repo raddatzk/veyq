@@ -71,9 +71,11 @@ interface CredentialDoor {
     /** The display names of [userIds], members of tenant [tenantId], as this account reads them (the id where it reads none). */
     suspend fun memberNames(tenantId: String, userIds: List<String>): Map<String, String>
 
-    /** Whether this account holds a sealed grant of the instance moderation key (`listMyModerationGrants`), which the
-     *  apps cannot carry or hand on yet (ADR 0148 decision 9, #965). */
-    suspend fun holdsModerationKey(): Boolean
+    /**
+     * The last holder's hand-over (ADR 0101 decision 9, #965): every epoch [delivery] names sealed to the Server Owner's
+     * anchored identity ([ModerationGrants.sealForServerOwner]); throws [ModerationGrants.DeliveryRefused] and sends nothing.
+     */
+    suspend fun sealForServerOwner(delivery: me.raddatz.veyq.mobile.api.models.ServerOwnerKeyDelivery): me.raddatz.veyq.mobile.api.models.ServerOwnerKeyDeliveryUpload
 
     suspend fun erase(body: me.raddatz.veyq.mobile.api.models.EraseOwnAccountRequest): FlowReply
 

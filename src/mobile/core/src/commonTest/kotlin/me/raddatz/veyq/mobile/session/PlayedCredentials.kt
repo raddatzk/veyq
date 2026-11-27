@@ -54,7 +54,10 @@ internal class PlayedCredentials(
     var passwordChangedCalls = 0
     var erasedCalls = 0
     var preview: Pair<FlowReply, AccountErasurePreview?> = FlowReply(200) to AccountErasurePreview(emptyList())
-    var moderator = false
+    /** The last holder's hand-over as the played device builds it: refused NOT_HELD unless the test plays one. */
+    var handOver: (me.raddatz.veyq.mobile.api.models.ServerOwnerKeyDelivery) -> me.raddatz.veyq.mobile.api.models.ServerOwnerKeyDeliveryUpload =
+        { throw ModerationGrants.DeliveryRefused(ModerationGrants.DeliveryRefused.Reason.NOT_HELD) }
+    val handedOver = mutableListOf<me.raddatz.veyq.mobile.api.models.ServerOwnerKeyDelivery>()
     var names: Map<String, String> = emptyMap()
 
     override fun masterKey(): ByteArray? = mk?.copyOf()
@@ -70,7 +73,7 @@ internal class PlayedCredentials(
     override suspend fun heldEmail(): String = held ?: email
     override suspend fun erasurePreview() = preview
     override suspend fun memberNames(tenantId: String, userIds: List<String>) = names.filterKeys { it in userIds }
-    override suspend fun holdsModerationKey() = moderator
+    override suspend fun sealForServerOwner(delivery: me.raddatz.veyq.mobile.api.models.ServerOwnerKeyDelivery) = handOver(delivery.also { handedOver += it })
     override suspend fun erase(body: EraseOwnAccountRequest): FlowReply = answer.also { erasures += body }
     override suspend fun erased() { erasedCalls++ }
     /** The kit records written (ADR 0157 decision 4) and whether the played server takes them. */

@@ -53,6 +53,7 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
         slugs()
         shareWrite()
         reportBundle()
+        moderationKey()
         blobs()
         secretKeyProof()
         authAttestation()
@@ -658,6 +659,23 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
                 eqHex(suite.seal(ctx, c.hex("kek"), c.hex("plaintext"), c.hex("nonce")), c.str("blob"))
                 eqHex(suite.open(ctx, c.hex("kek"), c.hex("blob")), c.str("plaintext"))
             }
+        }
+    }
+
+    /** `#moderation_key`: an epoch's two seeds and its public bundle from `M_n` (ADR 0099 § 2); any other length refused. */
+    private fun moderationKey() {
+        val k = v.obj("moderation_key")
+        check("moderation_key") {
+            val m = k.hex("m")
+            eqHex(suite.moderationSeed(m, "kem"), k.str("kem_seed"))
+            eqHex(suite.moderationSeed(m, "sign"), k.str("sign_seed"))
+            val bundle = suite.moderationBundle(m)
+            eqHex(bundle.kem, k.str("kem_public"))
+            eqHex(bundle.sign, k.str("sign_public"))
+            if (!bundle.same(k.hex("kem_public"), k.hex("sign_public"))) fail("the bundle is not the same as itself")
+        }
+        check("moderation_key refuses another length") {
+            if (runCatching { suite.moderationBundle(ByteArray(31)) }.isSuccess) fail("a 31-byte M_n derived a bundle")
         }
     }
 

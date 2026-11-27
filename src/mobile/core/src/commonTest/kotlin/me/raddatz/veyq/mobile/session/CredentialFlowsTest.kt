@@ -180,23 +180,68 @@ class CredentialFlowsTest {
     }
 
     @Test
-    fun theServerOwnerAndAModeratorAreToldAndSendNothing() = runTest {
+    fun theServerOwnerIsToldAndSendsNothing() = runTest {
         val owner = PlayedCredentials(p).apply { preview = FlowReply(409, "server_owner_account") to null }
         val e1 = AccountErasure(owner, p).also { it.load() }
         assertTrue(e1.current.serverOwner)
         e1.erase(owner.password)
         assertTrue(owner.erasures.isEmpty())
-        val moderator = PlayedCredentials(p).apply { moderator = true }
-        val e2 = AccountErasure(moderator, p).also { it.load() }
-        assertTrue(e2.current.onTheWeb)
-        assertEquals("http://a.example", e2.current.server)
-        e2.erase(moderator.password)
-        assertTrue(moderator.erasures.isEmpty())
         // a wrong password: the server's 403, nothing forgotten
         val a = PlayedCredentials(p).apply { answer = FlowReply(403) }
         val e3 = AccountErasure(a, p).also { it.load() }
         e3.erase("nope")
         assertEquals(Msg.ERASURE_ERROR_PASSWORD, e3.current.refusal)
         assertEquals(0, a.erasedCalls)
+    }
+
+    private val delivery = me.raddatz.veyq.mobile.api.models.ServerOwnerKeyDelivery("so", "c28tcHVi", "c28taGVhZA==", listOf(1, 2))
+
+    @Test
+    fun theLastHolderIsToldAndTheHandOverRidesInTheErasure() = runTest {
+        val upload = me.raddatz.veyq.mobile.api.models.ServerOwnerKeyDeliveryUpload(
+            "c28tcHVi", listOf(me.raddatz.veyq.mobile.api.models.ServerOwnerKeyGrant(1, "ZzE="), me.raddatz.veyq.mobile.api.models.ServerOwnerKeyGrant(2, "ZzI=")),
+        )
+        val a = PlayedCredentials(p).apply {
+            preview = FlowReply(200) to AccountErasurePreview(emptyList(), delivery)
+            answer = FlowReply(200)
+            handOver = { upload }
+        }
+        val e = AccountErasure(a, p).also { it.load() }
+        assertTrue(e.current.handsOver, "the note is not shown")
+        e.erase(a.password)
+        assertTrue(e.current.erased)
+        assertEquals(listOf(delivery), a.handedOver, "the preview's delivery was not sealed")
+        assertEquals(upload, a.erasures.single().serverOwnerDelivery, "the hand-over did not ride in the erasure")
+
+        // a holder who is not the last one: no note, nothing handed over
+        val b = PlayedCredentials(p).apply { answer = FlowReply(200) }
+        AccountErasure(b, p).also { it.load() }.also { assertFalse(it.current.handsOver) }.erase(b.password)
+        assertNull(b.erasures.single().serverOwnerDelivery)
+        assertTrue(b.handedOver.isEmpty())
+    }
+
+    @Test
+    fun aHandOverThatCannotBeBuiltSendsNothingAndTheServersRefusalsAreSaid() = runTest {
+        for ((reason, said) in listOf(
+            ModerationGrants.DeliveryRefused.Reason.UNANCHORED to Msg.ERASURE_ERROR_KEY_UNANCHORED,
+            ModerationGrants.DeliveryRefused.Reason.NOT_HELD to Msg.ERASURE_ERROR_KEY_NOT_HELD,
+        )) {
+            val a = PlayedCredentials(p).apply {
+                preview = FlowReply(200) to AccountErasurePreview(emptyList(), delivery)
+                handOver = { throw ModerationGrants.DeliveryRefused(reason) }
+            }
+            val e = AccountErasure(a, p).also { it.load() }
+            e.erase(a.password)
+            assertEquals(said, e.current.refusal)
+            assertTrue(a.erasures.isEmpty(), "an erasure was sent without its hand-over")
+            assertEquals(0, a.erasedCalls)
+        }
+        for ((code, said) in listOf("moderation_delivery_required" to Msg.ERASURE_ERROR_KEY_DELIVERY, "identity_changed" to Msg.ERASURE_ERROR_KEY_IDENTITY_CHANGED)) {
+            val a = PlayedCredentials(p).apply { answer = FlowReply(409, code) }
+            val e = AccountErasure(a, p).also { it.load() }
+            e.erase(a.password)
+            assertEquals(said, e.current.refusal, code)
+            assertEquals(0, a.erasedCalls)
+        }
     }
 }

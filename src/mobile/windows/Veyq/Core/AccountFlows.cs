@@ -1228,12 +1228,6 @@ internal sealed class KeyRotationPage : FlowPage
             case null or Step.Loading or Step.Working:
                 Body.Children.Add(Ring());
                 break;
-            case Step.OnTheWeb:
-                var web = new StackPanel { Spacing = 6 };
-                web.Children.Add(Text(Words.RotationModeratorWeb(), "rotation-on-the-web"));
-                web.Children.Add(Caption(Words.AccountOnTheWeb(s.server)));
-                Body.Children.Add(Card(web, "rotation-on-the-web-card"));
-                break;
             case Step.Kit:
                 KitStep(s);
                 break;
@@ -1415,13 +1409,13 @@ internal sealed class ErasurePage : FlowPage
     /// without, ERASURE_ERROR_CHOICE_REQUIRED, so this only keeps the button from asking in vain).</summary>
     private static bool ChoicesMade(AccountErasureState s) => s.tenants.All(t => t.members.Count == 0 || t.chosen);
 
-    private void Enable() => _erase.IsEnabled = _state is { loaded: true, working: false, serverOwner: false, onTheWeb: false } s
+    private void Enable() => _erase.IsEnabled = _state is { loaded: true, working: false, serverOwner: false } s
         && _password.Password.Length > 0 && ChoicesMade(s);
 
     private void Draw(AccountErasureState? s)
     {
         _state = s;
-        Log.Write($"erasure: loaded {s?.loaded}, working {s?.working}, owner {s?.serverOwner}, web {s?.onTheWeb}, {s?.tenants.Count ?? 0} tenants, erased {s?.erased}, refusal {s?.refusal ?? "none"}");
+        Log.Write($"erasure: loaded {s?.loaded}, working {s?.working}, owner {s?.serverOwner}, hand-over {s?.handsOver}, {s?.tenants.Count ?? 0} tenants, erased {s?.erased}, refusal {s?.refusal ?? "none"}");
         if (s is { erased: true })
         {
             TellErased();
@@ -1439,16 +1433,6 @@ internal sealed class ErasurePage : FlowPage
             Body.Children.Add(Card(Text(Words.ErasureServerOwner(), "erasure-server-owner"), "erasure-server-owner-card"));
             return;
         }
-        if (s.onTheWeb)
-        {
-            var web = new StackPanel { Spacing = 6 };
-            var strong = Text(Words.ErasureModeratorWeb(), "erasure-on-the-web");
-            strong.Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"];
-            web.Children.Add(strong);
-            web.Children.Add(Caption(Words.AccountOnTheWeb(s.server)));
-            Body.Children.Add(Card(web, "erasure-on-the-web-card"));
-            return;
-        }
         Body.Children.Add(Caption(Words.ErasureSub()));
         Body.Children.Add(Facts([Words.ErasureFactGoes(), Words.ErasureFactSharedStays(), Words.ErasureFactKept(), Words.ErasureFactBackups(), Words.ErasureFactWindow()], "erasure-facts"));
         var shared = s.tenants.Where(t => t.members.Count > 0).ToList();
@@ -1457,6 +1441,17 @@ internal sealed class ErasurePage : FlowPage
             Body.Children.Add(Heading(Words.ErasureChoiceTitle()));
             Body.Children.Add(Caption(Words.ErasureChoiceSub()));
             foreach (var t in shared) Body.Children.Add(Choice(t));
+        }
+        // the last holder's hand-over to the Server Owner (#965), the web's note between the choices and the sole spaces
+        if (s.handsOver)
+        {
+            var note = new InfoBar
+            {
+                Title = Words.ErasureKeyDeliveryTitle(), Message = Words.ErasureKeyDeliveryBody(),
+                Severity = InfoBarSeverity.Informational, IsOpen = true, IsClosable = false,
+            };
+            AutomationProperties.SetAutomationId(note, "erasure-key-delivery");
+            Body.Children.Add(note);
         }
         var sole = s.tenants.Where(t => t.members.Count == 0).ToList();
         if (sole.Count > 0)

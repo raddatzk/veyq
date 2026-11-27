@@ -52,6 +52,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -453,10 +454,6 @@ internal fun RotationFlow(m: KeyRotation, model: AppModel) {
             KeyRotation.Step.LOADING, KeyRotation.Step.WORKING -> {
                 Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator(Modifier.testTag("rotation-working")) }
             }
-            KeyRotation.Step.ON_THE_WEB -> {
-                Body(stringResource(R.string.rotation_moderator_web))
-                Text(say(Msg.ACCOUNT_ON_THE_WEB, state.server), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("rotation-on-the-web"))
-            }
             KeyRotation.Step.GATE -> {
                 Body(stringResource(R.string.rotation_sub), muted = true)
                 Heading(stringResource(R.string.rotation_after_title))
@@ -561,10 +558,6 @@ internal fun ErasureFlow(m: AccountErasure, model: AppModel) {
         when {
             !state.loaded -> Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             state.serverOwner -> Text(say(Msg.ERASURE_SERVER_OWNER), modifier = Modifier.testTag("erasure-server-owner"))
-            state.onTheWeb -> {
-                Body(say(Msg.ERASURE_MODERATOR_WEB))
-                Text(say(Msg.ACCOUNT_ON_THE_WEB, state.server), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.testTag("erasure-on-the-web"))
-            }
             state.erased -> Text(say(Msg.ERASURE_ENDED))
             else -> {
                 Body(stringResource(R.string.erasure_sub), muted = true)
@@ -577,6 +570,16 @@ internal fun ErasureFlow(m: AccountErasure, model: AppModel) {
                     Heading(stringResource(R.string.erasure_choice_title))
                     Body(stringResource(R.string.erasure_choice_sub), muted = true)
                     for (t in shared) LastOwnerChoice(t, enabled = !state.working) { owner -> m.choose(t.tenantId, owner) }
+                }
+                // the last holder's hand-over to the Server Owner (#965), the web's note between the choices and the sole spaces
+                if (state.handsOver) Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth().testTag("erasure-key-delivery"),
+                ) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(stringResource(R.string.erasure_key_delivery_title), style = MaterialTheme.typography.titleSmall)
+                        Text(stringResource(R.string.erasure_key_delivery_body), style = MaterialTheme.typography.bodyMedium)
+                    }
                 }
                 val sole = state.tenants.filter { it.members.isEmpty() }
                 if (sole.isNotEmpty()) {

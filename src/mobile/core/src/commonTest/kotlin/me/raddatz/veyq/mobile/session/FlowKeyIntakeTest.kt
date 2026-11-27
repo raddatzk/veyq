@@ -34,7 +34,6 @@ class FlowKeyIntakeTest {
 
     /** The rotation's engine: its gate passes for [right] alone. */
     private class Engine(private val right: ByteArray) : KeyRotation.Engine {
-        override suspend fun holdsModerationKey() = false
         override suspend fun prove(password: String, secretKey: ByteArray) = if (secretKey.contentEquals(right)) null else ColdCredential.Refusal.REJECTED
         override suspend fun resume(password: String, secretKey: ByteArray) = emptyList<RotationScopeState>()
         override suspend fun publish(password: String, secretKey: ByteArray, newSecretKey: ByteArray, newPassword: String?) =

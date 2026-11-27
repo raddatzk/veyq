@@ -24,9 +24,8 @@ import me.raddatz.veyq.mobile.words.MsgKey
  * Replace the keys (uc.account.rotate-keys, ADR 0060, ADR 0111, ADR 0148 decision 7): the web's `KeyRotationPanel`
  * order as one model over the core's port of `rotateKeys.ts` ([AccountRotation]).
  *
- * 1. [open]: a holder of the moderation key is sent to the web ([State.onTheWeb], decision 9, #965) — the rotation would
- *    have to carry that key, which the apps cannot; anyone else sees the gate's facts (the store wiped and refilled
- *    among them, [Msg.ROTATION_STORE_WIPED]).
+ * 1. [open]: the gate's facts (the store wiped and refilled among them, [Msg.ROTATION_STORE_WIPED]). A holder of the
+ *    moderation key goes through the same gate: the publish carries the key to the new identity (#965).
  * 2. [prove]: the password and the Secret Key (and, preselected, a new password) against the floor
  *    ([ColdCredential]). An account secured elsewhere since this one opened ([ColdCredential.Refusal.STALE]) is
  *    resumed — nothing is minted — and finished.
@@ -53,8 +52,6 @@ class KeyRotation(
 ) {
     /** What the model drives: [AccountRotation] over the signed-in account, a played one in the tests. */
     interface Engine {
-        suspend fun holdsModerationKey(): Boolean
-
         /** The cold proof's outcome: null when it passed, else the refusal (STALE included). */
         suspend fun prove(password: String, secretKey: ByteArray): ColdCredential.Refusal?
 
@@ -106,7 +103,7 @@ class KeyRotation(
     /** The publish's outcome could not be settled: the account was closed, the person unlocks again. */
     class OutcomeUnknown(cause: Throwable?) : Exception("rotation outcome unknown", cause)
 
-    enum class Step { LOADING, ON_THE_WEB, GATE, KIT, WORKING, DONE }
+    enum class Step { LOADING, GATE, KIT, WORKING, DONE }
 
     /**
      * One scope's line after the finish: its id, the server's state and, when blocked, why (the words a host draws), and
@@ -125,7 +122,7 @@ class KeyRotation(
     @Serializable
     data class State(
         val step: Step = Step.LOADING,
-        /** The server's address, for [Msg.ACCOUNT_ON_THE_WEB]. */
+        /** The server's address. */
         val server: String = "",
         /** "Also choose a new password", preselected as on the web. */
         val newPassword: Boolean = true,
@@ -165,8 +162,7 @@ class KeyRotation(
 
     suspend fun open() = acting.withLock {
         if (current.newPassword) runCatching { breach.load() }.onFailure { if (it is CancellationException) throw it }
-        val moderator = runCatching { engine.holdsModerationKey() }.getOrElse { if (it is CancellationException) throw it else false }
-        _state.value = current.copy(step = if (moderator) Step.ON_THE_WEB else Step.GATE)
+        _state.value = current.copy(step = Step.GATE)
     }
 
     fun setNewPassword(on: Boolean) {

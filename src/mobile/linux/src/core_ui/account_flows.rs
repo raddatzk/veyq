@@ -829,7 +829,6 @@ pub fn rotation(parent: &gtk::Widget, connection: String) {
         }
         match s.step {
             Step::Loading => f.nav.replace(&[spinner_page(&words::rotation_title(), "loading")]),
-            Step::OnTheWeb => f.nav.replace(&[on_the_web(&words::rotation_title(), &words::rotation_moderator_web(), &s.server)]),
             Step::Gate => f.nav.replace(std::slice::from_ref(&gate.page)),
             // the kit's page is pushed once `Prove` answered its step; a run refused there comes back to it
             Step::Kit => {
@@ -1051,14 +1050,6 @@ fn rotation_done(flow: &Flow, flow_id: &Id, s: &KeyRotationState) -> adw::Naviga
     page(&words::rotation_title(), "done", &col)
 }
 
-/// What the apps cannot do yet, said with the server's address (D9).
-fn on_the_web(title: &str, why: &str, server: &str) -> adw::NavigationPage {
-    let col = column();
-    let status = adw::StatusPage::builder().icon_name("network-server-symbolic").title(why).description(words::account_on_the_web(server)).build();
-    col.append(&status);
-    page(title, "on-the-web", &col)
-}
-
 // ---- erase the account (D8) ----
 
 /// "Erase your account" for the account [connection] names: the preview, the last-owner choices, the password, the danger
@@ -1078,8 +1069,8 @@ pub fn erasure(parent: &gtk::Widget, connection: String) {
             }
             return false;
         };
-        eprintln!("veyq: erasure: loaded {}, working {}, owner {}, web {}, {} tenants, erased {}, refusal {:?}", s.loaded, s.working,
-            s.server_owner, s.on_the_web, s.tenants.len(), s.erased, s.refusal);
+        eprintln!("veyq: erasure: loaded {}, working {}, owner {}, hand-over {}, {} tenants, erased {}, refusal {:?}", s.loaded, s.working,
+            s.server_owner, s.hands_over, s.tenants.len(), s.erased, s.refusal);
         if s.erased {
             if !erased.replace(true) {
                 let col = column();
@@ -1108,10 +1099,6 @@ pub fn erasure(parent: &gtk::Widget, connection: String) {
             let col = column();
             col.append(&text(&words::erasure_server_owner()));
             f.nav.replace(&[page(&words::erasure_title(), "owner", &col)]);
-            return true;
-        }
-        if s.on_the_web {
-            f.nav.replace(&[on_the_web(&words::erasure_title(), &words::erasure_moderator_web(), &s.server)]);
             return true;
         }
         let mut held = form.borrow_mut();
@@ -1191,6 +1178,14 @@ impl ErasureForm {
                 }
                 col.append(&group);
             }
+        }
+        // the last holder's hand-over to the Server Owner (#965), the web's note between the choices and the sole spaces
+        if s.hands_over {
+            let heading = text(&words::erasure_key_delivery_title());
+            heading.add_css_class("heading");
+            heading.set_widget_name("erasure-key-delivery");
+            col.append(&heading);
+            col.append(&text(&words::erasure_key_delivery_body()));
         }
         let sole: Vec<String> = s.tenants.iter().filter(|t| t.members.is_empty()).map(|t| t.name.clone()).collect();
         if !sole.is_empty() {

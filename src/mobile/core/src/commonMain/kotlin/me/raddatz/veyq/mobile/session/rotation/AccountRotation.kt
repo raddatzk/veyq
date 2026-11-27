@@ -5,7 +5,9 @@ import me.raddatz.veyq.mobile.AppKinds
 import me.raddatz.veyq.mobile.api.apis.AccountApi
 import me.raddatz.veyq.mobile.api.apis.AccountRotationApi
 import me.raddatz.veyq.mobile.api.apis.FavoritesApi
-import me.raddatz.veyq.mobile.api.apis.ModerationApi
+import me.raddatz.veyq.mobile.api.models.RotationStageModerationGrants
+import me.raddatz.veyq.mobile.session.ModerationGrants
+import me.raddatz.veyq.mobile.session.ModerationKeyStage
 import me.raddatz.veyq.mobile.api.apis.TenantsApi
 import me.raddatz.veyq.mobile.api.models.AccountKeyMaterial
 import me.raddatz.veyq.mobile.api.models.KeyChainStepSignatures
@@ -53,7 +55,7 @@ import me.raddatz.veyq.mobile.words.Msg
  *  2. **Stage**: every scope of the plan, its current epoch key opened with the OLD identity, granted to the NEW one and
  *     signed by it — a grant this device refuses declared in `unreadableScopeIds`, never dropped —, in chunks of
  *     [STAGE_CHUNK]; the open invites this account signed re-signed (or declared) and the join records it rooted
- *     endorsed (or declared). The moderation key is not here: a holder is sent to the web before the gate (D9).
+ *     endorsed (or declared). The moderation key this account holds is re-sealed to the new identity or declared, every live epoch ([ModerationKeyStage], #965).
  *  3. **Publish**: one request naming the stage and its digest under the proof statement, the pin store and the device
  *     register re-sealed under `MK'` riding inside it; `409 stale_revision` re-seals, `409 rotation_plan_changed`
  *     re-stages the delta, both bounded by [MAX_PUBLISH_ATTEMPTS]; a declared refusal wrote nothing; any other failure
@@ -80,13 +82,6 @@ internal class AccountRotation(
     private val verifications = Verifications(suite)
     private fun api() = AccountRotationApi(account.server, account.http)
 
-
-    override suspend fun holdsModerationKey(): Boolean {
-        val r = account.respond { ModerationApi(account.server, account.http).listMyModerationGrants() }
-        if (r.status == 403) return false
-        if (!r.success) throw VeyqAccount.Refused(r.status, account.errorCode(r))
-        return r.body().epochs.any { it.sealedGrant != null }
-    }
 
     override suspend fun prove(password: String, secretKey: ByteArray): ColdCredential.Refusal? = try {
         ColdCredential.prove(suite, account.masterKeyCopy(), account.keyMaterialNow(), password, secretKey).fill(0)
@@ -199,9 +194,13 @@ internal class AccountRotation(
 
             val stage = SelfGrantStage(identity, newPublic)
             val rooted = RootedStage(current, identity)
+            val moderationKey = ModerationKeyStage(suite, current, newPub.kem) { id, grants ->
+                val r = account.respond { api().putRotationStageModerationGrants(id, RotationStageModerationGrants(grants)) }
+                if (!r.success) throw VeyqAccount.Refused(r.status, account.errorCode(r))
+            }
             var plan = plan()
             stage.stageAll(plan)
-            stageRooted(stage, rooted, plan)
+            stageRooted(stage, rooted, moderationKey, plan)
             // the outgoing key's verifications, read NOW while it is still the account's (ADR 0111 decision 13)
             carried += collectMyVerifications(plan)
 
@@ -250,8 +249,8 @@ internal class AccountRotation(
                 if (r != null && retry && r.status == 409 && code == "stale_revision") continue
                 if (r != null && retry && r.status == 409 && code == "rotation_plan_changed") {
                     plan = plan()
-                    stage.restage(plan, rooted.moved(stage.id, rooted.read()))
-                    stageRooted(stage, rooted, plan)
+                    stage.restage(plan, rooted.moved(stage.id, rooted.read()) || moderationKey.moved(stage.id, ModerationGrants.read(account)))
+                    stageRooted(stage, rooted, moderationKey, plan)
                     continue
                 }
                 if (r != null && r.status == 413) throw KeyRotation.Refused(Msg.ROTATION_ERROR_TOO_LARGE)
@@ -479,10 +478,11 @@ internal class AccountRotation(
     }
 
     /** What the account rooted into [stage]'s stage; a stage the server lost re-opened, a moved list re-read, bounded. */
-    private suspend fun stageRooted(stage: SelfGrantStage, rooted: RootedStage, plan: List<RotationPlanScope>) {
+    private suspend fun stageRooted(stage: SelfGrantStage, rooted: RootedStage, moderationKey: ModerationKeyStage, plan: List<RotationPlanScope>) {
         for (attempt in 1..MAX_PUBLISH_ATTEMPTS) {
             try {
                 rooted.put(stage.id, plan, rooted.read())
+                moderationKey.put(stage.id, ModerationGrants.read(account))
                 return
             } catch (e: VeyqAccount.Refused) {
                 val retry = attempt < MAX_PUBLISH_ATTEMPTS
