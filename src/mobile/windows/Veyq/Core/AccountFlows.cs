@@ -344,6 +344,7 @@ internal sealed class KitSection : IDisposable
     private readonly Button _save = new() { Content = Words.KitSaveTitle() };
     private readonly CheckBox _confirm = new() { Content = Words.KitSavedConfirm(), IsEnabled = false };
     private readonly ContentControl _refusal = new();
+    private readonly TextBlock _done = FlowText.Notice("kit-done");
     private readonly Watch? _watch;
     private KitStepState? _state;
     private bool _drawing;
@@ -377,6 +378,7 @@ internal sealed class KitSection : IDisposable
         _panel.Children.Add(_save);
         _panel.Children.Add(_confirm);
         _panel.Children.Add(_refusal);
+        _panel.Children.Add(_done);
         _watch = Core.Watch(new Watched.Kit { kit = kit }, update =>
         {
             if (_closed || update is not Update.Kit { shown: var s }) return;
@@ -407,6 +409,8 @@ internal sealed class KitSection : IDisposable
         _confirm.IsChecked = s.confirmed;
         _drawing = false;
         _refusal.Content = s.refusal is { } r ? FlowText.Critical(Said.Key(r), "kit-refusal") : null;
+        // the flow's done line once the kit is kept and recorded (the renewal's, the web's kit.renew.done)
+        FlowText.Say(_done, s.done is { } d ? Said.Key(d) : null, "SystemFillColorSuccessBrush");
         Changed?.Invoke();
     }
 

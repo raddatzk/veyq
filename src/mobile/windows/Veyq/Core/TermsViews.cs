@@ -108,17 +108,8 @@ internal static class TermsText
         return panel;
     }
 
-    /// <summary>A Markdown text's paragraphs, each with whether it is a heading.</summary>
-    public static List<(string Text, bool Heading)> Blocks(string text) =>
-        text.Trim().Replace("\r\n", "\n").Split("\n\n").Select(b => b.Trim()).Where(b => b.Length > 0)
-            // a heading is its own line: the lines after it in the same block are the paragraph under it
-            .SelectMany(b => b.StartsWith('#') && b.IndexOf('\n') is var nl and > 0 && b[(nl + 1)..].Trim().Length > 0
-                ? new[] { b[..nl].Trim(), b[(nl + 1)..].Trim() } : new[] { b })
-            .Select(b =>
-            b.StartsWith('#')
-                ? (b.TrimStart('#').Trim(), true)
-                : (string.Join("\n", b.Split('\n').Select(l => l.Trim()).Select(l => l.StartsWith("- ") || l.StartsWith("* ") ? "• " + l[2..] : l)).Replace("**", ""), false)
-        ).ToList();
+    /// <summary>A Markdown text's paragraphs, each with whether it is a heading (MarkdownBlocks.cs).</summary>
+    public static List<(string Text, bool Heading)> Blocks(string text) => MarkdownBlocks.Of(text);
 
     public static TextBlock Line(string text, bool secondary)
     {
