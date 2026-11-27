@@ -707,7 +707,7 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
 - Not in the apps yet (the owner 2026-11-26: every app is to do what the web does — these are gaps, closed one by one):
   joining a tenant from an invite, inviting, members and roles, groups and leaving a space, editing a tenant's terms
   (its owner's; the apps hold the gate and show them, below), finishing a recovery (the apps ask for the reset link; the web finishes it), the trust reset,
-  the moderation key (#965), the task queue's jobs (#966), and an in-app choice of appearance and language (the apps follow the system's; the desktops
+  the moderation key (#965), the task queue's jobs (#966), reopening where the person left after a restart (#1415), and an in-app choice of appearance and language (the apps follow the system's; the desktops
   have no per-app language of their own).
 - *Who's who* (ADR 0148 § Who's who, built 2026-11-27): the macOS pass (the sheet over the Settings window, the window
   closing for a profile — the coordinator's), an anomaly and a rotation seen on any app (the throwaways had neither), the
