@@ -74,6 +74,12 @@
   or the sheet.
 - **Proven before printed.** A kit is rendered only from a Secret Key that just opened the floor.
 
+- **The apps** (built 2026-11-27, [ADR 0157](../../../decisions/0157-a-kits-layout-has-a-version-and-a-sealed-record-says-which-one-the-account-last-made.md)
+  § Consequences; [native-apps](../../../crosscutting/native-apps.md)): the same section in each app's Settings →
+  Security, the same one-time notice in each shell, the renewal proven before printed and recorded once kept, in the
+  core (`KitRecord`, `KitStatus`, `KitRenewal`). Tests (no coverage surface, ADR 0040): `KitRenewalTest`,
+  `AccountFlowsDispatchTest`, live `LiveAccountFlowsTest`.
+
 ## User impact
 
 When veyq learns to print a clearer Emergency Kit, you hear about it once, and can print the new one in a minute with your

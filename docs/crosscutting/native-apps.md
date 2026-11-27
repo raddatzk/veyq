@@ -171,7 +171,14 @@ never blocks. The new password of the password change and of the rotation is che
 anyway*, a check that could not run going ahead with one line. Passed on Android, Linux and Windows as throwaways, the
 range address blocked on each so no live query was sent (the kit file, a pasted token, another account's kit, *could
 not be checked*; Windows also a scan and the rotation's gate with the kit file); a hit is held by `BreachCheckTest`,
-never drawn live (ADR 0151's Consequences). The Use pages: [Your profile](../../site/src/content/docs/account/your-profile.mdx),
+never drawn live (ADR 0151's Consequences). **The kit's layout and its record**
+([ADR 0157](../decisions/0157-a-kits-layout-has-a-version-and-a-sealed-record-says-which-one-the-account-last-made.md)'s
+Consequences, built 2026-11-27 on every app): the core prints the web's layout 2 (the key labelled "9 blocks in 3
+lines"), records every kit an app makes (the rotation in its request, the address change and the renewal once the kit
+is kept), and Settings → Security says which kit the account has, with *Make a new kit* (proven before printed) where a
+clearer one exists; the shell shows the one-time notice. Passed by the core's live test as a throwaway (the earlier
+layout read, a new kit recorded, a fresh session reading it current) and on Linux (Broadway) as a throwaway (the notice,
+*Go to your kit* opening Settings at the kit, *Make a new kit*'s form); the other apps built. The Use pages: [Your profile](../../site/src/content/docs/account/your-profile.mdx),
 [Verify a person](../../site/src/content/docs/account/verify-a-person.mdx),
 [Change your password](../../site/src/content/docs/account/change-password.mdx),
 [Your email address](../../site/src/content/docs/account/change-email.mdx),
@@ -452,7 +459,8 @@ every original and tier by frame and decodes nothing); **item marks** (`ItemMark
 the lightbox's toolbar and, on Windows and Apple, a tile's menu), the **gallery's filter** (`GalleryFilter.kt` over
 core search's chips, the day chip in the viewer's calendar, the marks' mode), the **Contributions** as the view
 switch's fourth segment (`Buckets.kt`, `Contributions.kt`: the uploader picker, sub-buckets made, renamed, deleted and
-filled as the server allows — any member, any root, never across roots), a guest named from its bucket, a photo's or
+filled as the server allows — any member, any root, never across roots; since 2026-11-27 *Select* and a selection's
+*Shift capture time*, `CaptureTimeShift.kt`, ADR 0149's Consequences), a guest named from its bucket, a photo's or
 video's **Report** from the lightbox; the marks and buckets kept reads offline. **Tiles** on Home, a folder, an
 application's list and a person's Memories (`navigation/ViewMode.kt`: List | Tiles, a profile's Map too; one choice per
 account on the device; `TileGrid`'s square covers, two columns on a phone). The bridge carries it to the desktops under
@@ -709,6 +717,10 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   (its owner's; the apps hold the gate and show them, below), finishing a recovery (the apps ask for the reset link; the web finishes it), the trust reset,
   the moderation key (#965), the task queue's jobs (#966), reopening where the person left after a restart (#1415), and an in-app choice of appearance and language (the apps follow the system's; the desktops
   have no per-app language of their own).
+- A selection's capture-time shift and the kit's layout 2 (built 2026-11-27, inbox #1417; passed on Linux and by the core's live
+  tests): the passes on Android, the Mac, iPhone and iPad, and Windows — the VM resolves `tw-win.localhost` alone, which
+  a throwaway whose file was lost at a reboot still holds (inbox #1416); in the apps, *Make a new kit* typed through to a
+  saved kit on any app's screen (the core's live test ran it).
 - *Who's who* (ADR 0148 § Who's who, built 2026-11-27): the macOS pass (the sheet over the Settings window, the window
   closing for a profile — the coordinator's), an anomaly and a rotation seen on any app (the throwaways had neither), the
   owner's iPhone and iPad, and the cost on a large tenant (#1414).

@@ -86,8 +86,16 @@ What the tree holds (read 2026-11-22 on `main` `28e3312c0`):
 - One new account operation pair (`GET`/`PUT /api/account/kit-record`), one table, one seal purpose with its vector, and
   an optional field on three existing requests. The account erasure deletes the row.
 - `KIT_LAYOUT` exists twice, as the layout code does. A raise touches both writers and both catalogs' sentence.
-- The native apps (V2) make kits too once their account flows land: they write the record by the same rule, and their
-  sheet takes the number of the web sheet it matches or a number of its own — decided when they print a kit.
+- **The native apps** (built 2026-11-27, cr-apps-kit-layout-2): their sheet is the web's line for line (ADR 0148
+  decision 5), so it takes the web's number — the core's `KitWriter.LAYOUT = 2`, never a numbering of their own, since the
+  record is read by every client of the account. The core seals the record (`account/KitRecord.kt`) and reads it once per
+  unlock (`KitStatus`, the web's `kitLayoutState`), shared by Settings → Security and the shell's notice; the rotation
+  carries it in its request, the address change and the renewal (`session/KitRenewal.kt`, proven before printed) seal it
+  during their proof and write the blob once "I saved it" is ticked (`KitStep`'s `kept`). The notice's dismissal is per
+  device and account (the device store, the layout it spoke of). The apps make no birth kit (joining and setup are the
+  web's). The earlier app sheet stays as the fixture `kit-app-layout1.pdf`, still read by token and by its drawn QR.
+  Tests: `KitRenewalTest`, `KitFixtureTest`/`KitFixtureCases`, `AccountFlowsDispatchTest`; live, `LiveAccountFlowsTest`'s
+  kit case as a throwaway (born without a record: the earlier layout, renewed, read current by a fresh session).
 - A person who never opens Settings and dismissed the notice keeps the old kit. That is accepted: it works, and the
   sign-in screen counts the blocks for everyone.
 

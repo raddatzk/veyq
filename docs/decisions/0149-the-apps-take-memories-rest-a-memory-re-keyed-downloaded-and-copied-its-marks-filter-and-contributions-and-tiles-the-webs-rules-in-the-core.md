@@ -169,6 +169,19 @@ the branch the refine read (each claim's command is in the refine's record of it
 - **A download is held to the web's importer by a committed fixture**, not by a schema validator in the core's tests: a
   validator would be a new test dependency, and an archive the schema accepts can still be one the importer refuses.
 - **Import is [ADR 0152](0152-the-apps-import-a-download-as-the-web-does-the-webs-reader-and-walk-in-the-core-each-kinds-import-its-applications-recognised-by-every-depot-upload.md)'s**: the core reads the web's archive and the web's tests read the same cases.
+- **A selection's capture time shifted** (main's PR #97, uc.memory.buckets § Correct a selection's capture time; built in
+  the apps 2026-11-27, cr-apps-capture-time-shift): the Contributions view gains *Select* and the selection's *Shift
+  capture time*. The rule is the core's (`memories/CaptureTimeShift.kt`, the web's `planCaptureTimeShift`/`offsetParts`
+  case for case; `SelectionShift`, the run at concurrency 4, each medium one ordinary sealed meta write with its seconds
+  kept, `CaptureTime.write(exact)`; online only, never queued). Where the apps differ from the web, by their view, not by
+  the rule: **the anchor is the first selected medium with a capture time** (the apps' Contributions have no lightbox over
+  the selection alone — "select first the photo whose right time you know"), a selection with no dated medium is offered
+  no shift (the details' own editor is "only this one"); the dialog asks the time, then *Only this one* / *All N, shifted
+  by …* with the undated count; **the Undo sits in the dialog's last step** (one surface per platform, no timer of the
+  platform's own, ADR 0154 decision 4), refuses a medium a peer changed since, and a clean Undo closes the dialog; a
+  refused medium is named by its sealed file name, else "Item n" by its place in the selection. Tests:
+  `CaptureTimeShiftTest`, `MemoriesDispatchTest`; passed on Linux (Broadway) as a throwaway — two media shifted by
+  +1 d and undone.
 - **The owner's answers** (2026-11-19; each was built as recommended, so nothing changed): the rule is that the apps
   **behave exactly as the web** and **look as their platform's guidelines** say (owner 2026-11-09). So the first view is
   Tiles, the web's default (`ViewMode.FIRST`, decision 8); the Contributions are the fourth view exactly as the web
