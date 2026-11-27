@@ -540,6 +540,53 @@ final class AppModel {
     func removeMember(_ userId: String, revokeLinks: Bool) async throws -> TenantMembers.Outcome? {
         try await tenantSession?.members.remove(userId: userId, revokeLinks: revokeLinks)
     }
+
+    // MARK: Invites (core's `TenantInvites`, uc.spaces.add-member, uc.spaces.manage-member-invites)
+
+    /// *Invite member* by link, with the owners' optional label: the link shown once (`outcome.address`).
+    func inviteByLink(label: String?) async throws -> TenantInvites.Outcome? {
+        try await tenantSession?.invites.inviteByLink(label: label)
+    }
+
+    /// *Invite member* by mail: the code shown once, or none where the owner chose a `password`.
+    func inviteByMail(email: String, password: String?) async throws -> TenantInvites.Outcome? {
+        try await tenantSession?.invites.inviteByMail(email: email, password: password)
+    }
+
+    /// A pending invite's *Send again* / *New link*: its new code or link shown once.
+    func reissueInvite(_ invite: TenantInvites.PendingInvite) async throws -> TenantInvites.Outcome? {
+        try await tenantSession?.invites.reissue(invite: invite)
+    }
+
+    /// A pending invite's *Cancel invite*, after its question.
+    func revokeInvite(_ inviteId: String) async throws -> TenantInvites.Outcome? {
+        try await tenantSession?.invites.revoke(inviteId: inviteId)
+    }
+
+    /// A link invite's label set (empty clears it).
+    func setInviteLabel(_ inviteId: String, label: String) async throws -> TenantInvites.Outcome? {
+        try await tenantSession?.invites.setLabel(inviteId: inviteId, label: label.isEmpty ? nil : label)
+    }
+
+    // MARK: Joining from an invite (core's `TenantJoin`, ADR 0111, ADR 0129)
+
+    /// The account door a join signs in through: this device and the core's no-disk client, as the session's own.
+    @ObservationIgnored private lazy var door = AccountDoor(
+        primitives: LibsodiumPrimitives.shared, device: device,
+        client: { block in AppleKt.appleHttpClient(block: { config in _ = block(config) }) }
+    )
+
+    /// The join of a received `invite`, not loaded yet.
+    func join(_ invite: ReceivedLink.InviteLink) -> TenantJoin { door.join(invite: invite) }
+
+    /// *Open the space*: the app's own session signs in with what the join holds, its answer shown as a sign-in's is.
+    /// False where it did not (the join's state says why).
+    func openJoined(_ join: TenantJoin) async -> Bool {
+        let any = try? await join.openSpace(session: session as! SessionModel<Connection, AnyObject>)
+        guard let opened = any as? Opened else { return false }
+        try? await show(opened)
+        return true
+    }
     /// A change of this device's trust is under way (the offer's answer, Manage's): its controls wait.
     private(set) var trustWorking = false
     /// "Manage servers"' line under a server after a change it refused (a wrong password), by the account's key.

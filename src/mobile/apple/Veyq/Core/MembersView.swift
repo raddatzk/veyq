@@ -14,9 +14,25 @@ struct MembersView: View {
     @State private var working = false
     @State private var removing: TenantMembers.RosterMember?
     @State private var revokeLinks = false
+    /// *Invite member*'s sheet (owners only).
+    @State private var inviting = false
+    /// A re-issue's new link or code, shown once.
+    @State private var reissued: Reissued?
+    /// The link invite whose label is being edited.
+    @State private var labelling: TenantInvites.PendingInvite?
+    /// The invite whose cancellation is being asked.
+    @State private var revoking: TenantInvites.PendingInvite?
 
     var body: some View {
         List {
+            if roster?.owner == true {
+                // the owners' *Invite member* (uc.spaces.add-member), the web's button above the roster
+                Section {
+                    Button { inviting = true } label: { Label(say(.membersInvite), systemImage: "person.badge.plus") }
+                        .disabled(working)
+                        .accessibilityIdentifier("members-invite")
+                }
+            }
             Section {
                 if loading {
                     HStack(spacing: 12) { ProgressView(); Text(say(.membersLoading)) }
@@ -39,6 +55,21 @@ struct MembersView: View {
                     if let said { Text(said).foregroundStyle(.primary).accessibilityIdentifier("members-notice") }
                 }
             }
+            // the owners' pending invites (uc.spaces.manage-member-invites); none: no section
+            if let roster, roster.owner, !roster.invites.isEmpty {
+                Section {
+                    ForEach(roster.invites, id: \.inviteId) { invite in
+                        PendingInviteRow(invite: invite, working: working, rename: { labelling = invite }, reissue: { reissue(invite) }, revoke: { revoking = invite })
+                    }
+                    if working {
+                        HStack(spacing: 12) { ProgressView(); Text(say(.membersInviteSecuring)) }
+                    }
+                } header: {
+                    Text(say(.membersPendingTitle))
+                } footer: {
+                    Text(say(.membersPendingSub))
+                }
+            }
         }
         .environment(\.avatars, model.avatars)
         .navigationTitle(say(.membersTitle))
@@ -50,6 +81,27 @@ struct MembersView: View {
                 removing = nil
                 act { try await model.removeMember(r.row.userId, revokeLinks: revokeLinks) }
             }, cancel: { removing = nil })
+        }
+        .sheet(isPresented: $inviting) {
+            InviteMemberSheet(model: model) { Task { roster = await model.membersRead() } }
+        }
+        .sheet(item: $reissued) { r in InviteResultSheet(outcome: r.outcome, spaceName: model.tenant?.name ?? "") }
+        .sheet(item: Binding(get: { labelling.map(Labelling.init) }, set: { if $0 == nil { labelling = nil } })) { l in
+            InviteLabelSheet(draft: l.invite.label ?? "") { text in
+                labelling = nil
+                let id = l.invite.inviteId
+                inviteAct { try await model.setInviteLabel(id, label: text) }
+            }
+        }
+        .alert(say(.membersRevokeConfirmTitle), isPresented: Binding(get: { revoking != nil }, set: { if !$0 { revoking = nil } }), presenting: revoking) { invite in
+            Button(say(.membersRevoke), role: .destructive) {
+                revoking = nil
+                let id = invite.inviteId
+                inviteAct { try await model.revokeInvite(id) }
+            }
+            Button(say(.signinCancel), role: .cancel) { revoking = nil }
+        } message: { _ in
+            Text(say(.membersRevokeConfirm))
         }
     }
 
@@ -71,6 +123,48 @@ struct MembersView: View {
             working = false
         }
     }
+
+    /// An invite's act (a label, a revocation): its words said under the list, the roster read anew where it went through.
+    private func inviteAct(_ run: @escaping () async throws -> TenantInvites.Outcome?) {
+        working = true
+        Task {
+            let outcome = try? await run()
+            if let outcome {
+                said = say(notice: outcome.notice)
+                if outcome.done { roster = await model.membersRead() }
+            }
+            working = false
+        }
+    }
+
+    /// *Send again* / *New link*: a new invite in the old one's place, its new code or link shown once.
+    private func reissue(_ invite: TenantInvites.PendingInvite) {
+        working = true
+        Task {
+            let outcome = try? await model.reissueInvite(invite)
+            working = false
+            guard let outcome else { return }
+            if outcome.done && (outcome.address != nil || outcome.code != nil) {
+                said = nil
+                reissued = Reissued(outcome: outcome)
+            } else {
+                said = say(notice: outcome.notice)
+            }
+            if outcome.done { roster = await model.membersRead() }
+        }
+    }
+}
+
+/// A re-issue's outcome, as a sheet's item.
+private struct Reissued: Identifiable {
+    let outcome: TenantInvites.Outcome
+    let id = UUID()
+}
+
+/// The link invite whose label is edited, as a sheet's item.
+private struct Labelling: Identifiable {
+    let invite: TenantInvites.PendingInvite
+    var id: String { invite.inviteId }
 }
 
 /// The member being removed, as a sheet's item.

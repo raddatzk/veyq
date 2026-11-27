@@ -913,7 +913,7 @@ struct KeyRotationSheet: View {
 }
 
 /// The kit's step inside a flow, telling the flow when it is ready (a file written and "I saved it" checked).
-private struct KitReadyWatch: View {
+struct KitReadyWatch: View {
     let step: KitStep
     @Binding var ready: Bool
     @State private var held: HeldFlow<KitStep, KitStep.State>?

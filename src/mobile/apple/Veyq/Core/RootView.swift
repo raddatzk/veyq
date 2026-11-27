@@ -10,7 +10,10 @@ struct RootView: View {
             // a received link open as its guest (ADR 0150 decision 4): a screen in the place of the sign-in or the shell,
             // which stay as the app model holds them and show again once the link is left (no shell page beneath reads
             // the models the guest's pages hold in its place)
-            if let held = model.guests.screen {
+            if let join = model.guests.joining {
+                // an invite's join (ADR 0129): above everything, as a guest's screen is; what lies beneath stays as it was
+                JoinView(model: model, held: join).id(ObjectIdentifier(join))
+            } else if let held = model.guests.screen {
                 GuestLinkView(model: model, held: held).id(ObjectIdentifier(held))
             } else if let gate = model.terms {
                 // the tenant's terms gate (uc.account.accept-terms) stands in place of the shell, the offer behind it
