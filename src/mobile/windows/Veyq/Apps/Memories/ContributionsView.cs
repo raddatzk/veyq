@@ -19,6 +19,7 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Veyq.Bridge;
 using Veyq.Bridge.Wire;
@@ -40,6 +41,11 @@ internal sealed class ContributionsView : IDisposable
     private readonly ComboBox _picker = new() { MinWidth = 240 };
     private readonly DropDownButton _more = new() { Content = new FontIcon { Glyph = "\uE712", FontSize = 14 } };
     private readonly ContentControl _status = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };
+    /// <summary>Select (Photos' way): a click on a tile then toggles it (Buckets.Toggle); the bar says how many and offers the shift.</summary>
+    private readonly ToggleButton _select = new() { Content = Words.SelectAction() };
+    private readonly StackPanel _selection = new() { Orientation = Orientation.Horizontal, Spacing = 12, Visibility = Visibility.Collapsed };
+    private readonly TextBlock _picked = new() { VerticalAlignment = VerticalAlignment.Center };
+    private readonly Button _shift = new() { Content = Words.MemoryShiftAction(), IsEnabled = false };
     private readonly Canvas _canvas = new();
     private readonly Grid _grid = new() { HorizontalAlignment = HorizontalAlignment.Stretch };
     private readonly Recent<ImageSource> _thumbs = new(200);
@@ -55,6 +61,9 @@ internal sealed class ContributionsView : IDisposable
     /// <summary>What the last write was, for the words of its refusal.</summary>
     private bool _moving;
     private bool _closed;
+    private string? _selectedFor;
+
+    private bool Selecting => _select.IsChecked == true;
 
     public UIElement View => _view;
 
@@ -80,10 +89,39 @@ internal sealed class ContributionsView : IDisposable
         AutomationProperties.SetAutomationId(_more, "memory-buckets-more");
         AutomationProperties.SetName(_more, Words.MemoryBucketsOptions());
         ToolTipService.SetToolTip(_more, Words.MemoryBucketsOptions());
+        AutomationProperties.SetAutomationId(_select, "memory-buckets-select");
+        AutomationProperties.SetAutomationId(_selection, "memory-buckets-selection");
+        AutomationProperties.SetAutomationId(_shift, "memory-buckets-shift");
+        _shift.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+        _select.Click += (_, _) =>
+        {
+            var on = _select.IsChecked == true;
+            _selection.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            Log.Write($"contributions: select {on}");
+            if (!on && _id is { } buckets) Act.Send(new Call.BucketsClearPicked { buckets = buckets });
+            _gridDrawn = "";
+            if (_shown is { } s) Draw(s);
+        };
+        _shift.Click += async (_, _) =>
+        {
+            if (_id is not { } buckets) return;
+            try
+            {
+                await CaptureTimeShiftDialog.Show(_window, buckets);
+            }
+            catch (Exception e)
+            {
+                Log.Write($"the shift did not show ({e.GetType().Name})");
+            }
+        };
+        _selection.Children.Add(_picked);
+        _selection.Children.Add(_shift);
         var head = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         head.Children.Add(_picker);
         head.Children.Add(_more);
+        head.Children.Add(_select);
         _view.Children.Add(head);
+        _view.Children.Add(_selection);
         _view.Children.Add(_status);
         AutomationProperties.SetAutomationId(_grid, "memory-buckets-grid");
         _grid.Children.Add(_canvas);
@@ -173,7 +211,17 @@ internal sealed class ContributionsView : IDisposable
             { media.Count: 0, rows.Count: > 0 } => Line(Words.MemoryBucketsEmptyBucket(), "memory-buckets-empty"),
             _ => null,
         };
-        var grid = string.Join(",", s.media.Select(m => $"{m.mediaId}:{m.tile}")) + $"#{online}#{string.Join(",", s.moveTargets)}#{s.selected}";
+        if (s.selected != _selectedFor)
+        {
+            // another bucket chosen: its selection starts anew (the core cleared it)
+            _selectedFor = s.selected;
+            _select.IsChecked = false;
+            _selection.Visibility = Visibility.Collapsed;
+        }
+        _select.Visibility = online && s.selected is not null && s.media.Count >= 2 ? Visibility.Visible : Visibility.Collapsed;
+        _picked.Text = Words.SelectCount(s.picked.Count);
+        _shift.IsEnabled = s.shifts;
+        var grid = string.Join(",", s.media.Select(m => $"{m.mediaId}:{m.tile}")) + $"#{online}#{string.Join(",", s.moveTargets)}#{s.selected}#{Selecting}#{string.Join(",", s.picked)}";
         if (grid != _gridDrawn)
         {
             _gridDrawn = grid;
@@ -332,6 +380,19 @@ internal sealed class ContributionsView : IDisposable
             face.Children.Add(image);
             Thumb(image, glyph, row, blob);
         }
+        var picked = s.picked.Contains(row.mediaId);
+        if (picked)
+        {
+            // a picked tile carries a check in its corner, as Photos' selection does
+            var check = new Border
+            {
+                Width = 24, Height = 24, CornerRadius = new CornerRadius(12), Margin = new Thickness(6),
+                HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top,
+                Background = (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"],
+                Child = new FontIcon { Glyph = "\uE73E", FontSize = 14, Foreground = (Brush)Application.Current.Resources["TextOnAccentFillColorPrimaryBrush"] },
+            };
+            face.Children.Add(check);
+        }
         var tile = new Button
         {
             Content = face,
@@ -349,7 +410,12 @@ internal sealed class ContributionsView : IDisposable
         ToolTipService.SetToolTip(tile, name);
         var media = row.mediaId;
         // the lightbox over the chosen bucket's media, not the gallery's (#996)
-        tile.Click += (_, _) => { if (_id is { } buckets) _open(new Call.BucketsLightbox { buckets = buckets, mediaId = media }); };
+        tile.Click += (_, _) =>
+        {
+            if (_id is not { } buckets) return;
+            if (Selecting) Act.Send(new Call.BucketsToggle { buckets = buckets, mediaId = media });
+            else _open(new Call.BucketsLightbox { buckets = buckets, mediaId = media });
+        };
         // a medium moved into another bucket of its root (online; never across roots: the server's): the right-click menu, as Explorer's
         if (s.selected is not null && !_offline())
         {

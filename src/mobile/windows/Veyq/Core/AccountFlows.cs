@@ -31,7 +31,7 @@ using Veyq.Bridge.Wire;
 using Windows.Storage.Pickers;
 
 /// <summary>The account's flows the Settings page opens, each a section of the page (SettingsSection's id).</summary>
-internal enum AccountFlow { Profile, Password, Email, Security, Erase }
+internal enum AccountFlow { Profile, Password, Email, Security, Erase, Kit }
 
 internal static class AccountFlows
 {
@@ -42,6 +42,7 @@ internal static class AccountFlows
         AccountFlow.Password => "password",
         AccountFlow.Email => "email",
         AccountFlow.Security => "security",
+        AccountFlow.Kit => "kit",
         _ => "erase",
     };
 
@@ -52,6 +53,7 @@ internal static class AccountFlows
         AccountFlow.Password => Words.PasswordChangeTitle(),
         AccountFlow.Email => Words.AccountSettingsEmail(),
         AccountFlow.Security => Words.RotationTitle(),
+        AccountFlow.Kit => Words.KitRenewTitle(),
         _ => Words.ErasureTitle(),
     };
 
@@ -62,6 +64,7 @@ internal static class AccountFlows
         AccountFlow.Password => Words.PasswordChangeSub(),
         AccountFlow.Email => Words.EmailChangeFormSub(),
         AccountFlow.Security => Words.RotationSub(),
+        AccountFlow.Kit => Words.KitRenewSub(),
         _ => Words.ErasureSub(),
     };
 
@@ -72,6 +75,7 @@ internal static class AccountFlows
         AccountFlow.Password => Words.PasswordChangeTitle(),
         AccountFlow.Email => Words.EmailChangeAction(),
         AccountFlow.Security => Words.RotationAction(),
+        AccountFlow.Kit => Words.KitStatusMake(),
         _ => Words.ErasureAction(),
     };
 
@@ -93,6 +97,7 @@ internal static class AccountFlows
         AccountFlow.Password => new PasswordChangePage(window, connection, back),
         AccountFlow.Email => new AddressChangePage(window, connection, back),
         AccountFlow.Security => new KeyRotationPage(window, connection, back),
+        AccountFlow.Kit => new KitRenewalPage(window, connection, back),
         _ => new ErasurePage(window, connection, back),
     };
 }
@@ -1009,6 +1014,103 @@ internal sealed class AddressChangePage : FlowPage
         _kit = null;
         _watch?.Dispose();
         if (_id is { } flow) Act.Send(new Call.AddressChangeClose { flow = flow });
+    }
+}
+
+// ---- A clearer Emergency Kit (ADR 0157 decision 6) ----
+
+/// <summary>"Make a new kit": the password and the Secret Key (typed, the old kit read or scanned) checked against the floor
+/// by the core (Kit.Renew), then the kit saved as every kit is (KitSection); the core writes its record once it is kept.
+/// Closing it reads the Settings anew (Kit.RenewalClose).</summary>
+internal sealed class KitRenewalPage : FlowPage
+{
+    private readonly PasswordBox _password = Secret(Words.EmailChangePassword(), "kit-renew-password");
+    private readonly FlowKeyControl _key;
+    private readonly Button _check = Accent(Words.KitRenewCheck(), "kit-renew-check");
+    private long? _id;
+    private Watch? _watch;
+    private KitRenewalState? _state;
+    private KitSection? _kit;
+
+    public KitRenewalPage(Window window, string connection, Action back) : base(window, connection, back, AccountFlow.Kit)
+    {
+        _key = new FlowKeyControl(window, () => _id, Words.EmailChangeSecretKey(), "kit-renew-secret-key", "kit-renew") { Changed = Enable };
+        _password.PasswordChanged += (_, _) => Enable();
+        _check.Click += (_, _) => MakeKit();
+        Draw(null);
+        Start();
+    }
+
+    private async void Start()
+    {
+        var id = await OpenFlow("Kit.RenewalOpen", new Call.KitRenewalOpen { connection = Connection });
+        if (id is not { } flow) return;
+        if (Closed)
+        {
+            Act.Send(new Call.KitRenewalClose { flow = flow });
+            return;
+        }
+        _id = flow;
+        _watch = Core.Watch(new Watched.KitRenewal { flow = flow }, update =>
+        {
+            if (Closed || update is not Update.KitRenewal { shown: var s } u) return;
+            Guarded("the kit renewal", () =>
+            {
+                _key.Draw(u.kit);
+                Draw(s);
+            });
+        }, e => Log.Write($"a kit renewal update: {e.Message}"));
+    }
+
+    private void Enable() => _check.IsEnabled = _state is not { working: true } && _password.Password.Length > 0 && _key.Ready;
+
+    private void Draw(KitRenewalState? s)
+    {
+        _state = s;
+        ClearBody();
+        if (_kit is { } kit)
+        {
+            Body.Children.Add(kit.View);
+            var close = Plain(Words.ShareDone(), "kit-renew-close");
+            close.Click += (_, _) => Back();
+            Body.Children.Add(close);
+            return;
+        }
+        Body.Children.Add(Caption(Words.KitRenewSub()));
+        Body.Children.Add(_password);
+        Body.Children.Add(_key.View);
+        var row = Held(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12 });
+        row.Children.Add(_check);
+        if (s is { working: true }) row.Children.Add(Ring());
+        Body.Children.Add(row);
+        if (Refusal(s?.refusal) is { } r) Body.Children.Add(r);
+        Enable();
+    }
+
+    private async void MakeKit()
+    {
+        if (_id is not { } flow) return;
+        var call = new Call.KitRenew { flow = flow, password = _password.Password, secretKey = _key.Take() };
+        _password.Password = "";
+        _check.IsEnabled = false;
+        if (await Ask("Kit.Renew", call) is Answer.KitOpened { kit: var kit })
+        {
+            if (Closed)
+            {
+                Act.Send(new Call.KitClose { kit = kit });
+                return;
+            }
+            _kit = new KitSection(Window, kit, ownsClose: true);
+            Draw(_state);
+        }
+    }
+
+    protected override void Close()
+    {
+        _kit?.Dispose();
+        _kit = null;
+        _watch?.Dispose();
+        if (_id is { } flow) Act.Send(new Call.KitRenewalClose { flow = flow });
     }
 }
 

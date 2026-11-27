@@ -55,6 +55,8 @@ internal static class DevSettings
             askingRemoveAll = false,
             limitUnits = [],
             sections = [],
+            kit = null,
+            kitNews = null,
         };
     }
 }

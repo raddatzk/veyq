@@ -526,7 +526,11 @@ internal sealed class AccountSettingsPage : IDisposable
                 SettingsSection.Email => () => FlowSection(AccountFlow.Email),
                 SettingsSection.Password => () => FlowSection(AccountFlow.Password),
                 SettingsSection.AddDevice => () => DrawAddDevice(s),
-                SettingsSection.Security => () => FlowSection(AccountFlow.Security),
+                SettingsSection.Security => () =>
+                {
+                    FlowSection(AccountFlow.Security);
+                    KitSection(s);
+                },
                 SettingsSection.Profile => () => FlowSection(AccountFlow.Profile),
                 SettingsSection.Erase => () => FlowSection(AccountFlow.Erase),
                 SettingsSection.WhosWho => DrawWhosWho,
@@ -692,6 +696,26 @@ internal sealed class AccountSettingsPage : IDisposable
         var open = TextButton(Words.TermsSettingsTitle(), "settings-open:terms");
         open.Click += (_, _) => TermsDialog.Open(_window);
         _sections.Children.Add(Card("\uE8A5", Words.TermsSettingsTitle(), [Words.TermsReadonlyNote()], "settings-terms", open));
+    }
+
+    /// <summary>Which Emergency Kit the account has (ADR 0157 decision 5): current, or a clearer one exists — what it does
+    /// better, that the kit the person has keeps working, "Make a new kit" — or that it could not be read.</summary>
+    private void KitSection(SettingsShown s)
+    {
+        if (s.kit is not { } kit) return;
+        _sections.Children.Add(Heading(Words.KitStatusTitle()));
+        if (kit == KitStatusStanding.Older)
+        {
+            var open = TextButton(Words.KitStatusMake(), "settings-open:kit");
+            open.Click += (_, _) => OpenFlow(AccountFlow.Kit);
+            _sections.Children.Add(Card("\uE8A5", Words.KitStatusOlder(),
+                [s.kitNews is { } news ? Said.Notice(news) : "", Words.KitStatusKeepsWorking()], "settings-kit", open));
+        }
+        else
+        {
+            _sections.Children.Add(Card("\uE8A5", Words.KitStatusTitle(),
+                [kit == KitStatusStanding.Current ? Words.KitStatusCurrent() : Words.KitStatusUnreadable()], "settings-kit"));
+        }
     }
 
     private void FlowSection(AccountFlow f)

@@ -59,6 +59,9 @@ internal sealed class ShellView
     private readonly NoticeBar _notices;
     /// <summary>"Offline — content as of …", open while the core shows the lists from the offline store.</summary>
     private readonly InfoBar _offline;
+    /// <summary>The one-time "a clearer Emergency Kit exists" (ShellShown.kitNotice, ADR 0157 decision 5): Fluent's
+    /// InfoBar, its action "Go to your kit" (Settings at Security), its close "Not now"; both dismiss it for good.</summary>
+    private readonly InfoBar _kitNotice;
     private string _queuedSaid = "";
     /// <summary>The items no longer available offline, said once; and what it said last.</summary>
     private readonly InfoBar _gone;
@@ -172,6 +175,19 @@ internal sealed class ShellView
         head.Children.Add(_commands);
         _offline = new InfoBar { IsOpen = false, IsClosable = false, Severity = InfoBarSeverity.Warning, Margin = new Thickness(12, 0, 12, 4) };
         AutomationProperties.SetAutomationId(_offline, "offline-banner");
+        _kitNotice = new InfoBar { IsOpen = false, IsClosable = true, Severity = InfoBarSeverity.Informational, Title = Words.KitNoticeTitle(), Margin = new Thickness(12, 0, 12, 4) };
+        AutomationProperties.SetAutomationId(_kitNotice, "kit-notice");
+        var kitOpen = new Button { Content = Words.KitNoticeOpen() };
+        AutomationProperties.SetAutomationId(kitOpen, "kit-notice-open");
+        kitOpen.Click += (_, _) =>
+        {
+            Act.Send(new Call.ShellKitNoticeDismiss());
+            _kitNotice.IsOpen = false;
+            OpenSettingsAt(AccountFlows.Id(AccountFlow.Security));
+        };
+        _kitNotice.ActionButton = kitOpen;
+        _kitNotice.CloseButtonClick += (_, _) => Act.Send(new Call.ShellKitNoticeDismiss());
+        ToolTipService.SetToolTip(_kitNotice, Words.KitNoticeDismiss());
         _gone = new InfoBar { IsOpen = false, IsClosable = true, Severity = InfoBarSeverity.Informational, Margin = new Thickness(12, 0, 12, 4) };
         AutomationProperties.SetAutomationId(_gone, "offline-gone");
         _said = new InfoBar { IsOpen = false, IsClosable = true, Margin = new Thickness(12, 0, 12, 4) };
@@ -202,8 +218,11 @@ internal sealed class ShellView
         content.Children.Add(chips);
         Grid.SetRow(head, 1);
         content.Children.Add(head);
-        Grid.SetRow(_offline, 2);
-        content.Children.Add(_offline);
+        var banners = new StackPanel();
+        banners.Children.Add(_offline);
+        banners.Children.Add(_kitNotice);
+        Grid.SetRow(banners, 2);
+        content.Children.Add(banners);
         Grid.SetRow(_gone, 3);
         content.Children.Add(_gone);
         Grid.SetRow(_said, 4);
@@ -413,6 +432,8 @@ internal sealed class ShellView
         // the writes made offline waiting to be sent, counted under the offline banner (ShellModel.queuedBanner)
         _offline.Message = string.Join("\n", new[] { shown.offlineBanner, shown.queuedBanner }.OfType<Notice>().Select(Said.Notice));
         _offline.IsOpen = shown.offlineBanner is not null || shown.queuedBanner is not null;
+        if (shown.kitNotice is { } news) _kitNotice.Message = $"{Said.Notice(news)} {Words.KitStatusKeepsWorking()}";
+        _kitNotice.IsOpen = shown.kitNotice is not null;
         // what the reconnect sent and what now needs the person, said once, then told seen (Shell.QueuedSaidSeen)
         var sent = string.Join("\n", shown.queuedSaid.Select(Said.Notice));
         if (sent != _queuedSaid)
