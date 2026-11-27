@@ -26,8 +26,12 @@ as decision 6's amendment of 2026-11-26 decides them (inbox #461), then retire t
   `veyqctl restore --objects-from`, and reads it with the candidate's reader and browser spec.
 - **Then** the `upgrade-proof` job goes, and every doc that names it says what proves the upgrade now.
 
-**Requires `cr-stack-lane-l2-upgrade-in-place` done**: L3 reuses its building block (a published release installed and
-seeded on the stack, the suites in a container on the stack's networks, the browser spec, the predecessor field).
+**Builds on lane L2** (built, attested since the Publish of `d5ce223da`): L3 reuses its building block —
+`scripts/stack_lane.py` and `scripts/run_stack_upgrade.py`'s install-and-seed stages (a published release installed
+and seeded on the stack, the suites in a container on the stack's networks), the browser spec
+`tests/e2e/tests/upgrade/upgrade-in-place.spec.ts`, and the predicate's `inputs` beside `predecessor`. A done-when
+below that only GitHub can show (a dispatch, a registry listing, a push's L3 run) is met after the owner's push, per
+`changes/README.md` § the done-when in two halves.
 
 ## Context & constraints
 

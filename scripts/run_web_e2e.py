@@ -1584,30 +1584,32 @@ def changed_migrations(before: dict[str, str], after: dict[str, str]) -> list[st
     return changed + removed
 
 
-# Flyway's own words for refusing a restored schema at the candidate's start (`migrate-at-start` validates first). The
-# boot log is where they land; each is named so a red proof says WHICH migration and why, not "the JVM exited".
+# Flyway's own words for refusing the predecessor's schema at the candidate's start (`migrate-at-start` validates
+# first) — restored by the jar-level proof, upgraded in place by lane L2 (`run_stack_upgrade.py`), so the sentences
+# name neither. The boot log is where they land; each is named so a red run says WHICH migration and why, not "the JVM
+# exited".
 FLYWAY_REFUSALS = (
     (re.compile(r"Migration checksum mismatch for migration version (\S+?)\.?$", re.M),
-     "Flyway refused the restored schema: migration V{} was applied by the predecessor with another checksum than "
-     "the candidate's file — a migration changed between the two builds"),
+     "Flyway refused the predecessor's schema: migration V{} was applied by the predecessor with another checksum "
+     "than the candidate's file — a migration changed between the two builds"),
     (re.compile(r"Detected applied migration not resolved locally: (\S+?)\.?$", re.M),
-     "Flyway refused the restored schema: migration V{} was applied by the predecessor and the candidate no longer "
-     "carries it"),
+     "Flyway refused the predecessor's schema: migration V{} was applied by the predecessor and the candidate no "
+     "longer carries it"),
     (re.compile(r"Detected resolved migration not applied to database: (\S+?)\.?$", re.M),
-     "Flyway refused the restored schema: the candidate's migration V{} sorts below the restored history, which "
-     "outOfOrder=false refuses"),
+     "Flyway refused the predecessor's schema: the candidate's migration V{} sorts below the predecessor's history, "
+     "which outOfOrder=false refuses"),
 )
 
 
 def flyway_cause(log_text: str) -> str | None:
-    """Name Flyway's refusal of a restored schema from a boot log, or None when the log holds none."""
+    """Name Flyway's refusal of the predecessor's schema from a boot log, or None when the log holds none."""
     for pattern, sentence in FLYWAY_REFUSALS:
         found = pattern.search(log_text)
         if found:
             return sentence.format(found.group(1))
     if "Validate failed" in log_text:
         line = next(line for line in log_text.splitlines() if "Validate failed" in line)
-        return f"Flyway refused the restored schema: {line.strip()[-300:]}"
+        return f"Flyway refused the predecessor's schema: {line.strip()[-300:]}"
     return None
 
 
