@@ -2502,7 +2502,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      */
     private suspend fun openReceived(parts: Composition<A, T>, text: String): Answer {
         // an invite opens its join, not a guest view (ADR 0111, ADR 0129): its fragment stays in the join's model
-        me.raddatz.veyq.mobile.sharing.ReceivedLink.inviteOf(text)?.let { invite ->
+        // the invite dialog's Copy copies the whole message: the one link in it is read as a shared text's is
+        val inviteText = (me.raddatz.veyq.mobile.sharing.SharedText.linkIn(text) as? me.raddatz.veyq.mobile.sharing.SharedText.Found.One)?.text
+        (me.raddatz.veyq.mobile.sharing.ReceivedLink.inviteOf(text) ?: inviteText?.let(me.raddatz.veyq.mobile.sharing.ReceivedLink::inviteOf))?.let { invite ->
             val join = parts.join(invite) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
             val id = ids.incrementAndFetch().also { joins.put(it, HeldFlow(join, "") { j -> j.close() }) }
             scope.launch { join.load() }

@@ -252,7 +252,8 @@ internal static class InviteDialog
                 Log.Write($"{id}: copied");
                 var mine = ++round;
                 label.Text = Words.MembersLinkCopied();
-                await Task.Delay(Lives.Copied ?? TimeSpan.FromSeconds(2));
+                if (Lives.Copied is not { } life) return;
+                await Task.Delay(life);
                 if (mine == round) label.Text = word;
             }
             catch (Exception e)

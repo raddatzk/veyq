@@ -112,11 +112,6 @@ class TenantJoin internal constructor(
         /** *Open the space* is offered: the join is done and this flow still holds the sign-in. */
         val canOpen: Boolean = false,
     ) {
-        private val variant = when {
-            handover -> 2
-            role == Role.MEMBER -> 1
-            else -> 0
-        }
 
         /** The invitation's line: to own, to join, or to take over. */
         val intro: Notice = Notice(pick(Msg.JOIN_INVITED_TO, Msg.JOIN_INVITED_TO_MEMBER, Msg.JOIN_INVITED_TO_HANDOVER), tenantName, domain)
@@ -150,9 +145,10 @@ class TenantJoin internal constructor(
 
         @Serializable(with = MsgKey::class) val codeLabel: Msg = if (codeMode == Invites.Mode.CODE) Msg.JOIN_CODE else Msg.JOIN_INVITE_PASSWORD
 
-        private fun pick(owner: Msg, member: Msg, handover: Msg) = when (variant) {
-            2 -> handover
-            1 -> member
+        // a function, not a field: the variant is no part of the wire
+        private fun pick(owner: Msg, member: Msg, handover: Msg) = when {
+            this.handover -> handover
+            role == Role.MEMBER -> member
             else -> owner
         }
     }
