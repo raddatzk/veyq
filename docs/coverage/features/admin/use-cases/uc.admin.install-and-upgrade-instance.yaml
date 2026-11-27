@@ -5,9 +5,14 @@ status: planned
 # Refined 2026-10-16 with ADR 0096 (cr-veyqctl). Its client is `veyqctl`, a host-side Python tool, and a Python
 # operator tool is not a coverage surface (ADR 0040) — the same shape as uc.admin.back-up-and-restore-instance's
 # store leg. So this file stays `planned` even once built: its criteria are proven by `src/tools/veyqctl_selftest.py`
-# (no Docker) and by the stack lane booting the candidate through `veyqctl install` (ADR 0090), never by a ref here.
+# (no Docker) and by the stack lanes, never by a ref here: lane L1 boots the candidate through `veyqctl install
+# --unsigned-local` (ADR 0090), and lane L2 (`scripts/run_stack_upgrade.py`, checks.yml's `stack-upgrade`, ADR 0091
+# decision 6) runs `install` VERIFIED from a published release (the newest, and the major entry), then that release's
+# own `upgrade` to the candidate and `rollback` to the backup the upgrade took — the criteria it exercises name it below.
+# Green locally from v1.318 and v0.2480 (2026-11-27); its CI job's first run is still to come.
 acceptanceCriteria:
   - id: install-from-a-verified-release
+    # Lane L2's install stage: the starting release's own veyqctl, its manifest and both images verified (install.log).
     text: >-
       `veyqctl install` brings an instance up from the recipe a release carries and the images it names by digest,
       after both signatures verified, with every secret in `.env` generated and none taken from the template.
@@ -26,6 +31,7 @@ acceptanceCriteria:
       mirror or a directory alike — or whose images do not verify by the manifest's digests, is neither pulled nor
       started, no sha256 or digest in that manifest is used, and nothing on the host changes.
   - id: an-upgrade-backs-up-before-it-migrates
+    # Lane L2's upgrade stage: red unless the upgrade left exactly one capture `*-before-<candidate>` and the key apart.
     text: >-
       An upgrade takes a backup of the three legs — the database, the store's index (and, when a pool is configured,
       the new objects into it), and the key to a separate medium — before the new release's app starts and migrates
@@ -55,18 +61,36 @@ acceptanceCriteria:
       untested release is refused with nothing written and the app kept down; and the chart refuses an install that
       neither names the claim nor switches the gate off.
   - id: the-previous-release-stays-on-disk
+    # Lane L2 runs its upgrade AND its rollback with `releases/<start>/veyqctl`, which only that release's staying on
+    # disk makes possible.
     text: >-
       After an upgrade, successful or not, the previous release's recipe is still in `releases/`, so the way back is
       a restore onto it rather than a download.
   - id: a-rollback-goes-back-in-place
     # ADR 0096, ADR 0056 §7 (owner 2026-10-17, O1 (a)). Held by src/tools/veyqctl_selftest.py `test_rollback` (the
     # order, and three refusals that stop nothing) and run live on a throwaway Compose project
-    # (2026-10-17, cr-backup-store-leg-is-an-index) — a host tool, not a coverage surface.
+    # (2026-10-17, cr-backup-store-leg-is-an-index) — a host tool, not a coverage surface. Lane L2's rollback stage runs it
+    # after every upgrade, and the starting release's own reader opens every item afterwards.
     text: >-
       `veyqctl rollback` takes an instance back to the release a capture was taken under on the instance itself:
       refused, with nothing stopped, unless that release is still in `releases/` and the capture verifies against
       the live store; then the database is emptied, the release started once, and the capture restored with the
       check only — the store is never written.
+  - id: an-upgrade-in-place-keeps-every-item
+    # ADR 0091 decision 6, amended 2026-11-26. Lane L2 (`scripts/run_stack_upgrade.py`): the starting release's own
+    # seeder writes the record's items, that release's `veyqctl upgrade` takes the instance to the candidate, the
+    # candidate's `upgrade.b-read.e2e.test.ts` opens every item byte for byte and the browser spec opens the Memory and
+    # the Depot files. Green locally from v1.318 and v0.2480 (2026-11-27); a stack ref once a CI log shows it ran.
+    text: >-
+      An instance upgraded in place with `veyqctl upgrade` — from the newest release, or from the last release of the
+      previous major — opens every item it held before: the config-secret key first, then each Memory, photo and file
+      byte for byte, and in a browser for its owner signed in on a new device.
 gaps:
   backend: "Not a backend use-case: the instance is managed from the host by `veyqctl`, a Python operator tool, and on Kubernetes backed up by the chart's gate (`src/tools/instance_backup.py gate`, held by `src/tools/instance_backup_selftest.py` and `scripts/chart_meta_check.py`) — neither a coverage surface (ADR 0040)."
   web: "No client surface: the operator works at the shell with `veyqctl`; the Server Owner's console is unchanged by this use-case."
+  stack: >-
+    Lane L2's browser half (`tests/e2e/tests/upgrade/upgrade-in-place.spec.ts`, run by `scripts/run_stack_upgrade.py`
+    after `veyqctl upgrade` took an instance of a published release to the candidate in place) signs in as the owner
+    the starting release's own seeder wrote and opens the seeded Memory and Depot files, tagged
+    `an-upgrade-in-place-keeps-every-item`. ADR 0040 admits `stack` refs only once a CI run's log shows the suite executed; on that
+    run the file becomes a ref on that criterion, and this gap goes.

@@ -1,8 +1,11 @@
 # ADR 0091 — One pipeline per commit, every stage on a budget; a release promotes a tested snapshot
 
 - Status: Accepted
-- Built: partly (not built: decision 3's lanes L2 and L3, decision 5's rerun of moved lanes — a promotion refuses an
-  input it cannot compare instead — and the snapshot retention job, decision 6, decision 7; decision 5's snapshot —
+- Built: partly (not built: decision 3's lane L3, decision 5's rerun of moved lanes — a promotion refuses an input it
+  cannot compare, and lane L2's predecessor when it moved, instead — and the snapshot retention job, decision 6's
+  archive and L3, decision 7; lane L2 is built as decision 6's amendment of 2026-11-26 decides it —
+  `scripts/run_stack_upgrade.py`, checks.yml's `stack-upgrade`, attested per leg with the release it upgraded from and
+  required by the promotion (cr-stack-lane-l2-upgrade-in-place); decision 5's snapshot —
   weekly and by dispatch since its amendment of 2026-11-07, per green push before — its attestations, its `snapshot-`
   tag, the staging retention (first run 2026-11-23) and the promotion `release.yml` are built, and since its amendment of 2026-11-22 the release draft Publish writes — v1.312
   and v1.318 were released from such drafts)
@@ -72,8 +75,8 @@ Three structural costs sat on top of what a run took:
      Now `checks.yml` runs on every push and pull request; a push to `main` or `release/<major>.x` **stages** its images
      — the per-arch `build-<sha>-<arch>` tags, unsigned, pulled by digest by its lanes, whose green legs record what
      they installed. **Publish** (`publish.yml`, weekly and on a dispatch) runs no pipeline and builds nothing: it finds
-     HEAD's newest Checks push run, refuses unless that run concluded `success` with its gate and every lane leg on
-     both architectures green, and then signs and names exactly the digests that run staged and its lanes recorded
+     HEAD's newest Checks push run, refuses unless that run concluded `success` with its gate and every leg of every
+     lane's matrix green (L1 on both architectures), and then signs and names exactly the digests that run staged and its lanes recorded
      (decision 5). The signing is Publish's own: keyless signing names the file that holds the signing job. A pull
      request's run holds no write (`build` runs on a push alone and is the one job with `packages: write`; a pull
      request builds the same matrix and steps as `build-local`).
@@ -252,6 +255,52 @@ several, or one on another tag is refused (`scripts/promote.py` check 1). A save
    (ADR 0085 decision 10), the only release [ADR 0096](0096-veyqctl-manages-an-instance-from-immutable-releases.md) §5
    enters a new major from. Before the first release the archive is empty, L2 upgrades from the previous snapshot, and
    both inform and gate nothing, as ADR 0057 §7 says for the upgrade proof.
+   - **Amended 2026-11-26 (owner: compatibility is between releases, and L3 restores per schema state; the rest
+     decided in refinement, inbox #453 and #461): what L2 and L3 write and read, where the archive comes from, and
+     which backups L3 restores.** An operator only ever runs a release (ADR 0096) and may upgrade from any release of
+     the major, so what must hold is release → candidate, never commit → commit. Every commit is still tested, because
+     every commit on `main` may become the next release (decision 5); what a lane starts from is a release.
+     1. **The write half is the starting release's own; the read half is the candidate's.** Both lanes write with the
+        API upgrade seeder of the starting release's tree (`upgrade.a-seed.e2e.test.ts`, the pair the jar-level proof
+        runs, present unchanged in every release since v0.2480) against that release's own signed images, and read
+        with the candidate's reader (`upgrade.b-read.e2e.test.ts`) against the candidate, the versioned record
+        (`upgradeRecord.ts`) between them. One Playwright spec of the candidate's then opens the seeded content in a
+        browser. Not a new browser write half, and not decision 3's split of the scenarios: a browser write half
+        would exist only from the next release on, so every release before it would be written by today's test code
+        against an older interface — the half that breaks would be the test's, not the product's. The seeder uses
+        nothing only the e2e profile serves and makes three requests on the per-IP budget of 60 a minute (measured
+        2026-11-26 by a static trace of the suites against the rate-limit annotations), so it runs on the production
+        recipe unchanged.
+     2. **L2 upgrades with the starting release's `veyqctl`**, the tool its operator has installed — which is also the
+        lane ADR 0096's minor promise (decision 9) was missing. It runs from the newest release and, in a leg of its
+        own, from the major entry, crossing the major in place as an operator would. After the read it rolls back to
+        the backup the upgrade took and reads again with the starting release's own reader, so the recovery the
+        upgrade names on a failure has been run.
+     3. **The archive is written by a workflow of its own after the promotion, not taken from L1.** It installs the
+        published release, writes with that release's seeder, takes `veyqctl backup` with its object pool and its
+        kept-apart key, and publishes the result as an OCI artifact beside the release's images, signed keylessly
+        under that workflow's identity, which L3 verifies. One path for every release, including the ones released
+        before it: none of those has a capture (L1 never takes one, and the jar-level proof's are kept seven days),
+        so each is written once by the same workflow, dispatched with its tag. Every release is archived, not only
+        the ones L3 restores, so the selection below can change without a backup missing.
+     4. **L3 restores one backup per schema state, not one per release.** A release's schema state is its highest
+        migration, read from its own `scripts/applied_migrations.sha256`. Within the candidate's major L3 restores the
+        oldest release of each state, plus the major entry — derived from the tags and their pin files, never listed.
+        Flyway runs the same migrations in the same order from any release of a state, so the state, not the
+        release, is what the database path depends on: on 2026-11-26 the eighteen releases fell into four states
+        plus the entry. The cost grows with a major's migrations, not its releases, and resets with each major, where
+        only the entry carries over. **Its limit:** a release that writes a new data format without a migration is
+        covered only at the edges of its state — the oldest release by L3, the newest by L2. A format first written
+        by a release in the middle of a state and changed again before the state ends is never restored. A data
+        format version of its own would close that; it is not decided.
+     5. **When.** L2 on every pull request and push; L3 on a push, its backups spread over as many legs as decision
+        1's budget needs, not on a pull request, which keeps L2. A backup the selection names that is not archived is
+        red — a defect, never a skip. **Both on amd64 alone** (amended 2026-11-27, owner): what they prove is the data
+        path — Flyway's SQL on the one pinned MariaDB, the dump through the pinned vendor image, ciphertext — and no
+        architecture changes it; what an architecture does change (the image's start, its native code, the features)
+        is lane L1's, on every architecture the build publishes. Decision 4's rule that what is published for an
+        architecture has passed on it holds through L1; a data-path lane runs on a published architecture, never on
+        one L1 did not boot (`scripts/validate_release_identity.py`, `snapshot.py`, `promote.py`).
 
 7. **The jar-level upgrade proof retires when L2 and L3 gate.** They prove the same data path on the artifact that
    ships; ADR 0057 §7 then names them. The API end-to-end suites stay: fast, fresh per file, and where a wire defect is

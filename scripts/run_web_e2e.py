@@ -1836,10 +1836,15 @@ def predecessor_web_sources(commit: str) -> list[str]:
                *(f"{path}/src" for path in repo_layout.surface_paths(repo_layout.WEB))).splitlines()
 
 
-def prepare_predecessor(ref: str | None, workdir: Path) -> Predecessor:
+def prepare_predecessor(ref: str | None, workdir: Path, *, jar: bool = True,
+                        install_args: tuple[str, ...] = ()) -> Predecessor:
     """A detached worktree of the predecessor in the run directory, built as its own CI would: its web dependencies
     installed (which generates its client — `web`'s `prepare`) and its fast-jar built. Its suites run from there, never
     from this tree ([Build]); [remove_predecessor] deletes it once the group has run.
+
+    Lane L2 (`run_stack_upgrade.py`) builds its starting release's tree here too, without the jar (`jar=False`: its
+    instance runs the release's published images) and, on a host whose platform is not the suite container's,
+    with `install_args` — the extra `--os`/`--cpu`/`--libc` a pnpm install takes for that container's native packages.
 
     The install is a plain install of the predecessor's lockfile, not `pnpm_install_no_deprecated.py`: that lockfile
     passed the gate when it was the candidate, and a package deprecated SINCE would turn an upgrade proof red for a
@@ -1857,10 +1862,16 @@ def prepare_predecessor(ref: str | None, workdir: Path) -> Predecessor:
     atexit.register(remove_worktree, tree)
     # The predecessor's surfaces where ITS layout puts them, which may be the one before ADR 0106 stage 2.
     backend, web = repo_layout.surface_in(tree, repo_layout.BACKEND), repo_layout.surface_in(tree, repo_layout.WEB)
-    install = (["pnpm", "install", "--frozen-lockfile"] if (tree / "pnpm-lock.yaml").is_file()
-               else ["npm", "ci", "--no-audit", "--no-fund"])
-    for label, cmd, cwd in (("install", install, tree),
-                            ("gradle", ["./gradlew", "--no-daemon", "--console=plain", "quarkusBuild"], backend)):
+    if (tree / "pnpm-lock.yaml").is_file():
+        install = ["pnpm", "install", "--frozen-lockfile", *install_args]
+    elif install_args:
+        raise SystemExit(f"[e2e] UPGRADE PROOF: the predecessor {asked} installs with npm, which takes no {install_args}")
+    else:
+        install = ["npm", "ci", "--no-audit", "--no-fund"]
+    steps = [("install", install, tree)]
+    if jar:
+        steps.append(("gradle", ["./gradlew", "--no-daemon", "--console=plain", "quarkusBuild"], backend))
+    for label, cmd, cwd in steps:
         out = workdir / f"predecessor-{label}.log"
         log(f"upgrade proof: building the predecessor ({' '.join(cmd)}) -> {shown(out)}")
         with out.open("w") as handle:
@@ -1868,11 +1879,11 @@ def prepare_predecessor(ref: str | None, workdir: Path) -> Predecessor:
         if result.returncode != 0:
             tail(out)
             raise SystemExit(f"[e2e] UPGRADE PROOF: the predecessor's {label} step failed (exit {result.returncode})")
-    jar = backend / JAR_IN_BACKEND
-    if not jar.is_file() or not (web / "src" / "api" / "generated").is_dir():
-        raise SystemExit(f"[e2e] UPGRADE PROOF: the predecessor built no jar at {shown(jar)} or generated no client")
+    built = backend / JAR_IN_BACKEND
+    if (jar and not built.is_file()) or not (web / "src" / "api" / "generated").is_dir():
+        raise SystemExit(f"[e2e] UPGRADE PROOF: the predecessor built no jar at {shown(built)} or generated no client")
     return Predecessor(asked, commit, git("show", f"{commit}:{PIN_FILE}"),
-                       Build(f"predecessor {commit[:12]}", tree, jar))
+                       Build(f"predecessor {commit[:12]}", tree, built))
 
 
 def remove_predecessor(predecessor: Predecessor | None) -> None:

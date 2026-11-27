@@ -1177,6 +1177,240 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  # Lane L2 (ADR 0091 decision 6, amended 2026-11-26; scripts/run_stack_upgrade.py): a published release installed by its
+  # own veyqctl from its published files, verified under the release identity, written by its own API seeder, upgraded
+  # in place to this candidate by that release's own `veyqctl upgrade`, read by the candidate's reader and in a browser
+  # by its one spec, rolled back by the release's `veyqctl rollback` and read again by the release's own reader. Two
+  # legs: the newest release and the candidate's major entry (the jar-level proof's resolution, `--resolve`). A leg that
+  # resolves to nothing — the major entry while it is the newest release, or none — builds and installs nothing and
+  # passes, saying why, and still records that it had no release to start from, so every leg of the matrix is attested.
+  # amd64 alone, on a pull request and a push (ADR 0091 decision 6, amended 2026-11-27): what this lane proves is the data
+  # path — Flyway's SQL on the pinned MariaDB, the dump through the pinned vendor image, ciphertext — which no
+  # architecture changes; what does is lane L1's, on every architecture the build publishes.
+  stack-upgrade:
+    name: Stack lane L2 (${{ matrix.arch }}, ${{ matrix.leg }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # As lane L1's, for its reasons: the images this lane builds or pulls install a lockfile `frontend` has passed.
+    needs:
+      - version
+      - frontend
+      - build
+    if: >-
+      !cancelled() && needs.version.result == 'success' && needs.frontend.result == 'success'
+      && contains(fromJSON('["success", "skipped"]'), needs.build.result)
+    permissions:
+      contents: read
+      packages: read # a staging run pulls the staged images by digest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64]
+        leg: [newest, major-entry]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Every tag and the whole history: the leg's starting release is resolved from the tags (the major entry
+          # among every one, a `release/<old>.x` fix included), and the candidate's release counts its commits.
+          fetch-depth: 0
+
+      - name: Set up the orchestrator's Python
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/stack-venv"
+          "${RUNNER_TEMP}/stack-venv/bin/pip" install --quiet --require-hashes --only-binary :all: -r scripts/requirements-release.txt
+
+      - name: Resolve the starting release (${{ matrix.leg }})
+        id: predecessor
+        env:
+          LEG: ${{ matrix.leg }}
+        run: |
+          set -euo pipefail
+          "${RUNNER_TEMP}/stack-venv/bin/python" scripts/run_stack_upgrade.py --leg "$LEG" --resolve | tee "${RUNNER_TEMP}/resolve.log"
+          ref="$(sed -n 's/^predecessor=//p' "${RUNNER_TEMP}/resolve.log" | tail -n 1)"
+          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        if: steps.predecessor.outputs.ref != ''
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+
+      # pnpm at exactly the version package.json pins in `packageManager` (validate_pnpm_installs_gated.py holds
+      # the two equal). GitHub's runner only: a local run (scripts/run_pipeline.py) uses the host's pnpm, which
+      # switches itself to the pinned version.
+      - name: Install pnpm
+        if: steps.predecessor.outputs.ref != '' && runner.environment == 'github-hosted'
+        run: npm install -g pnpm@12.23.0
+
+      # The OpenAPI generator JAR, cached and verified as `frontend`'s says.
+      - name: Restore the OpenAPI generator JAR
+        if: steps.predecessor.outputs.ref != ''
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.openapi-generator
+          key: openapi-generator-jar-${{ hashFiles('scripts/openapi_generator_jar.sha256', 'src/web/openapitools.json', 'src/admin-web/openapitools.json') }}
+
+      # The candidate's reader and browser spec run from this install (the browser container mounts it read-only; the
+      # suite container runs its vitest). The starting release's tree is installed by the orchestrator, in a worktree of
+      # its tag. The registry half is asked once per commit, by `frontend`.
+      - name: Install dependencies
+        if: steps.predecessor.outputs.ref != ''
+        run: python3 scripts/pnpm_install_no_deprecated.py --skip-registry-check
+
+      # The starting release's own veyqctl verifies its manifest and both images with cosign, and refuses one older than
+      # its floor: the version publish.yml signs with (scripts/validate_release_identity.py holds the three equal).
+      - name: Install cosign
+        if: steps.predecessor.outputs.ref != ''
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: v3.1.4
+
+      - name: Set up Docker Buildx
+        if: steps.predecessor.outputs.ref != '' && needs.version.outputs.kind != 'stage'
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      # A run that does not stage: the candidate is built here, as lane L1 builds it, from the cache `build` wrote.
+      - name: Build the candidate app image
+        if: steps.predecessor.outputs.ref != '' && needs.version.outputs.kind != 'stage'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: src/backend/Dockerfile
+          target: runtime-jvm
+          platforms: linux/${{ matrix.arch }}
+          push: false
+          load: true
+          provenance: false
+          sbom: false
+          tags: veyq:candidate-${{ matrix.arch }}
+          build-args: |
+            VEYQ_VERSION=${{ needs.version.outputs.version }}
+            VEYQ_REVISION=sha-${{ github.sha }}
+          cache-from: type=gha,scope=veyq-${{ matrix.arch }}
+
+      - name: Build the candidate admin image
+        if: steps.predecessor.outputs.ref != '' && needs.version.outputs.kind != 'stage'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: src/admin-web/Dockerfile
+          target: runtime-nginx
+          platforms: linux/${{ matrix.arch }}
+          push: false
+          load: true
+          provenance: false
+          sbom: false
+          tags: veyq-admin:candidate-${{ matrix.arch }}
+          build-args: |
+            VEYQ_VERSION=${{ needs.version.outputs.version }}
+            VEYQ_REVISION=sha-${{ github.sha }}
+          cache-from: type=gha,scope=veyq-admin-${{ matrix.arch }}
+
+      # Never runs on GitHub: scripts/run_pipeline.py's stand-in for the two actions above, as lane L1's.
+      - name: Build the candidate images (the host's Docker)
+        if: steps.predecessor.outputs.ref != '' && runner.environment != 'github-hosted' && needs.version.outputs.kind != 'stage'
+        env:
+          PLATFORM: linux/${{ matrix.arch }}
+          ARCH: ${{ matrix.arch }}
+          VEYQ_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          docker build --file src/backend/Dockerfile --target runtime-jvm --platform "$PLATFORM" \
+            --build-arg "VEYQ_VERSION=${VEYQ_VERSION}" --build-arg "VEYQ_REVISION=sha-${GITHUB_SHA}" \
+            --tag "veyq:candidate-${ARCH}" .
+          docker build --file src/admin-web/Dockerfile --target runtime-nginx --platform "$PLATFORM" \
+            --build-arg "VEYQ_VERSION=${VEYQ_VERSION}" --build-arg "VEYQ_REVISION=sha-${GITHUB_SHA}" \
+            --tag "veyq-admin:candidate-${ARCH}" .
+
+      # A staging run: the images `build` pushed for this architecture, by the digests it handed over — fetched by every
+      # leg, the one with no starting release included, whose record names them too.
+      - name: Log in to GitHub Container Registry
+        if: steps.predecessor.outputs.ref != '' && needs.version.outputs.kind == 'stage'
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch the digests build pushed
+        if: needs.version.outputs.kind == 'stage'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+
+      - name: Pull the candidate by digest and name it locally
+        if: steps.predecessor.outputs.ref != '' && needs.version.outputs.kind == 'stage'
+        env:
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          for image in veyq veyq-admin; do
+            digest="$(tr -d '[:space:]' < "${RUNNER_TEMP}/digests/${image}")"
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "no digest for ${image} (${ARCH}) from build: '${digest}'" >&2
+              exit 1
+            fi
+            docker pull "${REGISTRY}/${image}@${digest}"
+            docker tag "${REGISTRY}/${image}@${digest}" "${image}:candidate-${ARCH}"
+            echo "${image}:candidate-${ARCH} is ${REGISTRY}/${image}@${digest}"
+          done
+
+      # A leg with no starting release passes here, saying why, and writes the asset set of the candidate's release files
+      # and a predecessor of `null` for its record; every other leg runs the lane. `gh release download` reads the
+      # starting release's files with the job's token, so the run spends no unauthenticated API budget.
+      - name: Run lane L2 (${{ matrix.leg }})
+        env:
+          ARCH: ${{ matrix.arch }}
+          LEG: ${{ matrix.leg }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          "${RUNNER_TEMP}/stack-venv/bin/python" scripts/run_stack_upgrade.py --leg "$LEG" \
+            --app "veyq:candidate-${ARCH}" --admin "veyq-admin:candidate-${ARCH}" \
+            --asset-set-out "${RUNNER_TEMP}/asset-set" --predecessor-out "${RUNNER_TEMP}/predecessor.json"
+
+      # What this green leg ran, for the snapshot's attestation (ADR 0091 decision 5), as lane L1's records — and the
+      # release it started from, with the digests its verified manifest named (`null` for a leg with none), which the
+      # promotion compares with the one it resolves then.
+      - name: Record the leg's result
+        if: needs.version.outputs.kind == 'stage'
+        env:
+          ARCH: ${{ matrix.arch }}
+          LEG: ${{ matrix.leg }}
+        run: |
+          set -euo pipefail
+          python3 scripts/snapshot.py lane-result --lane L2 --arch "$ARCH" --shard "$LEG" --commit "$GITHUB_SHA" \
+            --asset-set "$(tr -d '[:space:]' < "${RUNNER_TEMP}/asset-set")" \
+            --image "veyq=$(tr -d '[:space:]' < "${RUNNER_TEMP}/digests/veyq")" \
+            --image "veyq-admin=$(tr -d '[:space:]' < "${RUNNER_TEMP}/digests/veyq-admin")" \
+            --predecessor "${RUNNER_TEMP}/predecessor.json" \
+            --out "${RUNNER_TEMP}/lane-result/L2-${ARCH}-${LEG}.json"
+
+      - name: Keep the leg's result
+        if: needs.version.outputs.kind == 'stage'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: lane-result-L2-${{ matrix.arch }}-${{ matrix.leg }}
+          path: ${{ runner.temp }}/lane-result/L2-${{ matrix.arch }}-${{ matrix.leg }}.json
+          if-no-files-found: error
+          # 30 days, as lane L1's: publish.yml reads them from this run.
+          retention-days: 30
+
+      # The run directory: both releases, the instance's home with its backup, every step's log, the readings, the
+      # browser's report. It holds the secrets of a throwaway instance that no longer exists.
+      - name: Keep the stack run directory
+        if: always() && steps.predecessor.outputs.ref != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: stack-upgrade-out-${{ matrix.arch }}-${{ matrix.leg }}
+          path: .e2e-stack-out/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+
   # The upgrade proof (ADR 0057 Decision 7, site/src/content/docs/run/upgrade.mdx): the predecessor's own jar and e2e
   # suites seal content into an instance, ADR 0056's tool captures it, the capture is restored onto THIS commit's build,
   # which migrates it up at its start, and this commit's suites open the content and assert it. The predecessor is the
@@ -1307,6 +1541,7 @@ jobs:
       - build
       - build-local
       - stack
+      - stack-upgrade
       - upgrade-proof
     if: >-
       always()
@@ -1323,6 +1558,7 @@ jobs:
       && contains(fromJSON('["success", "skipped"]'), needs.build.result)
       && contains(fromJSON('["success", "skipped"]'), needs.build-local.result)
       && needs.stack.result == 'success'
+      && needs.stack-upgrade.result == 'success'
       && needs.upgrade-proof.result == 'success'
     permissions:
       contents: read # reads only its needs' results; no checkout
