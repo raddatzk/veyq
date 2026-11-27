@@ -146,8 +146,11 @@ object MemberTerms {
         /** *Insert template* is offered: the starter template has this language. */
         val templated: Boolean = lang in TermsTemplate.byLanguage
 
+        /** Whether *Insert template* replaces what is written here (its question then a destructive one). */
+        val templateReplaces: Boolean = text.trim().isNotEmpty()
+
         /** The template's question: an offer into an empty text, a replacement over a written one (the web's two asks). */
-        val templateAsk: Msg = if (text.trim().isNotEmpty()) Msg.TERMS_INSERT_TEMPLATE_OVERWRITE_ASK else Msg.TERMS_INSERT_TEMPLATE_ASK
+        val templateAsk: Msg = if (templateReplaces) Msg.TERMS_INSERT_TEMPLATE_OVERWRITE_ASK else Msg.TERMS_INSERT_TEMPLATE_ASK
     }
 
     /**

@@ -42,6 +42,7 @@ class TermsDraftTest {
     fun the_template_asks_to_fill_an_empty_text_and_to_replace_a_written_one() {
         assertEquals(Msg.TERMS_INSERT_TEMPLATE_ASK, LangText("de", " ").templateAsk)
         assertEquals(Msg.TERMS_INSERT_TEMPLATE_OVERWRITE_ASK, LangText("de", "Meins").templateAsk)
+        assertEquals(listOf(false, true), listOf(LangText("de", " ").templateReplaces, LangText("de", "Meins").templateReplaces))
         val filled = none.withLanguage("de").withTemplate("de")
         assertEquals(TermsTemplate.byLanguage.getValue("de"), filled.texts.single().text)
         assertEquals(true, LangText("en", "").templated)
