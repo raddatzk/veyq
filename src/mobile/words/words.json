@@ -6717,9 +6717,9 @@
     "de": "Es wurden noch keine Bedingungen festgelegt."
   },
   "terms_readonly_note": {
-    "note": "the apps show a space's terms read-only for everyone; the web's editor is the owner's (uc.admin.tenant-terms)",
-    "en": "Only the space owner can change these terms, in the browser.",
-    "de": "Nur wer den Bereich besitzt, kann diese Bedingungen ändern, im Browser."
+    "note": "a member's Settings > Terms: the space's owner edits them",
+    "en": "Only the space owner can edit these terms.",
+    "de": "Nur wer den Bereich besitzt, kann diese Bedingungen bearbeiten."
   },
   "terms_operator_section_label": {
     "en": "Operator section",
@@ -6737,6 +6737,185 @@
   "search_words_terms": {
     "en": "terms of use, conditions, rules, operator",
     "de": "Nutzungsbedingungen, Bedingungen, AGB, Regeln, Betreiber"
+  },
+  "members_title": {
+    "note": "Settings' section of a space's members (SettingsSection.MEMBERS)",
+    "en": "Members",
+    "de": "Mitglieder"
+  },
+  "members_sub": {
+    "en": "People in this shared space and their access.",
+    "de": "Personen in diesem geteilten Bereich und ihr Zugang."
+  },
+  "members_loading": {
+    "en": "Loading members…",
+    "de": "Mitglieder werden geladen…"
+  },
+  "members_load_failed": {
+    "en": "Could not load members.",
+    "de": "Mitglieder konnten nicht geladen werden."
+  },
+  "members_empty": {
+    "en": "No members yet.",
+    "de": "Noch keine Mitglieder."
+  },
+  "members_not_authorized": {
+    "en": "You don’t have access to this space’s members.",
+    "de": "Du hast keinen Zugriff auf die Mitglieder dieses Bereichs."
+  },
+  "members_status_active": {
+    "note": "the badge every listed member carries",
+    "en": "Active",
+    "de": "Aktiv"
+  },
+  "members_pending": {
+    "note": "a member behind the space's lock, declared pending by a rotation",
+    "en": "Waiting for someone who can confirm their key",
+    "de": "Wartet auf jemanden, der den Schlüssel bestätigen kann"
+  },
+  "members_role_owner": {
+    "note": "a member's role on their row (the web prints the role's code as it is)",
+    "en": "Owner",
+    "de": "Besitzt den Bereich"
+  },
+  "members_role_member": {
+    "note": "a member's role on their row",
+    "en": "Member",
+    "de": "Mitglied"
+  },
+  "members_promote": {
+    "en": "Make co-owner",
+    "de": "Mitbesitz geben",
+    "apple_en": "Make Co-Owner"
+  },
+  "members_demote": {
+    "en": "Remove co-owner",
+    "de": "Mitbesitz entfernen",
+    "apple_en": "Remove Co-Owner"
+  },
+  "members_promoted": {
+    "en": "They own this space now too.",
+    "de": "Der Bereich gehört jetzt auch dieser Person."
+  },
+  "members_demoted": {
+    "en": "They are a member of this space again.",
+    "de": "Die Person ist wieder Mitglied dieses Bereichs."
+  },
+  "members_last_owner": {
+    "en": "A shared space needs at least one owner.",
+    "de": "Ein geteilter Bereich braucht mindestens eine besitzende Person."
+  },
+  "members_role_change_failed": {
+    "en": "Could not change the role. Please try again.",
+    "de": "Die Rolle konnte nicht geändert werden. Bitte erneut versuchen."
+  },
+  "members_remove": {
+    "en": "Remove member",
+    "de": "Mitglied entfernen",
+    "apple_en": "Remove Member"
+  },
+  "members_remove_confirm": {
+    "en": "Remove this member? They lose access to this space and its shared groups in the app right away. A link to a Memory they may have copied keeps working until it is renewed or turned off. Their own memories stay readable to them for 30 days, then are erased. This can’t be undone.",
+    "de": "Dieses Mitglied entfernen? Es verliert in der App sofort den Zugriff auf diesen Bereich und seine geteilten Gruppen. Ein Link zu einer Erinnerung, den es kopiert haben kann, funktioniert weiter, bis er erneuert oder abgeschaltet wird. Die eigenen Erinnerungen dieser Person bleiben 30 Tage lang lesbar und werden dann gelöscht. Das lässt sich nicht rückgängig machen."
+  },
+  "members_removed": {
+    "en": "Member removed.",
+    "de": "Mitglied entfernt."
+  },
+  "members_remove_revoke_links": {
+    "en": "Also turn off every link in this space",
+    "de": "Auch alle Links dieses Bereichs abschalten"
+  },
+  "members_remove_revoke_links_hint": {
+    "en": "They may have copied any of its links. Each link’s owner can renew the ones still needed.",
+    "de": "Die entfernte Person kann jeden Link dieses Bereichs kopiert haben. Wem ein Link gehört, kann die noch benötigten erneuern."
+  },
+  "members_action_failed": {
+    "en": "That action failed. Please try again.",
+    "de": "Die Aktion ist fehlgeschlagen. Bitte erneut versuchen."
+  },
+  "search_words_members": {
+    "en": "members, people, roles, owner, co-owner, remove",
+    "de": "Mitglieder, Personen, Rollen, Besitz, Mitbesitz, entfernen"
+  },
+  "terms_editor_sub": {
+    "en": "The terms members of this space agree to. Set them per language; a change asks everyone to agree again.",
+    "de": "Die Bedingungen, denen Mitglieder dieses Bereichs zustimmen. Lege sie je Sprache fest; bei einer Änderung wird erneut um Zustimmung gebeten."
+  },
+  "terms_revision": {
+    "note": "the terms' revision badge: {1} the revision",
+    "en": "Revision {1:int}",
+    "de": "Fassung {1:int}"
+  },
+  "terms_placeholder": {
+    "en": "Write the terms in Markdown…",
+    "de": "Bedingungen als Markdown schreiben…"
+  },
+  "terms_markdown_hint": {
+    "note": "{1} is the literal placeholder the owner types, `{contact}`",
+    "en": "Markdown is supported. Use {1} as a placeholder for your contact details.",
+    "de": "Markdown wird unterstützt. Nutze {1} als Platzhalter für deine Kontaktangaben."
+  },
+  "terms_insert_template": {
+    "en": "Insert template",
+    "de": "Vorlage einfügen",
+    "apple_en": "Insert Template"
+  },
+  "terms_insert_template_ask": {
+    "note": "{1} a language's own name",
+    "en": "Fill {1} with the starter template? It is a draft — edit it before you save.",
+    "de": "{1} mit der Startvorlage füllen? Sie ist ein Entwurf — passe sie vor dem Speichern an."
+  },
+  "terms_insert_template_overwrite_ask": {
+    "note": "{1} a language's own name",
+    "en": "Replace the {1} terms with the starter template? What is written there now is lost.",
+    "de": "Die Bedingungen auf {1} durch die Startvorlage ersetzen? Was dort jetzt steht, geht verloren."
+  },
+  "terms_remove_lang_ask": {
+    "note": "{1} a language's own name",
+    "en": "Remove the {1} terms? Once you save they are gone from this space, and because the terms changed every member is asked to agree again.",
+    "de": "Die Bedingungen auf {1} entfernen? Mit dem Speichern sind sie aus diesem Bereich verschwunden, und weil sich die Bedingungen geändert haben, werden alle Mitglieder erneut um Zustimmung gebeten."
+  },
+  "terms_remove_lang": {
+    "note": "{1} a language's own name",
+    "en": "Remove {1}",
+    "de": "{1} entfernen"
+  },
+  "terms_blank_locale_warning": {
+    "note": "{1} the blank languages' names, comma-separated",
+    "en": "No text yet: {1}. A language with nothing written in it is not saved — it will be gone when the page reloads.",
+    "de": "Noch ohne Text: {1}. Eine Sprache ohne Inhalt wird nicht gespeichert — nach dem Neuladen ist sie wieder weg."
+  },
+  "terms_add_language": {
+    "en": "Add language",
+    "de": "Sprache hinzufügen",
+    "apple_en": "Add Language"
+  },
+  "terms_language_label": {
+    "en": "Language",
+    "de": "Sprache"
+  },
+  "terms_preview": {
+    "en": "Preview",
+    "de": "Vorschau"
+  },
+  "terms_save": {
+    "en": "Save terms",
+    "de": "Bedingungen speichern",
+    "apple_en": "Save Terms"
+  },
+  "terms_saved": {
+    "note": "{1} the new revision",
+    "en": "Saved — now revision {1:int}.",
+    "de": "Gespeichert — jetzt Fassung {1:int}."
+  },
+  "terms_save_failed": {
+    "en": "Couldn’t save the terms.",
+    "de": "Bedingungen konnten nicht gespeichert werden."
+  },
+  "terms_not_owner": {
+    "en": "Only the space owner can edit the terms.",
+    "de": "Nur wer den Bereich besitzt, kann die Bedingungen bearbeiten."
   },
   "share_note_title": {
     "en": "Please read this note",

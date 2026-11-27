@@ -892,6 +892,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.SessionSignInLocked, Call.SessionSignOutEverywhere, Call.SessionLockedBack, is Call.SessionForgotPassword,
             is Call.SessionRequestRecovery, Call.SessionBackToSignIn, Call.LockedPlan, is Call.RecoverPlan,
             Call.SessionAcceptTerms, Call.SettingsTerms -> signInEntries(call, session)
+            Call.SettingsTermsEditing, is Call.SettingsTermsEdit, is Call.SettingsTermsSave, Call.SettingsMembers, is Call.SettingsMemberRole, is Call.SettingsMemberRemove -> members(call)
             is Call.SessionForgetDevice -> {
                 val account = session.accounts.firstOrNull { it.key == call.connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
                 session.forgetDevice(account)
@@ -2754,6 +2755,29 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         Call.SettingsTerms -> tenant.value?.models?.session?.let { Answer.Terms(me.raddatz.veyq.mobile.session.MemberTerms.page(it, parts.await().language)) } ?: noTenant
         is Call.RecoverPlan -> Answer.RecoverPlan(me.raddatz.veyq.mobile.session.RecoverPlan.entries(call.sent))
         else -> error("not a sign-in entry's call: $call")
+    }
+
+    /**
+     * Settings' Members and the owner's terms editor (uc.spaces.remove-tenant-member, uc.admin.tenant-terms), dispatched
+     * apart: the dispatch's one method is at the JVM's size limit. Every rule is the core's (`TenantMembers`, `MemberTerms`).
+     */
+    private suspend fun members(call: Call): Answer = when (call) {
+        Call.SettingsTermsEditing -> tenant.value?.models?.session?.let { Answer.TermsEditing(me.raddatz.veyq.mobile.session.MemberTerms.editing(it, parts.await().language)) } ?: noTenant
+        is Call.SettingsTermsEdit -> {
+            val d = call.draft
+            val next = when (call.change) {
+                TermsChange.TEXT -> d.withText(call.lang, call.text)
+                TermsChange.ADD -> d.withLanguage(call.lang)
+                TermsChange.REMOVE -> d.without(call.lang)
+                TermsChange.TEMPLATE -> d.withTemplate(call.lang)
+            }
+            Answer.TermsDrafted(next, next.preview(parts.await().language))
+        }
+        is Call.SettingsTermsSave -> tenant.value?.models?.session?.let { me.raddatz.veyq.mobile.session.MemberTerms.save(it, call.draft).let { s -> Answer.TermsSaved(s.draft, s.notice) } } ?: noTenant
+        Call.SettingsMembers -> tenant.value?.models?.session?.let { Answer.Members(it.members.read()) } ?: noTenant
+        is Call.SettingsMemberRole -> tenant.value?.models?.session?.let { it.members.setRole(call.userId, call.owner).let { o -> Answer.MembersChanged(o.done, o.notice) } } ?: noTenant
+        is Call.SettingsMemberRemove -> tenant.value?.models?.session?.let { it.members.remove(call.userId, call.revokeLinks).let { o -> Answer.MembersChanged(o.done, o.notice) } } ?: noTenant
+        else -> error("not a members' call: $call")
     }
 
     private suspend fun selecting(call: Call): Answer = when (call) {

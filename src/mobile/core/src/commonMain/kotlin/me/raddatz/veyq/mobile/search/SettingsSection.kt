@@ -14,7 +14,7 @@ import me.raddatz.veyq.mobile.words.Msg
  * cr-apps-structure-from-core-plans' Q3): appearance, maps, sessions, password, add a device, security, profile, erase —
  * `SettingsOrderIsTheWebsTest` reads it there — with the app-only sections beside their kin: offline storage after maps,
  * this device and saved keys after sessions, the account and its address (the apps' own) where the web's password is;
- * then the tenant's sections the apps offer, in the web's tenant order — Who's who, then the terms (read-only); Sign out
+ * then the tenant's sections the apps offer, in the web's tenant order — the members, Who's who, then the terms; Sign out
  * ends the list, as it ends the apps' page. The web's sections the apps do not offer (trust reset, moderation, the
  * tenant's others) arrive with those sections.
  */
@@ -34,6 +34,12 @@ enum class SettingsSection(val id: String, val word: Msg, val keywords: Msg) {
     SECURITY("security", Msg.ROTATION_TITLE, Msg.SEARCH_WORDS_SECURITY),
     PROFILE("profile", Msg.PROFILE_TITLE, Msg.SEARCH_WORDS_PROFILE),
     ERASE("erase", Msg.ERASURE_TITLE, Msg.SEARCH_WORDS_ERASE),
+    /**
+     * The open tenant's members (uc.spaces.remove-tenant-member; the web's tenant section `tenant-members`, every
+     * member's): the roster with each role, an owner's acts on its rows ([me.raddatz.veyq.mobile.session.TenantMembers]).
+     * The web's tenant category leads with it, before Who's who.
+     */
+    MEMBERS("tenant-members", Msg.MEMBERS_TITLE, Msg.SEARCH_WORDS_MEMBERS),
     /**
      * Who's who in the open tenant (uc.spaces.enforce-verified-identities main flow 5; the web's tenant section
      * `tenant-people`, every member's): every other member's state there, a row opening their profile
@@ -67,7 +73,7 @@ enum class SettingsSection(val id: String, val word: Msg, val keywords: Msg) {
                 STORAGE -> gates.storage
                 MAPS -> gates.maps
                 APPEARANCE -> gates.appearance
-                SESSIONS, DEVICE, SAVED_KEYS, ACCOUNT, EMAIL, PASSWORD, SECURITY, PROFILE, ERASE, WHOS_WHO, TERMS, SIGN_OUT -> true
+                SESSIONS, DEVICE, SAVED_KEYS, ACCOUNT, EMAIL, PASSWORD, SECURITY, PROFILE, ERASE, MEMBERS, WHOS_WHO, TERMS, SIGN_OUT -> true
             }
         }
 

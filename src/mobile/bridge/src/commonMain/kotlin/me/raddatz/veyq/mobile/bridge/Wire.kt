@@ -176,6 +176,32 @@ internal sealed class Call {
     @Serializable @SerialName("Settings.Terms") data object SettingsTerms : Call()
 
     /**
+     * Settings' Terms for the caller (`MemberTerms.editing`, uc.admin.tenant-terms): the read-only page, and for an owner
+     * the editor's draft. [Answer.TermsEditing]; its `editing` null where they did not read; refused without a tenant.
+     */
+    @Serializable @SerialName("Settings.TermsEditing") data object SettingsTermsEditing : Call()
+
+    /**
+     * One change to the owner's draft (`MemberTerms.TermsDraft`): [change] applied to [draft] with [lang] (and [text] for
+     * [TermsChange.TEXT]). [Answer.TermsDrafted] with the new draft and its preview in the host's language. No tenant needed.
+     */
+    @Serializable @SerialName("Settings.TermsEdit") data class SettingsTermsEdit(
+        val draft: me.raddatz.veyq.mobile.session.MemberTerms.TermsDraft, val change: TermsChange, val lang: String, val text: String = "",
+    ) : Call()
+
+    /** The owner's *Save terms* (`MemberTerms.save`): [Answer.TermsSaved], the server's draft or null, and what is said. */
+    @Serializable @SerialName("Settings.TermsSave") data class SettingsTermsSave(val draft: me.raddatz.veyq.mobile.session.MemberTerms.TermsDraft) : Call()
+
+    /** Settings' Members (`TenantMembers.read`, uc.spaces.remove-tenant-member): the roster read anew. [Answer.Members]; refused without a tenant. */
+    @Serializable @SerialName("Settings.Members") data object SettingsMembers : Call()
+
+    /** *Make co-owner* ([owner]) or *Remove co-owner* on [userId]'s row (`TenantMembers.setRole`): [Answer.MembersChanged]. */
+    @Serializable @SerialName("Settings.MemberRole") data class SettingsMemberRole(val userId: String, val owner: Boolean) : Call()
+
+    /** *Remove member* after its question, every link of the space off too where [revokeLinks] (`TenantMembers.remove`): [Answer.MembersChanged]. */
+    @Serializable @SerialName("Settings.MemberRemove") data class SettingsMemberRemove(val userId: String, val revokeLinks: Boolean) : Call()
+
+    /**
      * "Manage servers" opened: [Watched.Manage] delivers every server with its trust from now on, each tenant's spaces as
      * they read; [ManageClose] ends it (null again).
      */
@@ -2056,6 +2082,21 @@ internal sealed class Answer {
 
     /** [Call.SettingsTerms]: the open tenant's terms as Settings shows them; null where they did not read. */
     @Serializable @SerialName("Terms") data class Terms(val shown: me.raddatz.veyq.mobile.session.MemberTerms.TermsShown?) : Answer()
+
+    /** [Call.SettingsTermsEditing]: Settings' Terms as the caller may use them; null where they did not read. */
+    @Serializable @SerialName("TermsEditing") data class TermsEditing(val editing: me.raddatz.veyq.mobile.session.MemberTerms.TermsEditing?) : Answer()
+
+    /** [Call.SettingsTermsEdit]: the draft changed, and its preview in the host's language. */
+    @Serializable @SerialName("TermsDrafted") data class TermsDrafted(val draft: me.raddatz.veyq.mobile.session.MemberTerms.TermsDraft, val preview: String) : Answer()
+
+    /** [Call.SettingsTermsSave]: the server's draft the editor shows from now on (null where the save failed), and what is said. */
+    @Serializable @SerialName("TermsSaved") data class TermsSaved(val draft: me.raddatz.veyq.mobile.session.MemberTerms.TermsDraft?, val notice: Notice) : Answer()
+
+    /** [Call.SettingsMembers]: the roster, or the one line said in its place. */
+    @Serializable @SerialName("Members") data class Members(val roster: me.raddatz.veyq.mobile.session.TenantMembers.Roster) : Answer()
+
+    /** [Call.SettingsMemberRole], [Call.SettingsMemberRemove]: whether it went through ([done]: read the roster anew), and what is said. */
+    @Serializable @SerialName("MembersChanged") data class MembersChanged(val done: Boolean, val notice: Notice) : Answer()
 
     /** *Reset your password*'s entries in their order ([Call.RecoverPlan]). */
     @Serializable @SerialName("RecoverPlan") data class RecoverPlan(val entries: List<me.raddatz.veyq.mobile.session.RecoverEntry>) : Answer()
@@ -4619,6 +4660,10 @@ internal object Roots {
     val outward: List<KSerializer<*>> = listOf(Answer.serializer(), Update.serializer(), HostRequest.serializer())
     val all: List<KSerializer<*>> get() = inward + outward
 }
+
+/** A change to the owner's terms draft ([Call.SettingsTermsEdit]): a text typed, a language added or removed, the template inserted. */
+@Serializable
+internal enum class TermsChange { TEXT, ADD, REMOVE, TEMPLATE }
 
 /** What a `veyq:` link opens (core's `DeepLink`, ADR 0150 § O1): the app where it is, or *Open a link*. */
 @Serializable

@@ -124,6 +124,29 @@ class DispatchTest {
         b.shutdown()
     }
 
+    /**
+     * The owner's terms editor's changes are the core's draft rules, applied in the host's order and previewed in the host's
+     * language; the members' and the terms' tenant calls are refused without a tenant (uc.admin.tenant-terms,
+     * uc.spaces.remove-tenant-member). Bitten by a dispatch that hands the draft back unchanged (red: no German added).
+     */
+    @Test
+    fun theTermsEditorsChangesAreTheCoresDraftAndTheMembersCallsNeedATenant() = runBlocking {
+        val b = bridge()
+        val none = me.raddatz.veyq.mobile.session.MemberTerms.TermsDraft(0, emptyList())
+        val added = b.ask(Call.SettingsTermsEdit(none, TermsChange.ADD, "de")) as Answer.TermsDrafted
+        assertEquals(listOf("de"), added.draft.texts.map { it.lang })
+        val typed = b.ask(Call.SettingsTermsEdit(added.draft, TermsChange.TEXT, "de", "## Regeln")) as Answer.TermsDrafted
+        assertEquals("## Regeln", typed.preview, "the only language with text is the preview's")
+        val template = b.ask(Call.SettingsTermsEdit(typed.draft, TermsChange.TEMPLATE, "de")) as Answer.TermsDrafted
+        assertTrue(template.draft.texts.single().text.startsWith("# Nutzungsbedingungen"))
+        val removed = b.ask(Call.SettingsTermsEdit(template.draft, TermsChange.REMOVE, "de")) as Answer.TermsDrafted
+        assertEquals(emptyList(), removed.draft.texts)
+        for (c in listOf(Call.SettingsMembers, Call.SettingsMemberRole("u2", true), Call.SettingsMemberRemove("u2", true), Call.SettingsTermsEditing, Call.SettingsTermsSave(none))) {
+            assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(c), "$c")
+        }
+        b.shutdown()
+    }
+
     private fun bridge() = Bridge {
         val hidden = Hidden({}, emptySet())
         Composition(SessionModel(Door(), hidden, RecentUses({}, emptyList())), hidden) { null }

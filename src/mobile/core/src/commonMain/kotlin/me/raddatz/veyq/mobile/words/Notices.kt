@@ -80,6 +80,8 @@ enum class NoticeKind {
             Msg.IMPORT_IMPORTED_LEFT_OUT, Msg.OFFLINE_SENT, Msg.MOVE_MANY_MOVED, Msg.COPY_MANY_COPIED,
             // a platform's own success, said as a notice since every app maps the kind (ADR 0154 decision 4)
             Msg.LINK_KEPT, Msg.PROFILE_SAVED, Msg.RECEIPTS_SAVED_GALLERY, Msg.RECEIPTS_SAVED,
+            // the members' role changes and removal, the terms' save (the web's `toast.success` on each)
+            Msg.MEMBERS_PROMOTED, Msg.MEMBERS_DEMOTED, Msg.MEMBERS_REMOVED, Msg.TERMS_SAVED,
         )
 
         /** The words that offer an undo (the web's `showUndo`). */

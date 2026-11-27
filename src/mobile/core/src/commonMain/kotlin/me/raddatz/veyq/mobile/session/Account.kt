@@ -2304,6 +2304,9 @@ class TenantSession internal constructor(
     /** A person's safety number and the compare that verifies them in this tenant (ADR 0148 decision 3). */
     val personTrust: PersonTrust by lazy { PersonTrust(this) }
 
+    /** Settings' *Members* of this tenant: the roster, an owner's role changes and removals ([TenantMembers]). */
+    val members: TenantMembers by lazy { TenantMembers(this) }
+
     /** One's own profile in this tenant (ADR 0148 decision 2): a new model each time a place opens it; the host closes it. Android, whose core target has no libwebp, hands its own [encoder]. */
     fun profile(encoder: me.raddatz.veyq.mobile.media.WebpEncoder? = me.raddatz.veyq.mobile.media.coreWebpEncoder): ProfileModel = ProfileModel(TenantProfileDoor(this), account.suite, encoder)
 
