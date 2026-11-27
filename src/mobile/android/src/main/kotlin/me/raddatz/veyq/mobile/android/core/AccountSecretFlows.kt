@@ -372,6 +372,8 @@ internal fun KitRenewalFlow(m: me.raddatz.veyq.mobile.session.KitRenewal, model:
             if (state.working) LinearProgressIndicator(Modifier.fillMaxWidth())
         } else {
             KitSave(step, model)
+            // the desktops' and the web's way out once the kit is kept (the top bar's close cancels nothing here)
+            OutlinedButton(onClick = model::closeAccountFlow, modifier = Modifier.testTag("kit-renew-close")) { Text(stringResource(R.string.share_done)) }
         }
     }
 }
@@ -411,6 +413,8 @@ internal fun KitSave(step: KitStep, model: AppModel) {
     if (saving) LinearProgressIndicator(Modifier.fillMaxWidth())
     Refusal(state.refusal, "kit-refusal")
     CheckRow(state.confirmed, enabled = state.saved, label = stringResource(R.string.kit_saved_confirm), tag = "kit-confirm") { step.confirm(it) }
+    // the flow's done line once the kit is kept and recorded (the renewal's, the web's kit.renew.done)
+    state.done?.let { Text(say(it), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("kit-done")) }
 }
 
 /**

@@ -742,14 +742,29 @@ internal fun PrimaryButton(label: String, modifier: Modifier = Modifier, enabled
 internal fun MarkdownText(markdown: String) {
     SelectionContainer {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            for (block in markdown.trim().split(Regex("\\n\\s*\\n"))) {
-                // a heading is its own line: the lines after it in the same block are the paragraph under it
-                val lines = block.trim().lines()
-                val heading = lines.first().trim().takeIf { it.startsWith("#") }
-                heading?.let { Text(it.trimStart('#').trim(), fontWeight = FontWeight.Bold) }
-                val body = if (heading != null) lines.drop(1) else lines
-                if (body.any { it.isNotBlank() }) Text(body.joinToString("\n") { l -> l.trim().replace(Regex("^[-*] "), "• ") }.replace("**", ""))
+            for ((text, heading) in markdownBlocks(markdown)) {
+                if (heading) Text(text, fontWeight = FontWeight.Bold) else Text(text)
             }
         }
     }
 }
+
+/**
+ * [markdown]'s paragraphs, each with whether it is a heading: a heading is its own line (the lines after it in the same
+ * block are the paragraph under it), a list item bulleted, `**strong**` and `*emphasis*` shown as their words (the
+ * operator section's "*Report*": the stars were drawn, inbox #1418's German pass).
+ */
+internal fun markdownBlocks(markdown: String): List<Pair<String, Boolean>> = buildList {
+    for (block in markdown.trim().split(Regex("\\n\\s*\\n"))) {
+        val lines = block.trim().lines()
+        val heading = lines.first().trim().takeIf { it.startsWith("#") }
+        heading?.let { add(it.trimStart('#').trim() to true) }
+        val body = if (heading != null) lines.drop(1) else lines
+        if (body.any { it.isNotBlank() }) {
+            add(body.joinToString("\n") { l -> l.trim().replace(Regex("^[-*] "), "• ") }.replace("**", "").replace(EMPHASIS, "$1") to false)
+        }
+    }
+}
+
+/** A `*` before a non-space, the next `*` on its line after one. */
+private val EMPHASIS = Regex("\\*([^\\s*](?:[^*\\n]*[^\\s*])?)\\*")
