@@ -135,6 +135,17 @@ gate passed). Passed as a throwaway on Android (an API 36 emulator: the gate, *I
 *Sign out* to the unlock) and Linux (Broadway: the gate, the offer only after *I agree*, the search's Terms result and
 Settings' subpage); Windows built with its tests on the VM (`run.py build`), Apple built (macOS, iOS and tvOS), their
 passes open (§ Open).
+**Who's who, on all four apps** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) § Who's who, built 2026-11-27;
+uc.spaces.enforce-verified-identities main flow 5): the web's people overview ported into the core
+(`PersonTrust.whosWho`, the rule `session/WhosWho`) — every other member of the open space with the one state their key
+has there (can't confirm, verified by whom, not verified, or none where the check failed for a request), *New*, a new
+identity, a replaced key, anomalies first then by name — in Settings' section `WHOS_WHO` (`tenant-people`, before
+Terms, found by the search); a row and its *Compare safety numbers* open the person's profile, Settings closing for it.
+The bridge carries `Trust.WhosWho`. No TV draws it. Held by `WhosWhoTest` (bitten), `PlansAreTheWebsTest` and live by
+`LiveAccountFlowsTest.whosWhoListsTheOtherMemberAsTheirPageShowsThem`; passed as a throwaway with a member on Android
+(API 36 emulator, English and German, a row into the profile), iOS (an iPhone 18 Pro simulator, German, a row into the
+profile), Linux (Broadway, a row into the profile) and Windows (the VM, German: *Not verified* and *New* with *Compare safety
+numbers* into the profile); macOS and tvOS built, the Mac's sheet never clicked (the coordinator's).
 **The account's own flows, on all four apps** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md), built 2026-11-19): the web's flows ported into the core and
 held to the shared vectors (`secret_key_proof`, `auth_attestation`, `rotation_stage`, `verification`, `fingerprint`'s
 digits and chain code, `safety_code`, on the JVM and libsodium) — the rename of any device a row names
@@ -696,8 +707,11 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
 - Not in the apps yet (the owner 2026-11-26: every app is to do what the web does — these are gaps, closed one by one):
   joining a tenant from an invite, inviting, members and roles, groups and leaving a space, editing a tenant's terms
   (its owner's; the apps hold the gate and show them, below), finishing a recovery (the apps ask for the reset link; the web finishes it), the trust reset,
-  *Who's who* (#967), the moderation key (#965), the task queue's jobs (#966), and an in-app choice of appearance and language (the apps follow the system's; the desktops
+  the moderation key (#965), the task queue's jobs (#966), and an in-app choice of appearance and language (the apps follow the system's; the desktops
   have no per-app language of their own).
+- *Who's who* (ADR 0148 § Who's who, built 2026-11-27): the macOS pass (the sheet over the Settings window, the window
+  closing for a profile — the coordinator's), an anomaly and a rotation seen on any app (the throwaways had neither), the
+  owner's iPhone and iPad, and the cost on a large tenant (#1414).
 - A space's terms (ADR 0035 § The apps' gate, built 2026-11-26): the macOS pass (the debug app started from the agent's
   shell drew no window the background tools reached — the coordinator's), the tvOS gate and an Android TV pass (no TV
   emulator ran), a German pass on any app, the Windows pass (the VM resolves one throwaway name, `tw-win.localhost`, which
@@ -813,7 +827,7 @@ picker, a profile from a participant and from an uploader and its map, *I was th
 image and a video banner across a 720 pt window, the trash's question, Remove banner, and on an iPhone whether
 `PhotosPicker`'s copy of a gallery photo is still shared. Not run elsewhere: Windows offline (the standing tunnel).
 One's own profile and the safety numbers on a person's page are built by [ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md)
-(above), tiles by ADR 0149 (above). Not built: a people search or overview.
+(above), tiles by ADR 0149 (above), the people overview (*Who's who*) by ADR 0148 § Who's who (above). Not built: a people search.
 
 **Uploads** ([ADR 0145](../decisions/0145-the-apps-uploads-go-on-with-the-app-left-and-show-in-the-gallery-a-desktop-asks-before-a-quit-drops-them.md), built above): **iOS is the owner's** — on a real iPhone whether the
 continued-processing task is granted for an upload (`app.veyq.uploads.*`), how long `beginBackgroundTask` lasts and what

@@ -238,6 +238,43 @@ wrote no Emergency Kit, encoded no WebP and called none of the operations these 
   Hello for real after a password change and a rotation, an address change to a real mailbox with the link opened on a
   phone, and a safety code scanned between two phones with real cameras (#912).
 
+## Who's who (inbox #967, built 2026-11-27)
+
+Decision 3 gave a person's page its state; the web's tenant section *Who's who* (`peopleOverview.ts`,
+`PeopleOverviewPanel.vue`; uc.spaces.enforce-verified-identities main flow 5) lists every other member's at once. The
+apps now show it too (owner 2026-11-26), decided as follows:
+
+1. **The overview is the core's, its rule one pure function.** `PersonTrust.whosWho()` does the web's reads — the
+   tenant's members anew, each other member anchored as their page anchors them (the one write: the pin it moves), the
+   pins once (`VeyqAccount.pinsOfAccount`), the verifications once and counted for the anchored alone, a key chain for a
+   rotation's date only where the pin is not the chain's genesis at the served head. `WhosWho.assemble` is `overviewOf`:
+   who is listed (not this account, not a pending proposal), the one state (`CANT_CONFIRM`, `VERIFIED`, `NOT_VERIFIED`,
+   `UNCHECKED` for a check that failed for a request — never a false anomaly), *new*, rotated, replaced, and the order
+   (anomalies first, then `NameOrder` over the folded names, then the id). **Load-bearing:** an anomaly's row takes no
+   count, pin or rotation, so it never reads as verified whatever rows the server serves (`WhosWhoTest`, bitten by
+   letting an anomaly through as anchored: red). A pin store this device refuses is said in the web's `verify.trust*`
+   words, never read as nobody; the trust reset's link beside them on the web is not in the apps yet.
+2. **The core says the words and whether to compare.** A row carries `stateWord`, `note`, `subtitle` (`@username`, the
+   web's list) and `compare` (the web's: every row this account has not verified); the page's one line in place of a
+   list is `said` with `retry`. The verifiers' names are joined "you" first, as every app's person page already joins
+   them (the web joins in the rows' order). The row's type is `WhosWho.Other`: a second `Row` on the wire renames the
+   existing one for C# and Rust (the bindings name a type by its last part unless two share it).
+3. **Reached as on the web: Settings' tenant section, after the personal ones, before Terms** (`SettingsSection.WHOS_WHO`,
+   `tenant-people`, every member's; `PlansAreTheWebsTest.theTenantSectionsAreTheWebsInTheirOrder`). Each platform opens
+   a page over Settings in its own way — Android a full-screen dialog as Terms, iOS a list pushed in Settings' navigation
+   stack, the Mac a sheet, Linux a subpage of the preferences dialog, Windows a `ContentDialog` — and a row and its
+   *Compare safety numbers* open the person's profile, where the compare lives (the web's link). Settings closes for it:
+   the profile is the shell's, so its back returns to the shell, not to Settings, which is no page of the shell's history.
+4. **No Who's who on a TV** (ADR 0159/0160): a TV's settings are its own few, it shows no safety number and compares
+   nobody; a list whose one action opens a compare the TV does not offer is no viewing.
+5. **No move of the web's TypeScript** (ADR 0155 decision 11): no *on demand* row covers the overview; the web keeps
+   `peopleOverview.ts`.
+
+Consequences: the core anchors members one after another under the anchoring lock and writes each first sight's pin at
+once — the web's `PinPass` (inbox #710, #741) has no port, so a cold large tenant costs more requests than the web's
+(inbox #1414). Proved by `WhosWhoTest`, `PlansAreTheWebsTest` and, live as a throwaway with a member,
+`LiveAccountFlowsTest.whosWhoListsTheOtherMemberAsTheirPageShowsThem`; the passes are native-apps § Built, by area.
+
 ## Alternatives considered
 
 - **A separate "Trusted devices" screen** — a second list of the same families, which the web does not have.
