@@ -46,6 +46,7 @@ import me.raddatz.veyq.mobile.session.ThisDevice
 import me.raddatz.veyq.mobile.session.TrustedDevice
 import me.raddatz.veyq.mobile.session.VeyqAccount
 import me.raddatz.veyq.mobile.session.addressChange
+import me.raddatz.veyq.mobile.session.kitRenewal
 import me.raddatz.veyq.mobile.session.erasure
 import me.raddatz.veyq.mobile.session.passwordChange
 import me.raddatz.veyq.mobile.session.rotation.keyRotation
@@ -962,6 +963,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         override fun openPasswordChange() = this@AppModel.openPasswordChange()
         override fun openAddressChange() = this@AppModel.openAddressChange()
         override fun openKeyRotation() = this@AppModel.openKeyRotation()
+        override fun openKitRenewal() = this@AppModel.openKitRenewal()
         override fun openErasure() = this@AppModel.openErasure()
     }
 
@@ -974,6 +976,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         class Address(val model: me.raddatz.veyq.mobile.session.AddressChange) : AccountFlow
         class Rotation(val model: me.raddatz.veyq.mobile.session.rotation.KeyRotation) : AccountFlow
         class Erasure(val model: me.raddatz.veyq.mobile.session.AccountErasure) : AccountFlow
+        class KitRenewal(val model: me.raddatz.veyq.mobile.session.KitRenewal) : AccountFlow
     }
 
     private val _accountFlow = MutableStateFlow<AccountFlow?>(null)
@@ -1003,6 +1006,11 @@ class AppModel(app: Application) : AndroidViewModel(app) {
             is AccountFlow.Password -> f.model.close()
             is AccountFlow.Address -> f.model.close()
             is AccountFlow.Rotation -> f.model.close()
+            is AccountFlow.KitRenewal -> {
+                f.model.close()
+                // Security says which kit the account has now
+                viewModelScope.launch { settingsModel?.refresh() }
+            }
             else -> Unit
         }
         _accountFlow.value = null
@@ -1125,6 +1133,33 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** A new kit with the account's address after the cold proof; [made] gets its step (null: refused, said by the model). */
     fun addressKit(m: me.raddatz.veyq.mobile.session.AddressChange, password: String, secretKey: String, made: (me.raddatz.veyq.mobile.account.KitStep?) -> Unit) {
         viewModelScope.launch { made(m.kit(password, secretKey)) }
+    }
+
+    /** A new Emergency Kit where a clearer one exists (ADR 0157 decision 6; Settings → Security, the shell's notice). */
+    fun openKitRenewal() {
+        val account = session.signedTo?.account ?: return
+        openFlow(AccountFlow.KitRenewal(account.kitRenewal()))
+    }
+
+    /** The renewal's kit after the cold proof; [made] gets its step (null: refused, said by the model). */
+    fun renewKit(m: me.raddatz.veyq.mobile.session.KitRenewal, password: String, secretKey: String, made: (me.raddatz.veyq.mobile.account.KitStep?) -> Unit) {
+        viewModelScope.launch { made(m.kit(password, secretKey)) }
+    }
+
+    /** The shell's one-time kit notice (core's `ShellModel.kitNotice`, ADR 0157 decision 5); null while it does not show. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val kitNotice: StateFlow<me.raddatz.veyq.mobile.words.Notice?> by lazy {
+        _shell.flatMapLatest { it?.kitNotice ?: kotlinx.coroutines.flow.flowOf(null) }
+            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, null)
+    }
+
+    /** The notice dismissed; [open] opens Settings at Security too ("Go to your kit"). */
+    fun dismissKitNotice(open: Boolean) {
+        _shell.value?.dismissKitNotice()
+        if (open) {
+            _settingsAt.value = me.raddatz.veyq.mobile.search.SettingsSection.SECURITY.id
+            openSettings()
+        }
     }
 
     fun openKeyRotation() {

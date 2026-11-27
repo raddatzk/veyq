@@ -71,6 +71,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -106,6 +107,7 @@ import me.raddatz.veyq.mobile.android.core.language
 import me.raddatz.veyq.mobile.android.core.role
 import me.raddatz.veyq.mobile.android.core.text
 import me.raddatz.veyq.mobile.memories.CaptureTimeEditor
+import me.raddatz.veyq.mobile.memories.SelectionShift
 import me.raddatz.veyq.mobile.memories.GalleryModel
 import me.raddatz.veyq.mobile.memories.Participants
 import me.raddatz.veyq.mobile.memories.ParticipantsPicker
@@ -510,28 +512,13 @@ internal fun CaptureTimeDialog(editor: CaptureTimeEditor, onClose: () -> Unit) {
         time = local(s.atMs).toLocalTime().withSecond(0).withNano(0)
     }
     LaunchedEffect(s.saved) { if (s.saved) onClose() }
-    var pickingDay by remember { mutableStateOf(false) }
-    var pickingTime by remember { mutableStateOf(false) }
     val palette = LocalPalette.current
     AlertDialog(
         onDismissRequest = { if (!s.saving) onClose() },
         title = { Text(stringResource(R.string.media_edit_captured_at)) },
         text = {
             Column {
-                val dayText = me.raddatz.veyq.mobile.words.Shown.day(day.toEpochDay(), context.language)
-                val timeText = me.raddatz.veyq.mobile.words.Shown.clock(time.hour, time.minute, context.language)
-                ListItem(
-                    headlineContent = { Text(dayText) },
-                    leadingContent = { Icon(Icons.Outlined.CalendarMonth, null) },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    modifier = Modifier.clickable(enabled = !s.saving) { pickingDay = true },
-                )
-                ListItem(
-                    headlineContent = { Text(timeText) },
-                    leadingContent = { Icon(Icons.Outlined.Schedule, null) },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    modifier = Modifier.clickable(enabled = !s.saving) { pickingTime = true },
-                )
+                CaptureTimeFields(day, time, !s.saving, { day = it }, { time = it })
                 val said = when (s.said) {
                     CaptureTimeEditor.Said.CONFLICT -> R.string.media_captured_at_conflict
                     CaptureTimeEditor.Said.FAILED -> R.string.media_captured_at_save_failed
@@ -554,6 +541,29 @@ internal fun CaptureTimeDialog(editor: CaptureTimeEditor, onClose: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = onClose, enabled = !s.saving) { Text(stringResource(R.string.trash_cancel)) } },
     )
+}
+
+/** A capture time's day and minute as two rows, each picked with Material's own picker (the editor's and the shift's). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun CaptureTimeFields(day: LocalDate, time: LocalTime, enabled: Boolean, onDay: (LocalDate) -> Unit, onTime: (LocalTime) -> Unit) {
+    val context = LocalContext.current
+    var pickingDay by remember { mutableStateOf(false) }
+    var pickingTime by remember { mutableStateOf(false) }
+    val dayText = me.raddatz.veyq.mobile.words.Shown.day(day.toEpochDay(), context.language)
+    val timeText = me.raddatz.veyq.mobile.words.Shown.clock(time.hour, time.minute, context.language)
+    ListItem(
+        headlineContent = { Text(dayText) },
+        leadingContent = { Icon(Icons.Outlined.CalendarMonth, null) },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.clickable(enabled = enabled) { pickingDay = true },
+    )
+    ListItem(
+        headlineContent = { Text(timeText) },
+        leadingContent = { Icon(Icons.Outlined.Schedule, null) },
+        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+        modifier = Modifier.clickable(enabled = enabled) { pickingTime = true },
+    )
     if (pickingDay) {
         // Material's date picker speaks UTC midnights: the local day goes in and comes out as one
         val state = rememberDatePickerState(initialSelectedDateMillis = day.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli())
@@ -561,7 +571,7 @@ internal fun CaptureTimeDialog(editor: CaptureTimeEditor, onClose: () -> Unit) {
             onDismissRequest = { pickingDay = false },
             confirmButton = {
                 TextButton(onClick = {
-                    state.selectedDateMillis?.let { ms -> day = LocalDate.ofEpochDay(Math.floorDiv(ms, 86_400_000L)) }
+                    state.selectedDateMillis?.let { ms -> onDay(LocalDate.ofEpochDay(Math.floorDiv(ms, 86_400_000L))) }
                     pickingDay = false
                 }) { Text(stringResource(R.string.ok)) }
             },
@@ -575,11 +585,80 @@ internal fun CaptureTimeDialog(editor: CaptureTimeEditor, onClose: () -> Unit) {
             text = { TimePicker(state) },
             confirmButton = {
                 TextButton(onClick = {
-                    time = LocalTime.of(state.hour, state.minute)
+                    onTime(LocalTime.of(state.hour, state.minute))
                     pickingTime = false
                 }) { Text(stringResource(R.string.ok)) }
             },
             dismissButton = { TextButton(onClick = { pickingTime = false }) { Text(stringResource(R.string.trash_cancel)) } },
         )
     }
+}
+
+/**
+ * A selection's capture-time shift (core's `SelectionShift`, uc.memory.buckets § Correct a selection's capture time): the
+ * anchor's day and minute picked as the editor picks them, then *Only this one* or *All N, shifted by …*, the progress, what
+ * it came to and its Undo. The platform turns the picked local time into epoch ms (`java.time`); the core does the rest.
+ */
+@Composable
+internal fun CaptureTimeShiftDialog(shift: SelectionShift, onClose: () -> Unit) {
+    val s by shift.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val zone = ZoneId.systemDefault()
+    val start = Instant.ofEpochMilli(s.anchorAtMs).atZone(zone)
+    var day by remember { mutableStateOf(start.toLocalDate()) }
+    var time by remember { mutableStateOf(start.toLocalTime().withSecond(0).withNano(0)) }
+    LaunchedEffect(s.closed) { if (s.closed) onClose() }
+    val running = s.step == SelectionShift.Step.RUN
+    val palette = LocalPalette.current
+    AlertDialog(
+        onDismissRequest = { if (!running) onClose() },
+        title = { Text(stringResource(R.string.memory_shift_action)) },
+        text = {
+            Column(Modifier.testTag("shift-dialog")) {
+                when (s.step) {
+                    SelectionShift.Step.EDIT -> {
+                        Text(context.text(s.intro))
+                        CaptureTimeFields(day, time, true, { day = it }, { time = it })
+                    }
+                    SelectionShift.Step.CHOOSE -> {
+                        s.undated?.let { Text(context.text(it), Modifier.padding(bottom = 8.dp)) }
+                        s.all?.let { all ->
+                            TextButton(onClick = { scope.launch { shift.all() } }, modifier = Modifier.testTag("shift-all")) { Text(context.text(all)) }
+                        }
+                        TextButton(onClick = { scope.launch { shift.onlyThis() } }, modifier = Modifier.testTag("shift-only")) {
+                            Text(stringResource(R.string.memory_shift_only_this))
+                        }
+                    }
+                    SelectionShift.Step.RUN -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(20.dp))
+                        s.progress?.let { Text(context.text(it), Modifier.padding(start = 12.dp)) }
+                    }
+                    SelectionShift.Step.DONE -> {
+                        s.done?.let { Text(context.text(it), Modifier.testTag("shift-done")) }
+                        for (line in s.refused) Text(context.text(line), color = role(palette.danger), style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            when (s.step) {
+                SelectionShift.Step.EDIT -> TextButton(onClick = {
+                    shift.propose(day.atTime(time).atZone(zone).toInstant().toEpochMilli())
+                }, modifier = Modifier.testTag("shift-next")) { Text(stringResource(R.string.memory_shift_next)) }
+                SelectionShift.Step.DONE -> TextButton(onClick = onClose, modifier = Modifier.testTag("shift-close")) { Text(stringResource(R.string.memory_close)) }
+                else -> {}
+            }
+        },
+        dismissButton = {
+            when (s.step) {
+                SelectionShift.Step.EDIT -> TextButton(onClick = onClose) { Text(stringResource(R.string.trash_cancel)) }
+                SelectionShift.Step.CHOOSE -> TextButton(onClick = { shift.back() }) { Text(stringResource(R.string.trash_cancel)) }
+                SelectionShift.Step.DONE -> if (s.undoable) TextButton(onClick = { scope.launch { shift.undo() } }, modifier = Modifier.testTag("shift-undo")) {
+                    Text(stringResource(R.string.trash_undo))
+                }
+                SelectionShift.Step.RUN -> {}
+            }
+        },
+    )
 }

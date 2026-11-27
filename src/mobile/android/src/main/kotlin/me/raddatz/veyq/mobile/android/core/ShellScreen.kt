@@ -217,7 +217,14 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     val body: @Composable () -> Unit = {
         // core's banner: the open page's own kept time where it has one (a Pot's ledger), else the lists'
         val waitingCount by model.queuedBanner.collectAsStateWithLifecycle()
-        val offlineBanner: @Composable () -> Unit = { s.banner?.let { OfflineBanner(it, waitingCount) } }
+        val kitNotice by model.kitNotice.collectAsStateWithLifecycle()
+        val offlineBanner: @Composable () -> Unit = {
+            Column {
+                s.banner?.let { OfflineBanner(it, waitingCount) }
+                // the one-time "a clearer Emergency Kit exists" (core's `ShellModel.kitNotice`, ADR 0157 decision 5)
+                kitNotice?.let { KitNotice(it, onOpen = { model.dismissKitNotice(open = true) }, onDismiss = { model.dismissKitNotice(open = false) }) }
+            }
+        }
         Scaffold(
             // a drop onto the app is a share (ADR 0138 decision 9); a Memory's gallery takes its own
             modifier = Modifier.sharedFilesDrop { model.receiveDrop(it.incoming) },
@@ -1142,6 +1149,23 @@ private fun OfflineBanner(banner: me.raddatz.veyq.mobile.words.Notice, waiting: 
             Text(say(banner), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             // how many writes made offline wait to be sent (core's `ShellModel.queuedBanner`)
             waiting?.let { Text(say(it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("offline-waiting-count")) }
+        }
+    }
+}
+
+/**
+ * The one-time notice that a clearer Emergency Kit exists (ADR 0157 decision 5; the web's `KitRenewalPrompt`): Material's
+ * banner — what the newer kit does better and that the kit the person has keeps working, *Go to your kit* (Settings →
+ * Security) and *Not now*; it never blocks and never returns once dismissed.
+ */
+@Composable
+private fun KitNotice(news: me.raddatz.veyq.mobile.words.Notice, onOpen: () -> Unit, onDismiss: () -> Unit) {
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(horizontal = 16.dp, vertical = 8.dp).testTag("kit-notice")) {
+        Text(stringResource(R.string.kit_notice_title), style = MaterialTheme.typography.titleSmall)
+        Text("${say(news)} ${stringResource(R.string.kit_status_keeps_working)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.align(Alignment.End)) {
+            androidx.compose.material3.TextButton(onClick = onDismiss, modifier = Modifier.testTag("kit-notice-dismiss")) { Text(stringResource(R.string.kit_notice_dismiss)) }
+            androidx.compose.material3.TextButton(onClick = onOpen, modifier = Modifier.testTag("kit-notice-open")) { Text(stringResource(R.string.kit_notice_open)) }
         }
     }
 }

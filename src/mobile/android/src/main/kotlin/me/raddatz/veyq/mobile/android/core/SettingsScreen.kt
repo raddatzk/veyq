@@ -49,6 +49,7 @@ import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.SdStorage
 import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.AlertDialog
@@ -149,6 +150,7 @@ interface SettingsActions {
     fun openPasswordChange() {}
     fun openAddressChange() {}
     fun openKeyRotation() {}
+    fun openKitRenewal() {}
     fun openErasure() {}
 
     /** The open space's Who's who (core's `SettingsSection.WHOS_WHO`, inbox #967). */
@@ -439,6 +441,33 @@ private fun LazyListScope.security(state: AccountSettings.State, actions: Settin
             leadingContent = { Icon(Icons.Outlined.Shield, null) },
             colors = listColors(),
             modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openKeyRotation).testTag("settings-security"),
+        )
+    }
+    // which Emergency Kit the account has (ADR 0157 decision 5): current, or a clearer one exists and *Make a new kit*
+    val kit = state.kit ?: return
+    item(key = "kit") {
+        val older = kit == me.raddatz.veyq.mobile.account.KitStatus.Standing.OLDER
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.kit_status_title)) },
+            supportingContent = {
+                Column {
+                    when (kit) {
+                        me.raddatz.veyq.mobile.account.KitStatus.Standing.CURRENT -> Text(stringResource(R.string.kit_status_current))
+                        me.raddatz.veyq.mobile.account.KitStatus.Standing.UNREADABLE -> Text(stringResource(R.string.kit_status_unreadable))
+                        me.raddatz.veyq.mobile.account.KitStatus.Standing.OLDER -> {
+                            Text(stringResource(R.string.kit_status_older), fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                            Text(say(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.account.KitStatus.NEWS)))
+                            Text(stringResource(R.string.kit_status_keeps_working))
+                        }
+                    }
+                }
+            },
+            leadingContent = { Icon(Icons.Outlined.Badge, null) },
+            trailingContent = if (older) {
+                { androidx.compose.material3.TextButton(onClick = actions::openKitRenewal, enabled = !state.working, modifier = Modifier.testTag("settings-kit-make")) { Text(stringResource(R.string.kit_status_make)) } }
+            } else null,
+            colors = listColors(),
+            modifier = Modifier.testTag("settings-kit"),
         )
     }
 }

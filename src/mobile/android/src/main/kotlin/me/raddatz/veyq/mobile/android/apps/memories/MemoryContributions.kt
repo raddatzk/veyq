@@ -16,6 +16,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.foundation.border
+import androidx.compose.ui.platform.testTag
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -100,6 +103,10 @@ internal fun ContributionsView(
     var renaming by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var moving by remember { mutableStateOf<String?>(null) }
+    // a selection of the chosen bucket's media (core's `Contributions.picked`): tap toggles while it is on, its bar offers the shift
+    var selecting by remember { mutableStateOf(false) }
+    var shifting by remember { mutableStateOf<me.raddatz.veyq.mobile.memories.SelectionShift?>(null) }
+    LaunchedEffect(state.selected) { selecting = false }
     val row = state.row
     val curates = row != null && online
     val subBucket = state.renames && online
@@ -127,6 +134,18 @@ internal fun ContributionsView(
                             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 BucketPicker(state, Modifier.weight(1f)) { contributions.pick(it) }
                                 if (subBucket) BucketOptions(onRename = { renaming = true }, onDelete = { deleting = true })
+                                if (!selecting && curates && media.size >= 2) {
+                                    TextButton(onClick = { selecting = true }, modifier = Modifier.testTag("contributions-select")) { Text(stringResource(R.string.select_action)) }
+                                }
+                            }
+                        }
+                        if (selecting) item(key = "selection") {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("contributions-selection"), verticalAlignment = Alignment.CenterVertically) {
+                                Text(context.text(me.raddatz.veyq.mobile.words.Notice(me.raddatz.veyq.mobile.words.Msg.SELECT_COUNT, state.picked.size)), Modifier.weight(1f))
+                                TextButton(enabled = state.shifts, onClick = { shifting = contributions.shift() }, modifier = Modifier.testTag("contributions-shift")) {
+                                    Text(stringResource(R.string.memory_shift_action))
+                                }
+                                TextButton(onClick = { selecting = false; contributions.clearPicked() }) { Text(stringResource(R.string.trash_cancel)) }
                             }
                         }
                         if (media.isEmpty()) item(key = "empty") {
@@ -141,11 +160,18 @@ internal fun ContributionsView(
                             ) {
                                 for (t in r.tiles) {
                                     val at = byId[t.id] ?: continue
-                                    val move = if (curates) stringResource(R.string.memory_buckets_move_media) to { moving = at.mediaId } else null
-                                    MediaTile(
-                                        at, galleryState.marks[at.mediaId], gallery, model,
-                                        Modifier.offset(x = t.left.dp).size(t.width.dp, t.height.dp), longPress = move,
-                                    ) { onOpen(at.mediaId) }
+                                    val move = if (curates && !selecting) stringResource(R.string.memory_buckets_move_media) to { moving = at.mediaId } else null
+                                    val picked = at.mediaId in state.picked
+                                    Box(Modifier.offset(x = t.left.dp).size(t.width.dp, t.height.dp)) {
+                                        MediaTile(
+                                            at, galleryState.marks[at.mediaId], gallery, model,
+                                            Modifier.fillMaxSize().then(if (picked) Modifier.border(3.dp, MaterialTheme.colorScheme.primary) else Modifier), longPress = move,
+                                        ) { if (selecting) contributions.toggle(at.mediaId) else onOpen(at.mediaId) }
+                                        if (picked) Icon(
+                                            Icons.Filled.CheckCircle, null, tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.align(Alignment.TopEnd).padding(6.dp),
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -168,6 +194,7 @@ internal fun ContributionsView(
         moved = false
         model.memories.curate { contributions.delete() }
     }
+    shifting?.let { shift -> CaptureTimeShiftDialog(shift) { shifting = null } }
     moving?.let { id ->
         MoveDialog(state.moveTargets, onClose = { moving = null }) { target ->
             moved = true

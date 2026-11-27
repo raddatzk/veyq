@@ -112,6 +112,7 @@ internal fun AccountFlowDialog(flow: AppModel.AccountFlow, model: AppModel) {
         is AppModel.AccountFlow.Address -> AddressFlow(flow.model, model)
         is AppModel.AccountFlow.Rotation -> RotationFlow(flow.model, model)
         is AppModel.AccountFlow.Erasure -> ErasureFlow(flow.model, model)
+        is AppModel.AccountFlow.KitRenewal -> KitRenewalFlow(flow.model, model)
     }
     // a flow's kit scan, once over the flow (the address flow has two Secret Key sections, one intake)
     val scan by model.flowKitScan.collectAsStateWithLifecycle()

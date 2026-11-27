@@ -332,6 +332,48 @@ internal fun AddressFlow(m: AddressChange, model: AppModel) {
     }
 }
 
+// ---- a clearer Emergency Kit (ADR 0157 decision 6, uc.account.renew-emergency-kit) ----
+
+/**
+ * *Make a new kit*: the password and the Secret Key (typed, the old kit read or scanned) checked against the floor by the
+ * core ([KitRenewal]), then the kit saved as every kit is ([KitSave]); its record written by the core once it is kept.
+ */
+@Composable
+internal fun KitRenewalFlow(m: me.raddatz.veyq.mobile.session.KitRenewal, model: AppModel) {
+    val state by m.state.collectAsStateWithLifecycle()
+    var password by remember { mutableStateOf("") }
+    var secretKey by remember { mutableStateOf("") }
+    var kit by remember { mutableStateOf<KitStep?>(null) }
+    val intake by m.intake.state.collectAsStateWithLifecycle()
+    DisposableEffect(Unit) { onDispose { kit?.close() } }
+    FlowDialog(stringResource(R.string.kit_renew_title), secure = true, tag = "kit-renew", onClose = model::closeAccountFlow) {
+        val enabled = !state.working
+        val step = kit
+        if (step == null) {
+            Body(stringResource(R.string.kit_renew_sub), muted = true)
+            SecretField(password, { password = it }, stringResource(R.string.rotation_password), "kit-renew-password", enabled)
+            FlowKeyField(m.intake, secretKey, { secretKey = it }, stringResource(R.string.rotation_secret_key), "kit-renew-secret-key", enabled, stringResource(R.string.rotation_secret_key_hint), model)
+            Refusal(state.refusal, "kit-renew-refusal")
+            Button(
+                onClick = {
+                    model.renewKit(m, password, secretKey) { made ->
+                        kit = made
+                        if (made != null) {
+                            password = ""
+                            secretKey = ""
+                        }
+                    }
+                },
+                enabled = enabled && password.isNotEmpty() && (secretKey.isNotBlank() || intake.kit != null),
+                modifier = Modifier.testTag("kit-renew-check"),
+            ) { Text(stringResource(R.string.kit_renew_check)) }
+            if (state.working) LinearProgressIndicator(Modifier.fillMaxWidth())
+        } else {
+            KitSave(step, model)
+        }
+    }
+}
+
 // ---- the Emergency Kit's save (ADR 0148 decision 5) ----
 
 /**
