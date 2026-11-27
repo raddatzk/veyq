@@ -306,6 +306,35 @@ Consequences: proved by `TenantMembersTest`, `PlansAreTheWebsTest`, the bridge's
 `DispatchTest.theTermsEditorsChangesAreTheCoresDraftAndTheMembersCallsNeedATenant`, and, live as a throwaway with a member,
 `MembersLiveTest`. The passes are in native-apps § Built, by area.
 
+## Groups (built 2026-11-27)
+
+The web's groups (en.spaces.group-scope; uc.spaces.add-group-member, uc.spaces.consent-group-add,
+uc.spaces.manage-group-members, uc.spaces.rename-group, uc.spaces.delete-group) are in the apps too (owner 2026-11-26).
+It was decided as follows:
+
+1. **A group's name opens on the device** (`session/GroupNames`): sealed (`group-name`) under a value key of its own
+   whose wrap the group key holds at the address of `group-name` in the SEAL schema (ADR 0115); a pending consent invitee
+   is handed that key (`group-name-key`). Held to a fixture the web's `@veyq/crypto` wrote (`GroupNamesTest`). Every open
+   GROUP scope is named by it, so the switcher, the drawer and Home name groups (`ShellWords.space`).
+2. **The acts are the core's** (`session/TenantGroups`, `TenantSession.groups`): *Create group* where `core.group-space`
+   is on; *Rename* under a fresh value key, sealed to each consent invitee the tenant anchors and rebuilt once on a stale
+   read; *Delete* and *Restore*; a group's page with the web's row acts; *Add member* by username, anchored first (an
+   anomaly sends nothing), a proposal where the member asks first; roles; *Remove* by the group's removal-rotation — the
+   core's `ScopeRotation.commitRotation` gained the web's `removes` and `revokeLinks`; *Withdraw* a proposal; the caller's
+   invitations with *Accept* and *Decline*. **Load-bearing:** only an owner's page offers an act, and *Remove* never on an
+   owner, the caller or a proposal (`TenantGroupsTest`, bitten); a removal without `removes` leaves the member
+   (`GroupsLiveTest`, bitten).
+3. **Two Settings sections, after the tenant's** (`SettingsSection.GROUPS`, `GROUP_INVITATIONS`): the web's `groups`
+   category holds a section per owned group and its invitations sit in the sidebar; the apps' page is a fixed plan over one
+   tenant, so *Groups* lists the caller's groups and opens each one's page, and *Group invitations* is the inbox
+   (`PlansAreTheWebsTest`). The bridge carries `Settings.Group*`.
+4. **Not yet in the apps**, the same panel's parts the tenant's Members leaves to the browser too: a group's picture, its
+   new lock and turning off every link.
+
+Consequences: proved by `GroupNamesTest`, `TenantGroupsTest`, `ShellWordsTest`, `PlansAreTheWebsTest`, the bridge's
+`WireTest` and `DispatchTest`, and live as a throwaway with its member by `GroupsLiveTest`. The passes are in
+native-apps § Built, by area.
+
 ## Alternatives considered
 
 - **A separate "Trusted devices" screen** — a second list of the same families, which the web does not have.

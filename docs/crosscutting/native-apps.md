@@ -146,6 +146,16 @@ The bridge carries `Trust.WhosWho`. No TV draws it. Held by `WhosWhoTest` (bitte
 (API 36 emulator, English and German, a row into the profile), iOS (an iPhone 18 Pro simulator, German, a row into the
 profile), Linux (Broadway, a row into the profile) and Windows (the VM, German: *Not verified* and *New* with *Compare safety
 numbers* into the profile); macOS and tvOS built, the Mac's sheet never clicked (the coordinator's).
+**Groups, on all four apps** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) § Groups, built
+2026-11-27): a group's name opens on the device and names it in the switcher (`session/GroupNames`); Settings' **Groups**
+lists the caller's groups with *Create group*, and a group's page renames it, adds members by username (a proposal where
+they ask first), changes roles, removes a member by the group's rotation, withdraws a proposal, deletes and restores it;
+**Group invitations** accepts or declines (`session/TenantGroups`). Held by `GroupNamesTest`, `TenantGroupsTest`,
+`ShellWordsTest`, `PlansAreTheWebsTest` and the bridge's tests, and live by `GroupsLiveTest`. Passed as a throwaway with
+its member on Android (`veyq_terms`: create, rename, add, roles, remove, a proposal withdrawn and accepted, delete and
+restore), Linux (Broadway: the owner's acts and the member's read-only page) and Windows (the VM with `tw-win`: the same,
+the consent proposal accepted with the name opened). Apple is built only. Owed (inbox #1421).
+
 **Inviting and joining, on all four apps** ([ADR 0129](../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md)
 § The apps, built 2026-11-27; uc.spaces.add-member, uc.spaces.manage-member-invites): an owner's **Members** offers *Invite
 member* (a link first, or a mail with a code or a chosen password; the result shown once) and the pending invites with
@@ -742,7 +752,7 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   iPad (a flow's kit scanned with the real camera, the breach notice too), Touch ID and Windows Hello for real, a real
   mailbox, a safety code scanned with real cameras (#912).
 - Not in the apps yet (the owner 2026-11-26: every app is to do what the web does — these are gaps, closed one by one):
-  groups (`changes/cr-apps-groups.md`), the rest of the web's Members panel — the space's new lock (alone and as the
+  a group's picture, its new lock and turning off its links, the rest of the web's Members panel — the space's new lock (alone and as the
   removal's second option), turning off every link of the space, the tenant icon — and the roster's trust badge (the
   apps show it in *Who's who*), finishing a recovery (the apps ask for the reset link; the web finishes it), the trust reset,
   the moderation key (#965), the task queue's jobs (#966), reopening where the person left after a restart (#1415), and an in-app choice of appearance and language (the apps follow the system's; the desktops
