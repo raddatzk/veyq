@@ -6,13 +6,13 @@
 // runs in CI, a leg whose folder is gone runs nothing but the dependencies — and none of them makes a test red. So this
 // file lists the suite once whole and once per leg, with no stack booted, and holds:
 //   1. every feature spec lies in exactly one folder one level below `features/`, and none directly in `features/`;
-//   2. the projects are `setup`, `scenarios`, `instance`, lane L2's `upgrade` and one per domain folder — nothing else,
+//   2. the projects are `setup`, `scenarios`, `instance`, lanes L2's and L3's `upgrade` and one per domain folder — nothing else,
 //      so a new kind of project is a decision this file is told about — and every spec runs in exactly one of them;
 //   3. `checks.yml`'s matrix names exactly the domain folders, and its `--project` passes the leg's domain;
 //   4. every leg runs `setup`, `scenarios` and `instance` whole — the state its feature specs start from — and its own
-//      domain whole, and nothing of another domain, nor `upgrade`, which only lane L2 runs (`run_stack_upgrade.py`).
+//      domain whole, and nothing of another domain, nor `upgrade`, which only lanes L2 and L3 run (`run_stack_upgrade.py`, `run_stack_restore.py`).
 // The `stack` job is read alone, up to the next job of checks.yml whatever that is (`jobSlice`), so a job added after it
-// — lane L2's — is never read as part of it.
+// — lane L2's, lane L3's — is never read as part of it.
 // The checks are a pure function over what the listing and the files say (`problems`), bitten below with a spec outside
 // a domain folder, a spec in two projects, a folder missing from the matrix and a matrix leg with no folder.
 // `pnpm run check` runs this file, and `checks.yml`'s frontend job runs that on every commit.
@@ -32,7 +32,7 @@ const CI = fileURLToPath(new URL('../../.github/workflows/checks.yml', import.me
 const CLI = fileURLToPath(new URL('./node_modules/@playwright/test/cli.js', import.meta.url))
 const WHOLE = ['setup', 'scenarios', 'instance']
 const INSTANCE = 'instance'
-// Projects no L1 leg runs: lane L2's browser half (playwright.config.ts says why it depends on nothing).
+// Projects no L1 leg runs: lanes L2's and L3's browser half (playwright.config.ts says why it depends on nothing).
 const LANE_ONLY = ['upgrade']
 
 /** One job of a workflow's text: from its `  <name>:` line to the next job's, or to the end. */

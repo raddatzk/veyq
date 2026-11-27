@@ -76,22 +76,27 @@ manifests, the image signatures, the predicates and the tag each name it.
      published before every stage is green. So every other job of `checks.yml` is in its gate job's (`green`)
      `needs:`, found by reading the file's jobs, never listed; when the gate's `if:` calls a status function
      (`always()`, `failure()`, `cancelled()`) — which lets it run past a failed or skipped need — the condition requires
-     `needs.<job>.result == 'success'` of every need, the one exception a job that runs by design on no event (`if:
+     `needs.<job>.result == 'success'` of every need, the exceptions a job that runs by design on no event (`if:
      false`, the disabled upgrade proof) or on one event alone (`if: github.event_name == '<event>'`, the two image
-     builds), whose `skipped` it may accept alongside `success`; and `snapshot` is gated on `checks-run`'s verdict,
+     builds), whose `skipped` it may accept alongside `success`, and a push-only lane (`PUSH_ONLY_LANES`, lane L3),
+     accepted by exactly two terms — `success` unless the event is a pull request, and `success` or `skipped` — so
+     only a pull request may skip it; and `snapshot` is gated on `checks-run`'s verdict,
      which publishes only a Checks run whose gate concluded `success` (scripts/snapshot.py, selftested).
- 10. **The snapshot waits on lanes L1 and L2** (ADR 0090 decision 2, ADR 0091 decision 3). Assertion 9 holds the
+ 10. **The snapshot waits on lanes L1, L2 and L3** (ADR 0090 decision 2, ADR 0091 decision 3). Assertion 9 holds the
      snapshot to the jobs the file has, and cannot see one that is gone; so the job of each lane — found by the
-     orchestrator it runs (`LANE_ORCHESTRATORS`: `scripts/run_stack_e2e.py`, `scripts/run_stack_upgrade.py`), never by
-     its name — must exist, need `build`, run on every architecture the build matrix publishes (lane L1; lane L2, which
-     proves the data path, on a non-empty subset of them — amd64, ADR 0091 decision 6 amended 2026-11-27), and be in the gate's
-     `needs:` with `needs.<lane>.result == 'success'` among its `&&` terms; and lane L2's job is named as
-     `scripts/snapshot.py` reads it (`UPGRADE_JOB_NAME`), as L1's is.
+     orchestrator it runs (`LANE_ORCHESTRATORS`: `scripts/run_stack_e2e.py`, `scripts/run_stack_upgrade.py`,
+     `scripts/run_stack_restore.py`), never by its name — must exist, need `build`, run on every architecture the build
+     matrix publishes (lane L1; lanes L2 and L3, which prove the data path, on a non-empty subset of them — amd64, ADR
+     0091 decision 6 amended 2026-11-27), and be in the gate's `needs:` with `needs.<lane>.result == 'success'` among
+     its `&&` terms (lane L3, which runs on a push alone — `github.event_name == 'push'` an `&&` term of its `if:`, and no
+     other lane's — by assertion 9's two push-only terms); and lane L2's job is named as `scripts/snapshot.py` reads it
+     (`UPGRADE_JOB_NAME`), as L1's is.
  13. **Each lane's result is attested by the snapshot, never by the lane** (ADR 0091 decision 5). Each lane's job
      records each green leg (`scripts/snapshot.py lane-result --lane <its lane>`, gated like every write; lane L2's with
-     `--predecessor`, no other lane's) and holds no `id-token`; the `snapshot` job assembles each lane's predicates once
-     (`scripts/snapshot.py predicates --lane <lane>`) with `--arch` and `--shard` equal to that lane's matrix `arch`
-     and its leg key (L1's `domain`, L2's `leg`), read from the file, and runs `cosign attest --type
+     `--predecessor` and lane L3's with `--backups`, no other lane's) and holds no `id-token`; the `snapshot` job
+     assembles each lane's predicates once (`scripts/snapshot.py predicates --lane <lane>`) with `--arch` and `--shard`
+     equal to that lane's matrix `arch` and its leg key (L1's `domain`, L2's `leg`, L3's `shard`), read from the file,
+     and runs `cosign attest --type
      "$PREDICATE_TYPE"` with that variable set to `scripts/snapshot.py`'s `PREDICATE_TYPE`, after the predicates and
      after every image signature.
  11. **(Retired here.)** A release's one immutable GitHub Release, created last (ADR 0096 decision 3), left this
@@ -99,8 +104,8 @@ manifests, the image signatures, the predicates and the tag each name it.
      14 holds it there. What stays of it here: **the
      cosign that signs is the line operators verify with** (inbox #474): exactly one `sigstore/cosign-installer` step
      in the file outside the stack lanes' jobs, in the `snapshot` job before every step that runs `cosign` (lane L2's
-     installer is a cosign that verifies, through the starting release's `veyqctl`, held to the same version as
-     release.yml's), with `cosign-release` an exact
+     installer is a cosign that verifies, through the starting release's `veyqctl`, and lane L3's one that verifies the
+     archive's signature, each held to the same version as release.yml's), with `cosign-release` an exact
      `v<major>.<minor>.<patch>` no older than `src/tools/veyqctl.py`'s `COSIGN_MIN_VERSION` — never the installer's
      default, which lags — and no `cosign` line anywhere passes the deprecated flag that chose the bundle format
      (cosign 3 writes the Sigstore bundle by default, and only its `=false` spelling still writes the legacy one).
@@ -119,7 +124,8 @@ manifests, the image signatures, the predicates and the tag each name it.
      `snapshot` worktree), holds them to the plan (`scripts/promote.py assets`), and only then signs exactly `veyqctl`
      and the manifest into the producer's reserved bundle names; it packages the chart from the snapshot's commit as
      `$VERSION` and signs it. Every job that runs cosign installs publish.yml's cosign first, the Helm pin is the
-     pipeline's and publish.yml's (each states it: a caller's env does not reach a called workflow),
+     pipeline's and publish.yml's (each states it: a caller's env does not reach a called workflow), the oras pin is
+     archive.yml's and the pipeline's (lane L3 reads the archive with the oras it was written with),
      the file states no certificate identity of its own, and no other workflow writes a GitHub Release (a `gh api`
      write by `-X` or `--method`) but publish.yml's draft line, held by assertion 3. What
      `scripts/promote.py` decides — every refusal — is `scripts/promote_selftest.py`'s, which `check` and the
@@ -492,10 +498,22 @@ STAGED_STEP = "assert-staged"  # publish.yml's check that the bytes are the Chec
 BUILD_JOB, LOCAL_BUILD_JOB = "build", "build-local"
 # The stack lanes' orchestrators: assertion 10 finds each lane's job by what it runs, never by the job's name, and
 # assertion 13 reads its legs from the matrix key named here (lane L1's domains, lane L2's starting releases).
-LANE_ORCHESTRATORS = {"L1": ("scripts/run_stack_e2e.py", "domain"), "L2": ("scripts/run_stack_upgrade.py", "leg")}
+LANE_ORCHESTRATORS = {"L1": ("scripts/run_stack_e2e.py", "domain"), "L2": ("scripts/run_stack_upgrade.py", "leg"),
+                      "L3": ("scripts/run_stack_restore.py", "shard")}
 # The lanes that boot every architecture the build publishes; every other lane proves the data path, which no
 # architecture changes, and runs on a non-empty subset of them (ADR 0091 decision 6, amended 2026-11-27).
 EVERY_ARCH_LANES = {"L1"}
+# The lanes that run on a push alone (ADR 0091 decision 6, amended 2026-11-26 point 5: a pull request keeps lane L2):
+# the job's `if:` holds `github.event_name == 'push'` as an `&&` term, and the gate accepts it skipped on a pull request
+# and nowhere else — by exactly the two `&&` terms PUSH_ONLY_GATE names, so on a push it must pass.
+PUSH_ONLY_LANES = {"L3"}
+PUSH_ONLY_IF = "github.event_name == 'push'"
+
+
+def push_only_gate(job: str) -> set[str]:
+    """The gate's two `&&` terms for a push-only lane job: success on a push, success or skipped on a pull request."""
+    return {f"(needs.{job}.result == 'success' || github.event_name == 'pull_request')",
+            f"contains(fromJSON('[\"success\", \"skipped\"]'), needs.{job}.result)"}
 # The snapshot's decisions (assertion 13): a lane leg's record, the predicates, the write-once refusal.
 SNAPSHOT_SCRIPT = "scripts/snapshot.py"
 CHART_DIR = repo_layout.CHART_DIR
@@ -1539,8 +1557,15 @@ if workflow_doc:
         # (`if: false`) or on one event alone (`if: github.event_name == '<event>'`, the two builds) may be accepted
         # as `skipped` too.
         terms = {" ".join(t.split()) for t in publish_if.split("&&")}
+        # The push-only lanes' jobs, found as assertion 10 finds every lane's: by the orchestrator they run.
+        push_only_jobs = {str(name) for name, job in jobs.items() if isinstance(job, dict) and any(
+            LANE_ORCHESTRATORS[lane_id][0] in str(st.get("run") or "")
+            for lane_id in PUSH_ONLY_LANES for st in job_steps(workflow_doc, name))}
         for need in gate_needs:
             accepted = f"needs.{need}.result == 'success'" in terms
+            if not accepted and need in push_only_jobs:
+                # A push-only lane: accepted skipped on a pull request alone, and only while its job runs on a push alone.
+                accepted = push_only_gate(need) <= terms
             need_if = " ".join(str((jobs.get(need) or {}).get("if")).split())
             by_design = need_if in ("False", "false") or bool(re.fullmatch(r"github\.event_name == '[a-z_]+'", need_if))
             if not accepted and by_design:
@@ -1550,7 +1575,8 @@ if workflow_doc:
                     f"the `{GATE_JOB}` job's `if:` calls a status function, which lets it run past a failed "
                     f"need, but it does not require `needs.{need}.result == 'success'` as one of its `&&` terms — a "
                     f"publish would go ahead on a red `{need}` (ADR 0091 decision 2). Only a job that is literally "
-                    f"`if: false`, or runs on one event alone, may be accepted as `skipped` too."
+                    f"`if: false`, or runs on one event alone, may be accepted as `skipped` too — and a push-only lane "
+                    f"({', '.join(sorted(PUSH_ONLY_LANES))}) by exactly {sorted(push_only_gate(need))}."
                 )
     snapshot_if = " ".join(str(publish_job.get("if") or "").split())
     if publish_job and not gated_on(publish_job.get("if"), PUBLISHES):
@@ -1597,10 +1623,18 @@ if workflow_doc:
         if BUILD_JOB not in lane_needs:
             fail(f"lane {lane_id}'s job `{lane}` does not need `{BUILD_JOB}` — on a publishing run it installs the images "
                  f"that job pushed, so it must run after it (ADR 0090 decision 2)")
-        if lane not in publish_needs or f"needs.{lane}.result == 'success'" not in {
-                " ".join(t.split()) for t in publish_if.split("&&")}:
+        gate_terms = {" ".join(t.split()) for t in publish_if.split("&&")}
+        waits = (f"needs.{lane}.result == 'success'" in gate_terms
+                 or (lane_id in PUSH_ONLY_LANES and push_only_gate(lane) <= gate_terms))
+        if lane not in publish_needs or not waits:
             fail(f"the `{GATE_JOB}` job does not wait on lane {lane_id} (`{lane}`) with `needs.{lane}.result == "
-                 f"'success'` — the snapshot would be published on bytes the lane never installed (ADR 0090 decision 2)")
+                 f"'success'` (a push-only lane: {sorted(push_only_gate(lane))}) — the snapshot would be published on "
+                 f"bytes the lane never installed (ADR 0090 decision 2)")
+        lane_if = {" ".join(t.split()) for t in " ".join(str(lane_job.get("if") or "").split()).split("&&")}
+        if (lane_id in PUSH_ONLY_LANES) != (PUSH_ONLY_IF in lane_if):
+            fail(f"lane {lane_id}'s job `{lane}` {'does not run' if lane_id in PUSH_ONLY_LANES else 'runs'} on a push "
+                 f"alone (`{PUSH_ONLY_IF}` as an `&&` term of its `if:`) — lane L3 runs on a push and the gate accepts "
+                 f"it skipped on a pull request; every other lane runs on both (ADR 0091 decision 6, point 5)")
         lane_archs = {str(a) for a in (((lane_job.get("strategy") or {}).get("matrix") or {}).get("arch") or [])}
         if not build_archs:
             fail(f"the `{BUILD_JOB}` job's matrix names no `arch` — lane {lane_id}'s architectures cannot be held to it")
@@ -1654,6 +1688,10 @@ if workflow_doc:
             if (lane_id in snapshot_script.PREDECESSOR_LANES) != bool(flag_values(argv, "--predecessor")):
                 fail(f"lane {lane_id}'s job `{lane}` records {'no' if lane_id in snapshot_script.PREDECESSOR_LANES else 'a'} "
                      f"`--predecessor` — lane L2's record names the release it started from, and only L2's (ADR 0091 "
+                     f"decision 5)")
+            if (lane_id in snapshot_script.BACKUP_LANES) != bool(flag_values(argv, "--backups")):
+                fail(f"lane {lane_id}'s job `{lane}` records {'no' if lane_id in snapshot_script.BACKUP_LANES else ''} "
+                     f"`--backups` — lane L3's record names the archived backups it restored, and only L3's (ADR 0091 "
                      f"decision 5)")
         assembled = [(i, step, argv) for i, step, argv in argv_lines(PUBLISH_JOB, f"{SNAPSHOT_SCRIPT} predicates")
                      if flag_values(argv, "--lane") == [lane_id]]
@@ -2475,6 +2513,14 @@ else:
     if len(set(helm_pins.values())) != 1 or None in next(iter(helm_pins.values())):
         fail(f"the Helm pin differs between {helm_pins} — the chart a release packages is the snapshot's Helm's, and the "
              f"chart check's (a caller's workflow-level env does not reach the pipeline, so each file states it)")
+    # And oras, the archive's OCI client: archive.yml writes the archive with it, checks.yml's lane L3 reads it — one pin.
+    oras_pins = {}
+    for path in (ROOT / (ARCHIVE_WORKFLOW_FILE or ".github/workflows/archive.yml"), CHECKS):
+        env = (yaml.safe_load(path.read_text()) or {}).get("env") or {} if path.is_file() else {}
+        oras_pins[rel_of(path)] = (env.get("ORAS_VERSION"), env.get("ORAS_SHA256"))
+    if len(set(oras_pins.values())) != 1 or None in next(iter(oras_pins.values())):
+        fail(f"the oras pin differs between {oras_pins} — lane L3 reads the archive with the oras archive.yml wrote it "
+             f"with, each file stating it (pin_follow.py oras rewrites both)")
     release_summary = (f"; {RELEASE_WORKFLOW} is started by hand only, in group `veyq-release`, its {len(RELEASE_JOBS)} "
                        f"jobs each holding only what they write, builds nothing, moves the channels after publishing "
                        f"and publishes last")

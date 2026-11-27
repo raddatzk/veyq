@@ -50,6 +50,11 @@ concurrency:
 env:
   HELM_VERSION: v4.3.2
   HELM_SHA256: d1c0278d46beab79582d7e50f5b3dc206944ba8e577cde618513fd07daa53983
+  # oras for lane L3's `stack-restore`, which reads the backup archive: the pin archive.yml writes the archive with
+  # (validate_release_identity.py holds the two copies equal; `pin_follow.py oras` rewrites both, and the sentence
+  # in archive.yml that says how it was measured).
+  ORAS_VERSION: v1.4.0
+  ORAS_SHA256: d8e1dce2fd8ce996f1d901845b688eb0cf505a6082897606f053825bb47935d1
 
 # Least-privilege default; each job widens only what it needs (see per-job permissions blocks).
 permissions:
@@ -128,6 +133,12 @@ jobs:
       # refusals — proven on every commit, before a release archives anything.
       - name: Archive self-test
         run: .venv/bin/python scripts/archive_backup_selftest.py
+
+      # Lane L3's decisions (scripts/run_stack_restore.py, and the selection beside the major entry in
+      # scripts/run_web_e2e.py): one backup per schema state plus the entry, on 2026-11-26's tags and a fabricated
+      # history; the shards' split; an archive that is missing, foreign-signed or not the one selected refused.
+      - name: Lane L3 self-test
+        run: .venv/bin/python scripts/stack_restore_selftest.py
 
       # Which staging images publish.yml's weekly retention deletes (scripts/staging_retention.py): proven on every
       # commit that could change it, before its next run deletes anything.
@@ -1417,6 +1428,257 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  # Lane L3 (ADR 0091 decision 6, amended 2026-11-26; scripts/run_stack_restore.py): the archived backups the selection
+  # names — one per schema state of the candidate's major, the oldest release of each, plus the major entry, derived
+  # from the tags and their pin files (`run_web_e2e.backup_selection_ref`), never listed — each pulled from
+  # `veyq-backups`, verified under archive.yml's identity (scripts/archive_backup.py's, read from there), restored by the
+  # candidate's own `veyqctl restore --objects-from --key-from` into a FRESH `veyqctl install --unsigned-local` of the
+  # candidate on the domain its archive.json names, and read by the candidate's reader and in a browser by its one spec.
+  # A selected backup that is not archived, or does not verify, is red naming the release — never skipped. The selection
+  # is dealt over the shards (the count is this matrix, read by the orchestrator) so one shard fits the budget; a shard
+  # the selection leaves empty restores nothing, passes, and still records `[]`. On a push only, amd64 alone (ADR 0091
+  # decision 6, amended 2026-11-26 point 5 and 2026-11-27): a pull request keeps lane L2, and `green` accepts this job
+  # skipped on a pull request alone.
+  stack-restore:
+    name: Stack lane L3 (${{ matrix.arch }}, ${{ matrix.shard }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # As lane L1's, for its reasons: the images this lane pulls install a lockfile `frontend` has passed.
+    needs:
+      - version
+      - frontend
+      - build
+    if: >-
+      !cancelled() && github.event_name == 'push' && needs.version.result == 'success'
+      && needs.frontend.result == 'success' && contains(fromJSON('["success", "skipped"]'), needs.build.result)
+    permissions:
+      contents: read
+      packages: read # a staging run pulls the staged images by digest; the archive is read with the same login
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64]
+        # The selection is dealt round-robin over these (scripts/run_stack_restore.py `shard_of`, `MAX_PER_SHARD`
+        # backups at most each); publish.yml's `predicates --lane L3` names the same shards (validate_release_identity.py).
+        shard: ["1", "2", "3"]
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Every tag and the whole history: the selection reads every tag's own pin file (a fix release on
+          # `release/<old>.x` included), and the candidate's release counts its commits.
+          fetch-depth: 0
+
+      - name: Set up the orchestrator's Python
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/stack-venv"
+          "${RUNNER_TEMP}/stack-venv/bin/pip" install --quiet --require-hashes --only-binary :all: -r scripts/requirements-release.txt
+
+      - name: Resolve the shard's backups (${{ matrix.shard }})
+        id: selection
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          "${RUNNER_TEMP}/stack-venv/bin/python" scripts/run_stack_restore.py --shard "$SHARD" --resolve | tee "${RUNNER_TEMP}/resolve.log"
+          backups="$(sed -n 's/^backups=//p' "${RUNNER_TEMP}/resolve.log" | tail -n 1)"
+          echo "backups=${backups}" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        if: steps.selection.outputs.backups != ''
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+
+      # pnpm at exactly the version package.json pins in `packageManager` (validate_pnpm_installs_gated.py holds
+      # the two equal). GitHub's runner only: a local run (scripts/run_pipeline.py) uses the host's pnpm, which
+      # switches itself to the pinned version.
+      - name: Install pnpm
+        if: steps.selection.outputs.backups != '' && runner.environment == 'github-hosted'
+        run: npm install -g pnpm@12.23.0
+
+      # The OpenAPI generator JAR, cached and verified as `frontend`'s says.
+      - name: Restore the OpenAPI generator JAR
+        if: steps.selection.outputs.backups != ''
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.openapi-generator
+          key: openapi-generator-jar-${{ hashFiles('scripts/openapi_generator_jar.sha256', 'src/web/openapitools.json', 'src/admin-web/openapitools.json') }}
+
+      # The candidate's reader and browser spec run from this install (the browser container mounts it read-only; the
+      # suite container runs its vitest). The registry half is asked once per commit, by `frontend`.
+      - name: Install dependencies
+        if: steps.selection.outputs.backups != ''
+        run: python3 scripts/pnpm_install_no_deprecated.py --skip-registry-check
+
+      # The archive's signature is verified with the cosign publish.yml signs with (validate_release_identity.py holds
+      # every installer of it equal).
+      - name: Install cosign
+        if: steps.selection.outputs.backups != ''
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: v3.1.4
+
+      # The archive's OCI client, the pinned tarball archive.yml writes with (ORAS_VERSION and ORAS_SHA256 above;
+      # validate_release_identity.py holds both copies equal), checked before it is extracted.
+      - name: Install oras (pinned tarball)
+        if: steps.selection.outputs.backups != ''
+        run: |
+          set -euo pipefail
+          tarball="oras_${ORAS_VERSION#v}_linux_amd64.tar.gz"
+          curl -fsSLo "${RUNNER_TEMP}/${tarball}" "https://github.com/oras-project/oras/releases/download/${ORAS_VERSION}/${tarball}"
+          echo "${ORAS_SHA256}  ${RUNNER_TEMP}/${tarball}" | sha256sum --check --strict -
+          mkdir -p "${RUNNER_TEMP}/oras"
+          tar -xzf "${RUNNER_TEMP}/${tarball}" -C "${RUNNER_TEMP}/oras" oras
+          echo "${RUNNER_TEMP}/oras" >> "$GITHUB_PATH"
+
+      # A staging run (every run of this job is a push): the images `build` pushed for this architecture, by the
+      # digests it handed over — fetched by every shard, the empty one included, whose record names them too. The
+      # login also reads the archive (public; reading it signed in spends no anonymous budget).
+      - name: Log in to GitHub Container Registry
+        if: needs.version.outputs.kind == 'stage'
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch the digests build pushed
+        if: needs.version.outputs.kind == 'stage'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+
+      - name: Pull the candidate by digest and name it locally
+        if: needs.version.outputs.kind == 'stage'
+        env:
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          for image in veyq veyq-admin; do
+            digest="$(tr -d '[:space:]' < "${RUNNER_TEMP}/digests/${image}")"
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "no digest for ${image} (${ARCH}) from build: '${digest}'" >&2
+              exit 1
+            fi
+            docker pull "${REGISTRY}/${image}@${digest}"
+            docker tag "${REGISTRY}/${image}@${digest}" "${image}:candidate-${ARCH}"
+            echo "${image}:candidate-${ARCH} is ${REGISTRY}/${image}@${digest}"
+          done
+
+      # A push to a branch that does not stage (one other than `main` or `release/<major>.x` — the trigger names none
+      # today — or a local run of scripts/run_pipeline.py) builds the candidate here, as lane L1 does, from the cache.
+      - name: Set up Docker Buildx
+        if: needs.version.outputs.kind != 'stage'
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build the candidate app image
+        if: needs.version.outputs.kind != 'stage'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: src/backend/Dockerfile
+          target: runtime-jvm
+          platforms: linux/${{ matrix.arch }}
+          push: false
+          load: true
+          provenance: false
+          sbom: false
+          tags: veyq:candidate-${{ matrix.arch }}
+          build-args: |
+            VEYQ_VERSION=${{ needs.version.outputs.version }}
+            VEYQ_REVISION=sha-${{ github.sha }}
+          cache-from: type=gha,scope=veyq-${{ matrix.arch }}
+
+      - name: Build the candidate admin image
+        if: needs.version.outputs.kind != 'stage'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: src/admin-web/Dockerfile
+          target: runtime-nginx
+          platforms: linux/${{ matrix.arch }}
+          push: false
+          load: true
+          provenance: false
+          sbom: false
+          tags: veyq-admin:candidate-${{ matrix.arch }}
+          build-args: |
+            VEYQ_VERSION=${{ needs.version.outputs.version }}
+            VEYQ_REVISION=sha-${{ github.sha }}
+          cache-from: type=gha,scope=veyq-admin-${{ matrix.arch }}
+
+      # Never runs on GitHub: scripts/run_pipeline.py's stand-in for the two actions above, as lane L1's.
+      - name: Build the candidate images (the host's Docker)
+        if: runner.environment != 'github-hosted' && needs.version.outputs.kind != 'stage'
+        env:
+          PLATFORM: linux/${{ matrix.arch }}
+          ARCH: ${{ matrix.arch }}
+          VEYQ_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          docker build --file src/backend/Dockerfile --target runtime-jvm --platform "$PLATFORM" \
+            --build-arg "VEYQ_VERSION=${VEYQ_VERSION}" --build-arg "VEYQ_REVISION=sha-${GITHUB_SHA}" \
+            --tag "veyq:candidate-${ARCH}" .
+          docker build --file src/admin-web/Dockerfile --target runtime-nginx --platform "$PLATFORM" \
+            --build-arg "VEYQ_VERSION=${VEYQ_VERSION}" --build-arg "VEYQ_REVISION=sha-${GITHUB_SHA}" \
+            --tag "veyq-admin:candidate-${ARCH}" .
+
+      # A shard with no backup passes here, saying so, and writes the asset set of the candidate's release files and
+      # `[]` for its record; every other shard restores its backups one after another, each into a fresh install.
+      - name: Run lane L3 (shard ${{ matrix.shard }})
+        env:
+          ARCH: ${{ matrix.arch }}
+          SHARD: ${{ matrix.shard }}
+          REGISTRY: ghcr.io/${{ github.repository_owner }}
+        run: |
+          "${RUNNER_TEMP}/stack-venv/bin/python" scripts/run_stack_restore.py --shard "$SHARD" --registry "$REGISTRY" \
+            --app "veyq:candidate-${ARCH}" --admin "veyq-admin:candidate-${ARCH}" \
+            --asset-set-out "${RUNNER_TEMP}/asset-set" --backups-out "${RUNNER_TEMP}/backups.json"
+
+      # What this green shard ran, for the snapshot's attestation (ADR 0091 decision 5), as lane L1's records — and the
+      # backups it restored, each with the artifact digest cosign verified, which the promotion compares with the
+      # selection it derives then.
+      - name: Record the shard's result
+        if: needs.version.outputs.kind == 'stage'
+        env:
+          ARCH: ${{ matrix.arch }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          python3 scripts/snapshot.py lane-result --lane L3 --arch "$ARCH" --shard "$SHARD" --commit "$GITHUB_SHA" \
+            --asset-set "$(tr -d '[:space:]' < "${RUNNER_TEMP}/asset-set")" \
+            --image "veyq=$(tr -d '[:space:]' < "${RUNNER_TEMP}/digests/veyq")" \
+            --image "veyq-admin=$(tr -d '[:space:]' < "${RUNNER_TEMP}/digests/veyq-admin")" \
+            --backups "${RUNNER_TEMP}/backups.json" \
+            --out "${RUNNER_TEMP}/lane-result/L3-${ARCH}-${SHARD}.json"
+
+      - name: Keep the shard's result
+        if: needs.version.outputs.kind == 'stage'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: lane-result-L3-${{ matrix.arch }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/lane-result/L3-${{ matrix.arch }}-${{ matrix.shard }}.json
+          if-no-files-found: error
+          # 30 days, as lane L1's: publish.yml reads them from this run.
+          retention-days: 30
+
+      # The run directory: the candidate's release, and per backup the pulled artifact, the instance's home, every
+      # step's log, the reading, the browser's report. It holds the secrets of throwaway instances that no longer
+      # exist, and the archived test data that is public in the archive anyway.
+      - name: Keep the stack run directory
+        if: always() && steps.selection.outputs.backups != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: stack-restore-out-${{ matrix.arch }}-${{ matrix.shard }}
+          path: .e2e-stack-out/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
+
   # The upgrade proof (ADR 0057 Decision 7, site/src/content/docs/run/upgrade.mdx): the predecessor's own jar and e2e
   # suites seal content into an instance, ADR 0056's tool captures it, the capture is restored onto THIS commit's build,
   # which migrates it up at its start, and this commit's suites open the content and assert it. The predecessor is the
@@ -1527,7 +1789,8 @@ jobs:
   # Every stage passed (ADR 0091 decision 2): the job publish.yml reads, by its result in this run, before it signs
   # this run's staging — so the build may start beside the tests. `always()` so that a job SKIPPED by design does not
   # skip this one, as a skipped need otherwise would: the one build of the two that this event does not run (`build` on
-  # a push, `build-local` on a pull request). Every result then gates it explicitly, and a red stage SKIPS it.
+  # a push, `build-local` on a pull request), and lane L3 on a pull request — accepted skipped on that event alone, so
+  # on a push it must pass. Every result then gates it explicitly, and a red stage SKIPS it.
   # validate_release_identity.py holds the list to every job of this file and the skips it accepts to those two.
   green:
     name: Pipeline green
@@ -1548,6 +1811,7 @@ jobs:
       - build-local
       - stack
       - stack-upgrade
+      - stack-restore
       - upgrade-proof
     if: >-
       always()
@@ -1565,6 +1829,8 @@ jobs:
       && contains(fromJSON('["success", "skipped"]'), needs.build-local.result)
       && needs.stack.result == 'success'
       && needs.stack-upgrade.result == 'success'
+      && (needs.stack-restore.result == 'success' || github.event_name == 'pull_request')
+      && contains(fromJSON('["success", "skipped"]'), needs.stack-restore.result)
       && needs.upgrade-proof.result == 'success'
     permissions:
       contents: read # reads only its needs' results; no checkout

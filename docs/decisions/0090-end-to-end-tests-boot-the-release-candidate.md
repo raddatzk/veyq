@@ -1,7 +1,7 @@
 # ADR 0090 — End-to-end tests boot the release candidate and drive it in a real browser
 
 - Status: Accepted
-- Built: partly (not built: decision 2's push gate on the published snapshot's digests, decision 7's boot of L3's restores; L2's predecessor is booted by the same primitives, `scripts/stack_lane.py`, since cr-stack-lane-l2-upgrade-in-place)
+- Built: partly (not built: decision 2's push gate on the published snapshot's digests; L2's predecessor is booted by the same primitives, `scripts/stack_lane.py`, since cr-stack-lane-l2-upgrade-in-place, and decision 7's L3 restores — each into a fresh install of the candidate — since cr-stack-lane-l3-backup-archive, `scripts/run_stack_restore.py`)
 - Date: 2026-10-16
 - Model: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md)
 

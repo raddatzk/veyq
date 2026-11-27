@@ -7,7 +7,7 @@ name: Publish
 # only what checks.yml's push `paths-ignore` skips, and so has no Checks run — its newest first-parent ancestor that has
 # one, every commit after it docs-only (scripts/snapshot.py checks-run): every name below is that commit's, never
 # `$GITHUB_SHA`'s. This file runs no pipeline and builds nothing: it publishes only when that commit's newest Checks
-# push run concluded `success` with its gate and every lane leg on both architectures green, and refuses, red and named,
+# push run concluded `success` with its gate and every lane leg on its architectures green, and refuses, red and named,
 # otherwise — a run still going, red, or cancelled by hand included (re-run it, or push again; this file never starts
 # Checks). Written once, never replaced: a commit that already carries its `snapshot-` tag — or its release's `v` tag,
 # since a release deletes the snapshot tag — publishes nothing, with a notice. Two triggers, and no other: the weekly
@@ -149,7 +149,7 @@ jobs:
           pattern: digest-*
           path: ${{ runner.temp }}/digests
 
-      # What every green leg of that run's lanes L1 and L2 recorded (`scripts/snapshot.py lane-result`).
+      # What every green leg of that run's lanes L1, L2 and L3 recorded (`scripts/snapshot.py lane-result`).
       - name: Fetch the Checks run's lane results
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -213,9 +213,10 @@ jobs:
 
       # One predicate per lane and architecture, refused unless every leg of the matrix left a green record, with one
       # asset set across all of them (ADR 0091 decision 5). Its `--arch` and `--shard` are the lane's matrix's — lane
-      # L1's `stack` domains, lane L2's `stack-upgrade` legs — which scripts/validate_release_identity.py holds equal.
-      # Lane L2's predicate names each leg's predecessor (the release it upgraded from, or none), which the promotion
-      # compares with the one it resolves then.
+      # L1's `stack` domains, lane L2's `stack-upgrade` legs, lane L3's `stack-restore` shards — which
+      # scripts/validate_release_identity.py holds equal. Lane L2's predicate names each leg's predecessor (the release
+      # it upgraded from, or none), lane L3's every archived backup its shards restored with its artifact digest; the
+      # promotion compares each with the one it derives then.
       - name: Assemble the lanes' attestations
         env:
           # The Checks run the lanes ran in — what the attestation says it records — not this run, which ran none.
@@ -227,6 +228,8 @@ jobs:
             --shard account --shard depot --shard expenses --shard memories --shard moderation --shard platform \
             --commit "$COMMIT" --run "$RUN_URL" --results "${RUNNER_TEMP}/lane-results" --out "${RUNNER_TEMP}/predicates"
           python3 scripts/snapshot.py predicates --lane L2 --arch amd64 --shard newest --shard major-entry \
+            --commit "$COMMIT" --run "$RUN_URL" --results "${RUNNER_TEMP}/lane-results" --out "${RUNNER_TEMP}/predicates"
+          python3 scripts/snapshot.py predicates --lane L3 --arch amd64 --shard 1 --shard 2 --shard 3 \
             --commit "$COMMIT" --run "$RUN_URL" --results "${RUNNER_TEMP}/lane-results" --out "${RUNNER_TEMP}/predicates"
 
       # The snapshot's names on the digests `build` pushed: `<version>-SNAPSHOT` and `sha-<commit>`, nothing else — no

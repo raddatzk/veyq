@@ -1787,6 +1787,61 @@ def major_entry_ref(major: int | None = None, root: Path = REPO) -> str | None:
     return major_entry(candidate_major(root) if major is None else major, tags)
 
 
+def release_order(tag: str) -> tuple[int, int]:
+    """A `v<major>.<minor>` tag's place in version order (`v1.10` after `v1.9`)."""
+    m = RELEASE_TAG.match(tag)
+    if not m:
+        raise ValueError(f"{tag!r} is no release tag v<major>.<minor>")
+    return int(m.group(1)), int(m.group(2))
+
+
+def backup_selection(major: int, tags: list[str], highest_of) -> list[tuple[str, str]]:
+    """The archived backups lane L3 restores into a candidate of `major` (ADR 0091 decision 6, amended 2026-11-26,
+    point 4), as `(tag, its highest migration)` in version order: the releases of `major` among `tags` GROUPED by the
+    highest migration of their own pin file (`highest_of(tag)`, a schema state), the OLDEST release of each group — Flyway
+    runs the same migrations in the same order from any release of a state — plus the major entry ([major_entry]), the
+    one release a new major is entered from. Derived, never listed: a release that opens a new state joins the
+    selection, and a fix release on `release/<major-1>.x` moves the entry. `tags` is EVERY release tag
+    ([backup_selection_ref]: `git tag --list`), as for [major_entry]. A release whose pin file names no migration is
+    refused: every release carries the baselines, so its state is unreadable, never empty."""
+    def state(tag: str) -> str:
+        found = highest_of(tag)
+        if not found:
+            raise ValueError(f"{tag}'s {PIN_FILE} names no migration, so its schema state cannot be read")
+        return found
+
+    releases = sorted((tag for tag in tags if (m := RELEASE_TAG.match(tag)) and int(m.group(1)) == major),
+                      key=release_order)
+    oldest: dict[str, str] = {}
+    for tag in releases:
+        oldest.setdefault(state(tag), tag)
+    entry = major_entry(major, tags)
+    chosen = sorted({*oldest.values(), *([entry] if entry else [])}, key=release_order)
+    return [(tag, state(tag)) for tag in chosen]
+
+
+def backup_selection_ref(root: Path = REPO) -> list[tuple[str, str]]:
+    """[backup_selection] for this checkout's major, fed with EVERY `v*` tag and each tag's own pin file (`git show
+    <tag>:scripts/applied_migrations.sha256`) — `git tag --list`, not `--merged`, as [major_entry_ref]. While the pin
+    file says `release: none` no tag is read and the selection is empty. Raises ValueError where a tag's pin file
+    cannot be read. Lane L3 (`run_stack_restore.py`) and the promotion's comparison of its backup list resolve it here:
+    ONE derivation of what L3 restores."""
+    release = read_release((root / PIN_FILE).read_text())
+    if release == "none":
+        return []
+    tags = git("tag", "--list", "v*", cwd=root).splitlines()
+
+    def highest_of(tag: str) -> str | None:
+        shown = subprocess.run(["git", "show", f"refs/tags/{tag}:{PIN_FILE}"], cwd=str(root), capture_output=True,
+                               text=True)
+        if shown.returncode != 0:
+            raise ValueError(f"{tag} carries no {PIN_FILE} ({shown.stderr.strip()[-200:]}), so its schema state "
+                             f"cannot be read")
+        return highest_migration(pinned_migrations(shown.stdout))
+
+    return backup_selection(candidate_major(root), tags, highest_of)
+
+
 def major_entry_proof_ref(root: Path = REPO) -> tuple[str | None, str]:
     """(the second predecessor's ref or None, the line saying which and why): [second_predecessor] of this checkout's
     default predecessor and its major entry. Raises ValueError where either refuses. The upgrade proof's

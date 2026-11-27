@@ -56,7 +56,7 @@ weekly `schedule` (Monday 03:17 UTC; GitHub runs it on the default branch only, 
 `workflow_dispatch` — Actions → Publish → *Run workflow* — on `main` or `release/<major>.x`, the one way a release
 branch's fix gets a snapshot. It runs no pipeline and builds nothing: it publishes the **publishable commit's newest
 Checks push run**, and only when that run concluded `success` with its gate and every leg of every lane's matrix
-green (lane L1 on both architectures, lane L2 on amd64, ADR 0091 decision 6); a run still going, red, or cancelled by hand is refused, named, and Publish never starts Checks. The publishable
+green (lane L1 on both architectures, lanes L2 and L3 on amd64, ADR 0091 decision 6; L3 runs on a push alone, and a snapshot is made from a push run); a run still going, red, or cancelled by hand is refused, named, and Publish never starts Checks. The publishable
 commit is HEAD, or — Checks skips a commit that changes only what its push `paths-ignore` names (docs, Markdown, the
 site), so a docs-only HEAD has no run — the newest first-parent ancestor with a run, provided every commit after it is
 docs-only (amended 2026-11-08; within 50 commits, refused and named otherwise); every name the snapshot writes, its
@@ -84,8 +84,8 @@ sees the earlier one's tag.
    the chart as `<major>.<minor>-SNAPSHOT` (its `appVersion` is the image tag its values default to), signs the three
    images and the chart keylessly, and attaches each lane's result as a signed in-toto attestation per architecture
    (`https://veyq.app/attestations/stack-lane/v1`: lane, architecture, outcome, shards, the Checks run, the digests, and the inputs —
-   the asset set; for lane L2 the release each leg upgraded from, with its two digests; the backups once lane L3
-   exists) to the app and admin images. No GitHub Release.
+   the asset set; for lane L2 the release each leg upgraded from, with its two digests; for lane L3 every archived
+   backup its shards restored, with its artifact digest) to the app and admin images. No GitHub Release.
 4. `snapshot-tag`, a job that holds `contents: write` and nothing else, sets the git tag `snapshot-<major>.<minor>` on
    the commit, so GitHub's release page offers the snapshots that can be promoted. Never `v…`. It creates the tag
    through the REST API (`git/refs`), as `release.yml` creates `v<major>.<minor>`, never by `git push`: GitHub refuses a
@@ -329,17 +329,21 @@ check is logged and retried with a back-off, and blocks nothing.
 - **The rerun of moved lanes, and retention** ([ADR 0091](../decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
   decision 5). A promotion compares each lane's recorded inputs with the current ones: L1's cannot move; L2's
   predecessor per leg is resolved again from the snapshot's commit and every tag, and one that moved — a release
-  published since — is refused, naming both, rather than rerun; an input it cannot compare (L3's backup list) is
-  refused too. Retention — the 20 newest unpromoted snapshots per major and every promoted one, a scheduled
+  published since — is refused, naming both, rather than rerun; L3's backup list is compared by release tag with the
+  selection the snapshot's own `run_stack_restore.py --resolve` derives now, and one that moved — a release that opened
+  a schema state, or a fix release that moved the major entry — is refused, naming what is missing and what was not
+  selected; an input it cannot compare is refused too. Retention — the 20 newest unpromoted snapshots per major and every promoted one, a scheduled
   job deleting the rest with their `snapshot-` tags — is not built: until it is, every snapshot stays in GHCR.
-- **Lane L3 and the backup archive** (ADR 0091 decisions 3 and 6, amended 2026-11-26): one archived backup per schema
-  state of the major, with its object pool, restored into the candidate, each written by its starting release's own API
-  seeder and read by the candidate's reader. The archive is written per release by a workflow of its own after the
-  promotion (`.github/workflows/archive.yml`, built; a dispatch writes it for a release already out); no release is
-  archived yet. Lane L2 — the newest release and the major entry installed
-  from their signed releases, upgraded in place by their own `veyqctl upgrade` and rolled back — is built
-  (`scripts/run_stack_upgrade.py`, checks.yml's `stack-upgrade`). When L2 and L3 both gate, the jar-level upgrade proof
-  retires (decision 7; replaces ADR 0057 § 7).
+- **The jar-level upgrade proof's retirement** (ADR 0091 decision 7; replaces ADR 0057 § 7). Lane L2 — the newest
+  release and the major entry installed from their signed releases, upgraded in place by their own `veyqctl upgrade`
+  and rolled back — is built (`scripts/run_stack_upgrade.py`, checks.yml's `stack-upgrade`), and so is lane L3 and the
+  backup archive (ADR 0091 decisions 3 and 6, amended 2026-11-26): `.github/workflows/archive.yml` writes every
+  release's backup once after its promotion, by its own seeder, signed under its own identity (all eighteen releases
+  before it by dispatch, 2026-11-27), and `scripts/run_stack_restore.py` (checks.yml's `stack-restore`, on a push,
+  amd64, in shards) restores one per schema state of the major and the major entry's — derived from the tags and their
+  pin files — each into a fresh install of the candidate with `veyqctl restore --objects-from`, read by the candidate's
+  reader and browser spec; a selected backup that is not archived or does not verify is red. Once both have gated a
+  push, the jar-level proof retires.
 - **The window of majors a client speaks** ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md)
   decision 5). The yearly train, its release order and the previous major's release branch (decisions 2, 3 and 10)
   are a procedure, written in [`infra/README.md`](../../infra/README.md) § Cutting a release, and no train has left.
@@ -349,5 +353,3 @@ check is logged and retried with a back-off, and blocks nothing.
   checks and its signed releases in `github.com/raddatzk/veyq-server` (v0.5, v0.8), and `init`'s server path, which
   set up the maintainer's instance from an empty repository on a fresh server (2026-11-11 and 2026-11-12; the Run
   page's *How far this is proven*).
-- **L3's archive holding the major entry** (ADR 0085 decision 10, inbox #461): the major entry's backup in the
-  archive lane L3 restores.

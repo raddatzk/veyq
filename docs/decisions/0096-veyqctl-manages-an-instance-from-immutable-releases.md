@@ -124,8 +124,10 @@ decision 2), so it holds the rule an app holds:
   it back — is what lane L2 runs on every commit, with the newest release's own `veyqctl` (and the major entry's across
   the major), [ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md) decision 6. Its limit:
   only those two releases' `veyqctl` are run; an older one of the major is not.
-- **The backup archive must hold the major entry**, since decision 5 enters a new major from it alone; which backups
-  lane L3 restores is ADR 0091 decision 6's.
+- **The backup archive holds the major entry**, since decision 5 enters a new major from it alone: every release is
+  archived (`archive.yml`, after each promotion), so the entry is too, and lane L3 restores it into every candidate of
+  the new major beside one backup per schema state (ADR 0091 decision 6; `run_web_e2e.backup_selection`, which reads
+  the entry from every tag as `major_entry` does).
 - **Rejected — keep the recipe in the image and add `garage.toml`.** Closes the gap, keeps an unusual shape, and still
   leaves the operator needing the repository for backups.
 - **Rejected — fetch the recipe at the commit the image names (`VEYQ_REVISION`).** Binds recipe to image without a

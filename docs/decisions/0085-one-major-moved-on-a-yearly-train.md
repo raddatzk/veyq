@@ -1,8 +1,9 @@
 # ADR 0085 — One major for the platform, moved on a yearly train; a client speaks every major since the train before last
 
 - Status: Accepted
-- Built: partly (not built: decision 5's client window — deferred until a major 2 is released, § Consequences —, lane
-  L3's archive holding decision 10's major entry)
+- Built: partly (not built: decision 5's client window — deferred until a major 2 is released, § Consequences; decision
+  10's major entry is in lane L3's archive — every release is archived, v0.2480 the entry of major 1 — and L3 restores
+  it into every candidate of the major, cr-stack-lane-l3-backup-archive)
 - Date: 2026-10-15
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
 

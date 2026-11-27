@@ -359,8 +359,8 @@ major from, and its manifest names it as `majorEntry`, the one `veyqctl` enters 
 (`run_web_e2e.py --upgrade-major-entry`, `chart_upgrade_check.py --upgrade-major-entry`,
 `release_assets.py --major-entry`, `release_assets.produce`: one derivation, ADR 0085 § Consequences). A snapshot
 bakes the entry when it is built, so a release of major N promotes a snapshot built **after** that fix release. Until
-that release exists, an instance on the fix release cannot enter the new major. Not built is lane L3's archive holding
-that release (ADR 0096, inbox #461).
+that release exists, an instance on the fix release cannot enter the new major. Once it is released, `archive.yml`
+archives it like every release, and lane L3 restores it as the new major entry (ADR 0096, ADR 0091 decision 6).
 
 **What a run on GitHub has shown, and what it still must,** is inbox #471: the first snapshot (of a push, before
 2026-11-07), its signatures and attestations; the dispatched (from 2026-11-07) and the weekly (2026-11-09) snapshot with their tag; the first

@@ -34,6 +34,10 @@ LEGS = ["major-entry", "newest"]
 # What lane L2's legs upgraded from, as attested, and as the promotion resolves them now (the World's `resolved`).
 STARTED = {"newest": {"tag": "v0.10", "images": {"veyq": "sha256:" + "5" * 64, "veyq-admin": "sha256:" + "6" * 64}},
            "major-entry": None}
+# Lane L3 on amd64 alone too, in three shards; the backups its shards restored, as attested, and the selection the
+# promotion derives now (the World's `selected`).
+RESTORE_ARCHS, RSHARDS = ["amd64"], ["1", "2", "3"]
+RESTORED = [{"tag": "v0.9", "digest": "sha256:" + "7" * 64}, {"tag": "v0.10", "digest": "sha256:" + "8" * 64}]
 
 
 def h(n: int) -> str:
@@ -45,6 +49,13 @@ def upgrade(started=None, **predicate) -> dict:
     return {"lane": "L2", "shards": LEGS,
             "inputs": {"assetSet": SET, "predecessor": copy.deepcopy(STARTED if started is None else started),
                        "backups": None}, **predicate}
+
+
+def restore(restored=None, **predicate) -> dict:
+    """The fields of a lane L3 predicate (its lane, shards and the backups they restored) over an L1 one's."""
+    return {"lane": "L3", "shards": RSHARDS,
+            "inputs": {"assetSet": SET, "predecessor": None,
+                       "backups": copy.deepcopy(RESTORED if restored is None else restored)}, **predicate}
 
 
 class World:
@@ -67,6 +78,8 @@ class World:
         self.matrix = (ARCHS, SHARDS)
         self.legs = (UPGRADE_ARCHS, LEGS)
         self.resolved = {"newest": "v0.10", "major-entry": None}
+        self.restores = (RESTORE_ARCHS, RSHARDS)
+        self.selected = ["v0.9", "v0.10"]
         n = 100
         for image in promote.IMAGES:
             per_arch = {}
@@ -89,6 +102,8 @@ class World:
                     lines.append(self.envelope(image, d, arch, promote.digest_of(per_arch[arch])))
                     if arch in UPGRADE_ARCHS:
                         lines.append(self.envelope(image, d, arch, promote.digest_of(per_arch[arch]), **upgrade()))
+                    if arch in RESTORE_ARCHS:
+                        lines.append(self.envelope(image, d, arch, promote.digest_of(per_arch[arch]), **restore()))
                 self.atts[f"{REG}/{image}@{d}"] = "\n".join(lines)
 
     @staticmethod
@@ -133,7 +148,9 @@ class World:
     def attestations(self, ref, identity):
         return self.atts.get(ref, "")
 
-    def lane_matrices(self, commit): return {"L1": self.matrix, "L2": self.legs}
+    def lane_matrices(self, commit):
+        return {"L1": self.matrix, "L2": self.legs, **({"L3": self.restores} if self.restores else {})}
+    def backups(self, commit): return list(self.selected)
     def predecessors(self, commit, legs):
         return {leg: self.resolved.get(leg) for leg in legs}
     def produce_asset_set(self, commit, unscheduled):
@@ -276,8 +293,9 @@ w = World(); w.matrix = ([], SHARDS)
 refuses("a stack matrix with no architecture", w, "names no architecture")
 
 
-def forge(world: World, image: str, lane2: dict | None = None, **predicate) -> None:
-    """`image`'s attestations with the L1 one forged by `predicate` and the L2 one by `lane2` (unforged when None)."""
+def forge(world: World, image: str, lane2: dict | None = None, lane3: dict | None = None, **predicate) -> None:
+    """`image`'s attestations with the L1 one forged by `predicate`, the L2 one by `lane2` and the L3 one by `lane3`
+    (each unforged when None)."""
     d = world.digest(image)
     lines = []
     for arch in ARCHS:
@@ -286,6 +304,8 @@ def forge(world: World, image: str, lane2: dict | None = None, **predicate) -> N
         lines.append(world.envelope(image, d, arch, per_arch, **predicate))
         if arch in UPGRADE_ARCHS:
             lines.append(world.envelope(image, d, arch, per_arch, **upgrade(**(lane2 or {}))))
+        if arch in RESTORE_ARCHS:
+            lines.append(world.envelope(image, d, arch, per_arch, **restore(**(lane3 or {}))))
     world.atts[f"{REG}/{image}@{d}"] = "\n".join(lines)
 
 
@@ -298,7 +318,7 @@ refuses("an attestation of another lane only", w, "no L1 attestation for amd64")
 w = World(); forge(w, "veyq", images={"veyq-admin": h(1)})
 refuses("an attestation naming no digest of the image", w, "it names no veyq digest")
 w = World(); forge(w, "veyq", inputs={"assetSet": SET, "predecessor": h(5), "backups": None})
-refuses("a lane input this promotion cannot compare", w, "the rerun of a lane whose inputs moved is not built")
+refuses("a lane input this promotion cannot compare", w, "it records inputs this promotion cannot compare (predecessor)")
 w = World(); forge(w, "veyq", inputs={"predecessor": None})
 refuses("an attestation with no asset set", w, "it records no asset set")
 w = World()
@@ -309,7 +329,8 @@ w = World()
 d = w.digest("veyq")
 w.atts[f"{REG}/veyq@{d}"] = "\n".join(
     w.envelope("veyq", d, arch, h(999), **predicate) for arch in ARCHS
-    for predicate in ({}, upgrade()) if arch in UPGRADE_ARCHS or not predicate)  # names a build the index does not hold
+    for predicate in ({}, upgrade(), restore())
+    if not predicate or arch in (UPGRADE_ARCHS if predicate["lane"] == "L2" else RESTORE_ARCHS))  # a build the index lacks
 w.registry[f"{REG}/veyq@{h(999)}"] = json.dumps({"manifests": [{"digest": h(998)}]})
 refuses("an index holding builds no lane attested", w, "that no attested build stands for")
 w = World()
@@ -327,16 +348,45 @@ refuses("a major entry that appeared since the lane ran", w, '"major-entry": "v0
 w = World(); forge(w, "veyq-admin", lane2={"inputs": {"assetSet": SET, "predecessor": "v0.10", "backups": None}})
 refuses("an L2 predecessor that is no mapping per leg", w, "it records no predecessor per leg")
 w = World(); forge(w, "veyq", inputs={"assetSet": SET, "predecessor": copy.deepcopy(STARTED), "backups": None})
-refuses("an L1 attestation that names a predecessor", w, "the rerun of a lane whose inputs moved is not built")
+refuses("an L1 attestation that names a predecessor", w, "it records inputs this promotion cannot compare (predecessor)")
 w = World(); forge(w, "veyq", lane2={"inputs": {"assetSet": SET, "predecessor": copy.deepcopy(STARTED),
                                                  "backups": ["x"]}})
-refuses("an L2 attestation with a backup list", w, "it records inputs this promotion cannot compare yet (backups)")
+refuses("an L2 attestation with a backup list", w, "it records inputs this promotion cannot compare (backups)")
 w = World(); w.legs = (ARCHS + ["riscv64"], LEGS)
 refuses("lane L2 on an architecture lane L1 never booted", w, "was never booted with its features")
 w = World(); w.legs = ([], LEGS)
 refuses("lane L2 with no architecture", w, "lane L2's matrix")
 w = World(); w.legs = (ARCHS, LEGS)
 refuses("lane L2 on arm64 too, without its arm64 attestation", w, "no L2 attestation for arm64")
+# Lane L3: attested on both images, every shard, and the backups its shards restored are the selection derived now —
+# compared by release tag; the artifact digests beside them are recorded.
+w = World(); forge(w, "veyq", lane3={"lane": "L9"})
+refuses("no L3 attestation", w, "no L3 attestation for amd64")
+w = World(); w.restores = (RESTORE_ARCHS, RSHARDS + ["4"])
+refuses("an L3 shard the attestation misses", w, "its shards are")
+w = World(); w.restores = None
+refuses("a snapshot whose commit has no lane L3 job (made before it was built)", w, "lane L3's matrix")
+w = World(); w.selected = ["v0.9", "v0.10", "v0.11"]
+refuses("a release that opened a schema state since the lane ran", w, "selected now and not restored: v0.11")
+w = World(); w.selected = ["v0.10"]
+refuses("a backup the selection no longer names (a fix release moved the entry)", w,
+        "restored and not selected now: v0.9")
+w = World(); w.selected = ["v0.8", "v0.10"]
+refuses("a moved backup list names both sides", w, "selected now and not restored: v0.8; restored and not selected now: v0.9")
+w = World(); forge(w, "veyq-admin", lane3={"inputs": {"assetSet": SET, "predecessor": None, "backups": {"v0.9": "x"}}})
+refuses("an L3 backup list that is no list", w, "it records no list of backups")
+w = World(); forge(w, "veyq", inputs={"assetSet": SET, "predecessor": None, "backups": copy.deepcopy(RESTORED)})
+refuses("an L1 attestation that names backups", w, "it records inputs this promotion cannot compare (backups)")
+w = World(); forge(w, "veyq", lane3={"inputs": {"assetSet": SET, "predecessor": copy.deepcopy(STARTED),
+                                                 "backups": copy.deepcopy(RESTORED)}})
+refuses("an L3 attestation with a predecessor", w, "it records inputs this promotion cannot compare (predecessor)")
+w = World(); w.restores = (ARCHS + ["riscv64"], RSHARDS)
+refuses("lane L3 on an architecture lane L1 never booted", w, "was never booted with its features")
+w = World()
+for image in promote.LANE_IMAGES:
+    forge(w, image, lane3={"inputs": {"assetSet": SET, "predecessor": None,
+                                      "backups": [dict(b, digest=h(4242)) for b in RESTORED]}})
+holds("the same backup tags under other recorded digests (a tag is written once; digests are recorded)", w)
 w = World(); w.atts[f"{REG}/veyq@{w.digest('veyq')}"] = "not json\n{\"payload\": \"%%%\"}"
 refuses("an attestation output of an unknown shape", w, "no L1 attestation for amd64")
 

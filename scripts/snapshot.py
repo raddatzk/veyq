@@ -25,8 +25,9 @@ commit without a run that changes another path is refused, named; so is a walk t
 commits. A C that already carries a `snapshot-` tag, or the `v<major>.<minor>` tag of its release, publishes nothing
 (`kind=none`, a notice). Otherwise C's run is its
 newest such run, refused, red and named, unless it is completed and `success`, and in its latest attempt the gate job
-(`Pipeline green`), one lane L1 leg per architecture and domain of the commit's own `stack` matrix, and one lane L2 leg
-per architecture and leg of its `stack-upgrade` matrix concluded `success`. A run cancelled by hand, still running, or red is refused with that reason; Publish never starts Checks
+(`Pipeline green`), one lane L1 leg per architecture and domain of the commit's own `stack` matrix, one lane L2 leg
+per architecture and leg of its `stack-upgrade` matrix, and one lane L3 leg per architecture and shard of its
+`stack-restore` matrix concluded `success`. A run cancelled by hand, still running, or red is refused with that reason; Publish never starts Checks
 itself (owner 2026-11-07). With `--wait-minutes n` (the weekly schedule's, `await_completion`) a run still queued or
 running is re-read every minute for up to n minutes first, and judged once it completed. Writes `kind`, `commit` (C — every later name of the publish is C's), `run_id`, `run_url`,
 `attempt` and `version` (C's tree release, `release_assets.tree_release`) to `$GITHUB_OUTPUT`, and `draft_version`: the
@@ -42,15 +43,19 @@ digest artifact from that run, every lane record names exactly those digests for
 L1's domain of the suite, lane L2's leg), the commit, the asset set it installed (`release_assets.py --asset-set`) and
 the per-arch image digests it pulled; lane L2's also its `predecessor` (`--predecessor FILE`, which
 `run_stack_upgrade.py --predecessor-out` writes): the release it upgraded from with the app and admin digests its
-verified manifest named, or `null` for a leg that had none to start from — required of L2, refused of every other lane. A leg runs the commit's test code and holds no signing token; it hands this file over as an
-artifact, and the `snapshot` job signs.
+verified manifest named, or `null` for a leg that had none to start from — required of L2, refused of every other lane;
+lane L3's its `backups` (`--backups FILE`, which `run_stack_restore.py --backups-out` writes): the archived backups the
+shard restored, each `{tag, digest}` with the artifact's manifest digest, `[]` for a shard the selection left empty —
+required of L3, refused of every other lane. A leg runs the commit's test code and holds no signing token; it hands
+this file over as an artifact, and the `snapshot` job signs.
 
 **predicates** — one in-toto predicate per lane and architecture (`PREDICATE_TYPE`), from the records of that lane in
 the results directory. Refused unless every expected (architecture, shard) leg is there and none else, each `passed`, of
 this commit and lane, with ONE asset set across all legs and one image digest per image within an architecture. Its
 `inputs` are what decides whether the result still holds at a promotion: `assetSet`; `predecessor`, for lane L2 the
 release each leg upgraded from (`{leg: {tag, images} | null}`, one per leg across the architectures, else refused),
-`null` for every other lane; and `backups`, `null` until lane L3 (inbox #461).
+`null` for every other lane; and `backups`, for lane L3 every backup its shards restored (`[{tag, digest}]` in version
+order, each tag in one shard only, else refused), `null` for every other lane.
 
 **check-unpublished** — a snapshot is written once per commit and never replaced. Per image, `<version>-SNAPSHOT` and
 `sha-<commit>` must be absent or name exactly the manifests this run's build pushed (a re-run of a half-done publish
@@ -86,6 +91,8 @@ COMMIT = re.compile(r"^[0-9a-f]{40}$")
 LANES = ("L1", "L2", "L3")
 # The lanes whose legs start from a release, and so record it (ADR 0091 decision 5's "the predecessor digest for L2").
 PREDECESSOR_LANES = ("L2",)
+# The lanes whose legs restore archived backups, and so record which (ADR 0091 decision 5's "the list of backups for L3").
+BACKUP_LANES = ("L3",)
 RELEASE_TAG = re.compile(r"^v[0-9]+\.[0-9]+$")
 INDEX_TYPES = ("application/vnd.oci.image.index.v1+json", "application/vnd.docker.distribution.manifest.list.v2+json")
 NOT_FOUND = re.compile(r"not.found|MANIFEST_UNKNOWN|\b404\b", re.IGNORECASE)
@@ -112,15 +119,42 @@ def check_predecessor(predecessor: object, where: str) -> dict | None:
     return {"tag": predecessor["tag"], "images": dict(sorted(images.items()))}
 
 
+def release_order(tag: str) -> tuple[int, int]:
+    major, minor = tag[1:].split(".")
+    return int(major), int(minor)
+
+
+def check_backups(backups: object, where: str) -> list[dict]:
+    """Lane L3's backups as a record carries them: a list (empty for a shard the selection left nothing), each the
+    release tag it was archived for and the artifact's manifest digest, no tag twice; returned in version order."""
+    if not isinstance(backups, list):
+        raise Refused(f"{where}'s backups {backups!r} are not a list")
+    out, seen = [], set()
+    for backup in backups:
+        if not isinstance(backup, dict) or sorted(backup) != ["digest", "tag"] \
+                or not RELEASE_TAG.match(str(backup.get("tag"))) or not DIGEST.match(str(backup.get("digest"))):
+            raise Refused(f"{where} names the backup {backup!r}, not one `{{tag: v<major>.<minor>, digest: sha256:…}}`")
+        if backup["tag"] in seen:
+            raise Refused(f"{where} names the backup of {backup['tag']} twice")
+        seen.add(backup["tag"])
+        out.append({"tag": backup["tag"], "digest": backup["digest"]})
+    return sorted(out, key=lambda b: release_order(b["tag"]))
+
+
 def lane_result(lane: str, arch: str, shard: str, commit: str, asset_set: str, images: dict[str, str],
-                predecessor: object = None, has_predecessor: bool = False) -> dict:
+                predecessor: object = None, has_predecessor: bool = False, backups: object = None,
+                has_backups: bool = False) -> dict:
     """One green leg's record. Lane L2's carries its `predecessor` (`has_predecessor`): the release it upgraded from,
-    or None for a leg with no release to start from; no other lane has one."""
+    or None for a leg with no release to start from; no other lane has one. Lane L3's carries its `backups`
+    (`has_backups`): the archived backups the shard restored; no other lane has them."""
     if lane not in LANES:
         raise Refused(f"`{lane}` is not a lane ({', '.join(LANES)})")
     if has_predecessor != (lane in PREDECESSOR_LANES):
         raise Refused(f"lane {lane} records {'a' if has_predecessor else 'no'} predecessor; only "
                       f"{', '.join(PREDECESSOR_LANES)} records one, and always")
+    if has_backups != (lane in BACKUP_LANES):
+        raise Refused(f"lane {lane} records {'its' if has_backups else 'no'} backups; only "
+                      f"{', '.join(BACKUP_LANES)} records them, and always")
     if not COMMIT.match(commit):
         raise Refused(f"`{commit}` is not a full commit hash")
     if not DIGEST.match(asset_set):
@@ -134,6 +168,8 @@ def lane_result(lane: str, arch: str, shard: str, commit: str, asset_set: str, i
               "assetSet": asset_set, "images": dict(sorted(images.items()))}
     if has_predecessor:
         record["predecessor"] = check_predecessor(predecessor, f"the {arch}/{shard} leg")
+    if has_backups:
+        record["backups"] = check_backups(backups, f"the {arch}/{shard} leg")
     return record
 
 
@@ -176,6 +212,29 @@ def predicates(results: list[dict], lane: str, archs: list[str], shards: list[st
         carrying = sorted(f"{a}/{sh}" for (a, sh), r in seen.items() if r.get("predecessor") is not None)
         if carrying:
             raise Refused(f"lane {lane} has no predecessor, and the {', '.join(carrying)} record(s) name one")
+    backups: list[dict] | None = None
+    if lane in BACKUP_LANES:
+        per_arch = set()
+        for arch in archs:
+            restored: dict[str, tuple[str, str]] = {}  # tag -> (digest, shard)
+            for shard in shards:
+                record = seen[(arch, shard)]
+                if "backups" not in record:
+                    raise Refused(f"the {arch}/{shard} record of lane {lane} carries no backups (not even none)")
+                for backup in check_backups(record["backups"], f"the {arch}/{shard} record"):
+                    if backup["tag"] in restored:
+                        raise Refused(f"the backup of {backup['tag']} was restored by the {arch} shards "
+                                      f"{restored[backup['tag']][1]} and {shard} — each backup is one shard's")
+                    restored[backup["tag"]] = (backup["digest"], shard)
+            per_arch.add(json.dumps(sorted(([t, d] for t, (d, _) in restored.items()),
+                                           key=lambda td: release_order(td[0]))))
+        if len(per_arch) != 1:
+            raise Refused(f"lane {lane}'s architectures restored different backups: {sorted(per_arch)}")
+        backups = [{"tag": t, "digest": d} for t, d in json.loads(per_arch.pop())]
+    else:
+        carrying = sorted(f"{a}/{sh}" for (a, sh), r in seen.items() if r.get("backups") is not None)
+        if carrying:
+            raise Refused(f"lane {lane} restores no backups, and the {', '.join(carrying)} record(s) name some")
     asset_sets = {r["assetSet"] for r in seen.values()}
     if len(asset_sets) != 1:
         raise Refused(f"the legs installed {len(asset_sets)} different asset sets ({', '.join(sorted(asset_sets))})")
@@ -189,7 +248,7 @@ def predicates(results: list[dict], lane: str, archs: list[str], shards: list[st
         out[arch] = {
             "lane": lane, "arch": arch, "outcome": "passed", "commit": commit, "run": run,
             "shards": sorted(shards), "images": legs[0]["images"],
-            "inputs": {"assetSet": asset_set, "predecessor": predecessors, "backups": None},
+            "inputs": {"assetSet": asset_set, "predecessor": predecessors, "backups": backups},
         }
     return out
 
@@ -274,6 +333,8 @@ GATE_JOB_NAME = "Pipeline green"  # checks.yml's `green` job; validate_release_i
 LANE_JOB_NAME = "Stack lane L1 ({arch}, {domain})"  # checks.yml's `stack` job's name, per leg
 UPGRADE_JOB_NAME = "Stack lane L2 ({arch}, {leg})"  # checks.yml's `stack-upgrade` job's name, per leg
 UPGRADE_JOB = "stack-upgrade"
+RESTORE_JOB_NAME = "Stack lane L3 ({arch}, {shard})"  # checks.yml's `stack-restore` job's name, per shard
+RESTORE_JOB = "stack-restore"
 BUILD_IMAGES = ("veyq", "veyq-admin", "veyq-tools")  # checks.yml's build matrix; validate_release_identity.py holds it
 LANE_IMAGES = ("veyq", "veyq-admin")  # what lane L1 installs, and so what each lane record names
 
@@ -427,18 +488,23 @@ def await_completion(run: dict, fetch, wait_seconds: int, poll: int = 60, sleep=
 
 
 def checks_verdict(run: dict, jobs: list[dict], archs: list[str], domains: list[str], legs: list[str],
-                   upgrade_archs: list[str]) -> dict:
+                   upgrade_archs: list[str], shards: list[str], restore_archs: list[str]) -> dict:
     """Whether a snapshot may be made from `run` (pick_run's), given its latest attempt's jobs (`filter=latest`);
-    refused, naming why not. Every lane L1 leg (`domains`) of each of its architectures (`archs`), and every lane L2
-    leg (`legs`) of each of L2's (`upgrade_archs`) — amd64 alone since ADR 0091 decision 6's amendment of 2026-11-27,
-    the data path being the same on every architecture; L2's must be among L1's."""
+    refused, naming why not. Every lane L1 leg (`domains`) of each of its architectures (`archs`), every lane L2
+    leg (`legs`) of each of L2's (`upgrade_archs`) and every lane L3 shard (`shards`) of each of L3's
+    (`restore_archs`) — L2 and L3 on amd64 alone since ADR 0091 decision 6's amendment of 2026-11-27, the data path
+    being the same on every architecture; theirs must be among L1's. L3 runs on a push only, and a snapshot is made
+    only from a push run, so its shards are required here like every other leg."""
     if not archs or not domains:
         raise Refused("the commit's `stack` matrix names no architecture or no domain, so no lane result can be checked")
-    if not legs or not upgrade_archs:
-        raise Refused(f"the commit's `{UPGRADE_JOB}` matrix names no leg or no architecture, so lane L2 cannot be checked")
-    if not set(upgrade_archs) <= set(archs):
-        raise Refused(f"lane L2 runs on {sorted(upgrade_archs)}, lane L1 on {sorted(archs)} — an architecture only L2 "
-                      f"ran was never booted with its features")
+    for lane, job, lane_legs, lane_archs in (("L2", UPGRADE_JOB, legs, upgrade_archs),
+                                             ("L3", RESTORE_JOB, shards, restore_archs)):
+        if not lane_legs or not lane_archs:
+            raise Refused(f"the commit's `{job}` matrix names no leg or no architecture, so lane {lane} cannot be "
+                          f"checked")
+        if not set(lane_archs) <= set(archs):
+            raise Refused(f"lane {lane} runs on {sorted(lane_archs)}, lane L1 on {sorted(archs)} — an architecture "
+                          f"only {lane} ran was never booted with its features")
     where = f"Checks run {run.get('id')} (attempt {run.get('run_attempt')}, {run.get('html_url')})"
     if run.get("status") != "completed":
         raise Refused(f"{where} is `{run.get('status')}`, not completed — publish again once it has finished")
@@ -452,7 +518,8 @@ def checks_verdict(run: dict, jobs: list[dict], archs: list[str], domains: list[
     if attempts and attempts != {int(run.get("run_attempt") or 0)}:
         raise Refused(f"{where}: its jobs are of attempts {sorted(attempts)}, not only its latest — read the latest")
     wanted = ([GATE_JOB_NAME] + [LANE_JOB_NAME.format(arch=a, domain=d) for a in archs for d in domains]
-              + [UPGRADE_JOB_NAME.format(arch=a, leg=leg) for a in upgrade_archs for leg in legs])
+              + [UPGRADE_JOB_NAME.format(arch=a, leg=leg) for a in upgrade_archs for leg in legs]
+              + [RESTORE_JOB_NAME.format(arch=a, shard=shard) for a in restore_archs for shard in shards])
     for name in wanted:
         found = by_name.get(name) or []
         if len(found) != 1 or found[0].get("conclusion") != "success":
@@ -500,20 +567,33 @@ def stack_matrix(root: pathlib.Path) -> tuple[list[str], list[str]]:
     return sorted(map(str, matrix.get("arch") or [])), sorted(map(str, matrix.get("domain") or []))
 
 
-def upgrade_legs(root: pathlib.Path) -> list[str]:
-    """Lane L2's legs in the checked-out commit's checks.yml (`stack-upgrade`'s matrix `leg`)."""
+def job_matrix(root: pathlib.Path, job: str, key: str) -> list[str]:
+    """One matrix key of one job in the checked-out commit's checks.yml, as strings, sorted."""
     import yaml
     doc = yaml.safe_load((root / CHECKS_WORKFLOW).read_text()) or {}
-    matrix = (((doc.get("jobs") or {}).get(UPGRADE_JOB) or {}).get("strategy") or {}).get("matrix") or {}
-    return sorted(map(str, matrix.get("leg") or []))
+    matrix = (((doc.get("jobs") or {}).get(job) or {}).get("strategy") or {}).get("matrix") or {}
+    return sorted(map(str, matrix.get(key) or []))
+
+
+def upgrade_legs(root: pathlib.Path) -> list[str]:
+    """Lane L2's legs in the checked-out commit's checks.yml (`stack-upgrade`'s matrix `leg`)."""
+    return job_matrix(root, UPGRADE_JOB, "leg")
 
 
 def upgrade_archs(root: pathlib.Path) -> list[str]:
     """Lane L2's architectures in the checked-out commit's checks.yml (`stack-upgrade`'s matrix `arch`)."""
-    import yaml
-    doc = yaml.safe_load((root / CHECKS_WORKFLOW).read_text()) or {}
-    matrix = (((doc.get("jobs") or {}).get(UPGRADE_JOB) or {}).get("strategy") or {}).get("matrix") or {}
-    return sorted(map(str, matrix.get("arch") or []))
+    return job_matrix(root, UPGRADE_JOB, "arch")
+
+
+def restore_shards(root: pathlib.Path) -> list[str]:
+    """Lane L3's shards in the checked-out commit's checks.yml (`stack-restore`'s matrix `shard`) — also what
+    `run_stack_restore.py` splits the selection over, so the count is stated once."""
+    return job_matrix(root, RESTORE_JOB, "shard")
+
+
+def restore_archs(root: pathlib.Path) -> list[str]:
+    """Lane L3's architectures in the checked-out commit's checks.yml (`stack-restore`'s matrix `arch`)."""
+    return job_matrix(root, RESTORE_JOB, "arch")
 
 
 def _git_out(root: pathlib.Path, *args: str) -> str:
@@ -572,7 +652,8 @@ def checks_run(repository: str, head: str, branch: str, root: pathlib.Path, boun
         if len(chunk.get("jobs") or []) < 100:
             break
         page += 1
-    verdict = checks_verdict(run, jobs, archs, domains, upgrade_legs(root), upgrade_archs(root))
+    verdict = checks_verdict(run, jobs, archs, domains, upgrade_legs(root), upgrade_archs(root), restore_shards(root),
+                             restore_archs(root))
     version = release_assets.tree_release(root, commit)
     print(f"publishing {version} of {commit} from {verdict['run_url']} (attempt {verdict['attempt']})")
     return {"kind": "snapshot", "commit": commit, **verdict, "version": version, "draft_version": version}
@@ -609,6 +690,8 @@ def main() -> int:
     r.add_argument("--image", action="append", default=[], metavar="NAME=DIGEST")
     r.add_argument("--predecessor", type=pathlib.Path, default=None, metavar="FILE",
                    help="lane L2: the JSON `run_stack_upgrade.py --predecessor-out` wrote (the release, or null)")
+    r.add_argument("--backups", type=pathlib.Path, default=None, metavar="FILE",
+                   help="lane L3: the JSON `run_stack_restore.py --backups-out` wrote (the backups the shard restored)")
     r.add_argument("--out", required=True, type=pathlib.Path)
     p = sub.add_parser("predicates")
     p.add_argument("--lane", required=True)
@@ -642,8 +725,10 @@ def main() -> int:
             if len(images) != len(args.image):
                 raise Refused(f"--image takes NAME=DIGEST, got {args.image}")
             predecessor = json.loads(args.predecessor.read_text()) if args.predecessor is not None else None
+            backups = json.loads(args.backups.read_text()) if args.backups is not None else None
             record = lane_result(args.lane, args.arch, args.shard, args.commit, args.asset_set, images, predecessor,
-                                 has_predecessor=args.predecessor is not None)
+                                 has_predecessor=args.predecessor is not None, backups=backups,
+                                 has_backups=args.backups is not None)
             args.out.parent.mkdir(parents=True, exist_ok=True)
             args.out.write_text(json.dumps(record, indent=2) + "\n")
             print(f"{args.out}: {args.lane} {args.arch}/{args.shard} passed")

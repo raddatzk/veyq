@@ -1,14 +1,16 @@
-// Lane L2's browser half (ADR 0091 decision 6, amended 2026-11-26; `scripts/run_stack_upgrade.py` stage `browser`): an
-// instance a published release installed and that release's own API seeder wrote into
-// (`upgrade.a-seed.e2e.test.ts` of its tree) has just been upgraded in place to the candidate by the starting release's
-// own `veyqctl upgrade`, and the candidate's API reader has asserted every item. This opens what was seeded the way its
-// owner does after the upgrade: a new device, email, password and Secret Key from the record (the person's, and nothing
-// else, `src/web/src/test/upgradeRecord.ts`), the personal space, the Memory with its place and its chapter, and the Depot folder with
-// each of its files — on the candidate's shipped web client, which the API reader never loads.
+// The browser half of lanes L2 and L3 (ADR 0091 decision 6, amended 2026-11-26): an instance that a published release's
+// own API seeder wrote into (`upgrade.a-seed.e2e.test.ts` of its tree) now runs the candidate — in lane L2
+// (`scripts/run_stack_upgrade.py` stage `browser`) upgraded in place by the starting release's own `veyqctl upgrade`, in
+// lane L3 (`scripts/run_stack_restore.py` stage `browser`) restored from that release's archived backup into a fresh
+// install of the candidate by the candidate's `veyqctl restore` — and the candidate's API reader has asserted every
+// item. This opens what was seeded the way its owner does after the upgrade: a new device, email, password and Secret
+// Key from the record (the person's, and nothing else, `src/web/src/test/upgradeRecord.ts`), the personal space, the
+// Memory with its place and its chapter, and the Depot folder with each of its files — on the candidate's shipped web
+// client, which the API reader never loads.
 //
-// It runs only in lane L2 (and L3 later), never in an L1 leg: its project `upgrade` has no dependency on the first-run
-// `setup` (the instance was set up by the seeder) and no leg names it (tests/e2e/shards.test.mjs holds that). The record
-// is the run directory's, named in `stack.json` as `upgradeRecord`.
+// It runs only in lanes L2 and L3, never in an L1 leg: its project `upgrade` has no dependency on the first-run `setup`
+// (the instance was set up by the seeder) and no leg names it (tests/e2e/shards.test.mjs holds that). The record is the
+// run directory's, named in `stack.json` as `upgradeRecord`.
 import { expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { test } from '../../src/cspViolations'
@@ -28,7 +30,7 @@ let record: Record
 
 test.beforeAll(async ({ browser }) => {
   const path = stack().upgradeRecord
-  if (!path) throw new Error('stack.json names no upgradeRecord: this spec runs only in lane L2 (scripts/run_stack_upgrade.py)')
+  if (!path) throw new Error('stack.json names no upgradeRecord: this spec runs only in lanes L2 and L3 (scripts/run_stack_upgrade.py, scripts/run_stack_restore.py)')
   record = JSON.parse(readFileSync(path, 'utf8')) as Record
   device = await newDevice(browser)
 })
@@ -40,8 +42,13 @@ test.afterAll(async () => {
 })
 
 test(
-  'after an upgrade in place the seeded owner signs in on a new device and opens the seeded Memory and Depot files',
-  { tag: '@uc.admin.install-and-upgrade-instance:an-upgrade-in-place-keeps-every-item' },
+  'after an upgrade the seeded owner signs in on a new device and opens the seeded Memory and Depot files',
+  {
+    tag: [
+      '@uc.admin.install-and-upgrade-instance:an-upgrade-in-place-keeps-every-item',
+      '@uc.admin.back-up-and-restore-instance:a-predecessors-backup-upgrades-with-its-content-intact',
+    ],
+  },
   async () => {
     const { page } = device
     const origin = `https://${stack().domain}`
