@@ -203,7 +203,12 @@ object the store lost kept in the pool while a retained capture named it, the pr
 named, and the capture restored from the pool onto a second fresh install. `src/tools/instance_backup_selftest.py` holds
 the pool's builder (copied into with `--immutable`, deleted from only by the prune), the prune and every refusal without Docker. Every `scripts/run_web_e2e.py` run captures a
 live instance into a pool, destroys it, restores it from the pool and runs a suite against the result, and holds the
-production capture to resolving the production project rather than whatever else runs.
+production capture to resolving the production project rather than whatever else runs. Since 2026-11-27 every release's
+own `veyqctl backup --objects-to <directory> --key-into <file>` runs once on GitHub on an instance its own test code
+filled, for the backup archive (`archive.yml`; all eighteen releases then), and stack lane L3 restores such backups with
+the candidate's `veyqctl restore --objects-from <directory> --key-from <file>` onto a fresh install on every push
+(`scripts/run_stack_restore.py`; locally green for the five it selects, 2026-11-28; on Docker Desktop for macOS the
+backup into a directory pool is refused by rclone, inbox #870, while the restore from one is not).
 
 **Leg (c) never goes beside the dump.** The dump plus the key opens every tenant's SMTP password, so a capture
 directory holding both is exactly the leaked backup the key exists to defend against (ADR 0056 §1). `capture`
