@@ -147,7 +147,7 @@ A Gradle build of its own, run through its own wrapper.
   content, the naming), `GuestTree`, `GuestView` and `GuestAccess` (the link's reads, writes and own upload queue),
   `GuestMove` (a READ_WRITE guest's move within the link's folders through the member's `MoveSheet`, its top the link's
   root; a guest level's row menu, Select and selection, `GuestLevel.move`),
-  `GuestReport`, the `GuestSessions` port; *Open a link* and the screen above the shell, `OpenLink` and `GuestScreen` (a member's own web link handed to the shell, `OpenLink.openPlace`); a place from outside and the reopen, `navigation/Place.kt` (`PlaceLink`'s allow-list, `RoutePath`'s port of the web's slug paths, `KeptPlace` sealed in the account's store as kind `place`, `ShellModel.arrive`; ADR 0150 § O5–O6; `PlaceLinkTest`, `ReopenTest`)
+  `GuestReport`, the `GuestSessions` port; *Open a link* and the screen above the shell, `OpenLink` and `GuestScreen` (a member's own web link handed to the shell, `OpenLink.openPlace`); a place from outside and the reopen, `navigation/Place.kt` (`PlaceLink`'s allow-list, `RoutePath`'s port of the web's slug paths, `KeptPlace` sealed in the account's store as kind `place` — the drawer's Recent beside it as kind `recent`, the account's own (`VeyqAccount.recentUses`, ADR 0122 decision 6; `RecentTest`) —, `ShellModel.arrive`; ADR 0150 § O5–O6; `PlaceLinkTest`, `ReopenTest`)
   (*Keep* where a tenant is open, *Back* that asks at the root); a kept link's meta, dialog and page, `BookmarkMeta`,
   `BookmarkCreate`, `BookmarkPage` (listed and opened through `Shell.bookmark`). Each kind's guest door is its
   application's, through `AppKinds.guestDoor`: core's `GuestLevel`, Depot's `DepotGuest`, Memories' `MemoriesGuest`,

@@ -196,9 +196,9 @@ den du bekommen hast*, *Open in the browser* / *Im Browser öffnen*, *Keep* / *B
    a person's profile and an application's list keep the place below them, and a lightbox, a dialog, Settings or a
    screen showing a secret are no place of the shell. After the unlock `ShellModel.load` opens it through the same open
    as decision 5, with nothing behind it; a node gone opens its nearest listed ancestor, a space gone Home. An account
-   without a store on the device (not trusted, a TV) opens on Home. The device-wide `RecentUses` no longer decides where
-   the app opens — it did, and on Android a second account that joined the same tenant opened on the Memory the first had
-   open (2026-11-27); it still orders the drawer's Recent (inbox #1423).
+   without a store on the device (not trusted, a TV) opens on Home. The drawer's Recent no longer decides where the app opens — it
+   did, and on Android a second account that joined the same tenant opened on the Memory the first had open
+   (2026-11-27); it is each account's too since #1423 (ADR 0122 decision 6).
 
 ### S — A link shared into the app from another app (inbox #1015)
 

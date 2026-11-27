@@ -62,9 +62,15 @@ two apps, and a store listing, review and signing setup per app for one maintain
    Memories on their profile are no application's list and are ordered by date, newest first, as the web orders them
    ([ADR 0144](0144-the-apps-curate-a-memorys-participants-a-persons-profile-a-mediums-capture-time-and-the-banner-the-webs-rules-in-the-core.md) decision 13, built).
 
-6. **Recent stays on the device.** It is per install, never synced and never sent: which object was opened when is
-   behaviour, and a synced list would be a new sealed datum with no use the device's own list does not serve. The
-   device stores the opened objects' ids and times, never their names, so nothing decrypted rests on it. Favorites
+6. **Recent stays on the device, and is each account's.** It is never synced and never sent: which object was opened
+   when is behaviour, and a synced list would be a new sealed datum with no use the device's own list does not serve.
+   It is kept per account and tenant (inbox #1423) — an entry of kind `recent` in the account's own offline store, the
+   opened objects' ids and times only, sealed as every entry is, so no id is in clear on disk and nothing decrypted
+   rests there; kept as the place of ADR 0150 § O6 is (never evicted, cleared or swept, carried by a rotation, wiped
+   with the store). An account without a store on the device (not trusted, a TV) holds it in memory for the session
+   only. A second account on the device never sees another's: until 2026-11-27 the list was one per install in plain
+   prefs, and a member who joined a tenant on the owner's phone saw the owner's Memory under Recent. The old per-install
+   entry is removed at every start, never read. Favorites
    are the existing sealed set per member and scope ([ADR 0068](0068-favorites-two-confidentiality-levels.md)), read
    from every scope the member belongs to.
 
@@ -93,6 +99,15 @@ two apps, and a store listing, review and signing setup per app for one maintain
   so the app reads every scope (`listNodes` answers `304` for an unchanged tree). Whether that stays enough for a
   member of many spaces is measured once there are such members.
 - The web keeps its navigation. Giving it the same start (Favorites, then Recent) is inbox #905, not V2.
+- **Recent per account, built 2026-11-27** (cr-apps-recent-per-account, inbox #1423; decision 6). The account holds the
+  list (`VeyqAccount.recentUses`, one per tenant for as long as the account is open), not the shell, which is made anew at
+  each switch; a store opened after the first shell (trust given later) is merged in, each object once at its latest use.
+  Each use is written on the account's own thread behind one lock, the list as it stands then, so a later use never loses
+  to an earlier write. "Stop trusting" wipes the stored list with the store and leaves the one in memory for the rest of
+  that session (the account is still open and it is its own); a sign-out ends both, so `SessionModel` no longer clears a
+  device-wide list. The old entry (Android's `uses` in `veyq-recent`, which keeps the hidden spaces; Apple's
+  `veyq.recent`; the bridge's) is removed at every start, never read: a one-time flag would cost a key of its own for
+  nothing. Held by `RecentTest` and `LegacyRecentTest`, each bitten; passed on Android, the rest owed (#1424).
 
 ## Alternatives considered
 

@@ -295,6 +295,13 @@ a node's cover with its crop, core's header for every kind, a report to the mode
 The drawer shows only a section with something in it, and every switcher row names its server (and the account where
 two signed-in accounts list the same tenant) — the owner's rules of 2026-11-19, core's `Lists.drawerSections` and
 `ShellWords.switcher` on every app ([src/mobile/CLAUDE.md](../../src/mobile/CLAUDE.md), the drawer and the switcher).
+Recent is each account's (ADR 0122 decision 6, inbox #1423): sealed per tenant in the account's offline store (kind
+`recent`), in memory for the session where the account has none (not trusted, a TV); the per-install list of before is
+removed at every start (`RecentTest`, `LegacyRecentTest`, each bitten). Measured 2026-11-27 on Android
+(`veyq_terms`) as a throwaway owner and member of one tenant on one device: each one's Recent listed only the Memory that
+account had opened (the member never the owner's *Rome*, the owner never the member's *Paris*, also after a fresh sign-in
+reading it back from its store); the old `uses` entry of `veyq-recent.xml` (ids in clear, left by an earlier pass) was
+gone at the first start, and no file of the app held a scope or node id.
 
 **Search** ([ADR 0146](../decisions/0146-the-apps-search-with-the-cores-port-of-the-webs-search-both-answer-to-one-set-of-vectors.md)): the web's search ported into the core (`search/`) and held to the web by
 `contracts/platform/search/v1-vectors.json` — since ADR 0155's pilot the web's too: it draws the rules from the core
@@ -783,7 +790,7 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   have no per-app language of their own).
 - Reopening where the person left and a place reached from outside (ADR 0150 § O5–O6, built 2026-11-27; passed on Android
   and Linux as throwaways and by the core's tests): Apple, Windows, a real browser's `veyq://open` and the Mac's `open` (#1424);
-  the drawer's Recent still one per device (#1423).
+  the drawer's Recent per account (inbox #1423, built 2026-11-27): Apple and the desktops live (#1424).
 - A selection's capture-time shift and the kit's layout 2 (built 2026-11-27, inbox #1417; passed on Linux, Android and
   Windows and by the core's live tests): the passes on the Mac, iPhone and iPad.
 - *Who's who* (ADR 0148 § Who's who, built 2026-11-27): the macOS pass (the sheet over the Settings window, the window
