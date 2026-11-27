@@ -79,7 +79,9 @@ internal fun JoinScreen(join: TenantJoin, model: AppModel) {
             Phase.REGISTER -> {
                 Body(say(s.intro))
                 Body(say(s.registerSub), muted = true)
-                Details(s, enabled, username, { username = it }, firstName, { firstName = it }, lastName, { lastName = it }, email, { email = it })
+                Details(s, enabled, username, { username = it }, firstName, { firstName = it }, lastName, { lastName = it }, email, { email = it }) {
+                    if (s.asksPicture) JoinPicture(join, s, enabled, "$firstName $lastName".trim().ifEmpty { username }, model)
+                }
                 NewPasswordField(
                     join.passwordCheck, password, { password = it }, stringResource(R.string.signin_password), "join-password", enabled,
                     check = { join.checkPassword(it) }, model = model, onAnyway = join::useAnyway,
@@ -112,7 +114,9 @@ internal fun JoinScreen(join: TenantJoin, model: AppModel) {
             Phase.SIGNIN -> {
                 Body(say(s.intro))
                 Body(say(s.signinSub), muted = true)
-                Details(s, enabled, username, { username = it }, firstName, { firstName = it }, lastName, { lastName = it }, email, { email = it })
+                Details(s, enabled, username, { username = it }, firstName, { firstName = it }, lastName, { lastName = it }, email, { email = it }) {
+                    if (s.asksPicture) JoinPicture(join, s, enabled, "$firstName $lastName".trim().ifEmpty { username }, model)
+                }
                 SecretField(password, { password = it }, stringResource(R.string.signin_password), "join-signin-password", enabled)
                 // the sign-in's Secret Key control: masked, a typo said as it is typed (core's `SecretKeyProblem`)
                 val typo = remember(secretKey) { model.secretKeyProblem(secretKey) == me.raddatz.veyq.mobile.crypto.SecretKeyProblem.TYPO }
@@ -153,7 +157,7 @@ private fun Said(text: String, tag: String, error: Boolean) {
     )
 }
 
-/** The account step's details as the web asks them: the handle, the real name, a link invite's address. */
+/** The account step's details as the web asks them: the handle, the real name, the optional [picture], a link invite's address. */
 @Composable
 private fun Details(
     s: TenantJoin.State, enabled: Boolean,
@@ -161,6 +165,7 @@ private fun Details(
     firstName: String, onFirstName: (String) -> Unit,
     lastName: String, onLastName: (String) -> Unit,
     email: String, onEmail: (String) -> Unit,
+    picture: @Composable () -> Unit,
 ) {
     if (s.asksUsername) {
         OutlinedTextField(
@@ -179,6 +184,8 @@ private fun Details(
             modifier = Modifier.fillMaxWidth().testTag("join-last-name"),
         )
     }
+    // the optional picture below the name, before the address (the web's `JoinPicturePicker`)
+    picture()
     if (s.asksEmail) {
         OutlinedTextField(
             email, onEmail, singleLine = true, enabled = enabled, label = { Text(stringResource(R.string.signin_email)) },
@@ -186,4 +193,35 @@ private fun Details(
             modifier = Modifier.fillMaxWidth().testTag("join-email"),
         )
     }
+}
+
+/**
+ * The join's optional picture (the web's `JoinPicturePicker`, ADR 0084): a preview of the chosen picture (the initial
+ * otherwise), *Choose picture* / *Change picture* through the app's one square crop ([AvatarCropSheet]) and *Remove* once
+ * one is chosen. Core keeps it encoded in the join only, sealed beside the name at the accept.
+ */
+@Composable
+private fun JoinPicture(join: TenantJoin, s: TenantJoin.State, enabled: Boolean, name: String, model: AppModel) {
+    var cropping by remember { mutableStateOf<android.net.Uri?>(null) }
+    // a second choice leaves the state as it was: the round re-reads the picture all the same
+    var round by remember { mutableStateOf(0) }
+    val bytes = remember(s.picture, round) { if (s.picture) join.picture() else null }
+    val pick = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> if (uri != null) cropping = uri }
+    Heading(stringResource(R.string.profile_picture_label))
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        PictureAvatar(bytes, name, 72.dp, "join-picture")
+        androidx.compose.foundation.layout.Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            androidx.compose.material3.OutlinedButton(
+                onClick = { pick.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                enabled = enabled, modifier = Modifier.testTag("join-picture-choose"),
+            ) { Text(say(s.pictureWord)) }
+            if (s.picture) TextButton(onClick = { join.removePicture() }, enabled = enabled, modifier = Modifier.testTag("join-picture-remove")) {
+                Text(stringResource(R.string.profile_picture_remove), color = MaterialTheme.colorScheme.error)
+            }
+        }
+    }
+    Body(stringResource(R.string.profile_picture_join_hint), muted = true)
+    cropping?.let { uri -> AvatarCropSheet(uri, model, onUse = { rgba -> model.joinPicture(join, rgba) { round++ } }, onClose = { cropping = null }) }
 }

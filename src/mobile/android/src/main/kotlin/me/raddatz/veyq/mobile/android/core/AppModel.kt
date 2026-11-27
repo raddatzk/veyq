@@ -288,8 +288,33 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val read = m.read()
             _members.update { it?.copy(loading = false, roster = read) }
+            readTenantIcon()
         }
     }
+
+    /** The space's icon (core's `ScopeIcons.icon`), opened on this device for Members' header; null shows the initial. */
+    private suspend fun readTenantIcon() {
+        val t = tenantSession ?: return
+        val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { t.icons(AndroidWebpEncoder).icon(t.tenant.tenantId) }
+        _members.update { it?.copy(icon = bytes) }
+    }
+
+    /** An act on the space's icon: what it said shows on Members; one that went through opens the icon anew. */
+    private fun tenantIconAct(act: suspend (me.raddatz.veyq.mobile.session.ScopeIcons, String) -> me.raddatz.veyq.mobile.session.ScopeIcons.Outcome) {
+        val t = tenantSession ?: return
+        _members.update { it?.copy(working = true) }
+        viewModelScope.launch {
+            val o = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { act(t.icons(AndroidWebpEncoder), t.tenant.tenantId) }
+            if (o.done) readTenantIcon()
+            _members.update { p -> p?.copy(working = false, said = o.notice, round = p.round + 1) }
+        }
+    }
+
+    /** *Add icon* / *Change icon*: the square crop's pixels as the space's icon (core's `ScopeIcons.set`). */
+    fun setTenantIcon(rgba: ByteArray) = tenantIconAct { icons, id -> icons.set(id, rgba) }
+
+    /** *Remove icon*, after its question (core's `ScopeIcons.clear`). */
+    fun clearTenantIcon() = tenantIconAct { icons, id -> icons.clear(id) }
 
     fun closeMembers() {
         _members.value = null
@@ -299,7 +324,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         val m = tenantSession?.members ?: return
         _members.update { it?.copy(working = true) }
         viewModelScope.launch {
-            val o = act(m)
+            val o = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { act(m) }
             val read = if (o.done) m.read() else null
             _members.update { p -> p?.copy(working = false, roster = read ?: p.roster, said = o.notice, round = p.round + 1) }
         }
@@ -308,8 +333,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** A row's *Make co-owner* ([owner]) or *Remove co-owner* (core's `TenantMembers.setRole`). */
     fun setMemberRole(userId: String, owner: Boolean) = memberAct { it.setRole(userId, owner) }
 
-    /** A row's *Remove member*, after its question (core's `TenantMembers.remove`). */
-    fun removeMember(userId: String, revokeLinks: Boolean) = memberAct { it.remove(userId, revokeLinks) }
+    /** A row's *Remove member*, after its question with its two options (core's `TenantMembers.remove`). */
+    fun removeMember(userId: String, revokeLinks: Boolean, newLock: Boolean) = memberAct { it.remove(userId, revokeLinks, newLock) }
+
+    /** *Give it a new lock*, after its question (core's `TenantMembers.newLock`). */
+    fun membersNewLock() = memberAct { it.newLock() }
+
+    /** *Turn off every link* of the space, after its question (core's `TenantMembers.revokeAllLinks`). */
+    fun membersRevokeLinks() = memberAct { it.revokeAllLinks() }
 
     /**
      * The owner's invite (core's `TenantInvites`, the web's `InviteMemberDialog`): a link with its optional [label], or a
@@ -416,8 +447,34 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val page = g.page(scopeId)
             _group.update { if (it?.scopeId == scopeId) it.copy(loading = false, page = page) else it }
+            readGroupIcon(scopeId)
         }
     }
+
+    /** The group's icon (core's `ScopeIcons.icon`), opened on this device for its page's header; null shows the initial. */
+    private suspend fun readGroupIcon(scopeId: String) {
+        val t = tenantSession ?: return
+        val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { t.icons(AndroidWebpEncoder).icon(scopeId) }
+        _group.update { if (it?.scopeId == scopeId) it.copy(icon = bytes) else it }
+    }
+
+    /** An act on the open group's icon: what it said shows on the page; one that went through opens the icon anew. */
+    private fun groupIconAct(act: suspend (me.raddatz.veyq.mobile.session.ScopeIcons, String) -> me.raddatz.veyq.mobile.session.ScopeIcons.Outcome) {
+        val t = tenantSession ?: return
+        val scopeId = _group.value?.scopeId ?: return
+        _group.update { it?.copy(working = true) }
+        viewModelScope.launch {
+            val o = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { act(t.icons(AndroidWebpEncoder), scopeId) }
+            if (o.done) readGroupIcon(scopeId)
+            _group.update { p -> if (p?.scopeId != scopeId) p else p.copy(working = false, said = o.notice, round = p.round + 1) }
+        }
+    }
+
+    /** The group's *Add icon* / *Change icon* (core's `ScopeIcons.set`). */
+    fun setGroupIcon(rgba: ByteArray) = groupIconAct { icons, id -> icons.set(id, rgba) }
+
+    /** The group's *Remove icon*, after its question (core's `ScopeIcons.clear`). */
+    fun clearGroupIcon() = groupIconAct { icons, id -> icons.clear(id) }
 
     fun closeGroup() {
         _group.value = null
@@ -467,6 +524,12 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** *Restore group* in its grace period (core's `TenantGroups.restore`). */
     fun restoreGroup() = groupAct(moves = true) { g, id -> g.restore(id) }
 
+    /** The group's *Give it a new lock*, after its question (core's `TenantGroups.newLock`). */
+    fun groupNewLock() = groupAct { g, id -> g.newLock(id) }
+
+    /** *Turn off every link* of the group, after its question (core's `TenantGroups.revokeAllLinks`). */
+    fun groupRevokeLinks() = groupAct { g, id -> g.revokeAllLinks(id) }
+
     private val _invitations = MutableStateFlow<InvitationsPage?>(null)
 
     /** Settings' Group invitations while it is open (core's `TenantGroups.invitations`); null when closed. */
@@ -511,9 +574,6 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     // ---- joining a space from an invite (core's `TenantJoin`) ----
 
-    /** The door the join's cold sign-ins go through: this device and its client, as the session's own door. */
-    private val joinDoor by lazy { me.raddatz.veyq.mobile.session.AccountDoor(BouncyCastlePrimitives, device, { block -> Network.client(block) }) }
-
     private val _join = MutableStateFlow<me.raddatz.veyq.mobile.session.TenantJoin?>(null)
 
     /** The join of a received invite, above everything (as a link's guest view is); null while none is open. */
@@ -522,7 +582,8 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** A received invite ([OpenLink.invite]) opened as its join, which reads it at once; one open before is closed. */
     fun openJoin(invite: me.raddatz.veyq.mobile.sharing.ReceivedLink.InviteLink) {
         _join.value?.close()
-        val j = joinDoor.join(invite)
+        // the join's optional picture is encoded by this host's WebP encoder (the core's Android target has no libwebp)
+        val j = me.raddatz.veyq.mobile.session.TenantJoin.of(BouncyCastlePrimitives, device, { block -> Network.client(block) }, invite, AndroidWebpEncoder)
         _join.value = j
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) { j.load() }
     }
@@ -530,6 +591,14 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** One of the join's steps, off the main thread (the account's build hashes the password). */
     fun joinStep(j: me.raddatz.veyq.mobile.session.TenantJoin, step: suspend (me.raddatz.veyq.mobile.session.TenantJoin) -> Unit) {
         viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) { step(j) }
+    }
+
+    /** The join's optional picture: the square crop's pixels handed to the core, which encodes and keeps it until the accept; [done] after. */
+    fun joinPicture(j: me.raddatz.veyq.mobile.session.TenantJoin, rgba: ByteArray, done: () -> Unit) {
+        viewModelScope.launch {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { j.choosePicture(rgba) }
+            done()
+        }
     }
 
     /** *Open the space*: the app's own sign-in with what the join holds, opened as any sign-in's ([show]); the join closes. */

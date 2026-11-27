@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -39,5 +40,19 @@ internal fun PersonAvatar(name: String, userId: String?, size: Dp = 32.dp) {
         Box(Modifier.size(size).clip(CircleShape).background(role(palette.line)), contentAlignment = Alignment.Center) {
             Text(name.trim().take(1).uppercase().ifEmpty { "?" }, color = role(palette.controlText), fontSize = (size.value * 0.5f).sp)
         }
+    }
+}
+
+/**
+ * A picture held as encoded bytes — a space's or a group's icon, the join's chosen picture, one's profile draft — else the
+ * letter of [name] as [PersonAvatar] draws it (also for bytes that do not decode). Decorative, as [PersonAvatar] is.
+ */
+@Composable
+internal fun PictureAvatar(bytes: ByteArray?, name: String, size: Dp, tag: String) {
+    val picture = remember(bytes) { bytes?.let { runCatching { BitmapFactory.decodeByteArray(it, 0, it.size) }.getOrNull() } }
+    if (picture != null) {
+        Image(picture.asImageBitmap(), null, Modifier.size(size).clip(CircleShape).testTag(tag), contentScale = ContentScale.Crop)
+    } else {
+        Box(Modifier.testTag("$tag-initial")) { PersonAvatar(name, null, size) }
     }
 }

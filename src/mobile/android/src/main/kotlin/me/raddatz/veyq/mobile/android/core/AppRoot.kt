@@ -107,7 +107,8 @@ fun AppRoot(model: AppModel) {
             MembersDialog(
                 it, onRetry = model::openMembers, onRole = model::setMemberRole, onRemove = model::removeMember,
                 invites = InviteActions(model::inviteMember, model::setInviteLabel, model::reissueInvite, model::revokeInvite, model::inviteShownSeen),
-                spaceName = model.tenantName(), onClose = model::closeMembers,
+                scope = ScopeActions(model::setTenantIcon, model::clearTenantIcon, model::membersRevokeLinks, model::membersNewLock),
+                spaceName = model.tenantName(), model = model, onClose = model::closeMembers,
             )
         }
         // Settings' Groups (core's `SettingsSection.GROUPS`), over the page; a group's page over the list
@@ -120,7 +121,8 @@ fun AppRoot(model: AppModel) {
                     setRole = model::setGroupRole, remove = model::removeGroupMember, rescind = model::rescindGroupMember,
                     delete = model::deleteGroup, restore = model::restoreGroup,
                 ),
-                onClose = model::closeGroup,
+                ScopeActions(model::setGroupIcon, model::clearGroupIcon, model::groupRevokeLinks, model::groupNewLock),
+                model = model, onClose = model::closeGroup,
             )
         }
         // Settings' Group invitations (core's `SettingsSection.GROUP_INVITATIONS`), over the page

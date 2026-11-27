@@ -65,7 +65,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -298,26 +297,17 @@ private fun ProfileFlow(m: me.raddatz.veyq.mobile.session.ProfileModel, model: A
 
 /** One's picture as the draft or the server holds it, else the letter (the web's `PersonAvatar`). */
 @Composable
-private fun ProfilePicture(bytes: ByteArray?, name: String) {
-    val picture = remember(bytes) { bytes?.let { runCatching { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size) }.getOrNull() } }
-    if (picture != null) {
-        androidx.compose.foundation.Image(
-            picture.asImageBitmap(), null,
-            Modifier.size(72.dp).clip(CircleShape).testTag("profile-picture"), contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-        )
-    } else {
-        PersonAvatar(name, null, 72.dp)
-    }
-}
+private fun ProfilePicture(bytes: ByteArray?, name: String) = PictureAvatar(bytes, name, 72.dp, "profile-picture")
 
 /**
  * The picture framed square (ADR 0148 decision 2): the cover's cropper — core's `CoverFrame`, the web's math — with a
  * 1:1 frame; a drag pans, a pinch or the slider zooms (1–3). *Use this picture* renders the frame to 256 × 256 RGBA
- * ([AppModel.avatarPixels]); the core encodes, pads and seals it with the profile's save.
+ * ([AppModel.avatarPixels]); the core encodes, pads and seals it with the profile's save. The one square crop of the app:
+ * a space's and a group's icon and the join's picture go through it too.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AvatarCropSheet(uri: Uri, model: AppModel, onUse: (ByteArray) -> Unit, onClose: () -> Unit) {
+internal fun AvatarCropSheet(uri: Uri, model: AppModel, onUse: (ByteArray) -> Unit, onClose: () -> Unit, title: String = stringResource(R.string.profile_picture_label)) {
     val scope = rememberCoroutineScope()
     var image by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var failed by remember { mutableStateOf(false) }
@@ -340,7 +330,7 @@ private fun AvatarCropSheet(uri: Uri, model: AppModel, onUse: (ByteArray) -> Uni
         sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 24.dp).testTag("avatar-crop"), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(stringResource(R.string.profile_picture_label), style = MaterialTheme.typography.titleLarge)
+            Text(title, style = MaterialTheme.typography.titleLarge)
             Body(stringResource(R.string.profile_picture_dialog_intro), muted = true)
             Box(
                 Modifier.fillMaxWidth(0.8f).align(Alignment.CenterHorizontally).aspectRatio(1f)

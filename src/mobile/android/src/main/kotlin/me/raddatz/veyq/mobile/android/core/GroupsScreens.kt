@@ -76,6 +76,8 @@ internal data class GroupPageState(
     val said: Notice? = null,
     val round: Int = 0,
     val working: Boolean = false,
+    /** The group's icon opened on this device (core's `ScopeIcons.icon`); null shows its initial. */
+    val icon: ByteArray? = null,
 )
 
 /** Settings' *Group invitations* (core's `TenantGroups.invitations`); [busy] the proposal being answered. */
@@ -157,8 +159,11 @@ internal fun GroupsDialog(page: GroupsPage, onRetry: () -> Unit, onOpen: (String
                             supportingContent = {
                                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text(stringResource(if (row.owner) R.string.members_role_owner else R.string.members_role_member))
-                                    // the web's pending-deletion state; its day is not in core's row (the page's words without it)
-                                    if (row.deleted) Text(stringResource(R.string.groups_pending_sub), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("group-deleted"))
+                                    // the web's pending-deletion state: the day it is deleted (core's `GroupRow.deletion`)
+                                    if (row.deleted) Text(
+                                        row.deletion?.let { say(it) } ?: stringResource(R.string.groups_pending_sub),
+                                        color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("group-deleted"),
+                                    )
                                     if (row.behind) Text(stringResource(R.string.members_pending), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("group-behind"))
                                 }
                             },
@@ -198,11 +203,13 @@ private fun CreateGroupDialog(working: Boolean, onCreate: (String) -> Unit, onDi
  * uc.spaces.rename-group, uc.spaces.delete-group): its name, with *Rename* for an owner; its members, each row's acts in
  * its overflow menu as core offers them — *Make co-owner*, *Remove co-owner*, *Remove* (the removal-rotation, asked first
  * with the opt-in to turn off every link of the group) and *Withdraw* for a proposal not yet answered —; *Add member* by
- * username; and the owner's danger zone: *Delete group*, asked first, or while it is being deleted *Restore group*. A
- * member reads the page with core's note why nothing on it changes. A deleted group is read-only: no add, no row acts.
+ * username; the owner's *Links* and *New lock* ([LinksAndLock], core's `wholeActs`) and danger zone: *Delete group*, asked
+ * first, or while it is being deleted *Restore group*. Its header ([ScopeHeader]) shows the group's icon, which an owner
+ * sets or removes; each row its trust badge. A member reads the page with core's note why nothing on it changes. A deleted
+ * group is read-only — no add, no row acts — and says the day it is deleted.
  */
 @Composable
-internal fun GroupPageDialog(state: GroupPageState, actions: GroupActions, onClose: () -> Unit) {
+internal fun GroupPageDialog(state: GroupPageState, actions: GroupActions, scope: ScopeActions, model: AppModel, onClose: () -> Unit) {
     val snackbar = remember { SnackbarHostState() }
     Said(snackbar, state.said, state.round)
     var renaming by remember { mutableStateOf(false) }
@@ -220,6 +227,15 @@ internal fun GroupPageDialog(state: GroupPageState, actions: GroupActions, onClo
             else -> {
                 val open = !state.working
                 val acts = page.owner && !page.deleted
+                ScopeHeader(
+                    page.name.ifEmpty { stringResource(R.string.groups_untitled) }, state.icon, owner = page.owner, enabled = open,
+                    onSetIcon = scope.setIcon, onClearIcon = scope.clearIcon, model = model,
+                )
+                // a deleted group's day (core's `GroupPage.deletion`), the web's warning line above the roster
+                if (page.deleted) Text(
+                    page.deletion?.let { say(it) } ?: stringResource(R.string.groups_pending_sub),
+                    color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("group-deleted"),
+                )
                 if (acts) OutlinedButton(onClick = { renaming = true }, enabled = open, modifier = Modifier.testTag("group-rename")) {
                     Icon(Icons.Outlined.Edit, null, Modifier.size(18.dp))
                     Spacer(Modifier.size(8.dp))
@@ -235,6 +251,10 @@ internal fun GroupPageDialog(state: GroupPageState, actions: GroupActions, onClo
                         GroupMemberRow(m, acts = !page.deleted, enabled = open, onRole = actions.setRole, onRemove = { removing = m }, onRescind = actions.rescind)
                     }
                 }
+                if (page.wholeActs) LinksAndLock(
+                    enabled = open, lockSub = stringResource(R.string.space_lock_sub_group), lockConfirm = stringResource(R.string.space_lock_confirm_group),
+                    onRevokeLinks = scope.revokeLinks, onNewLock = scope.newLock,
+                )
                 if (page.owner) {
                     HorizontalDivider()
                     SectionHead(stringResource(R.string.groups_danger_zone), stringResource(if (page.deleted) R.string.groups_pending_sub else R.string.groups_delete_sub))
@@ -251,9 +271,8 @@ internal fun GroupPageDialog(state: GroupPageState, actions: GroupActions, onClo
                         Spacer(Modifier.size(8.dp))
                         Text(stringResource(R.string.groups_delete_group))
                     }
-                } else if (page.deleted) {
-                    Text(stringResource(R.string.groups_pending_sub), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("group-deleted"))
                 }
+                if (state.working) androidx.compose.material3.LinearProgressIndicator(Modifier.fillMaxWidth())
             }
         }
     }
@@ -309,7 +328,9 @@ private fun GroupMemberRow(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Badge(say(m.statusWord), "group-member-status")
                     m.pendingWord?.let { Badge(say(it), "group-member-pending") }
+                    m.badgeWord?.let { Badge(say(it), "member-trust") }
                 }
+                m.badgeNote?.let { TrustNote(say(it)) }
             }
         },
         trailingContent = if (any) {
