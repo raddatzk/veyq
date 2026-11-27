@@ -287,24 +287,52 @@ decision 9) is in the apps too (owner 2026-11-26: every app does what the web do
    co-owner* on an owner, and *Remove member* never on an owner. All three are an owner's only. **Load-bearing:** a
    member's roster offers no act (`TenantMembersTest`, bitten by offering *Remove* on every row: red). A role change
    (`setTenantMemberRole`) moves no key, and the last owner's demotion is said as the web says it (`409 last_owner`). The
-   removal (`removeTenantMember`) is the server's cascade. Its one opt-in, to turn off every link of the space, is sent
-   only when ticked. After it the session reopens what moved and finishes the re-keys now due (`reopenMoved`, then
-   `resumeRekeys`), the web's `rekeyClosedScopes`.
-2. **The role shows as a word** ("Owner", "Member"). The web's row prints the enum's code as it is. The roster leaves out
-   the web's trust badge, because *Who's who*, the next section, shows each member's trust.
+   removal (`removeTenantMember`) is the server's cascade. Its two opt-ins are the web's, unticked: turning off every link
+   of the space is sent with it; the space's new lock runs only once the removal landed (decision 5). After it the
+   session reopens what moved and finishes the re-keys now due (`reopenMoved`, then `resumeRekeys`), the web's
+   `rekeyClosedScopes`.
+2. **The role shows as a word** ("Owner", "Member"). The web's row prints the enum's code as it is. Each row carries the
+   web's trust badge (`MemberBadge.of` over *Who's who*'s states, the web's `badgesIn`): *Verified* where a verification
+   of the member's current head counts, *New* under two weeks after this account first saw them, the anomaly with its
+   note; *not verified* and an unchecked member show none, nor does one's own row. **Load-bearing:** verified wins over
+   new (`SpaceIconsTest.theBadgeIsTheWebs`, bitten). A group's page carries the same badge (the web's group panel draws it).
 3. **Reached as on the web**: Settings' tenant category opens with it (`SettingsSection.MEMBERS`, `tenant-members`, before
    *Who's who*; `PlansAreTheWebsTest`). Each platform opens it the way it opens *Who's who*. A row's acts are its
    platform's menu: Android an overflow `DropdownMenu`, Apple a `Menu` and a context menu, Linux a `GtkMenuButton`,
    Windows a `MenuFlyout`. The removal's question is an alert, a sheet on Apple, and on Windows it is asked in place.
    The bridge carries `Settings.Members`, `Settings.MemberRole` and `Settings.MemberRemove`.
-4. **Not yet in the apps**, each part of the web's same panel: the space's new lock (on its own, and as the removal's
-   second option), turning off every link of the space, the tenant icon, and inviting with its pending invites. They are
-   listed in native-apps § Open. Leaving a space is no gap: the web has no self-leave (no operation in `scopes` or
-   `tenants`, no use case), and a member leaves only when an owner removes them.
+4. **Leaving a space is no gap**: the web has no self-leave (no operation in `scopes` or `tenants`, no use case), and a
+   member leaves only when an owner removes them. The panel's status lines — the re-keying and resealing hints and a
+   stuck compromise rotation's notice — stay the web's (native-apps § Open).
+5. **The space's new lock and turning off every link are one core seam for a tenant and a group** (`session/Locks`;
+   ADR 0025 § 2, ADR 0075 point 5), each an owner's section below the roster behind its question. The new lock is the web's
+   `rekeySpace`: `commitRotation` over the directory read now, then the nodes re-keyed on the device at once
+   (`reopenMoved`, `resumeRekeys` awaited, the web's `rekeyScope`); the notice says the lock is in where this scope's
+   re-key finished, else that it is going in. After a tenant removal it runs with the web's `excluding` (added to
+   `commitRotation`): the removed member is dropped from the list and every re-read by the owner's choice, never sent as
+   a `removesUserId`, which a TENANT refuses. **Load-bearing:** the new epoch is wrapped to no excluded or removed member
+   (`ScopeRotation.listedFor`, `SpaceIconsTest`, bitten). Turning off every link is `revokeScopeShares`, the count said
+   (none, one, more), each close's re-key started in the background. The bridge carries `Settings.MembersNewLock`,
+   `Settings.MembersRevokeLinks` and `Settings.MemberRemove`'s `newLock`.
+6. **A space's icon is opened, set and removed as the web's** (`session/SpaceIcons`, `ScopeIcons`,
+   `TenantSession.icons(encoder)`; uc.spaces.set-space-icon): on the Members header and a group's page, every member seeing
+   it, an owner setting and removing it. The platform crops the picture square as for one's own picture
+   (`ProfileModel.EDGE` RGBA; the bridge asks the host's `PictureSquare`), the core encodes it by the profile's ladder,
+   pads it to 16 KiB and seals it `space-icon` under a fresh value key wrapped at the epoch it holds; a `409 stale_epoch`
+   reads the scopes anew and seals once more. A deleted group's icon opens from its own grant. **Load-bearing:** an icon
+   opens at its own scope, icon epoch and key epoch only, held to a fixture the web's `spaceIcon.ts` wrote
+   (`SpaceIconsTest`, bitten). The bridge carries `Settings.Icon`, `Settings.IconSet` and `Settings.IconClear`. The
+   switcher and the drawer draw no space picture yet (native-apps § Open).
+7. **The join takes an optional picture** (`TenantJoin.choosePicture`, ADR 0084): below the name on the account step,
+   never at a handover (the web's `JoinPicturePicker`), kept encoded in the flow only and sealed `member-avatar` beside the
+   name at the accept, the register's and the sign-in's alike; zeroed at the finish and the close. **Load-bearing:** the
+   owner opens the joiner's picture (`InvitesLiveTest`, bitten by sending no `sealedAvatar`). The bridge carries
+   `Join.Picture`, `Join.RemovePicture` and `Join.PictureBytes`.
 
 Consequences: proved by `TenantMembersTest`, `PlansAreTheWebsTest`, the bridge's `WireTest`, `SecretFreeSchemaTest` and
-`DispatchTest.theTermsEditorsChangesAreTheCoresDraftAndTheMembersCallsNeedATenant`, and, live as a throwaway with a member,
-`MembersLiveTest`. The passes are in native-apps § Built, by area.
+`DispatchTest.theTermsEditorsChangesAreTheCoresDraftAndTheMembersCallsNeedATenant`, `SpaceIconsTest`, and, live as a
+throwaway with a member, `MembersLiveTest`, `MembersPageRestLiveTest` (icons, both new locks, the links, the removal's new
+lock) and `InvitesLiveTest` (the join's picture). The passes are in native-apps § Built, by area.
 
 ## Groups (built 2026-11-27)
 
@@ -328,8 +356,11 @@ It was decided as follows:
    category holds a section per owned group and its invitations sit in the sidebar; the apps' page is a fixed plan over one
    tenant, so *Groups* lists the caller's groups and opens each one's page, and *Group invitations* is the inbox
    (`PlansAreTheWebsTest`). The bridge carries `Settings.Group*`.
-4. **Not yet in the apps**, the same panel's parts the tenant's Members leaves to the browser too: a group's picture, its
-   new lock and turning off every link.
+4. **A group's picture, new lock and links are the tenant's** (§ Members decisions 5 and 6): the page's header shows its
+   icon, and an owner's *Links* and *New lock* sections show while the group is not being deleted
+   (`GroupPage.wholeActs`, the web's `!isPending`). A deleted group's page and row say the day it goes
+   (`GroupPage.deletion`, `GroupRow.deletion`, `groups.pendingDeletion`). A group's removal needs no new-lock option: it
+   rotates by itself.
 
 Consequences: proved by `GroupNamesTest`, `TenantGroupsTest`, `ShellWordsTest`, `PlansAreTheWebsTest`, the bridge's
 `WireTest` and `DispatchTest`, and live as a throwaway with its member by `GroupsLiveTest`. The passes are in

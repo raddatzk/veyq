@@ -185,6 +185,19 @@ Held by `TenantMembersTest`, `TermsDraftTest`, `TermsTemplateIsTheWebsTest` (eac
 language*, the blank warning, *Insert template* and *Save terms* to revision 2) and Android (an API 36 emulator: the roster, a
 role changed and back, the member removed with every link turned off, the editor reading Linux's revision 2); Apple built
 (macOS, iOS), Windows built with its tests on the VM; their passes open (inbox #1418).
+**The rest of Members and a group's page, and the join's picture, on all four apps** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md)
+§ Members decisions 2 and 5–7, § Groups decision 4, built 2026-11-27; uc.spaces.set-space-icon): the Members header shows the
+space's icon and name, an owner adding, changing and removing the icon through the profile picture's crop
+(`session/SpaceIcons`, `ScopeIcons`); each row of the roster and of a group's page carries the trust badge
+(`MemberBadge`); an owner's *Links* turns off every link and *New lock* gives the space a new lock (`session/Locks`), the
+removal's question offering the new lock as its second option; a group's page has the same icon, *Links* and *New lock*,
+and a deleted group's page and row say its day; the join's account step takes an optional picture
+(`TenantJoin.choosePicture`). Held by `SpaceIconsTest` (bitten three ways), the bridge's tests, and live by
+`MembersPageRestLiveTest` and `InvitesLiveTest`. Passed as a throwaway with its member on Android (`veyq_terms`: the icon set,
+kept across a restart and removed, the badge, links off, the new lock, the removal with both options, a group's icon, lock,
+links and deleted day, a full join with its picture opened on the joiner's profile and the account erased), Linux (Broadway:
+the same acts, the join's picker on the register and sign-in steps) and Windows (the VM with `tw-win`, German: the same,
+the join's picker on the register step). Apple is built only (macOS, iOS). Owed (inbox #1422).
 **The account's own flows, on all four apps** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md), built 2026-11-19): the web's flows ported into the core and
 held to the shared vectors (`secret_key_proof`, `auth_attestation`, `rotation_stage`, `verification`, `fingerprint`'s
 digits and chain code, `safety_code`, on the JVM and libsodium) — the rename of any device a row names
@@ -752,9 +765,9 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   iPad (a flow's kit scanned with the real camera, the breach notice too), Touch ID and Windows Hello for real, a real
   mailbox, a safety code scanned with real cameras (#912).
 - Not in the apps yet (the owner 2026-11-26: every app is to do what the web does — these are gaps, closed one by one):
-  a group's picture, its new lock and turning off its links, the rest of the web's Members panel — the space's new lock (alone and as the
-  removal's second option), turning off every link of the space, the tenant icon — and the roster's trust badge (the
-  apps show it in *Who's who*), finishing a recovery (the apps ask for the reset link; the web finishes it), the trust reset,
+  the Members panel's and a group page's status lines (the re-keying and resealing hints, a stuck compromise rotation's
+  notice), a space's picture in the switcher and the drawer (the apps show it on the Members header and a group's page
+  only), finishing a recovery (the apps ask for the reset link; the web finishes it), the trust reset,
   the moderation key (#965), the task queue's jobs (#966), reopening where the person left after a restart (#1415), and an in-app choice of appearance and language (the apps follow the system's; the desktops
   have no per-app language of their own).
 - A selection's capture-time shift and the kit's layout 2 (built 2026-11-27, inbox #1417; passed on Linux and by the core's live
