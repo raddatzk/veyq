@@ -154,7 +154,9 @@ they ask first), changes roles, removes a member by the group's rotation, withdr
 `ShellWordsTest`, `PlansAreTheWebsTest` and the bridge's tests, and live by `GroupsLiveTest`. Passed as a throwaway with
 its member on Android (`veyq_terms`: create, rename, add, roles, remove, a proposal withdrawn and accepted, delete and
 restore), Linux (Broadway: the owner's acts and the member's read-only page) and Windows (the VM with `tw-win`: the same,
-the consent proposal accepted with the name opened). Apple is built only. Owed (inbox #1421).
+the consent proposal accepted with the name opened); on 2026-11-27 *Decline* and a stale rename on Android, *Accept* on
+Linux and the switcher's group name on both, in German. Apple is built only. Owed (inbox #1421): the Apple passes, and a
+group behind its lock, which needs a forged key.
 
 **Inviting and joining, on all four apps** ([ADR 0129](../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md)
 § The apps, built 2026-11-27; uc.spaces.add-member, uc.spaces.manage-member-invites): an owner's **Members** offers *Invite
@@ -168,8 +170,11 @@ labelled link invite created, renamed and copied; a mailed invite sent again and
 the link, saved its kit, opened the space and was erased), Linux (Broadway: the link invite, its rename, the whole
 message pasted, a new account joined and erased) and Windows (the VM with `tw-win`: both ways, the re-issues, the
 cancel, a new account joined, its kit saved, the space opened, the account erased; the join's window out of capture).
-Apple is built only (iOS and macOS). Owed (inbox #1420): the Apple passes, the existing-account sign-in path and the code
-step on any app, *Open in email* and *Share*, the share-in of an invite on Android and iOS.
+On 2026-11-27 also on Android: a mailed invite shared in as text, its code step and the existing-account sign-in and
+accept; *Share…* through the system sheet back into veyq and *Open in email*; an OWNER invite's birth and a handover; and on
+Windows an existing account's join. A join whose server is not reached ends as an invalid invite (`TenantJoin.load`).
+Apple is built only (iOS and macOS). Owed (inbox #1420): the Apple passes and the share-in on iOS; a breach hit at the
+join is held by `BreachCheckTest`, never drawn (the core's range client takes only `https`).
 
 **Members and the terms' editor, on all four apps** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) § Members and
 [ADR 0035](../decisions/0035-server-terms-of-service.md) § The apps' gate decision 5, built 2026-11-27;
@@ -184,7 +189,9 @@ Held by `TenantMembersTest`, `TermsDraftTest`, `TermsTemplateIsTheWebsTest` (eac
 (Broadway: the roster, *Make co-owner* and back with their toasts, the removal's question; the editor with *Add
 language*, the blank warning, *Insert template* and *Save terms* to revision 2) and Android (an API 36 emulator: the roster, a
 role changed and back, the member removed with every link turned off, the editor reading Linux's revision 2); Apple built
-(macOS, iOS), Windows built with its tests on the VM; their passes open (inbox #1418).
+(macOS, iOS); on 2026-11-27 Windows (the VM: the roster, a removal with every link turned off, the editor to revision 1),
+a removal answered on Linux, and German on Android. The terms' Markdown shows an *emphasis* as its words on every app since
+(the operator section drew its stars). Apple's passes open (inbox #1418).
 **The rest of Members and a group's page, and the join's picture, on all four apps** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md)
 § Members decisions 2 and 5–7, § Groups decision 4, built 2026-11-27; uc.spaces.set-space-icon): the Members header shows the
 space's icon and name, an owner adding, changing and removing the icon through the profile picture's crop
@@ -197,7 +204,9 @@ and a deleted group's page and row say its day; the join's account step takes an
 kept across a restart and removed, the badge, links off, the new lock, the removal with both options, a group's icon, lock,
 links and deleted day, a full join with its picture opened on the joiner's profile and the account erased), Linux (Broadway:
 the same acts, the join's picker on the register and sign-in steps) and Windows (the VM with `tw-win`, German: the same,
-the join's picker on the register step). Apple is built only (macOS, iOS). Owed (inbox #1422).
+the join's picker on the register step); on 2026-11-27 *N links turned off* with links on and an icon's stale-epoch retry
+(Android, beside a new lock from Linux), a full join with its picture on Linux and Windows, and Windows' sign-in step's
+picker. Apple is built only (macOS, iOS). Owed (inbox #1422): the Apple passes and an anomaly's badge (a forged key).
 **The account's own flows, on all four apps** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md), built 2026-11-19): the web's flows ported into the core and
 held to the shared vectors (`secret_key_proof`, `auth_attestation`, `rotation_stage`, `verification`, `fingerprint`'s
 digits and chain code, `safety_code`, on the JVM and libsodium) — the rename of any device a row names
@@ -230,7 +239,9 @@ lines"), records every kit an app makes (the rotation in its request, the addres
 is kept), and Settings → Security says which kit the account has, with *Make a new kit* (proven before printed) where a
 clearer one exists; the shell shows the one-time notice. Passed by the core's live test as a throwaway (the earlier
 layout read, a new kit recorded, a fresh session reading it current) and on Linux (Broadway) as a throwaway (the notice,
-*Go to your kit* opening Settings at the kit, *Make a new kit*'s form); the other apps built. The Use pages: [Your profile](../../site/src/content/docs/account/your-profile.mdx),
+*Go to your kit* opening Settings at the kit, *Make a new kit*'s form), and on 2026-11-27 on Android and Windows (*Make a
+new kit* typed through to a saved kit, its record then read current; the step says the web's `kit.renew.done` since);
+Apple built (inbox #1417). The Use pages: [Your profile](../../site/src/content/docs/account/your-profile.mdx),
 [Verify a person](../../site/src/content/docs/account/verify-a-person.mdx),
 [Change your password](../../site/src/content/docs/account/change-password.mdx),
 [Your email address](../../site/src/content/docs/account/change-email.mdx),
@@ -770,10 +781,8 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   only), finishing a recovery (the apps ask for the reset link; the web finishes it), the trust reset,
   the moderation key (#965), the task queue's jobs (#966), reopening where the person left after a restart (#1415), and an in-app choice of appearance and language (the apps follow the system's; the desktops
   have no per-app language of their own).
-- A selection's capture-time shift and the kit's layout 2 (built 2026-11-27, inbox #1417; passed on Linux and by the core's live
-  tests): the passes on Android, the Mac, iPhone and iPad, and Windows — the VM resolves `tw-win.localhost` alone, which
-  a throwaway whose file was lost at a reboot still holds (inbox #1416); in the apps, *Make a new kit* typed through to a
-  saved kit on any app's screen (the core's live test ran it).
+- A selection's capture-time shift and the kit's layout 2 (built 2026-11-27, inbox #1417; passed on Linux, Android and
+  Windows and by the core's live tests): the passes on the Mac, iPhone and iPad.
 - *Who's who* (ADR 0148 § Who's who, built 2026-11-27): the macOS pass (the sheet over the Settings window, the window
   closing for a profile — the coordinator's), an anomaly and a rotation seen on any app (the throwaways had neither), the
   owner's iPhone and iPad, and the cost on a large tenant (#1414).

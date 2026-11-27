@@ -92,8 +92,10 @@ What the tree holds (read 2026-11-22 on `main` `28e3312c0`):
   unlock (`KitStatus`, the web's `kitLayoutState`), shared by Settings → Security and the shell's notice; the rotation
   carries it in its request, the address change and the renewal (`session/KitRenewal.kt`, proven before printed) seal it
   during their proof and write the blob once "I saved it" is ticked (`KitStep`'s `kept`). The notice's dismissal is per
-  device and account (the device store, the layout it spoke of). The apps make no birth kit (joining and setup are the
-  web's). The earlier app sheet stays as the fixture `kit-app-layout1.pdf`, still read by token and by its drawn QR.
+  device and account (the device store, the layout it spoke of). An account born at an app's join (ADR 0129 § The apps,
+  `TenantJoin`) carries the record in its registration, as the web's birth does (seen current on Linux, 2026-11-27); setup
+  stays the web's. The renewal's step says the web's `kit.renew.done` once its record is written (`KitStep`'s `done`, added
+  2026-11-27 after the Android pass found the sheet silent). The earlier app sheet stays as the fixture `kit-app-layout1.pdf`, still read by token and by its drawn QR.
   Tests: `KitRenewalTest`, `KitFixtureTest`/`KitFixtureCases`, `AccountFlowsDispatchTest`; live, `LiveAccountFlowsTest`'s
   kit case as a throwaway (born without a record: the earlier layout, renewed, read current by a fresh session).
 - A person who never opens Settings and dismissed the notice keeps the old kit. That is accepted: it works, and the

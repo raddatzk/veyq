@@ -107,7 +107,10 @@ Inviting and joining are in the four apps too (owner 2026-11-26: every app does 
    (decision 4). It then lets that account go. *Open the space* signs in through the app's own session model with what the
    join holds in memory. A second sign-in was chosen over handing the join's account to the session model, which is
    generic over its door. The inviting owner is pinned from the served chain (`Anchoring.anchorServedChain`).
-5. **Not in the apps:** the web's optional picture at the join, which is set afterwards in Settings' profile.
+5. ~~**Not in the apps:** the web's optional picture at the join.~~ Superseded 2026-11-27: the apps' join takes it too
+   ([ADR 0148](0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md)
+   § Members decision 7). A join whose server is not reached ends as an invalid invite, as the web's catch-all does
+   (`TenantJoinLoadTest`; found 2026-11-27, it stayed on "Checking your invitation…").
 
 Proved by `InviteCheckTest`, the conformance runners, `InviteLinkTest` and the bridge's `WireTest`, `SecretFreeSchemaTest`
 and `DispatchTest` (each new check bitten), and live by `InvitesLiveTest` as a throwaway: a link invite labelled, renamed,
