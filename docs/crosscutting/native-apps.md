@@ -146,6 +146,21 @@ The bridge carries `Trust.WhosWho`. No TV draws it. Held by `WhosWhoTest` (bitte
 (API 36 emulator, English and German, a row into the profile), iOS (an iPhone 18 Pro simulator, German, a row into the
 profile), Linux (Broadway, a row into the profile) and Windows (the VM, German: *Not verified* and *New* with *Compare safety
 numbers* into the profile); macOS and tvOS built, the Mac's sheet never clicked (the coordinator's).
+**Inviting and joining, on all four apps** ([ADR 0129](../decisions/0129-a-member-invite-is-mailed-or-handed-over-as-a-link.md)
+§ The apps, built 2026-11-27; uc.spaces.add-member, uc.spaces.manage-member-invites): an owner's **Members** offers *Invite
+member* (a link first, or a mail with a code or a chosen password; the result shown once) and the pending invites with
+*Rename*, *New link* / *Send again* and *Cancel invite* (`session/TenantInvites`). An invite link pasted into *Open a link*
+(or shared into the app) opens the join above everything (`session/TenantJoin`): the code where the link has none, a new
+account with its kit or an existing one, *Open the space*. The bridge carries `Settings.Invite*`, `Join.*` and
+`Received.Open`'s `JoinOpened`. Held by `InviteCheckTest`, the conformance runners, `InviteLinkTest`, `WireTest`,
+`SecretFreeSchemaTest` and `DispatchTest`, and live by `InvitesLiveTest`. Passed as a throwaway on Android (`veyq_terms`: a
+labelled link invite created, renamed and copied; a mailed invite sent again and cancelled; a new account joined through
+the link, saved its kit, opened the space and was erased), Linux (Broadway: the link invite, its rename, the whole
+message pasted, a new account joined and erased) and Windows (the VM with `tw-win`: both ways, the re-issues, the
+cancel, a new account joined, its kit saved, the space opened, the account erased; the join's window out of capture).
+Apple is built only (iOS and macOS). Owed (inbox #1420): the Apple passes, the existing-account sign-in path and the code
+step on any app, *Open in email* and *Share*, the share-in of an invite on Android and iOS.
+
 **Members and the terms' editor, on all four apps** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) § Members and
 [ADR 0035](../decisions/0035-server-terms-of-service.md) § The apps' gate decision 5, built 2026-11-27;
 uc.spaces.remove-tenant-member, uc.admin.tenant-terms): Settings' **Members** (`SettingsSection.MEMBERS`, `tenant-members`,
@@ -727,7 +742,6 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   iPad (a flow's kit scanned with the real camera, the breach notice too), Touch ID and Windows Hello for real, a real
   mailbox, a safety code scanned with real cameras (#912).
 - Not in the apps yet (the owner 2026-11-26: every app is to do what the web does — these are gaps, closed one by one):
-  joining a tenant from an invite and inviting with its pending invites and labels (`changes/cr-apps-invites-and-join.md`),
   groups (`changes/cr-apps-groups.md`), the rest of the web's Members panel — the space's new lock (alone and as the
   removal's second option), turning off every link of the space, the tenant icon — and the roster's trust badge (the
   apps show it in *Who's who*), finishing a recovery (the apps ask for the reset link; the web finishes it), the trust reset,

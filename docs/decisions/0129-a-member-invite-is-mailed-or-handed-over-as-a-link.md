@@ -79,6 +79,41 @@ An invite that ends drops its label in the statement that drops its key and gran
 so the owner's client seals the label anew for it. Its last editor is recorded
 ([ADR 0093](0093-a-report-opens-one-window-for-the-moderator-and-a-hold-copies-never-blocks.md) § 8).
 
+## The apps (built 2026-11-27)
+
+Inviting and joining are in the four apps too (owner 2026-11-26: every app does what the web does). Decided as follows:
+
+1. **The suite is the Kotlin core's, held to the vectors.** `crypto/Invites.kt` ports `invite.ts` line for line: the
+   invite key, the owner's signature, the accept proof, the code, the link KEK, the version-2 payload and its seal, the
+   sealed part's one-profile parse, the fragment and `checkInvite`. `Conformance` runs `#invite_key`, `#invite_link` and
+   `#join_record` on the JVM, over libsodium and in `@veyq/core-js`. `InviteCheckTest` ports `inviteCheck.test.ts`, each
+   refusal beside its control. A sealed part with another profile is refused as `InviteLinkInvalid("profile")`, the web's
+   `KdfProfileRefused`.
+2. **Inviting is the core's** (`session/TenantInvites`, `TenantSession.invites`): a link invite (decision 1) or a mailed
+   one, the pending list with each link invite's label opened under the tenant key (decision 7), re-issue, revoke and the
+   label, from Settings' Members. The link and the code are answered once, to the call that made them, and never kept
+   or sent in an update. They are made to be handed on, as a share link and its password are, so they are not covered
+   as secrets on screen (`src/mobile/CLAUDE.md`).
+3. **An invite enters the app through *Open a link* and a shared text, never through `veyq:`.** `ReceivedLink.inviteOf`
+   reads `<origin>/tenant/accept#…`, also as the one link of a pasted message (the result's *Copy* copies the whole
+   message). A `veyq:` link carries nothing (ADR 0150 § O1), and the later deep links of inbox #1415 leave invites out
+   (owner 2026-11-27). **Residual:** on the desktops, a person who is signed in reaches *Open a link* only after a sign-out
+   (no share sheet there).
+4. **The join is the core's** (`session/TenantJoin`, the web's `TenantJoinView`): the preview, the code, the checks
+   before anything is sent, a new account born on the device with its Emergency Kit written by the core, or an existing
+   one signed in cold with its password and Secret Key; the `409 invite_changed` / `stale_epoch` re-check, and an OWNER
+   invite's birth and a handover as on the web. The join signs in on its own: to accept for an existing account, and once
+   after a registration to hold the accepted key (ADR 0111 decision 23) and to ask a link registration's confirmation mail
+   (decision 4). It then lets that account go. *Open the space* signs in through the app's own session model with what the
+   join holds in memory. A second sign-in was chosen over handing the join's account to the session model, which is
+   generic over its door. The inviting owner is pinned from the served chain (`Anchoring.anchorServedChain`).
+5. **Not in the apps:** the web's optional picture at the join, which is set afterwards in Settings' profile.
+
+Proved by `InviteCheckTest`, the conformance runners, `InviteLinkTest` and the bridge's `WireTest`, `SecretFreeSchemaTest`
+and `DispatchTest` (each new check bitten), and live by `InvitesLiveTest` as a throwaway: a link invite labelled, renamed,
+re-issued, joined by a new account that opens the space, a mailed invite revoked, the joined account erased. It is bitten
+by an accept proof signed with the wrong key, which the server refuses. The passes are in native-apps § Built, by area.
+
 ## Consequences
 
 - **A link is a bearer credential.** Whoever holds it joins with the tenant key, and what they read before the owner

@@ -377,6 +377,13 @@ Facts the design rests on, as the code stood:
       store would reach a new device too, at the cost of one more entry kind there — not taken while the no-mark case
       stays open anyway.
 
+## The apps' invitee (2026-11-27)
+
+The apps run the invitee's half as the web does, in the Kotlin core (`crypto/Invites.kt`, `session/TenantJoin`, held to
+`#invite_key`, `#invite_link` and `#join_record`): the checks of decisions 1 and 19 before anything is sent, the self-grant
+and the twice-signed join record of decision 3, the re-check of decision 20, and the accepted key held (decision 23) by
+an account the join signs in itself. ADR 0129 § The apps holds how the link reaches the app.
+
 ## Consequences
 
 - **Goal 3 holds for members through every rotation**, their own included: posting needs only the current epoch, a
