@@ -68,11 +68,11 @@ internal static class TermsText
 {
     /// <summary>The space's text (or that it has none), the operator section under its label and note, and the record's
     /// pointer with its link to the server's privacy notice.</summary>
-    public static StackPanel Of(TermsShown shown)
+    public static StackPanel Of(TermsShown shown, bool withTerms = true)
     {
         var panel = new StackPanel { Spacing = 12 };
-        if (shown.hasTerms && shown.terms.Trim().Length > 0) panel.Children.Add(Markdown(shown.terms));
-        else panel.Children.Add(Line(Words.TermsNoneSet(), true));
+        if (withTerms && shown.hasTerms && shown.terms.Trim().Length > 0) panel.Children.Add(Markdown(shown.terms));
+        else if (withTerms) panel.Children.Add(Line(Words.TermsNoneSet(), true));
         panel.Children.Add(new Border { Height = 1, Background = (Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"] });
         var label = new TextBlock { Text = Words.TermsOperatorSectionLabel(), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] };
         AutomationProperties.SetHeadingLevel(label, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
@@ -128,8 +128,10 @@ internal static class TermsText
     }
 }
 
-/// <summary>Settings' Terms: the open space's terms read when it opens, read-only with the note that the owner edits
-/// them in the browser.</summary>
+/// <summary>Settings' Terms (the web's TenantTermsPanel): for an owner the editor over the core's draft (Terms.Editing,
+/// Terms.Edit, Terms.Save) — one text per language that has terms, "Add language", each language's "Insert template" and
+/// remove (asked in place first), the blank language's warning, "Save terms" and the preview —, for a member the terms
+/// read-only; the operator section below both. Every rule is the core's; the dialog keeps the draft it was answered.</summary>
 internal static class TermsDialog
 {
     public static async void Open(Window window)
@@ -142,22 +144,26 @@ internal static class TermsDialog
             var dialog = new ContentDialog
             {
                 Title = Words.TermsSettingsTitle(),
-                Content = new ScrollViewer { Content = body, MaxHeight = 520 },
+                Content = new ScrollViewer { Content = body, MaxHeight = 560 },
                 CloseButtonText = Words.ShareDone(),
                 DefaultButton = ContentDialogButton.Close,
             };
             AutomationProperties.SetAutomationId(dialog, "terms-page");
             var shown = Dialogs.Show(window, dialog);
-            var (answer, _) = await Core.CallAsync(new Call.SettingsTerms());
+            var (answer, _) = await Core.CallAsync(new Call.SettingsTermsEditing());
             body.Children.Clear();
-            if (answer is Answer.Terms { shown: { } terms })
+            if (answer is Answer.TermsEditing { editing: { owner: true } editing })
+            {
+                new Editor(body, editing.shown, editing.draft).Edit(editing.draft, TermsChange.Text, "", null);
+            }
+            else if (answer is Answer.TermsEditing { editing: { } read })
             {
                 body.Children.Add(TermsText.Line(Words.TermsReadonlyNote(), true));
-                body.Children.Add(TermsText.Of(terms));
+                body.Children.Add(TermsText.Of(read.shown));
             }
             else
             {
-                Log.Write($"Settings.Terms answered {answer?.GetType().Name}");
+                Log.Write($"Terms.Editing answered {answer?.GetType().Name}");
                 var failed = TermsText.Line(Words.TermsLoadFailed(), false);
                 AutomationProperties.SetAutomationId(failed, "terms-load-failed");
                 body.Children.Add(failed);
@@ -167,6 +173,158 @@ internal static class TermsDialog
         catch (Exception e)
         {
             Log.Write($"the terms did not open ({e.GetType().Name})");
+        }
+    }
+
+    /// <summary>A word of one text argument the core named.</summary>
+    private static string With(Msg m, string arg)
+    {
+        var key = System.Text.Json.JsonSerializer.Serialize(m).Trim('"').ToLowerInvariant();
+        return Words.Say(key, [arg]) ?? key;
+    }
+
+    /// <summary>The owner's editor: the draft the core last answered, drawn anew after each change of its languages; a
+    /// typed text asks the core for the new draft and preview without redrawing the box being typed in.</summary>
+    private sealed class Editor(StackPanel body, TermsShown shown, TermsDraft draft)
+    {
+        private TermsDraft _draft = draft;
+        private string _preview = "";
+        private readonly StackPanel _tail = new() { Spacing = 12 };
+        private readonly InfoBar _said = new() { IsOpen = false, IsClosable = true };
+
+        public async void Edit(TermsDraft from, TermsChange change, string lang, string? typed)
+        {
+            var (answer, _) = await Core.CallAsync(new Call.SettingsTermsEdit { draft = from, change = change, lang = lang, text = typed ?? "" });
+            if (answer is not Answer.TermsDrafted { draft: { } next } drafted)
+            {
+                Log.Write($"Terms.Edit answered {answer?.GetType().Name}");
+                return;
+            }
+            _draft = next;
+            _preview = drafted.preview;
+            if (typed is null) Draw(); else Tail();
+        }
+
+        private void Draw()
+        {
+            body.Children.Clear();
+            AutomationProperties.SetAutomationId(_said, "terms-notice");
+            body.Children.Add(_said);
+            body.Children.Add(TermsText.Line(Words.TermsEditorSub(), true));
+            if (_draft.showsRevision)
+            {
+                var revision = new TextBlock { Text = Words.TermsRevision(_draft.revision), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] };
+                AutomationProperties.SetAutomationId(revision, "terms-revision");
+                body.Children.Add(revision);
+            }
+            foreach (var t in _draft.texts) body.Children.Add(Language(t));
+            if (_draft.addable.Count > 0)
+            {
+                var menu = new MenuFlyout();
+                foreach (var l in _draft.addable)
+                {
+                    var item = new MenuFlyoutItem { Text = l.name };
+                    AutomationProperties.SetAutomationId(item, $"terms-add-{l.lang}");
+                    var code = l.lang;
+                    item.Click += (_, _) => Edit(_draft, TermsChange.Add, code, null);
+                    menu.Items.Add(item);
+                }
+                var add = new DropDownButton { Content = Words.TermsAddLanguage(), Flyout = menu };
+                AutomationProperties.SetAutomationId(add, "terms-add");
+                body.Children.Add(add);
+            }
+            body.Children.Add(_tail);
+            Tail();
+        }
+
+        private StackPanel Language(LangText t)
+        {
+            var panel = new StackPanel { Spacing = 6 };
+            AutomationProperties.SetAutomationId(panel, $"terms-lang-{t.lang}");
+            var box = new TextBox
+            {
+                Header = t.name, Text = t.text, PlaceholderText = Words.TermsPlaceholder(), AcceptsReturn = true,
+                TextWrapping = TextWrapping.Wrap, MinHeight = 160, FontFamily = new FontFamily("Cascadia Mono, Consolas"),
+            };
+            AutomationProperties.SetAutomationId(box, $"terms-text-{t.lang}");
+            var code = t.lang;
+            box.TextChanged += (_, _) => Edit(_draft, TermsChange.Text, code, box.Text);
+            panel.Children.Add(box);
+            var acts = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            if (t.templated)
+            {
+                var template = new HyperlinkButton { Content = Words.TermsInsertTemplate() };
+                AutomationProperties.SetAutomationId(template, $"terms-template-{t.lang}");
+                template.Click += (_, _) => Ask(panel, Words.TermsInsertTemplate(), With(t.templateAsk, t.name), () => Edit(_draft, TermsChange.Template, code, null));
+                acts.Children.Add(template);
+            }
+            var remove = new HyperlinkButton { Content = Words.TermsRemoveLang(t.name) };
+            AutomationProperties.SetAutomationId(remove, $"terms-remove-{t.lang}");
+            remove.Click += (_, _) => Ask(panel, Words.TermsRemoveLang(t.name), Words.TermsRemoveLangAsk(t.name), () => Edit(_draft, TermsChange.Remove, code, null));
+            acts.Children.Add(remove);
+            panel.Children.Add(acts);
+            return panel;
+        }
+
+        /// <summary>A question asked in place under a language's row (one ContentDialog at a time): its words, the act and Cancel.</summary>
+        private static void Ask(StackPanel under, string act, string question, Action then)
+        {
+            var ask = new StackPanel { Spacing = 8, Padding = new Thickness(12), CornerRadius = new CornerRadius(4), Background = (Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"] };
+            AutomationProperties.SetAutomationId(ask, "terms-ask");
+            ask.Children.Add(TermsText.Line(question, false));
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            var yes = new Button { Content = act, Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+            AutomationProperties.SetAutomationId(yes, "terms-ask-confirm");
+            var no = new Button { Content = Words.SigninCancel() };
+            yes.Click += (_, _) => { under.Children.Remove(ask); then(); };
+            no.Click += (_, _) => under.Children.Remove(ask);
+            buttons.Children.Add(yes);
+            buttons.Children.Add(no);
+            ask.Children.Add(buttons);
+            under.Children.Add(ask);
+        }
+
+        /// <summary>The warning, the hint, "Save terms", the preview and the operator section: what a typed text moves.</summary>
+        private void Tail()
+        {
+            _tail.Children.Clear();
+            if (_draft.blankWarning is { } warning)
+            {
+                var bar = new InfoBar { IsOpen = true, IsClosable = false, Severity = InfoBarSeverity.Warning, Message = With(warning, _draft.blankNames ?? "") };
+                AutomationProperties.SetAutomationId(bar, "terms-blank");
+                _tail.Children.Add(bar);
+            }
+            var hint = TermsText.Line(Words.TermsMarkdownHint("{contact}"), true);
+            hint.Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"];
+            _tail.Children.Add(hint);
+            var save = new Button { Content = Words.TermsSave(), Style = (Style)Application.Current.Resources["AccentButtonStyle"] };
+            AutomationProperties.SetAutomationId(save, "terms-save");
+            save.Click += (_, _) => Save(save);
+            _tail.Children.Add(save);
+            if (_preview.Length > 0)
+            {
+                var label = new TextBlock { Text = Words.TermsPreview(), Style = (Style)Application.Current.Resources["BodyStrongTextBlockStyle"] };
+                AutomationProperties.SetHeadingLevel(label, Microsoft.UI.Xaml.Automation.Peers.AutomationHeadingLevel.Level2);
+                _tail.Children.Add(label);
+                _tail.Children.Add(TermsText.Markdown(_preview));
+            }
+            _tail.Children.Add(TermsText.Of(shown, withTerms: false));
+        }
+
+        private async void Save(Button save)
+        {
+            save.IsEnabled = false;
+            var (answer, _) = await Core.CallAsync(new Call.SettingsTermsSave { draft = _draft });
+            save.IsEnabled = true;
+            if (answer is not Answer.TermsSaved { notice: { } n } saved)
+            {
+                Log.Write($"Terms.Save answered {answer?.GetType().Name}");
+                return;
+            }
+            _said.Message = Said.Notice(n);
+            _said.Severity = n.kind == NoticeKind.Said ? InfoBarSeverity.Success : InfoBarSeverity.Error;
+            _said.IsOpen = true;
+            if (saved.draft is { } next) Edit(next, TermsChange.Text, "", null);
         }
     }
 }

@@ -533,6 +533,7 @@ internal sealed class AccountSettingsPage : IDisposable
                 },
                 SettingsSection.Profile => () => FlowSection(AccountFlow.Profile),
                 SettingsSection.Erase => () => FlowSection(AccountFlow.Erase),
+                SettingsSection.Members => DrawMembers,
                 SettingsSection.WhosWho => DrawWhosWho,
                 SettingsSection.Terms => DrawTerms,
                 SettingsSection.SignOut => DrawSignOut,
@@ -689,13 +690,22 @@ internal sealed class AccountSettingsPage : IDisposable
         _sections.Children.Add(Card("\uE716", Words.WhosWhoTitle(), [Words.WhosWhoSub()], "settings-whos-who", open));
     }
 
-    /// <summary>The open space's terms, read-only (uc.account.accept-terms): opened over the page.</summary>
+    /// <summary>The open space's members and their roles (the web's tenant section `tenant-members`): opened over the page.</summary>
+    private void DrawMembers()
+    {
+        _sections.Children.Add(Anchor("tenant-members", Heading(Words.MembersTitle())));
+        var open = TextButton(Words.MembersTitle(), "settings-open:tenant-members");
+        open.Click += (_, _) => MembersDialog.Open(_window);
+        _sections.Children.Add(Card("\uE716", Words.MembersTitle(), [Words.MembersSub()], "settings-members", open));
+    }
+
+    /// <summary>The open space's terms, an owner's to edit (uc.admin.tenant-terms): opened over the page.</summary>
     private void DrawTerms()
     {
         _sections.Children.Add(Anchor("terms", Heading(Words.TermsSettingsTitle())));
         var open = TextButton(Words.TermsSettingsTitle(), "settings-open:terms");
         open.Click += (_, _) => TermsDialog.Open(_window);
-        _sections.Children.Add(Card("\uE8A5", Words.TermsSettingsTitle(), [Words.TermsReadonlyNote()], "settings-terms", open));
+        _sections.Children.Add(Card("\uE8A5", Words.TermsSettingsTitle(), [Words.TermsEditorSub()], "settings-terms", open));
     }
 
     /// <summary>Which Emergency Kit the account has (ADR 0157 decision 5): current, or a clearer one exists — what it does
