@@ -232,7 +232,47 @@ deleted, and #436's mention of the disabled major-entry proof is updated.
   a package that is scoped to your personal account, the default visibility is private", and a linked package inherits
   "the access permissions (but not the visibility)" of its repository. Decision 2 says the archive is public, so making
   it public after the first dispatch is the owner's step (below). The first push from a workflow could not be measured
-  here (no registry writes).
+  here (no registry writes). **Superseded by what the first dispatch showed:** GHCR created `veyq-backups` public, no
+  owner step taken (§ Phases 1 and 2 — observed).
+
+### Phases 1 and 2 — observed (the owner's dispatches, 2026-11-27)
+
+- **Phase 1's observed half holds.** The dispatch for `v1.318` ([run 46047675181](https://github.com/raddatzk/veyq/actions/runs/46047675181))
+  published `veyq-backups:1.318`; its verify step passed under the archive identity and was refused under release.yml's.
+  The second dispatch ([run 46048381605](https://github.com/raddatzk/veyq/actions/runs/46048381605)) wrote nothing and said so.
+- **The package is public, by inheritance, without an owner step.** Measured: an anonymous token
+  (`curl 'https://ghcr.io/token?scope=repository:raddatzk/veyq-backups:pull'`) lists the tags and fetches every
+  manifest (HTTP 200). So L3 pulls without a login — but it may log in with `GITHUB_TOKEN` (`packages: read`) all the
+  same; the implementer's call.
+- **Phase 2 holds: every `v` tag is archived.** One dispatch per tag, oldest first; every run green, v1.0 on its second
+  attempt (the first failed at a transient `docker pull` of the Playwright image, before anything was written). Every
+  `archive.json` (fetched anonymously) names 14 files, domain `veyq.test`, record version 1, and the highest migration
+  the substrate table names for that tag — the four schema states exactly.
+
+  | Tag | Run | Manifest digest |
+  |---|---|---|
+  | v0.2480 | [46048626398](https://github.com/raddatzk/veyq/actions/runs/46048626398) | `sha256:0af17dbf60eebb3984bc5a0d5efa06aefbfd6c78b8e4bf150b72dbfdc17fcfff` |
+  | v1.0 | [46048630362](https://github.com/raddatzk/veyq/actions/runs/46048630362) (attempt 2) | `sha256:5aab38485b277dc2e8ad9a61633f0d1800643ffaaf8f0a62d3f1f789edebb576` |
+  | v1.61 | [46048633927](https://github.com/raddatzk/veyq/actions/runs/46048633927) | `sha256:77aa3a56753679512ee5db1d6f01e13e89e2590459faec6c6412f383bfbd900a` |
+  | v1.66 | [46048637388](https://github.com/raddatzk/veyq/actions/runs/46048637388) | `sha256:99fb85f2c5d4e6b135ddc937bb464f1e235ab04c83c2138ac833aa83e5b8490e` |
+  | v1.82 | [46048640861](https://github.com/raddatzk/veyq/actions/runs/46048640861) | `sha256:690c3808536d49854629b594401750a4643f1985c22aba512ca1a7cf56927add` |
+  | v1.84 | [46048644589](https://github.com/raddatzk/veyq/actions/runs/46048644589) | `sha256:40393e597e2762d7e0e190ddcebdecf9d4e18184842a3925ebfe4577f5bf4cd5` |
+  | v1.133 | [46048648107](https://github.com/raddatzk/veyq/actions/runs/46048648107) | `sha256:82a0ffba54164b746d2d68e7fe28dde824677aa1aeee0d5f9e134048a98beaa4` |
+  | v1.152 | [46048651853](https://github.com/raddatzk/veyq/actions/runs/46048651853) | `sha256:cc0b020389c32699cab39f42bb5f9c4cdf8a846e1e4bad22b04093fd4b77e6fc` |
+  | v1.168 | [46048655057](https://github.com/raddatzk/veyq/actions/runs/46048655057) | `sha256:09a207fff9cc3fb0591069a7c21a5a637aa8d94fa5ded31206d057c84e1c2020` |
+  | v1.215 | [46048658475](https://github.com/raddatzk/veyq/actions/runs/46048658475) | `sha256:18be801232e1f3181ca1f1c592b3e09e01efe16d1b34ee1e42009f812781ea09` |
+  | v1.223 | [46048662199](https://github.com/raddatzk/veyq/actions/runs/46048662199) | `sha256:6451b1aed143bacc6e7c0be7709a3649f25e3c80cc4cce2d297171d89d250359` |
+  | v1.243 | [46048666366](https://github.com/raddatzk/veyq/actions/runs/46048666366) | `sha256:fb24d91ae82ae58fbd26438e1a45cd1c096b2d623b17eac623c53827ca22b159` |
+  | v1.247 | [46048670631](https://github.com/raddatzk/veyq/actions/runs/46048670631) | `sha256:8a0bca6e686ea26b70d20d80ed0fad9abde0b4761b753569a9e3f64e9f942101` |
+  | v1.248 | [46048674597](https://github.com/raddatzk/veyq/actions/runs/46048674597) | `sha256:da5e97106947073b78ac274acbbcb124b37706add57a52c0addc5366f1abeecb` |
+  | v1.249 | [46048678699](https://github.com/raddatzk/veyq/actions/runs/46048678699) | `sha256:8bc3a6948c2bc24fa04c25246ab2ff2807f7300b98381d82e7247593f4d403ca` |
+  | v1.260 | [46048683166](https://github.com/raddatzk/veyq/actions/runs/46048683166) | `sha256:f6a9c476825ac40662a45a4184b1a0ff6ffae512bf09dde4408d53ff198d8d97` |
+  | v1.312 | [46048687016](https://github.com/raddatzk/veyq/actions/runs/46048687016) | `sha256:4090c3c6ff364a0d49b6cdc283622599d6210e1a58e64582c8f31e9236d24181` |
+  | v1.318 | [46047675181](https://github.com/raddatzk/veyq/actions/runs/46047675181) | `sha256:270a4345647d353642a67514dc0830d67edf0baf3de0445c55248821cc58a008` |
+
+  Digests measured with an anonymous `HEAD /v2/raddatzk/veyq-backups/manifests/<major>.<minor>` (`Docker-Content-Digest`).
+- **The repository's tag list holds more than the archives:** beside each `<major>.<minor>` stands a `sha256-<hex>` tag —
+  cosign's signature, stored by the tag scheme. A reader names an archive by `<major>.<minor>`, never by listing tags.
 
 ### Phase 1 — technical observations
 
