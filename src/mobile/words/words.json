@@ -8248,5 +8248,217 @@
     "note": "a link invite's label saved (the web closes its dialog silently)",
     "en": "Label saved.",
     "de": "Bezeichnung gespeichert."
+  },
+  "groups_add_member": {
+    "en": "Add",
+    "de": "Hinzufügen"
+  },
+  "groups_add_member_failed": {
+    "en": "Could not add the member. Please try again.",
+    "de": "Das Mitglied konnte nicht hinzugefügt werden. Bitte erneut versuchen."
+  },
+  "groups_add_member_intro": {
+    "en": "Add a member of this space by their username — they get access right away.",
+    "de": "Füge ein Mitglied dieses Bereichs über den Benutzernamen hinzu — es erhält sofort Zugang."
+  },
+  "groups_create_failed": {
+    "en": "The group could not be created. Please try again.",
+    "de": "Die Gruppe konnte nicht erstellt werden. Bitte erneut versuchen."
+  },
+  "groups_create_title": {
+    "en": "New group",
+    "de": "Neue Gruppe"
+  },
+  "groups_danger_zone": {
+    "en": "Delete group",
+    "de": "Gruppe löschen"
+  },
+  "groups_delete_confirm": {
+    "en": "Delete this group?",
+    "de": "Diese Gruppe löschen?"
+  },
+  "groups_delete_confirm_yes": {
+    "en": "Delete",
+    "de": "Löschen"
+  },
+  "groups_delete_failed": {
+    "en": "Could not delete the group. Please try again.",
+    "de": "Die Gruppe konnte nicht gelöscht werden. Bitte erneut versuchen."
+  },
+  "groups_delete_group": {
+    "en": "Delete group",
+    "de": "Gruppe löschen"
+  },
+  "groups_delete_sub": {
+    "en": "Deleting starts a 30-day grace period — everyone can still look through it, and any owner can undo it, until it is erased.",
+    "de": "Beim Löschen startet eine 30-tägige Frist — alle können noch durchsehen, und jede besitzende Person kann es rückgängig machen, bis endgültig gelöscht wird."
+  },
+  "groups_demote": {
+    "en": "Remove co-owner",
+    "de": "Mitbesitz entfernen"
+  },
+  "groups_invitation_sent": {
+    "en": "Invitation sent — awaiting their consent.",
+    "de": "Einladung gesendet — wartet auf ihre Zustimmung."
+  },
+  "groups_last_owner": {
+    "en": "A group needs at least one owner.",
+    "de": "Eine Gruppe braucht mindestens eine besitzende Person."
+  },
+  "groups_member_not_found": {
+    "en": "No member of this space has that username.",
+    "de": "Kein Mitglied dieses Bereichs hat diesen Benutzernamen."
+  },
+  "groups_members": {
+    "en": "Members",
+    "de": "Mitglieder"
+  },
+  "groups_members_sub": {
+    "en": "People in this group and their access.",
+    "de": "Personen in dieser Gruppe und ihr Zugang."
+  },
+  "groups_name_label": {
+    "en": "Group name",
+    "de": "Gruppenname"
+  },
+  "groups_pending_deletion": {
+    "note": "the web's groups.pendingDeletion (day)",
+    "en": "Scheduled for deletion on {1}. Members can still view it; nothing new can be added.",
+    "de": "Wird am {1} gelöscht. Mitglieder können sie noch ansehen; Neues kann nicht hinzukommen."
+  },
+  "groups_pending_sub": {
+    "en": "This group is being deleted. You can still view it until then, or restore it.",
+    "de": "Diese Gruppe wird gelöscht. Du kannst sie bis dahin noch ansehen oder wiederherstellen."
+  },
+  "groups_promote": {
+    "en": "Make co-owner",
+    "de": "Mitbesitz geben"
+  },
+  "groups_readonly_note": {
+    "en": "Only an owner of this group can change its members and settings.",
+    "de": "Nur wer die Gruppe besitzt, kann ihre Mitglieder und Einstellungen ändern."
+  },
+  "groups_remove": {
+    "en": "Remove",
+    "de": "Entfernen"
+  },
+  "groups_remove_confirm": {
+    "en": "Remove and rotate the key?",
+    "de": "Entfernen und Schlüssel rotieren?"
+  },
+  "groups_remove_confirm_yes": {
+    "en": "Remove",
+    "de": "Entfernen"
+  },
+  "groups_remove_member_failed": {
+    "en": "Could not remove the member. Please try again.",
+    "de": "Das Mitglied konnte nicht entfernt werden. Bitte erneut versuchen."
+  },
+  "groups_remove_revoke_links": {
+    "en": "Also turn off every link on this group",
+    "de": "Auch alle Links dieser Gruppe abschalten"
+  },
+  "groups_remove_revoke_links_hint": {
+    "en": "Anyone who leaves may have copied any of them. Each link’s owner can renew the ones still needed.",
+    "de": "Wer die Gruppe verlässt, kann jeden davon kopiert haben. Wem ein Link gehört, kann die noch benötigten erneuern."
+  },
+  "groups_rename": {
+    "en": "Rename",
+    "de": "Umbenennen"
+  },
+  "groups_rename_failed": {
+    "en": "Could not rename the group. Please try again.",
+    "de": "Die Gruppe konnte nicht umbenannt werden. Bitte erneut versuchen."
+  },
+  "groups_rename_placeholder": {
+    "en": "Group name",
+    "de": "Gruppenname"
+  },
+  "groups_rename_stale": {
+    "en": "The group changed just now (a key rotation). Please reopen and try again.",
+    "de": "Die Gruppe hat sich gerade geändert (eine Schlüsselrotation). Bitte erneut öffnen und versuchen."
+  },
+  "groups_rescind": {
+    "en": "Withdraw",
+    "de": "Zurückziehen"
+  },
+  "groups_rescind_failed": {
+    "en": "Could not withdraw the invitation. Please try again.",
+    "de": "Die Einladung konnte nicht zurückgezogen werden. Bitte erneut versuchen."
+  },
+  "groups_restore": {
+    "en": "Restore group",
+    "de": "Gruppe wiederherstellen"
+  },
+  "groups_restore_failed": {
+    "en": "Could not restore the group. Please try again.",
+    "de": "Die Gruppe konnte nicht wiederhergestellt werden. Bitte erneut versuchen."
+  },
+  "groups_untitled": {
+    "en": "Untitled group",
+    "de": "Unbenannte Gruppe"
+  },
+  "groups_username_placeholder": {
+    "en": "username",
+    "de": "benutzername"
+  },
+  "groups_none_owned": {
+    "en": "You don’t own any groups yet.",
+    "de": "Du besitzt noch keine Gruppen."
+  },
+  "invitations_accept": {
+    "en": "Accept",
+    "de": "Annehmen"
+  },
+  "invitations_added_by": {
+    "note": "the web's invitations.addedBy (user)",
+    "en": "Invited by @{1}",
+    "de": "Eingeladen von @{1}"
+  },
+  "invitations_decline": {
+    "en": "Decline",
+    "de": "Ablehnen"
+  },
+  "invitations_empty": {
+    "en": "No pending invitations.",
+    "de": "Keine offenen Einladungen."
+  },
+  "invitations_load_failed": {
+    "en": "Could not load your invitations.",
+    "de": "Deine Einladungen konnten nicht geladen werden."
+  },
+  "invitations_loading": {
+    "en": "Loading your invitations…",
+    "de": "Deine Einladungen werden geladen…"
+  },
+  "invitations_sub": {
+    "en": "Groups you’ve been invited to join. Accept to get access, or decline — nothing reaches you until you accept.",
+    "de": "Gruppen, zu denen du eingeladen wurdest. Nimm an, um Zugang zu erhalten, oder lehne ab — nichts erreicht dich, bevor du annimmst."
+  },
+  "invitations_title": {
+    "en": "Group invitations",
+    "de": "Gruppeneinladungen"
+  },
+  "invitations_unnamed_group": {
+    "en": "A group",
+    "de": "Eine Gruppe"
+  },
+  "members_status_pending_consent": {
+    "en": "Awaiting consent",
+    "de": "Wartet auf Zustimmung"
+  },
+  "groups_title": {
+    "en": "Groups",
+    "de": "Gruppen"
+  },
+  "search_words_groups": {
+    "note": "what Settings' Groups section is also found by (comma-separated, never shown)",
+    "en": "groups, group, create group, group members",
+    "de": "Gruppen, Gruppe, Gruppe erstellen, Gruppenmitglieder"
+  },
+  "search_words_group_invitations": {
+    "note": "what Settings' Group invitations section is also found by (comma-separated, never shown)",
+    "en": "invitations, group invitations, accept, decline",
+    "de": "Einladungen, Gruppeneinladungen, annehmen, ablehnen"
   }
 }

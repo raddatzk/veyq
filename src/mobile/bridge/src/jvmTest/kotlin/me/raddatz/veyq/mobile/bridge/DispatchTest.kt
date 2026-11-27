@@ -159,7 +159,7 @@ class DispatchTest {
         assertEquals(Answer.Refused(Answer.Why.NOT_OFFERED), b.ask(Call.ReceivedOpen("https://veyq.localhost/tenant/accept#tok.sealed.R0SE1N7AKE")))
         assertEquals(Answer.Refused(Answer.Why.NOT_OFFERED), b.ask(Call.ReceivedOpen("You are invited to “F”. Open this link to join:\nhttps://veyq.localhost/tenant/accept#tok.s.R0SE1N7AKE")), "the whole message pasted")
         assertTrue(b.ask(Call.ReceivedOpen("https://veyq.localhost/tenant/other#tok")) is Answer.ReceivedProblem, "a path that is no invite is the share check's")
-        for (c in listOf(Call.SettingsInviteLink("Oma"), Call.SettingsInviteMail("sam@veyq.localhost"), Call.SettingsInviteRevoke("i"), Call.SettingsInviteLabel("i", "x"))) {
+        for (c in listOf(Call.SettingsInviteLink("Oma"), Call.SettingsInviteMail("sam@veyq.localhost"), Call.SettingsInviteRevoke("i"), Call.SettingsInviteLabel("i", "x"), Call.SettingsGroups, Call.SettingsGroupCreate("g"), Call.SettingsGroupRemove("g", "u"), Call.SettingsGroupInvitations)) {
             assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(c), "$c")
         }
         for (c in listOf(Call.JoinCode(9, "x"), Call.JoinFinish(9), Call.JoinOpen(9), Call.JoinClose(9))) {

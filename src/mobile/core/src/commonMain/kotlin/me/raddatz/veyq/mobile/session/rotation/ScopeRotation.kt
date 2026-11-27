@@ -117,18 +117,26 @@ class ScopeRotation(
      * Commits [scopeId]'s next epoch: built first from [members] (the list the caller read), a rebuild from the members
      * read again. [open] opens the caller's grant ([planOpener] for the finish), [openTenant] the scope's TENANT to read who
      * is anchored there. Returns the epoch committed; throws the refusal of the last attempt.
+     *
+     * With [removes] it is a removal-rotation (the web's `rotateGroupForRemoval`): that member is carried in no grant and
+     * the server deletes the membership with the commit (`removesUserId`); [revokeLinks] turns off every link of the scope
+     * in the same transaction (ADR 0075).
      */
-    suspend fun commitRotation(scopeId: String, members: List<ScopeMember>, open: RotationOpener, openTenant: RotationOpener): Long {
+    suspend fun commitRotation(
+        scopeId: String, members: List<ScopeMember>, open: RotationOpener, openTenant: RotationOpener,
+        removes: String? = null, revokeLinks: Boolean = false,
+    ): Long {
         var attempt = 0
         var base: String? = null
         while (true) {
             // the rebuild reads the directory again: the answer that sent it here may be a membership the list lacks
-            val listed = if (attempt == 0) members else sent(account) { ScopesApi(base!!, account.http).listScopeMembers(scopeId) }.body()
+            val listed = (if (attempt == 0) members else sent(account) { ScopesApi(base!!, account.http).listScopeMembers(scopeId) }.body())
+                .filter { it.userId != removes }
             val opened = open(scopeId) ?: throw IllegalStateException("cannot open scope to rotate")
             base = account.originOfTenant(opened.tenantId)
             val newKey = p.randomBytes(32)
             try {
-                return attempt(scopeId, base, listed, opened, newKey, openTenant)
+                return attempt(scopeId, base, listed, opened, newKey, openTenant, removes, revokeLinks)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -147,6 +155,7 @@ class ScopeRotation(
 
     private suspend fun attempt(
         scopeId: String, base: String, listed: List<ScopeMember>, opened: OpenedScope, newKey: ByteArray, openTenant: RotationOpener,
+        removes: String? = null, revokeLinks: Boolean = false,
     ): Long {
         val epoch = opened.epoch + 1
         val grants = ArrayList<ScopeGrantEntry>()
@@ -176,6 +185,7 @@ class ScopeRotation(
         val request = RotateScopeRequest(
             epoch = epoch.toInt(), successionPublicKey = b64(successionPublic), successionSignature = b64(successionSignature), rekeyId = rekeyId,
             grants = grants, pendingUserIds = pendingUserIds, inviteGrants = invites.grants, pendingInviteIds = invites.pending,
+            removesUserId = removes, revokeLinks = if (revokeLinks) true else null,
         )
         val run = Run(base, scopeId, rekeyId, opened.epoch, opened.key, epoch, newKey)
         var restage = 0

@@ -709,11 +709,11 @@ class VeyqAccount private constructor(
         suspend fun openOne(s: ScopeSummary, view: TenantView?) {
             val same = kept[s.id]?.takeIf { sameGrant(it.summary, s) }
             if (same != null) {
-                open += TenantSession.OpenScope(s, same.key, scopeName(s, tenant))
+                open += TenantSession.OpenScope(s, same.key, scopeName(s, tenant, same.key, suite))
                 return
             }
             when (val o = grants.open(s, view)) {
-                is GrantOutcome.Opened -> open += TenantSession.OpenScope(s, opened(o.key), scopeName(s, tenant))
+                is GrantOutcome.Opened -> open += opened(o.key).let { k -> TenantSession.OpenScope(s, k, scopeName(s, tenant, k, suite)) }
                 is GrantOutcome.Refused -> closed[s.id] = o.reason
             }
         }
@@ -746,7 +746,7 @@ class VeyqAccount private constructor(
         val open = mutableListOf<TenantSession.OpenScope>()
         val closed = mutableMapOf<String, GrantOutcome.Reason>()
         for (s in summaries) when (val o = grants.openHeld(s)) {
-            is GrantOutcome.Opened -> open += TenantSession.OpenScope(s, opened(o.key), scopeName(s, tenant))
+            is GrantOutcome.Opened -> open += opened(o.key).let { k -> TenantSession.OpenScope(s, k, scopeName(s, tenant, k, suite)) }
             is GrantOutcome.Refused -> closed[s.id] = o.reason
         }
         // the tenant's directory as kept (ADR 0144 decision 7): offline a participant and an uploader are named as online, never judged
@@ -1411,10 +1411,11 @@ class VeyqAccount private constructor(
 
         private val KNOWN_APPLICATIONS = setOf("memories", "depot", "expenses")
 
-        private fun scopeName(s: ScopeSummary, tenant: TenantRef): String = when (s.kind.value) {
+        private fun scopeName(s: ScopeSummary, tenant: TenantRef, key: ByteArray, suite: V1): String = when (s.kind.value) {
             "TENANT" -> tenant.name
             "PERSONAL" -> "Personal"
-            else -> "Group"
+            // a group's name opens on the device, under its value key the scope key wraps (ADR 0115); unnamed where it does not
+            else -> GroupNames.open(suite, s, key) ?: ""
         }
 
         /** The DEVICE factor's message (`deviceKey.ts`: HMAC-SHA256(device key, "veyq/v1/device-bind")). */
@@ -2310,6 +2311,9 @@ class TenantSession internal constructor(
     /** The owner's invites: by link or mail, the pending list, re-issue, revoke and label (uc.spaces.add-member). */
     val invites: TenantInvites by lazy { TenantInvites(this) }
 
+    /** The tenant's groups: create, rename, delete and restore, members, invitations (uc.spaces.add-group-member). */
+    val groups: TenantGroups by lazy { TenantGroups(this) }
+
     /** One's own profile in this tenant (ADR 0148 decision 2): a new model each time a place opens it; the host closes it. Android, whose core target has no libwebp, hands its own [encoder]. */
     fun profile(encoder: me.raddatz.veyq.mobile.media.WebpEncoder? = me.raddatz.veyq.mobile.media.coreWebpEncoder): ProfileModel = ProfileModel(TenantProfileDoor(this), account.suite, encoder)
 
@@ -2328,6 +2332,12 @@ class TenantSession internal constructor(
     @PlatformApi
     @HiddenFromObjC
     fun scopeKind(scopeId: String): String? = scopes.firstOrNull { it.summary.id == scopeId }?.summary?.kind?.value
+
+    /** The summary [scopeId]'s open scope was read with; null where it is not open. */
+    internal fun summaryOf(scopeId: String): ScopeSummary? = scopes.firstOrNull { it.summary.id == scopeId }?.summary
+
+    /** The name an open scope is shown by (a group's opened on the device). */
+    internal fun scopeName(scopeId: String): String? = scopes.firstOrNull { it.summary.id == scopeId }?.name
 
     private var tree: Map<String, List<OpenNode>>? = null
 

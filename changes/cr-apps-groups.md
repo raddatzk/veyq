@@ -41,3 +41,16 @@ invitations*.
 
 - **Split from cr-apps-members-and-terms-editing** (2026-11-27): the apps do not open group names yet, and every group
   screen needs them.
+- **A group's name is `session/GroupNames`** (2026-11-27, implement): sealed (`group-name`, SEAL schema) under a fresh
+  value key whose wrap's address is `group-name`'s in the SEAL schema, as `encodeValueContext` reads it; the invitee's
+  `group-name-key` seal. Held by `GroupNamesTest` over a fixture the web's `@veyq/crypto` wrote (bitten by the FIELD
+  schema's address). `Account.scopeName` opens it for every open GROUP scope, so the shell and switcher name groups.
+- **Groups live in one Settings section, `GROUPS` (`groups`), and invitations in another, `GROUP_INVITATIONS`**
+  (2026-11-27): the web's `groups` category holds one section per owned group and its `/invitations` page sits in the
+  sidebar; the apps' Settings page is a fixed plan over one tenant, so *Groups* lists the caller's groups (owned first)
+  and opens each group's page, and *Group invitations* is the inbox. Both after the tenant's sections.
+- **The removal is `ScopeRotation.commitRotation(removes, revokeLinks)`** (2026-11-27): the existing rotation gained the
+  web's `removes`/`revokeLinks` options (the removed member carried in no grant, on every rebuild too); the session then
+  reopens what moved and resumes the re-keys, as the tenant removal does. Live-bitten: without `removes` the member stays.
+- **Not in the apps (gaps, as for the tenant):** a group's icon, its new lock and *turn off every link*, which are the
+  same panel's parts the tenant's Members also leaves to the browser.

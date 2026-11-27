@@ -54,6 +54,19 @@ enum class SettingsSection(val id: String, val word: Msg, val keywords: Msg) {
      * here, before Sign out.
      */
     TERMS("terms", Msg.TERMS_SETTINGS_TITLE, Msg.SEARCH_WORDS_TERMS),
+    /**
+     * The caller's groups in the open tenant (en.spaces.group-scope; the web's `groups` category, one section per group
+     * there): the list, *Create group* where `core.group-space` is on, and each group's page — its members, an owner's
+     * rename, add, roles, removal and deletion ([me.raddatz.veyq.mobile.session.TenantGroups]). One section on the apps'
+     * page over one tenant, after the tenant's, as the web's category follows the tenant's.
+     */
+    GROUPS("groups", Msg.GROUPS_TITLE, Msg.SEARCH_WORDS_GROUPS),
+    /**
+     * The caller's group invitations (uc.spaces.consent-group-add; the web's `/invitations` page, reached from its
+     * sidebar): each proposal's name opened with the caller's identity, *Accept* or *Decline*. A section here: the apps'
+     * shell has no place of the web's sidebar badge.
+     */
+    GROUP_INVITATIONS("group-invitations", Msg.INVITATIONS_TITLE, Msg.SEARCH_WORDS_GROUP_INVITATIONS),
     /** Signing out on this device (the apps' page ends with it; the web's is its account menu's). */
     SIGN_OUT("sign-out", Msg.DRAWER_SIGN_OUT, Msg.SEARCH_WORDS_SIGN_OUT),
     ;
@@ -73,7 +86,7 @@ enum class SettingsSection(val id: String, val word: Msg, val keywords: Msg) {
                 STORAGE -> gates.storage
                 MAPS -> gates.maps
                 APPEARANCE -> gates.appearance
-                SESSIONS, DEVICE, SAVED_KEYS, ACCOUNT, EMAIL, PASSWORD, SECURITY, PROFILE, ERASE, MEMBERS, WHOS_WHO, TERMS, SIGN_OUT -> true
+                SESSIONS, DEVICE, SAVED_KEYS, ACCOUNT, EMAIL, PASSWORD, SECURITY, PROFILE, ERASE, MEMBERS, WHOS_WHO, TERMS, GROUPS, GROUP_INVITATIONS, SIGN_OUT -> true
             }
         }
 

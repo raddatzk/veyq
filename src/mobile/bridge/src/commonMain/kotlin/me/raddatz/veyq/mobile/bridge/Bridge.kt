@@ -897,6 +897,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             Call.SessionAcceptTerms, Call.SettingsTerms -> signInEntries(call, session)
             Call.SettingsTermsEditing, is Call.SettingsTermsEdit, is Call.SettingsTermsSave, Call.SettingsMembers, is Call.SettingsMemberRole, is Call.SettingsMemberRemove,
             is Call.SettingsInviteLink, is Call.SettingsInviteMail, is Call.SettingsInviteReissue, is Call.SettingsInviteRevoke, is Call.SettingsInviteLabel -> members(call)
+            Call.SettingsGroups, is Call.SettingsGroupCreate, is Call.SettingsGroup, is Call.SettingsGroupRename, is Call.SettingsGroupDelete, is Call.SettingsGroupAdd,
+            is Call.SettingsGroupRole, is Call.SettingsGroupRemove, Call.SettingsGroupInvitations, is Call.SettingsGroupInvitationAnswer -> grouping(call)
             is Call.JoinCode, is Call.JoinChoose, is Call.JoinCheckPassword, is Call.JoinUseAnyway, is Call.JoinRegister, is Call.JoinFinish, is Call.JoinSignIn, is Call.JoinOpen, is Call.JoinClose -> joining(call)
             is Call.SessionForgetDevice -> {
                 val account = session.accounts.firstOrNull { it.key == call.connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
@@ -2827,6 +2829,24 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             } ?: noJoin
             is Call.JoinClose -> joins.remove(call.join)?.close().done(Answer.Why.NO_SUCH_FLOW)
             else -> error("not a join's call: $call")
+        }
+    }
+
+    /** The tenant's groups (`TenantGroups`, en.spaces.group-scope): every rule the core's. Dispatched apart (the JVM's size limit). */
+    private suspend fun grouping(call: Call): Answer {
+        val g = tenant.value?.models?.session?.groups ?: return noTenant
+        return when (call) {
+            Call.SettingsGroups -> Answer.GroupsListed(g.list())
+            is Call.SettingsGroupCreate -> Answer.GroupChanged(g.create(call.name))
+            is Call.SettingsGroup -> Answer.GroupPage(g.page(call.scopeId))
+            is Call.SettingsGroupRename -> Answer.GroupChanged(g.rename(call.scopeId, call.name))
+            is Call.SettingsGroupDelete -> Answer.GroupChanged(if (call.restore) g.restore(call.scopeId) else g.delete(call.scopeId))
+            is Call.SettingsGroupAdd -> Answer.GroupChanged(g.add(call.scopeId, call.username))
+            is Call.SettingsGroupRole -> Answer.GroupChanged(g.setRole(call.scopeId, call.userId, call.owner))
+            is Call.SettingsGroupRemove -> Answer.GroupChanged(if (call.rescind) g.rescind(call.scopeId, call.userId) else g.remove(call.scopeId, call.userId, call.revokeLinks))
+            Call.SettingsGroupInvitations -> Answer.GroupInvitations(g.invitations())
+            is Call.SettingsGroupInvitationAnswer -> Answer.GroupChanged(if (call.accept) g.accept(call.scopeId) else g.decline(call.scopeId))
+            else -> error("not a group's call: $call")
         }
     }
 

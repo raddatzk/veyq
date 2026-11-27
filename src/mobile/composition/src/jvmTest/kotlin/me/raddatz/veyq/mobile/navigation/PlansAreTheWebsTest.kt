@@ -37,7 +37,7 @@ class PlansAreTheWebsTest {
                 SettingsSection.APPEARANCE, SettingsSection.MAPS, SettingsSection.STORAGE, SettingsSection.SESSIONS,
                 SettingsSection.DEVICE, SettingsSection.SAVED_KEYS, SettingsSection.ACCOUNT, SettingsSection.EMAIL,
                 SettingsSection.PASSWORD, SettingsSection.ADD_DEVICE, SettingsSection.SECURITY, SettingsSection.PROFILE,
-                SettingsSection.ERASE, SettingsSection.MEMBERS, SettingsSection.WHOS_WHO, SettingsSection.TERMS, SettingsSection.SIGN_OUT,
+                SettingsSection.ERASE, SettingsSection.MEMBERS, SettingsSection.WHOS_WHO, SettingsSection.TERMS, SettingsSection.GROUPS, SettingsSection.GROUP_INVITATIONS, SettingsSection.SIGN_OUT,
             ),
             all,
         )
@@ -56,7 +56,7 @@ class PlansAreTheWebsTest {
         val offered = all.map { it.id }.filter { it in web }
         assertEquals(listOf("tenant-members", "tenant-people", "terms"), offered, "the tenant sections the apps offer")
         assertEquals(web.filter { it in offered }, offered, "in the web's tenant order (sections.ts)")
-        assertEquals(listOf(SettingsSection.MEMBERS, SettingsSection.WHOS_WHO, SettingsSection.TERMS, SettingsSection.SIGN_OUT), all.takeLast(4))
+        assertEquals(listOf(SettingsSection.MEMBERS, SettingsSection.WHOS_WHO, SettingsSection.TERMS, SettingsSection.GROUPS, SettingsSection.GROUP_INVITATIONS, SettingsSection.SIGN_OUT), all.takeLast(6))
     }
 
     /**
@@ -69,6 +69,7 @@ class PlansAreTheWebsTest {
         val tenant = text.substring(text.indexOf("key: 'tenant'"), text.indexOf("key: 'groups'"))
         assertTrue(Regex("""\bid:\s*'terms'""").containsMatchIn(tenant), "the web's tenant category offers its terms")
         val all = SettingsSection.offered(SettingsSection.Gates(addDevice = false, storage = false, maps = false, appearance = false))
-        assertEquals(listOf(SettingsSection.TERMS, SettingsSection.SIGN_OUT), all.takeLast(2), "the terms after the personal sections, Sign out last")
+        assertEquals(listOf(SettingsSection.TERMS, SettingsSection.GROUPS, SettingsSection.GROUP_INVITATIONS, SettingsSection.SIGN_OUT), all.takeLast(4), "the terms after the personal sections, the groups after the tenant's (the web's `groups` category follows its `tenant` one), Sign out last")
+        assertTrue(text.indexOf("key: 'groups'") > text.indexOf("key: 'tenant'"), "the web's groups category follows its tenant category")
     }
 }

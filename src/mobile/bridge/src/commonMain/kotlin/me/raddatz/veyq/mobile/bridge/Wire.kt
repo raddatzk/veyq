@@ -216,6 +216,36 @@ internal sealed class Call {
     /** A link invite's label set, or cleared when [label] is empty (`TenantInvites.setLabel`): [Answer.Invited]. */
     @Serializable @SerialName("Settings.InviteLabel") data class SettingsInviteLabel(val inviteId: String, val label: String? = null) : Call()
 
+    /** Settings' *Groups* (`TenantGroups.list`, en.spaces.group-scope): the caller's groups, names opened here. [Answer.Groups]. */
+    @Serializable @SerialName("Settings.Groups") data object SettingsGroups : Call()
+
+    /** *Create group* named [name] (`TenantGroups.create`): [Answer.GroupChanged], the new group's id in it. */
+    @Serializable @SerialName("Settings.GroupCreate") data class SettingsGroupCreate(val name: String) : Call()
+
+    /** A group's page (`TenantGroups.page`): [Answer.GroupPage]. */
+    @Serializable @SerialName("Settings.Group") data class SettingsGroup(val scopeId: String) : Call()
+
+    /** An owner's *Rename* (`TenantGroups.rename`): [Answer.GroupChanged]. */
+    @Serializable @SerialName("Settings.GroupRename") data class SettingsGroupRename(val scopeId: String, val name: String) : Call()
+
+    /** *Delete group* after its question, or *Restore* where [restore] (`TenantGroups.delete`/`restore`): [Answer.GroupChanged]. */
+    @Serializable @SerialName("Settings.GroupDelete") data class SettingsGroupDelete(val scopeId: String, val restore: Boolean = false) : Call()
+
+    /** *Add member* by [username] (`TenantGroups.add`): [Answer.GroupChanged]. */
+    @Serializable @SerialName("Settings.GroupAdd") data class SettingsGroupAdd(val scopeId: String, val username: String) : Call()
+
+    /** *Make co-owner* ([owner]) or *Remove co-owner* (`TenantGroups.setRole`): [Answer.GroupChanged]. */
+    @Serializable @SerialName("Settings.GroupRole") data class SettingsGroupRole(val scopeId: String, val userId: String, val owner: Boolean) : Call()
+
+    /** *Remove* by the group's removal-rotation (`TenantGroups.remove`), or *Withdraw* a proposal where [rescind]: [Answer.GroupChanged]. */
+    @Serializable @SerialName("Settings.GroupRemove") data class SettingsGroupRemove(val scopeId: String, val userId: String, val revokeLinks: Boolean = false, val rescind: Boolean = false) : Call()
+
+    /** Settings' *Group invitations* (`TenantGroups.invitations`): [Answer.GroupInvitations]. */
+    @Serializable @SerialName("Settings.GroupInvitations") data object SettingsGroupInvitations : Call()
+
+    /** *Accept* ([accept]) or *Decline* an invitation (`TenantGroups.accept`/`decline`): [Answer.GroupChanged]. */
+    @Serializable @SerialName("Settings.GroupInvitationAnswer") data class SettingsGroupInvitationAnswer(val scopeId: String, val accept: Boolean) : Call()
+
     /** A join's member invite opened with the [code] (or password) typed (`TenantJoin.code`). Inward once, never back. */
     @Serializable @SerialName("Join.Code") data class JoinCode(val join: Long, val code: String) : Call()
 
@@ -2149,6 +2179,18 @@ internal sealed class Answer {
 
     /** [Call.ReceivedOpen] of an invite link: its join (`TenantJoin`, ADR 0111, ADR 0129), watched as [Watched.Join]. */
     @Serializable @SerialName("JoinOpened") data class JoinOpened(val join: Long) : Answer()
+
+    /** [Call.SettingsGroups]: the caller's groups. */
+    @Serializable @SerialName("GroupsListed") data class GroupsListed(val groups: me.raddatz.veyq.mobile.session.TenantGroups.Groups) : Answer()
+
+    /** [Call.SettingsGroup]: a group's page. */
+    @Serializable @SerialName("GroupPage") data class GroupPage(val page: me.raddatz.veyq.mobile.session.TenantGroups.GroupPage) : Answer()
+
+    /** [Call.SettingsGroupInvitations]: the caller's group invitations. */
+    @Serializable @SerialName("GroupInvitations") data class GroupInvitations(val invitations: me.raddatz.veyq.mobile.session.TenantGroups.Invitations) : Answer()
+
+    /** A group's act: whether it went through (read anew), what is said, a created group's id. */
+    @Serializable @SerialName("GroupChanged") data class GroupChanged(val outcome: me.raddatz.veyq.mobile.session.TenantGroups.Outcome) : Answer()
 
     /** [Call.SettingsMemberRole], [Call.SettingsMemberRemove]: whether it went through ([done]: read the roster anew), and what is said. */
     @Serializable @SerialName("MembersChanged") data class MembersChanged(val done: Boolean, val notice: Notice) : Answer()
