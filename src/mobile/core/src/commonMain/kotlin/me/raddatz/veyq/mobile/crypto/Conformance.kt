@@ -47,6 +47,7 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
         identityPin()
         scopeSuccession()
         joinRecords()
+        inviteLink(argonAtProductionCost)
         valueKeys()
         itemMarks()
         slugs()
@@ -218,6 +219,147 @@ class Conformance(private val p: Primitives, vectorsJson: String) {
             if (!joins.endorsementVerifies(ownerSign, c.str("tenantId"), c.str("userId"), c.str("signerUserId"), opened, je.hex("signature"))) fail("does not verify")
             if (joins.endorsementVerifies(ownerSign, c.str("tenantId"), c.str("userId"), c.str("signerUserId"), opened + byteArrayOf(0), je.hex("signature"))) fail("another record verified")
         }
+    }
+
+    private val invites = Invites(suite)
+    private val OTHER_ID = "c0ffee00-0000-4000-8000-0000000000e0"
+
+    /**
+     * `#invite_key`'s derivation, `#invite_link` (the code, the KEK at production cost, the signer head, the payload, its
+     * seal, the sealed part's parse, the fragment) and `#join_record`'s accept proof and signing: the invite's whole suite
+     * (ADR 0111 decisions 1-3, 19; ADR 0129 decision 1), each refusal beside its control.
+     */
+    private fun inviteLink(production: Boolean) {
+        val ik = v.obj("invite_key")
+        val owner = ik.obj("owner")
+        val key = invites.inviteKeyFromSeed(ik.hex("seed"))
+        check("invite_key derived from its seed") {
+            eqHex(key.priv.kemSeed, ik.str("kem_seed"))
+            eqHex(key.priv.signSeed, ik.str("sign_seed"))
+            eqHex(key.pub.sign, ik.str("sign_public"))
+            eqHex(key.pub.kem, ik.str("kem_public"))
+            eqHex(key.pub.serialize(), ik.str("bundle"))
+            if (runCatching { invites.inviteKeyFromSeed(ByteArray(31)) }.isSuccess) fail("a 31-byte seed derived a key")
+        }
+        check("invite_key signature answers for nothing else") {
+            val c = ik.obj("context")
+            val sig = ik.hex("signature")
+            val ownerSign = owner.hex("sign_public")
+            val (t, i, e) = Triple(c.str("tenantId"), c.str("inviteId"), c.long("expiresAt"))
+            eqHex(invites.signInviteKey(v.obj("grant_signature").hex("sign_seed"), t, i, ik.hex("bundle"), e), ik.str("signature"))
+            if (!invites.inviteKeySignatureVerifies(ownerSign, t, i, ik.hex("bundle"), e, sig)) fail("the vector's signature does not verify")
+            if (invites.inviteKeySignatureVerifies(ownerSign, t, i, ik.hex("bundle"), e + 1, sig)) fail("verified for another expiry")
+            if (invites.inviteKeySignatureVerifies(ownerSign, OTHER_ID, i, ik.hex("bundle"), e, sig)) fail("verified for another tenant")
+            if (invites.inviteKeySignatureVerifies(ik.hex("sign_public"), t, i, ik.hex("bundle"), e, sig)) fail("verified under another key")
+        }
+        val l = v.obj("invite_link")
+        val c = l.obj("context")
+        val (tenantId, inviteId) = c.str("tenantId") to c.str("inviteId")
+        check("invite_link code read canonical, anything else no code") {
+            eq(Invites.normalizeCode(l.str("typed")), l.str("code"))
+            eq(Invites.normalizeCode(Invites.formatCode(l.str("code"))), l.str("code"))
+            for (bad in listOf("R0SE1N7AK", "R0SE1N7AKEE", "R0SE1N7AKU")) if (Invites.normalizeCode(bad) != null) fail("$bad read as a code")
+            if (invites.linkSecret(Invites.Mode.CODE, "R0SE1N7AK") != null) fail("a nine-character code derived a secret")
+            if (invites.linkSecret(Invites.Mode.PASSWORD, "") != null) fail("an empty password derived a secret")
+            val fresh = invites.generateCode()
+            eq(Invites.normalizeCode(fresh), fresh)
+            if (fresh == invites.generateCode()) fail("two fresh codes are the same")
+        }
+        if (production) {
+            check("invite_link KEK of the code and of the password") {
+                eq(params(l), V1.ARGON)
+                eqHex(invites.kekInviteLink(invites.linkSecret(Invites.Mode.CODE, l.str("typed"))!!, l.hex("salt")), l.str("kek_code"))
+                eqHex(invites.kekInviteLink(invites.linkSecret(Invites.Mode.PASSWORD, l.str("password"))!!, l.hex("salt")), l.str("kek_password"))
+            }
+        }
+        check("invite_link signer head at step 0") {
+            val genesis = trust.keyChainGenesisStatement(owner.str("user_id"), Trust.KeyChainKeys(owner.hex("bundle"), v.obj("secret_key_proof").obj("key").hex("public_key")))
+            eqHex(genesis, l.str("signer_genesis"))
+            eqHex(trust.keyChainHead(genesis), l.str("signer_head"))
+        }
+        val payload = Invites.LinkPayload(ik.hex("seed"), l.hex("signer_head"), owner.str("user_id"))
+        check("invite_link payload, seal and encoding") {
+            eqHex(invites.encodePayload(payload), l.str("payload"))
+            val back = invites.decodePayload(l.hex("payload"))
+            eqHex(back.seed, ik.str("seed"))
+            eqHex(back.signerHead, l.str("signer_head"))
+            eq(back.signerUserId, owner.str("user_id"))
+            eqHex(encodeContext(Purposes.SEAL, Context("invite-link", "tenantId" to tenantId, "inviteId" to inviteId)), l.str("context_bytes"))
+            eqHex(suite.encodeKdfParams(V1.ARGON, l.hex("salt")), l.str("kdf_params"))
+            val parsed = invites.parseSealedLink(l.str("sealed"))
+            eq(parsed.mode, Invites.Mode.CODE)
+            eq(parsed.params, V1.ARGON)
+            eqHex(parsed.salt, l.str("salt"))
+            eqHex(parsed.sealed, l.str("blob"))
+            val opened = invites.openLink(tenantId, inviteId, l.hex("kek_code"), parsed)
+            eqHex(opened.seed, ik.str("seed"))
+            eqHex(opened.signerHead, l.str("signer_head"))
+            eq(opened.signerUserId, owner.str("user_id"))
+            // sealing draws its own nonce: what it writes parses to the same header and opens to the same payload
+            val fresh = invites.sealLink(tenantId, inviteId, Invites.Mode.CODE, l.hex("kek_code"), l.hex("salt"), payload)
+            eq(fresh.take(44), l.str("sealed").take(44))
+            eqHex(invites.encodePayload(invites.openLink(tenantId, inviteId, l.hex("kek_code"), invites.parseSealedLink(fresh))), l.str("payload"))
+        }
+        check("invite_link refuses a version-1 payload, a wrong size and another address") {
+            refused("version") { invites.decodePayload(l.hex("payload_v1")) }
+            val p2 = l.hex("payload")
+            refused("truncated") { invites.decodePayload(p2.copyOfRange(0, p2.size - 1)) }
+            refused("trailing") { invites.decodePayload(p2 + byteArrayOf(0)) }
+            refused("head") { invites.encodePayload(Invites.LinkPayload(ik.hex("seed"), ByteArray(31), owner.str("user_id"))) }
+            refused("signer") { invites.encodePayload(Invites.LinkPayload(ik.hex("seed"), l.hex("signer_head"), "not-a-uuid")) }
+            val parsed = invites.parseSealedLink(l.str("sealed"))
+            val v1Sealed = suite.seal(Context("invite-link", "tenantId" to tenantId, "inviteId" to inviteId), l.hex("kek_code"), l.hex("payload_v1"))
+            refused("version") { invites.openLink(tenantId, inviteId, l.hex("kek_code"), Invites.SealedLink(parsed.mode, parsed.params, parsed.salt, v1Sealed)) }
+            for ((t, i, k) in listOf(Triple(tenantId, inviteId, l.hex("kek_password")), Triple(tenantId, OTHER_ID, l.hex("kek_code")), Triple(OTHER_ID, inviteId, l.hex("kek_code")))) {
+                if (runCatching { invites.openLink(t, i, k, parsed) }.exceptionOrNull() !is OpenRefused) fail("opened with another key or address")
+            }
+        }
+        check("invite_link sealed part refused before any derivation") {
+            val raw = Invites.unb64urlStrict(l.str("sealed"))!!
+            refused("profile") { invites.parseSealedLink(b64url(raw.copyOf().also { it[1 + 7] = 0x01 })) }
+            refused("mode") { invites.parseSealedLink(b64url(raw.copyOf().also { it[0] = 3 })) }
+            refused("length") { invites.parseSealedLink(b64url(raw.copyOfRange(0, 33))) }
+            refused("encoding") { invites.parseSealedLink("!!") }
+        }
+        check("invite_link fragment") {
+            val token = l.str("token")
+            val sealed = l.str("sealed")
+            val code = l.str("code")
+            eq(Invites.parseFragment("#" + l.str("fragment")), Invites.Fragment(token, sealed, null))
+            eq(Invites.parseFragment(token), Invites.Fragment(token, null, null))
+            eq(Invites.parseFragment("#$token."), Invites.Fragment(token, null, null))
+            eq(Invites.parseFragment("#" + l.str("link_fragment")), Invites.Fragment(token, sealed, code))
+            eq(Invites.parseFragment(l.str("fragment") + "." + l.str("typed")), Invites.Fragment(token, sealed, code))
+            eq(Invites.parseFragment(l.str("fragment") + ".NOTACODE"), Invites.Fragment(token, sealed, null))
+            eq(Invites.parseFragment(l.str("fragment") + ".$code.$code"), Invites.Fragment(token, sealed, null))
+            eq(Invites.parseFragment("$token..$code"), Invites.Fragment(token, null, null))
+            eq(invites.buildFragment(token, sealed, l.str("typed")), l.str("link_fragment"))
+            refused("token") { invites.buildFragment("", sealed, code) }
+            refused("token") { invites.buildFragment("$token.x", sealed, code) }
+            refused("encoding") { invites.buildFragment(token, "$sealed.x", code) }
+            val raw = Invites.unb64urlStrict(sealed)!!
+            refused("mode") { invites.buildFragment(token, b64url(raw.copyOf().also { it[0] = 2 }), code) }
+            refused("code") { invites.buildFragment(token, sealed, "NOTACODE") }
+        }
+        val jr = v.obj("join_record")
+        val at = jr.obj("context")
+        check("join_record accept proof and both signatures") {
+            eqHex(invites.inviteAcceptStatement(ik.obj("context").str("inviteId"), at.str("userId"), jr.hex("joiner_bundle")), jr.str("accept_statement"))
+            eqHex(invites.signInviteAccept(key.priv.signSeed, ik.obj("context").str("inviteId"), at.str("userId"), jr.hex("joiner_bundle")), jr.str("accept_signature"))
+            val rec = invites.signJoinRecord(
+                at.str("tenantId"), at.str("userId"), jr.hex("joiner_bundle"), jr.hex("secret_key_proof_public_key"), ik.obj("context").str("inviteId"),
+                ik.hex("bundle"), ik.hex("signature"), ik.obj("context").long("expiresAt"), owner.str("user_id"), owner.hex("bundle"),
+                key.priv.signSeed, jr.hex("joiner_sign_seed"),
+            )
+            eqHex(rec.inviteSignature, jr.str("invite_signature"))
+            eqHex(rec.identitySignature, jr.str("identity_signature"))
+            eqHex(joins.encode(rec), jr.str("record"))
+        }
+    }
+
+    private inline fun refused(reason: String, f: () -> Unit) {
+        val e = runCatching(f).exceptionOrNull()
+        if (e !is InviteLinkInvalid || e.reason != reason) fail("expected invite_link_invalid: $reason, got ${e?.message ?: "no refusal"}")
     }
 
     private fun valueKeys() {

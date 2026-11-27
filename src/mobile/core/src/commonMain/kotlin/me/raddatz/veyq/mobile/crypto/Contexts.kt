@@ -82,6 +82,7 @@ object Purposes {
             "recipientIdentityDigest" to FieldKind.DIGEST, "wrappedGrantDigest" to FieldKind.DIGEST,
         ),
         "invite-key" to s("tenantId" to ID, "inviteId" to ID, "inviteKeyDigest" to FieldKind.DIGEST, "expiresAt" to UINT),
+        "invite-accept" to s("inviteId" to ID, "userId" to ID, "identityDigest" to FieldKind.DIGEST),
         "join-endorsement" to s("tenantId" to ID, "userId" to ID, "signerUserId" to ID, "recordDigest" to FieldKind.DIGEST),
         "join-record" to s(
             "tenantId" to ID, "userId" to ID, "identityDigest" to FieldKind.DIGEST, "secretKeyProofPublicKey" to FieldKind.BYTES,
