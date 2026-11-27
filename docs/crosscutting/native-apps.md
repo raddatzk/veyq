@@ -455,6 +455,17 @@ what each pass proved). The Use pages: [Mark the best photos](../../site/src/con
 [Download and import](../../site/src/content/docs/spaces/download-and-import.md),
 [Copy things](../../site/src/content/docs/spaces/copy-things.mdx).
 
+**The gallery's order and the lightbox round its ends, on all four apps** (built 2026-11-26, [ADR 0155](../decisions/0155-the-web-draws-over-the-kotlin-core-application-by-application-after-a-measured-pilot.md)
+§ The lightbox's rules for the apps): the grid's newest/oldest toggle in each platform's sort form; paging round the
+ends by button, key, swipe and remote; the slideshow going round, and shuffled from three media on — the rules the core's
+`Lightbox`, the web's own lightbox unchanged (inbox #1343). Passed as a throwaway on Android (the `veyq_terms` emulator:
+the chip turned the grid, a swipe each way round the ends, a slideshow round, shuffled, kept running by the toggle and
+paused by a swipe), on iOS (the iPhone 17e simulator: the Sort menu, a swipe each way round the ends, the shuffle pressed
+with the slideshow running) and on Linux (Broadway, headless Chrome: the sort menu sent `Gallery.Sort`, ← and → went round,
+a shuffled round showed every other medium once) and on Windows (the VM through UI Automation: the Sort drop-down turned the
+grid, Next and Previous went round, a shuffled round showed every other medium once with the toggle on and the slideshow
+running); macOS and tvOS built, their passes and the Android TV's owed.
+
 **A received link, on all four apps** ([ADR 0150](../decisions/0150-a-received-link-opens-in-the-app-as-its-guest-the-share-pages-rules-in-the-core-a-kept-link-a-bookmark-the-app-opened-by-a-veyq-link-that-carries-nothing.md), built 2026-11-19): the web's share page ported into the core
 (`sharing/`: the link held to the web's parse by `contracts/platform/share-links/cases.v1.json` — the web's parse itself
 since ADR 0155's share-link slice, which also made a link's last end day `LinkDays`' for the web and every app —, the link instance's

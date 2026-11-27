@@ -1460,8 +1460,8 @@ Measured before the decision (2026-11-20):
   - **D3 — The grid's order is the model's, in the web's direction and with the web's ties** (ADR 0154's rule): the web
     toggled newest/oldest and broke a tie by the listing's order, the core had one direction and broke ties by id.
     `MemoryMedia.order(items, oldestFirst)` is a stable sort, an undated medium last either way; the model orders every
-    listing's rows itself (`GalleryModel.sort`, `State.oldestFirst`). The apps' order changes only on a tie; they draw no toggle yet
-    (#1344).
+    listing's rows itself (`GalleryModel.sort`, `State.oldestFirst`). The apps' order changes only on a tie; each draws the toggle since 2026-11-26
+    (§ The lightbox's rules for the apps).
   - **D4 — One poll per page.** `live()` made a `LivePoll` per run, its last start always now, so a page shown again waited
     the whole interval — against `LivePoll`'s own contract and the web's poller. The page keeps one across its runs.
   - **D5 — A restore from the Trash tab lifts the model's tombstone** (`GalleryModel.restored`): a medium trashed here and
@@ -1481,6 +1481,40 @@ Measured before the decision (2026-11-20):
     order; a test door listing unordered tracks showed the difference): the model decides membership, each tab its own order.
   - *Not done here:* the browser pass (a member's Memory and a guest's, en and de: the poll, a trash and its Undo, a guest's
     purge, the sort) — the tests above hold the behaviour; the pass is owed (inbox #1345).
+
+- **The lightbox's rules for the apps** (decision 11's first move taken on demand, built 2026-11-26, the work order
+  cr-apps-gallery-sort-and-lightbox-rounds, deleted at harvest). The web's lightbox learned to page round its ends, its
+  slideshow to go round and to run shuffled (PRs #98 and #101); the apps had neither, nor the grid's sort toggle (#1344).
+  The core's `Lightbox` takes the rules — `next` / `previous` round the ends, `State.canPage`, a removed last medium
+  giving way to the first, the slideshow going round until paused (`Slideshow.ENDED` deleted), and `shuffle` in the web's
+  rounds (`State.canShuffle` from three media on, `State.shuffled`) —, twinned case for case with `MediaLightbox.test.ts`
+  (`GalleryActionsTest`, `GalleryModelTest`); the bridge carries them (`Gallery.Sort`, `Lightbox.Step`,
+  `Lightbox.Shuffle`, `MemoriesDispatchTest`). Each app draws them in its form: Android an assist chip for the order, a
+  pager holding the rows many times over, a toggle icon button (the TV's D-pad pages round and offers the toggle); Apple a
+  Sort menu, on iOS a copy of the last and the first page around the pager, on a Mac Previous and Next with the arrow keys,
+  a button-styled toggle (tvOS a selectable button); Linux GNOME's sort menu and a toggle button; Windows File Explorer's
+  Sort drop-down and an `AppBarToggleButton`. Its decision log:
+  - **D1 — The web keeps its own lightbox; #1343 stays open.** Drawing the core's `Lightbox` on the web would move its
+    snapshot of the rows, its clock (which waits for a slow preview, the core's does not), its read-ahead cache, its EXIF
+    deferral and its zoom reset at once; exporting only the round and the shuffle through `@veyq/core-js` would cost a
+    façade entry and decision 10's guest-path report for two small functions the web already has right. *Cost:* two
+    copies of the round and the shuffle until #1343 moves the lightbox.
+  - **D2 — `Slideshow.ENDED` is deleted, not kept unused**, as the web dropped `ended`; the bridge's `SlideshowState`
+    with it, so a host that matched it no longer compiles.
+  - **D3 — Paging round is the model's** (`next` / `previous`, `Lightbox.Step`), not each host's `(i ± 1) mod n`
+    (ADR 0161); `go(index)` stays for a pager that knows its page.
+  - **D4 — `shuffle(true)` is refused below three media** (the web hides its button there); once on it stays on if media
+    go, as the web's does. Its order comes from `kotlin.random.Random`, settable by a test (the web's `Math.random`: the
+    order is no secret).
+  - **D5 — A pager's own moves are no paging of the person's.** Android's pager read its current page while the model's
+    jump (a shuffled step) scrolled across other pages, and each one paused the slideshow (measured on the emulator): the
+    person's paging is the settled page now, and a jump of more than one page is drawn at once. iOS's page view reported a
+    copy page again while it settled and, jumped at once, settled one page past the real one (measured on the simulator):
+    a copy pages round only from the end beside it and only once the pages rest.
+  - **D6 — The tick's own `round.removeAt(0)` is kept though a bite showed it equivalent** (the next tick drops the shown
+    head anyway, as the web's loop does): line for line with the web's `upcomingInRound` and `shift`.
+  - **D7 — The order control takes each platform's sort form**, never the web's one labelled button: Material's assist
+    chip, the HIG's Sort menu, GNOME's sort menu, File Explorer's Sort drop-down; each names the order shown.
 
 - **The operator-served web is unchanged in kind** ([ADR 0026](0026-client-trust-tiers.md)): still same-origin,
   content-hashed chunks, no new CSP source, no Subresource Integrity in use before or after; the Kotlin output is one

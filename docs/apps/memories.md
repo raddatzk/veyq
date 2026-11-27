@@ -328,6 +328,8 @@ never in the eager set: the medoid and the participants' write sit in files of t
 Memory's page — the member's and a link guest's — lists, orders (newest or oldest first), splits, polls, trashes with its
 Undo and purges a guest's own medium through `GalleryModel`, drawn through `@veyq/core-js/memories` over a door the web
 writes (`galleryDoor.ts`) and observed by `useGalleryModel.ts`; the thumbnails, the in-flight tiles, the lightbox, the
-marks and the filter are still the web's (inbox #1340–#1343, #1321).
+marks and the filter are still the web's (inbox #1340–#1343, #1321). The lightbox's paging round the ends and its
+slideshow's shuffle are in the core's `Lightbox` for the apps since 2026-11-26, a twin of `MediaLightbox.vue`'s until
+#1343 moves it.
 
 - End-user view (docs site): [Memories](../../site/src/content/docs/memories/index.mdx)
