@@ -1,14 +1,16 @@
-// The record the `upgrade` group's two members share (`scripts/run_web_e2e.py` § the upgrade proof, ADR 0057 Decision 7):
+// The record the `upgrade` group's two members share (lanes L2 and L3, ADR 0091 decision 6; `scripts/run_web_e2e.py`
+// § the upgrade proof, ADR 0057 Decision 7):
 // the SEEDER writes into `$VEYQ_GROUP_DIR` what it sealed into a fresh instance, the orchestrator captures that
 // instance, destroys it and restores it onto a freshly installed build, and the READER opens the restored content and
 // asserts every item the record names.
 //
-// **It is a contract between two builds, not between two files of one tree.** Under `run_web_e2e.py --upgrade` the
-// seeder runs from the PREDECESSOR's worktree and the reader from the candidate's, so the reader reads a record an
+// **It is a contract between two builds, not between two files of one tree.** In lanes L2 and L3 (and under the local
+// `run_web_e2e.py --upgrade`) the seeder runs from a released PREDECESSOR's tree and the reader from the candidate's, so the reader reads a record an
 // older copy of this module wrote. Hence the `version`: a change to the shape bumps it, and the reader keeps reading
-// every version a predecessor's seeder can still write (the previous main commit until the first release, the last
-// release after it) - a reader that only knows the newest shape would make every proof across the change red for a
-// reason that is not the upgrade.
+// every version a predecessor's seeder can still write - since lane L3, every archived backup it restores (the oldest
+// release of each schema state of the major and the major entry, records written once and kept), beside the newest
+// release lane L2 starts from - a reader that only knows the newest shape would make every upgrade across the change
+// red for a reason that is not the upgrade.
 //
 // What crosses is what a PERSON would still have after the upgrade (the owner's address, password and Emergency Kit
 // Secret Key, as `restoreHandoff.ts` argues) plus the QUESTION: the ids to reopen and, per item, the plaintext the
@@ -17,7 +19,7 @@
 // The orchestrator checks the same shape before it captures (`upgrade_record_problems` in `scripts/run_web_e2e.py`),
 // so a seeder that wrote no usable record is named as that, not as a failed upgrade. Both validators accept
 // `upgradeRecord.fixture.json` and refuse the same mutations of it (`upgradeRecord.test.ts`,
-// `scripts/upgrade_proof_selftest.py`) - the one place the two definitions are held to each other.
+// `scripts/upgrade_derivations_selftest.py`) - the one place the two definitions are held to each other.
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 

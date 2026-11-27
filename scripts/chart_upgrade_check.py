@@ -25,16 +25,16 @@ Anything else may change: an image tag, a label, an env var, a pod template - `h
 renders the candidate with each of the PREDECESSOR's `ci/*.yaml`: an operator's existing values must still pass the
 candidate's schema and render, or the upgrade fails before it starts.
 
-**The predecessor** is the upgrade proof's ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md)
-Decision 7): `run_web_e2e.default_predecessor_ref()`, so the commit before the one under test while
+**The predecessor** is the default one ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md)
+Decision 7; lane L2's newest leg starts from it): `run_web_e2e.default_predecessor_ref()`, so the commit before the one under test while
 `scripts/applied_migrations.sha256` says `release: none`, then the newest `v<major>.<minor>` tag the first parent
-contains. `--upgrade-from <ref>` names another one, as it does for the proof. `--upgrade-major-entry` checks from the
-release's major entry instead, as the proof's second run does (`run_web_e2e.major_entry_proof_ref()`: the newest
+contains. `--upgrade-from <ref>` names another one, as it does for the local jar-level proof. `--upgrade-major-entry`
+checks from the release's major entry instead, as lane L2's major-entry leg does (`run_web_e2e.major_entry_proof_ref()`: the newest
 release of the previous major among every tag, a `release/<old>.x` branch's included, ADR 0085 decision 10) - when
 there is one and it is not the default predecessor; otherwise it says so and exits 0, nothing to check twice. A
 predecessor with a chart at neither path is said and skipped - nothing to upgrade from.
 
-**The verdict** is [verdict]'s alone, on the same `release:` line the upgrade proof reads: while it is `none` the
+**The verdict** is [verdict]'s alone, on the same `release:` line the upgrade derivations read: while it is `none` the
 findings are printed with their reasons and the run exits 0, "information only" - a chart before the first release
 has no installation to break; from the release on it exits 1, and since `checks.yml`'s `chart` job runs it, a red
 gates `publish`, which needs every stage.
@@ -79,7 +79,7 @@ from decimal import Decimal, InvalidOperation
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import chart_render  # noqa: E402 - the one `helm template` both chart scripts render through
 import repo_layout  # noqa: E402 - where the chart lives, in this checkout's layout and in the one before it
-import run_web_e2e as e2e  # noqa: E402 - the upgrade proof's predecessor and its pin line
+import run_web_e2e as e2e  # noqa: E402 - the default predecessor, the major entry and the pin line
 
 ROOT = repo_layout.ROOT
 CHART_PATH = repo_layout.CHART_PATH
@@ -229,7 +229,7 @@ def compare_claim(at: str, field: str, a: dict, b: dict, growth_allowed: bool) -
 
 def verdict(release: str, problems: list[str]) -> tuple[int, str]:
     """(exit code, closing line) - the ONE place the switch to the release happens, on the pin file's `release:` line
-    the upgrade proof reads (`run_web_e2e.read_release`). Findings inform while it is `none` and fail from then on."""
+    the upgrade derivations read (`run_web_e2e.read_release`). Findings inform while it is `none` and fail from then on."""
     if not problems:
         return 0, "chart upgrade check OK: nothing the predecessor's chart renders is changed beyond `helm upgrade`"
     if release == "none":

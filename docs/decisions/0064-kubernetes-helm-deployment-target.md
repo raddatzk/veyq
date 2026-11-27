@@ -143,7 +143,8 @@ so where the chart deploys `garage` it deploys nothing beside it.
   exception: the app generates it onto its own claim. The app runs one pod with `strategy: Recreate`, because the
   schema migrates at boot with no gate and a rolling update would start the new migrator before the old one stops.
 - **A chart upgrade is checked by rendering both versions.** The app-level upgrade proof
-  ([ADR 0057](0057-release-identity-and-deployment-recipe.md) Decision 7) proves the data; what breaks a
+  ([ADR 0057](0057-release-identity-and-deployment-recipe.md) Decision 7; lanes L2 and L3 since ADR 0091 decision 7)
+  proves the data; what breaks a
   `helm upgrade` is an **immutable field**, an object disappearing with the data behind it, or an operator's values no
   longer passing the new schema. All of these are visible **without a cluster**, so the check renders the
   predecessor's chart and the candidate's with the same values and compares them. The predecessor is the upgrade

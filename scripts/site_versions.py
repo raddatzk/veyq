@@ -12,7 +12,7 @@ A version is built **once per tag** and kept on the branch `site-versions` (`v<m
 maps each major to the tag it was built from); a later deploy reuses it. Built soon after its tag, with the toolchain
 of that time, it never meets a Node or a registry a year younger than its lockfile. Its install is the plain
 `pnpm install --frozen-lockfile` of the tag's own `site/` lockfile, not the deprecation gate: that lockfile passed the
-gate when it was `main`'s, as `run_web_e2e.py --upgrade` installs a predecessor's (`prepare_predecessor`). A version
+gate when it was `main`'s, as `run_web_e2e.prepare_predecessor` installs a predecessor's (lane L2's start tree). A version
 that fails to build or fails `site_version_check.py` keeps the build it had, and the run is red.
 
     python3 scripts/site_versions.py older                      # `1` or `1,2`: VEYQ_SITE_OLDER of the root build

@@ -2209,7 +2209,7 @@ CAPTURES_DIR = "captures"
 PARTIAL = ".partial"
 # What the `veyq-tools` image bakes at build (ADR 0098, cr-kubernetes-backup-gate O3): its own release and the
 # release a new major is entered from — the newest release of the previous major among every tag, which the release's
-# own upgrade proof and chart check ran from too (`release_assets.py --major-entry`, ADR 0085 decision 10), or null.
+# own lanes L2 and L3 and chart check ran from too (`release_assets.py --major-entry`, ADR 0085 decision 10), or null.
 RELEASE_FILE = Path("/opt/veyq/release.json")
 # ADR 0057's release grammar, `<major>.<minor>` with an optional `-SNAPSHOT` (infra/kubernetes/charts/veyq/Chart.yaml says the same).
 RELEASE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-SNAPSHOT)?")

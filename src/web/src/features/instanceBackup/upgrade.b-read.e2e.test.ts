@@ -1,8 +1,9 @@
-// The READER of the upgrade proof (ADR 0057 Decision 7, uc.admin.back-up-and-restore-instance criterion
-// `a-predecessors-backup-upgrades-with-its-content-intact`) - the `upgrade` group's second member. It always runs from
-// the CANDIDATE's tree, against the candidate's jar, on an instance the orchestrator restored from the seeder's capture:
-// under `--upgrade` that capture is the PREDECESSOR's, written by its own jar and its own suite, so the first boot of
-// this member is the candidate migrating the predecessor's schema up.
+// The READER of the upgrade pair (ADR 0057 Decision 7, ADR 0091 decision 6, uc.admin.back-up-and-restore-instance
+// criterion `a-predecessors-backup-upgrades-with-its-content-intact`) - the `upgrade` group's second member. It always
+// runs from the CANDIDATE's tree, against the candidate, on an instance that holds what a published release's own seeder
+// wrote: upgraded in place by lane L2, restored from that release's archived backup by lane L3 (or, under the local
+// `run_web_e2e.py --upgrade`, restored from the predecessor jar's capture), so the candidate has migrated the release's
+// schema up before this reads it.
 //
 // It asserts every item the record names - never only that nothing failed, because a sealed field that no longer opens
 // degrades to an empty value, not to an error (a missing date reads as "no date"). In order:

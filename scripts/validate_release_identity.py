@@ -77,7 +77,7 @@ manifests, the image signatures, the predicates and the tag each name it.
      `needs:`, found by reading the file's jobs, never listed; when the gate's `if:` calls a status function
      (`always()`, `failure()`, `cancelled()`) — which lets it run past a failed or skipped need — the condition requires
      `needs.<job>.result == 'success'` of every need, the exceptions a job that runs by design on no event (`if:
-     false`, the disabled upgrade proof) or on one event alone (`if: github.event_name == '<event>'`, the two image
+     false`, as the jar-level upgrade proof was until the first release) or on one event alone (`if: github.event_name == '<event>'`, the two image
      builds), whose `skipped` it may accept alongside `success`, and a push-only lane (`PUSH_ONLY_LANES`, lane L3),
      accepted by exactly two terms — `success` unless the event is a pull request, and `success` or `skipped` — so
      only a pull request may skip it; and `snapshot` is gated on `checks-run`'s verdict,
@@ -287,7 +287,8 @@ so whatever PyPI served under that name would have run beside the release identi
 registry. Its first run against the untouched `build` job was red, as the bite that restores that line shows.
 Assertion 16 came with the first real run of the snapshot (2026-11-06, run 42274582708): every stage green, the snapshot
 published and attested, and `snapshot-tag` skipped. Its `if:` named no status function, so GitHub's implicit
-`success()` saw the switched-off `upgrade-proof` skipped upstream of `snapshot`, and no `snapshot-` tag was set. The
+`success()` saw the switched-off `upgrade-proof` (the jar-level proof, retired since) skipped upstream of `snapshot`,
+and no `snapshot-` tag was set. The
 assertion was written against that form first and was red on it, then the job was fixed.
 Assertion 17 came with the owner's decision of 2026-11-07, no incident in the code: every green push published, so
 once Dependabot opened its pull requests each merged bump was a snapshot, three images, a chart and a `snapshot-` tag
@@ -2774,8 +2775,8 @@ pip_summary = (f"; every one of the {held_installs} `pip install`(s) of a job th
 
 # ---- 16. no job relies on the implicit `success()` behind a job that can be skipped --------------------------------
 # GitHub adds `success()` to a job's `if:` unless the condition calls a status function itself, and that `success()`
-# looks at the WHOLE chain of needs: a job skipped anywhere upstream skips everything after it. `snapshot` waits on the
-# switched-off `upgrade-proof` (`if: false`) and survives through `always()`; on the first real run (2026-11-06,
+# looks at the WHOLE chain of needs: a job skipped anywhere upstream skips everything after it. `snapshot` waited on the
+# then switched-off `upgrade-proof` (`if: false`, a job retired since) and survived through `always()`; on the first real run (2026-11-06,
 # 42274582708) `snapshot-tag`, which needs `snapshot` and stated no status function, was skipped — the snapshot got no
 # tag. So in the Checks and Publish runs and `release.yml` a job whose needs reach a job with an `if:` (one that can be skipped) states its
 # own gate: a status function (`always()`, `!cancelled()`) and, for each direct need that can be skipped or follows

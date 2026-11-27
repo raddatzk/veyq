@@ -589,7 +589,7 @@ def open_source(spec: str | None) -> Source:
 # that major, `latest` the newest of all. `install` takes it from `--set VEYQ_RELEASE=…`, else `latest`, and writes it
 # into `.env`. `upgrade` (and `check`, which says what `upgrade` would take) enters a major only from the release that
 # major's release names as its entry (decision 5 step 1, `upgrade_target`): `majorEntry` in its signed manifest, the
-# newest release of the previous major when it was cut — the one its upgrade proof ran from (ADR 0085 decision 10) —
+# newest release of the previous major when it was cut — the one its lanes L2 and L3 ran from (ADR 0085 decision 10) —
 # and never more than the next major per run. So `latest` from 1.3, with 2.5 entered from 1.9, goes to 1.9, and from
 # 1.9 with 3.1 listed to the newest of major 2; a pin inside the next major is reached directly from its entry. A fix
 # release of the old major cut after it (1.10) is no way in: 2.5 was never proved from it, and from 1.10 only a later
@@ -631,7 +631,7 @@ def upgrade_target(listed: list[Listed], running: tuple[int, int], chosen: Liste
                    entry_of: Callable[[Listed], str | None]) -> Listed:
     """Where an `upgrade` from `running` toward `chosen` (above it) goes in this run — ADR 0096 decision 5 step 1.
 
-    No run crosses more than one major, and a major is entered only from the release its own upgrade proof ran from
+    No run crosses more than one major, and a major is entered only from the release its own lanes L2 and L3 ran from
     (ADR 0085 decision 10): the one its signed manifest names as `majorEntry`, which `entry_of` reads — the newest
     release of the previous major when it was cut, a `release/<major>.x` fix included. Not simply the running major's
     newest NOW: a fix release cut after the next major's release (1.10 after 2.0, entered from 1.9) is one nobody

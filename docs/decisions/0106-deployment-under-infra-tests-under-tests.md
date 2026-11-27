@@ -33,7 +33,9 @@ the published site — and conflicts with every branch that touches the moved fi
    name one of two frontends by what both are.
 6. **An image mirrors the checkout.** A build stage lays the sources out as the checkout does, so a relative path
    between surfaces holds in both.
-7. **Decision 3's rule holds for the code too**: the upgrade proof builds a predecessor from before stage 2.
+7. **Decision 3's rule holds for the code too**: the upgrade proof builds a predecessor from before stage 2 (the
+   predecessor's tree is `run_web_e2e.prepare_predecessor`'s, which lane L2 and the archive build from since the
+   jar-level proof's CI job retired, ADR 0091 decision 7).
 8. **Stage 3 — what a release ships lives under `src/`, what the repository runs on itself under `scripts/`.** The two
    operator tools a release carries, `veyqctl` and `instance_backup.py`, are in `src/tools/` with their selftests. They
    ship alone — Python 3.9 and the standard library, no import from `scripts/` — and prove themselves by their selftest,

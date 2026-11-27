@@ -5,7 +5,7 @@
   `release.yml`, first run 2026-11-10: v0.2480 and v1.0)
 - Date: 2026-08-10
 - Model: [release-and-deployment](../crosscutting/release-and-deployment.md)
-- Replaced in part: § 1 by ADR 0091 (built: the snapshot and its promotion), § 7 by ADR 0091 (not built); § 3 by ADR
+- Replaced in part: § 1 by ADR 0091 (built: the snapshot and its promotion), § 7 by ADR 0091 (built: lanes L2 and L3 prove the upgrade, the jar-level proof's CI job retired 2026-11-28, ADR 0091 decision 7); § 3 by ADR
   0096 (built); § 6's last sentence (bumping a pin at a release) by ADR 0158 (built)
 
 ## Context

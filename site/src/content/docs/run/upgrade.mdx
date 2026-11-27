@@ -7,6 +7,7 @@ sources:
   - docs/decisions/0057-release-identity-and-deployment-recipe.md
   - docs/decisions/0064-kubernetes-helm-deployment-target.md
   - docs/decisions/0085-one-major-moved-on-a-yearly-train.md
+  - docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md
   - docs/decisions/0096-veyqctl-manages-an-instance-from-immutable-releases.md
   - docs/decisions/0098-on-kubernetes-the-start-that-would-migrate-backs-up-first.md
   - docs/decisions/0118-the-app-image-is-distroless-and-carries-its-own-commands.md
@@ -19,34 +20,41 @@ is not a precaution taken *around* this procedure — it **is** the way back ([A
 Everything else below exists to keep that backup usable: to name the release you are leaving, and to notice a
 recipe change before it stops anything.
 
-**Which of these steps has ever been executed.** `veyqctl upgrade` has run once, live, between two releases produced
-from two commits of the tree with images built on the host (`--unsigned-local`, so no signature was checked): a
-Memory sealed under the first was still open after it, the upgrade's backup restored onto a fresh install, and its
-refusals were each provoked against a running instance with every container's start time unchanged. The two
-releases' images were identical, so that run proves the switch, not a schema migration. No upgrade between two
-published releases has run yet (v1.0 was installed fresh), so none has pulled a published image or checked its signatures, and none has run a rollback. Step 4's
-capture is also rehearsed on every `scripts/run_web_e2e.py` run, and the data half of a whole upgrade by the upgrade
-proof below. Read it that way.
+**Which of these steps has ever been executed.** `veyqctl upgrade` runs on every commit between published releases
+and the candidate, in pipeline lane L2 (below); before it existed it had run once, live, between two releases produced
+from two commits of the tree with images built on the host (`--unsigned-local`): a Memory sealed under the first was
+still open after it, the upgrade's backup restored onto a fresh install, and its refusals were each provoked against a
+running instance with every container's start time unchanged. Step 4's capture is also rehearsed on every
+`scripts/run_web_e2e.py` run, and a restore of every schema state's backup by lane L3 (below). Read it that way.
 
-**The upgrade proof — what it covers, and what it does not** ([ADR 0057](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0057-release-identity-and-deployment-recipe.md) Decision 7).
-`python3 scripts/run_web_e2e.py --upgrade` builds the **predecessor** in a worktree of its ref (its own fast-jar, its
-own web dependencies and client) and lets its own e2e seeder seal content of every application into a fresh instance;
-step 2's capture takes it, the restore puts it onto an instance freshly installed by **this** checkout's jar ("restore,
-start", ADR 0056 §7), the candidate migrates it up at its start, must report `configSecretState: OK` (step 7), and this
-checkout's reader opens every item the seeder recorded — names, date and place, the cover, every photo and file byte
-for byte, the drop box's guest files, and a READ link as its guest sees it. The predecessor is the commit before the
-one under test until the first release, the last release (`v<major>.<minor>`) from then on; `--upgrade-from <ref>`
-names another one, and a ref older than the seeder is refused. A release of major N is proved a second time
-(`--upgrade-major-entry`) from the newest release of major N−1, a fix release on its `release/<N−1>.x` branch included:
-the release its tools image's gate lets a new major be entered from. Where there is none, or it is the predecessor
-above, that run says so and runs nothing. The run's summary ends with the predecessor, both
-builds' highest migration, the migrations changed or removed between them, and the outcome with its cause — a Flyway
-refusal (a changed baseline's checksum above all) is named as such. The pipeline's `upgrade-proof` job runs it on every
-commit since the first release (v0.2480), and its `green` gate — and so the snapshot — needs it green
-([backend/CLAUDE.md](https://github.com/raddatzk/veyq/blob/main/src/backend/CLAUDE.md) § Migrations). **What it does not cover:** it boots jars, not the published
-images, so a pull, an `up` that migrates, and the rollback stay unrehearsed; and it says nothing
-about the chart — `helm upgrade` from the predecessor's chart to the candidate's runs in no cluster; its immutable
-fields and claims are compared on rendered manifests by `scripts/chart_upgrade_check.py` ([Upgrade](/run/upgrade/), Kubernetes), and a cluster leg is inbox #430.
+**What proves an upgrade before a release — and what it does not** ([ADR 0091](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
+decisions 6 and 7). Two stack lanes run on the images that ship, from releases you could be running:
+- **Lane L2, upgrade in place** (`scripts/run_stack_upgrade.py`, every pull request and push). The newest release, and
+  in a leg of its own the newest release of the previous major (the one a new major is entered from, a fix release on
+  its `release/<N−1>.x` branch included), is installed from its published files by its own `veyqctl`, every signature
+  checked; that release's own e2e seeder seals content of every application into it; its own `veyqctl upgrade` —
+  step 4's backup, the template check, the health wait — takes it to the candidate, which migrates it at its start,
+  must report `configSecretState: OK` (step 7), and whose reader opens every item the seeder recorded — names, date and
+  place, the cover, every photo and file byte for byte, the drop box's guest files, and a READ link as its guest sees
+  it — and whose browser test signs the owner in on a new device. Then the release's own `veyqctl rollback` takes it
+  back to that backup, and its own reader reads it again. A migration edited after it was released stops the upgrade,
+  Flyway's refusal named.
+- **Lane L3, a backup of every schema state restored** (`scripts/run_stack_restore.py`, every push). Every release's
+  backup is archived once, after it is released, by its own seeder and its own `veyqctl backup` with the object pool
+  and the kept-apart key. The candidate restores the backup of the oldest release of each set of migrations of its
+  major, and the previous major's newest release's, each into a fresh install with its own `veyqctl restore
+  --objects-from --key-from` (the [Backup and restore](/run/backup-and-restore/) path), and reads it as above. A backup
+  the selection names that is missing, or not signed by the archive's own workflow, is red.
+
+Every leg's green is attested with the snapshot, and a release is promoted only from a snapshot whose L2 starting
+releases and L3 backups are still the ones the releases name. **What it does not cover:** the seeder writes through the
+API, so what only a browser writes is not in the content; a data format a release writes without a migration in the
+middle of a set of releases with the same migrations is restored only at the set's edges; and it says nothing about
+the chart — `helm upgrade` from the predecessor's chart to the candidate's runs in no cluster; its immutable fields
+and claims are compared on rendered manifests by `scripts/chart_upgrade_check.py` ([Upgrade](/run/upgrade/),
+Kubernetes), and a cluster leg is inbox #430. Until 2026-11-28 a jar-level proof (`scripts/run_web_e2e.py
+--upgrade`: the predecessor's own jar and suites, its capture restored onto the candidate's jar) was the pipeline's
+proof; it booted jars, not the published images, and stays a tool for bisecting a defect between two commits.
 
 <Tabs syncKey="target">
   <TabItem label="Docker Compose">
@@ -147,9 +155,10 @@ way back. Four things are specific to this target.
   Argo CD shows the application progressing; the Deployment reports `ProgressDeadlineExceeded` after
   `progressDeadlineSeconds` (600 by default), and Kubernetes keeps retrying the gate.
 - **What the chart change between two releases is checked for — and what not** ([ADR 0064](https://github.com/raddatzk/veyq/blob/main/docs/decisions/0064-kubernetes-helm-deployment-target.md)
-  § Decision, the chart-upgrade check). `python3 scripts/chart_upgrade_check.py` reads the upgrade proof's predecessor's chart out of git
-  (the commit before until the first release, the last `v<major>.<minor>` from then on; `--upgrade-from <ref>` names
-  another, and `--upgrade-major-entry` the newest release of the previous major, as the proof's second run does) — at `infra/kubernetes/charts/veyq`, or at `charts/veyq` where an older release carries it — renders it and this checkout's chart with each of this chart's `ci/` values files, and refuses what
+  § Decision, the chart-upgrade check). `python3 scripts/chart_upgrade_check.py` reads the default predecessor's chart out of git
+  (the commit before until the first release, the last `v<major>.<minor>` from then on, lane L2's newest leg's;
+  `--upgrade-from <ref>` names another, and `--upgrade-major-entry` the newest release of the previous major, as lane
+  L2's major-entry leg does) — at `infra/kubernetes/charts/veyq`, or at `charts/veyq` where an older release carries it — renders it and this checkout's chart with each of this chart's `ci/` values files, and refuses what
   `helm upgrade` cannot apply or would lose data over: a Deployment's or StatefulSet's `selector`, any StatefulSet
   `spec` field the API server does not let an update change (all but `replicas`, `ordinals`, `template`,
   `updateStrategy`, `persistentVolumeClaimRetentionPolicy`, `minReadySeconds`) - `serviceName`, `podManagementPolicy`,

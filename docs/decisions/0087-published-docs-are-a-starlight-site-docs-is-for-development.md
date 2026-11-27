@@ -94,8 +94,8 @@ copy (the drift the wiki's source guard was built after), and it lives only on G
      built from) and reuses it on every later deploy; the deploy puts `main`'s build at the root and every kept
      version beside it ([`scripts/site_versions.py`](../../scripts/site_versions.py)). Built soon after its tag, a
      version meets the Node and the registry of its own time, never those of a year later. Its install is the tag's
-     own frozen lockfile, not the deprecated-package gate: that lockfile passed the gate when it was `main`'s, as the
-     upgrade proof installs a predecessor's. A version that fails to build keeps the build it had, and the run is red.
+     own frozen lockfile, not the deprecated-package gate: that lockfile passed the gate when it was `main`'s, as a
+     predecessor's tree is installed (`run_web_e2e.prepare_predecessor`, the upgrade proof's then, lane L2's since). A version that fails to build keeps the build it had, and the run is red.
    - **Checked by what it is.** `starlight-links-validator` runs on the root build only: a `base` blinds
      `errorOnInconsistentLocale` (`site/astro.config.mjs`), and a version is the commit the root build already
      checked. What a base adds is held on the build itself by

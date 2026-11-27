@@ -35,7 +35,12 @@ Docker and the database root credential. Every one of those sweeps also searches
 capability token the run handled, read out of the HTTP recording by the contract's `token` marker
 ([token_needles]) — and the database sweep proves it armed by finding the tokens' hashes ([db_token_findings]).
 
-**The upgrade proof — two builds in one run** (ADR 0057 Decision 7, `--upgrade` / `--upgrade-from <ref>`). The
+**The upgrade proof — two builds in one run, a local tool** (ADR 0057 Decision 7, `--upgrade` / `--upgrade-from <ref>`).
+Its CI job retired with cr-stack-lane-l3-backup-archive (ADR 0091 decision 7): lanes L2 and L3
+(`scripts/run_stack_upgrade.py`, `scripts/run_stack_restore.py`) prove the same data path on the shipped images, from
+published releases, and run on its derivations below ([default_predecessor_ref], [major_entry_proof_ref],
+[backup_selection_ref], [prepare_predecessor], the record's check). It stays as the fast jar-level way to bisect an
+upgrade defect between two commits. The
 `upgrade` group's first member, the SEEDER, runs from a detached worktree of a PREDECESSOR ref built in the run
 directory ([prepare_predecessor]: its own lockfile install, which generates its client, and its own fast-jar) and boots on the
 predecessor's jar; the group's hook captures that instance, destroys it and restores it onto a target installed by THIS
@@ -54,7 +59,7 @@ first release that informs and gates nothing. Every wire sweep runs as in any ru
 with one known edge: its HTTP recording is matched against THIS tree's contracts, so a call the candidate no longer
 declares fails the token derivation, naming the call. In an ordinary run the `upgrade` group runs like any other, both
 members from this tree, which keeps the pair working between proofs. Its pure parts are pinned, without Docker, by
-`scripts/upgrade_proof_selftest.py`.
+`scripts/upgrade_derivations_selftest.py`.
 
 **Why a fresh instance per file.** Every suite cold-births its own Server Owner and asserts
 `setupRequired === true`, and a server is single-owner-per-instance. `checks.yml` used to call this "a fresh in-mem
@@ -1462,7 +1467,7 @@ UPGRADE_GROUP = "upgrade"
 UPGRADE_RECORD_FILE = "upgrade-record.json"
 UPGRADE_READING_FILE = "upgrade-reading.json"
 # What the record's `version` may be — the versions the CANDIDATE's reader reads. Mirrors `UPGRADE_RECORD_VERSION` and
-# the reader's own check; `upgrade_proof_selftest.py` and `upgradeRecord.test.ts` hold both to one fixture.
+# the reader's own check; `upgrade_derivations_selftest.py` and `upgradeRecord.test.ts` hold both to one fixture.
 UPGRADE_RECORD_VERSIONS = (1,)
 PIN_FILE = "scripts/applied_migrations.sha256"
 RELEASE_TAG = re.compile(r"^v(\d+)\.(\d+)$")
@@ -1759,7 +1764,7 @@ def default_predecessor_ref(root: Path = REPO) -> tuple[str, str]:
     """(the default predecessor's ref, how it was chosen): [default_predecessor] fed with this checkout's pin file and
     the release tags `HEAD^1` contains. Raises ValueError where that refuses. `chart_upgrade_check.py` resolves its
     predecessor here too, so the chart's upgrade check and this proof never compare against different builds. `root`
-    is another checkout only for `upgrade_proof_selftest.py`'s fabricated history."""
+    is another checkout only for `upgrade_derivations_selftest.py`'s fabricated history."""
     release = read_release((root / PIN_FILE).read_text())
     tags = git("tag", "--merged", "HEAD^1", "--list", "v*", cwd=root).splitlines() if release != "none" else []
     ref = default_predecessor(release, tags)
@@ -1844,8 +1849,8 @@ def backup_selection_ref(root: Path = REPO) -> list[tuple[str, str]]:
 
 def major_entry_proof_ref(root: Path = REPO) -> tuple[str | None, str]:
     """(the second predecessor's ref or None, the line saying which and why): [second_predecessor] of this checkout's
-    default predecessor and its major entry. Raises ValueError where either refuses. The upgrade proof's
-    `--upgrade-major-entry` and the chart upgrade check's resolve it here alike."""
+    default predecessor and its major entry. Raises ValueError where either refuses. Lane L2's `--leg major-entry`,
+    the chart upgrade check's `--upgrade-major-entry` and the local upgrade proof's resolve it here alike."""
     default, _ = default_predecessor_ref(root)
     major = candidate_major(root)
     entry = major_entry_ref(major, root)
@@ -2168,7 +2173,8 @@ def keep_runs() -> int:
 
 def main(argv: list[str]) -> int:
     # `--resolve`: name the predecessor this proof would run from, as its last line `predecessor=<ref>` (empty: no run),
-    # and start nothing — `checks.yml`'s `upgrade-proof` asks it before it builds anything, one leg per predecessor.
+    # and start nothing (until cr-stack-lane-l3-backup-archive checks.yml's retired `upgrade-proof` asked it first;
+    # lane L2 asks its own `run_stack_upgrade.py --resolve`, which resolves through the same derivations).
     resolve = RESOLVE_REQUEST in argv
     argv = [a for a in argv if a != RESOLVE_REQUEST]
     try:

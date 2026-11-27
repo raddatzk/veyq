@@ -146,9 +146,12 @@
   data-less target before loading, so the instance holds exactly the captured schema. The application then
   migrates it up at its next start, the same forward migration an ordinary upgrade runs. The restore says so as
   it finishes, because this is an upgrade, and that matters whenever the operator meant a rollback (A7).
-  **Proven over real data by the upgrade proof** ([ADR 0057](../../../decisions/0057-release-identity-and-deployment-recipe.md)
-  Decision 7, inbox #419): a predecessor's backup, written by its own client, restored
-  onto the candidate, migrated up, and read back by the candidate's suites.
+  **Proven over real data by lane L3** ([ADR 0091](../../../decisions/0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)
+  decision 6): every release's backup, written by its own test code and its own `veyqctl backup`, archived once; on
+  every push the backup of each schema state of the major, and the major entry's, restored onto a fresh install of the
+  candidate, migrated up, and read back by the candidate's reader and in a browser. Until 2026-11-28 the jar-level
+  upgrade proof did this from the predecessor's own build ([ADR 0057](../../../decisions/0057-release-identity-and-deployment-recipe.md)
+  Decision 7, inbox #419); it retired from CI then (ADR 0091 decision 7).
 - **A10 — The backup is newer than the target.** Refused before anything is written, naming the release the
   backup came from. The older image would refuse to start on a migration history it does not know, so loading
   and failing at boot would leave the operator with neither instance.

@@ -1,4 +1,4 @@
-// The upgrade record's validator against the fixture `scripts/upgrade_proof_selftest.py` holds the orchestrator's to:
+// The upgrade record's validator against the fixture `scripts/upgrade_derivations_selftest.py` holds the orchestrator's to:
 // both must accept the fixture's record and every edit it lists as accepted, and refuse every edit it lists as refused
 // (src/web/src/test/upgradeRecord.ts).
 import { describe, it, expect } from 'vitest'

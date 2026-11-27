@@ -53,9 +53,10 @@ installs is a second pin, and two Dockerfiles plus every workflow job naming it 
   - **Spellings it does not parse.** An install reached through `npx`, `pnpm dlx`, `yarn`, a shell variable or alias, a
     nested `sh -c '…'` string, a heredoc `RUN`, or a third-party `uses:` action that installs on its own is
     invisible; so is one in a script a step calls. Three tracked scripts run pnpm's install: the gate;
-    `run_web_e2e.py --upgrade`, which installs a PREDECESSOR's lockfile in a worktree of that older commit - one the
-    gate passed when it was the candidate, deliberately not gated again (a package deprecated since would turn the
-    upgrade proof red for a reason that is not the upgrade; its `prepare_predecessor` says so); and
+    `run_web_e2e.py`'s `prepare_predecessor` (lane L2's and the archive's start tree, and the local `--upgrade`),
+    which installs a PREDECESSOR's lockfile in a worktree of that older commit - one the gate passed when it was the
+    candidate, deliberately not gated again (a package deprecated since would turn an upgrade red for a reason that is
+    not the upgrade; `prepare_predecessor` says so); and
     `site_versions.py sync`, which installs an older major's release tag's `site/` lockfile to build that version of
     the docs, ungated for the same reason (ADR 0087 decision 6).
   - **Published, not built.** Premise (b)'s second form lets an image build install the lockfile before the gate's

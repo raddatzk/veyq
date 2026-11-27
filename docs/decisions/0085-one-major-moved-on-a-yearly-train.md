@@ -135,7 +135,8 @@ keeps inside a major reaches the operators who have not left the previous major 
 - **The train is a procedure (decisions 2, 3 and 10)**, written in [`infra/README.md`](../../infra/README.md) § Cutting
   a release. The manifest's deprecation lifecycle stays deferred (ADR 0032 § Consequences) and is not needed for
   this.
-- **One derivation of the major entry (decision 10).** The upgrade proof, the gate's tools image and the signed
+- **One derivation of the major entry (decision 10).** The pipeline's proof of it (the jar-level upgrade proof's until
+  ADR 0091 decision 7 retired it; lane L2's major-entry leg and lane L3 since), the gate's tools image and the signed
   manifest that `veyqctl` routes by take the entry from the same place, so neither the gate nor a Compose upgrade takes
   an entry the pipeline did not prove. Before major N−1 has a release there is no entry and nothing to prove from it;
   an entry that is also the default predecessor (a major's first release, cut before any fix release) is proved once.

@@ -1,9 +1,10 @@
-// The SEEDER of the upgrade proof (ADR 0057 Decision 7, uc.admin.back-up-and-restore-instance criterion
-// `a-predecessors-backup-upgrades-with-its-content-intact`) - a GROUP member, so it only means anything under
-// `scripts/run_web_e2e.py`. Under `--upgrade` / `--upgrade-from <ref>` it runs from the PREDECESSOR's worktree against
-// the predecessor's jar; the orchestrator then captures the instance, destroys it, restores it onto a freshly installed
-// candidate, and the candidate's `upgrade.b-read.e2e.test.ts` opens what this wrote. In an ordinary run both members
-// are this tree's, which keeps the pair working between proofs.
+// The SEEDER of the upgrade pair (ADR 0057 Decision 7, ADR 0091 decision 6, uc.admin.back-up-and-restore-instance
+// criterion `a-predecessors-backup-upgrades-with-its-content-intact`) - a GROUP member, so it only means anything under
+// an orchestrator. Every release's own copy of it writes the content lanes L2 (`scripts/run_stack_upgrade.py`) and L3
+// (`scripts/run_stack_restore.py`, through the backup `scripts/archive_backup.py` archived) upgrade, and the
+// candidate's `upgrade.b-read.e2e.test.ts` opens what it wrote. Under `scripts/run_web_e2e.py --upgrade` (the local
+// jar-level tool) it runs from the PREDECESSOR's worktree against its jar, the capture restored onto the candidate's. In
+// an ordinary `run_web_e2e.py` run both members are this tree's, which keeps the pair working between releases.
 //
 // It seals real content of every application there is: a Memory with a date, a place, a cover (an uploaded image with
 // a crop) and media, a chapter with media; a Depot folder with a member's files (one of several frames); a drop box

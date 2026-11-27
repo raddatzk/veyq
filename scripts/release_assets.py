@@ -323,13 +323,13 @@ def major_entry(release: str) -> str | None:
     """The release a new major is entered from, which the `veyq-tools` image bakes (ADR 0098, its gate's entry rule):
     `run_web_e2e.major_entry_ref()` for RELEASE's major — the newest release of the previous major among every tag of
     the repository, a `release/<old>.x` branch's fix releases included (ADR 0085 decision 10). That is the ONE
-    derivation the upgrade proof's `--upgrade-major-entry` and the chart check's prove from, so the gate never admits
-    an entry the pipeline did not prove. None for major 0, where the previous major has no release tag, and while the
-    pin file says `release: none`. The manifest carries the same answer as `majorEntry`, which `veyqctl` routes by, so a
-    Compose instance and a cluster cross into a major from the one release that was proved. Planned to be replaced by
-    the L2 lane's attestation (ADR 0091 decision 5, not built)."""
+    derivation lane L2's major-entry leg, lane L3's selection and the chart check's `--upgrade-major-entry` prove from,
+    so the gate never admits an entry the pipeline did not prove. None for major 0, where the previous major has no
+    release tag, and while the pin file says `release: none`. The manifest carries the same answer as `majorEntry`,
+    which `veyqctl` routes by, so a Compose instance and a cluster cross into a major from the one release that was
+    proved; the promotion holds the baked one to the one the tags name then (`promote.py`, check 8)."""
     sys.path.insert(0, str(ROOT / "scripts"))
-    import run_web_e2e  # noqa: E402 — the upgrade proof's own derivation, imported only for this question
+    import run_web_e2e  # noqa: E402 — the lanes' own derivation, imported only for this question
 
     ours = re.match(r"^([0-9]+)\.", release)
     if not ours:
@@ -374,7 +374,7 @@ def produce(out: pathlib.Path, app: str, admin: str, unscheduled: bool, tools: s
         # `tools` is the image a cluster's backup gate and restore Job run (ADR 0098); `veyqctl` reads `app` and `admin`
         # only, since Compose never runs it. The manifest is signed as one file, so the key is bound like the others.
         images = {"app": app, "admin": admin, **({"tools": tools} if tools is not None else {})}
-        # `majorEntry` is the release this one's major is entered from, the one its upgrade proof ran from and its
+        # `majorEntry` is the release this one's major is entered from, the one its lanes L2 and L3 ran from and its
         # tools image bakes ([major_entry]): `veyqctl` crosses into this release only from it (ADR 0096 decision 5).
         manifest = {"release": release, "date": date, "images": images, "unscheduled": unscheduled,
                     "majorEntry": major_entry(release), "assets": assets}

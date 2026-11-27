@@ -430,7 +430,8 @@ jobs:
         run: |
           "${RUNNER_TEMP}/chart-venv/bin/python" scripts/veyqctl_gitops_render_check.py --published
 
-      # A `helm upgrade` from the upgrade proof's predecessor's chart to this one, checked on rendered manifests
+      # A `helm upgrade` from the default predecessor's chart to this one (`run_web_e2e.default_predecessor_ref`, the
+      # release lane L2's newest leg starts from), checked on rendered manifests
       # (ADR 0064 § Decision, the chart-upgrade check): immutable fields, claims that would go, values an operator
       # already has. Information while scripts/applied_migrations.sha256 says `release: none`, red from the first
       # release - the script's own verdict, so this step carries no switch of its own.
@@ -440,8 +441,9 @@ jobs:
           "${RUNNER_TEMP}/chart-venv/bin/python" scripts/chart_upgrade_check.py
 
       # The same check from the release's major entry (ADR 0085 decision 10): the newest release of the previous major
-      # among every tag, which the tools image bakes and its gate admits alone. The script resolves it through the
-      # upgrade proof's derivation and exits 0, saying why, when there is none or it is the default predecessor above.
+      # among every tag, which the tools image bakes and its gate admits alone. The script resolves it through
+      # `run_web_e2e.major_entry_proof_ref` (lane L2's major-entry leg's) and exits 0, saying why, when there is none or
+      # it is the default predecessor above.
       - name: Chart upgrade check from the major entry
         run: |
           "${RUNNER_TEMP}/chart-venv/bin/python" scripts/chart_upgrade_check.py --upgrade-major-entry
@@ -463,7 +465,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The whole history: scripts/upgrade_proof_selftest.py finds the commit before the code surfaces moved under
+          # The whole history: scripts/upgrade_derivations_selftest.py finds the commit before the code surfaces moved under
           # src/ (ADR 0106) in it, and a shallow checkout holds HEAD alone (the second GitHub run, 2026-11-05: "no
           # commit carries web/package.json").
           fetch-depth: 0
@@ -533,10 +535,13 @@ jobs:
       - name: veyqctl self-test
         run: python3 src/tools/veyqctl_selftest.py
 
-      # Docker-free: the upgrade proof's pure parts (which predecessor, both builds' migrations, Flyway's refusal named,
-      # the record both builds share). The proof itself is `upgrade-proof` below.
-      - name: Upgrade proof self-test
-        run: python3 scripts/upgrade_proof_selftest.py
+      # Docker-free: the derivations lanes L2 and L3, the archive, the chart check and the tools image's stamp read
+      # (which predecessor and which major entry, both builds' migrations, Flyway's refusal named, the record the seeder
+      # and the reader share), and the flags of `run_web_e2e.py --upgrade`, the local jar-level tool. Its CI job, the
+      # jar-level upgrade proof, retired with cr-stack-lane-l3-backup-archive (ADR 0091 decision 7); this step stays
+      # because lanes L2 and L3 run on these derivations.
+      - name: Upgrade derivations self-test
+        run: python3 scripts/upgrade_derivations_selftest.py
 
       - name: Run web E2E suites against a live backend
         run: python3 scripts/run_web_e2e.py
@@ -765,11 +770,10 @@ jobs:
           # fetch-depth: 0 fetches with the history (no `fetch-tags` needed); the other two need neither.
           fetch-depth: ${{ matrix.image == 'veyq-tools' && '0' || '1' }}
 
-      # The tools image's gate refuses to enter a new major from any release but the one this release's own upgrade
-      # proof and chart check ran from (ADR 0098) — the newest release of the previous major among every tag (ADR 0085
-      # decision 10), the ONE derivation `upgrade-proof` and `chart` prove from too, read here and baked in as
-      # VEYQ_MAJOR_ENTRY; empty when the previous major has no release. Planned to be replaced by the L2 lane's
-      # attestation (ADR 0091 decision 5, not built). PyYAML as exact, hashed wheels only
+      # The tools image's gate refuses to enter a new major from any release but the one this release's own lanes and
+      # chart check ran from (ADR 0098) — the newest release of the previous major among every tag (ADR 0085 decision
+      # 10), the ONE derivation lane L2's major-entry leg, lane L3's selection and `chart` read too, read here and baked
+      # in as VEYQ_MAJOR_ENTRY; empty when the previous major has no release. PyYAML as exact, hashed wheels only
       # (scripts/requirements-release.txt): this job pushes images, and code PyPI served unpinned would run beside
       # that access (validate_release_identity.py assertion 15).
       - name: Find the release a new major is entered from (tools)
@@ -1679,113 +1683,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  # The upgrade proof (ADR 0057 Decision 7, site/src/content/docs/run/upgrade.mdx): the predecessor's own jar and e2e
-  # suites seal content into an instance, ADR 0056's tool captures it, the capture is restored onto THIS commit's build,
-  # which migrates it up at its start, and this commit's suites open the content and assert it. The predecessor is the
-  # default of `scripts/run_web_e2e.py --upgrade`: the first parent of the commit until the first release, the newest
-  # `v<major>.<minor>` tag it reaches from then on. A second leg proves the release's major entry (ADR 0085 decision
-  # 10), the newest release of the previous major among EVERY tag — a fix release tagged on `release/<old>.x`, which this
-  # commit does not reach — hence the full history and every tag (fetch-depth: 0 fetches both). One leg per predecessor,
-  # each with the job's budget (ADR 0091 decision 1): each builds two jars and proves once, as one leg did before the
-  # second proof. A leg asks `--resolve` first and builds nothing when there is nothing to prove from: the major-entry
-  # leg while the entry is the default predecessor (a major's first release) or there is none.
-  #
-  # Enabled with the first release (owner decision 2026-10-14): the commit that set the `release:` line of
-  # scripts/applied_migrations.sha256 (v0.2480's three baselines, frozen from then on) deleted its `if: false` and the
-  # `"skipped"` that `green` tolerated for it, so it gates every commit.
-  upgrade-proof:
-    name: Upgrade proof (the predecessor's backup, restored onto and read by this build)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        predecessor:
-          - { leg: default, flag: --upgrade }
-          - { leg: major-entry, flag: --upgrade-major-entry }
-    permissions:
-      contents: read
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - name: Resolve the predecessor (${{ matrix.predecessor.leg }})
-        id: predecessor
-        env:
-          FLAG: ${{ matrix.predecessor.flag }}
-        run: |
-          set -euo pipefail
-          python3 scripts/run_web_e2e.py "$FLAG" --resolve | tee "${RUNNER_TEMP}/resolve.log"
-          ref="$(sed -n 's/^predecessor=//p' "${RUNNER_TEMP}/resolve.log" | tail -n 1)"
-          echo "ref=${ref}" >> "$GITHUB_OUTPUT"
-      - name: Set up Java
-        if: steps.predecessor.outputs.ref != ''
-        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
-        with:
-          distribution: temurin
-          java-version: "25"
-      # The Gradle cache, keyed and restored as `backend`'s says.
-      - name: Restore the Gradle cache
-        if: steps.predecessor.outputs.ref != ''
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: gradle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('src/backend/**/*.gradle.kts', 'src/backend/gradle/libs.versions.toml', 'src/backend/gradle/verification-metadata.xml', 'src/backend/gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: |
-            gradle-${{ runner.os }}-${{ runner.arch }}-
-      - name: Validate the Gradle wrapper JAR
-        if: steps.predecessor.outputs.ref != ''
-        uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-      - name: Set up Node
-        if: steps.predecessor.outputs.ref != ''
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: "26"
-
-      # pnpm at exactly the version package.json pins in `packageManager` (validate_pnpm_installs_gated.py holds
-      # the two equal). GitHub's runner only: a local run (scripts/run_pipeline.py) uses the host's pnpm, which
-      # switches itself to the pinned version.
-      - name: Install pnpm
-        if: steps.predecessor.outputs.ref != '' && runner.environment == 'github-hosted'
-        run: npm install -g pnpm@12.23.0
-      - name: Build the candidate's fast-jar
-        if: steps.predecessor.outputs.ref != ''
-        working-directory: src/backend
-        run: ./gradlew --no-daemon quarkusBuild
-      # The OpenAPI generator JAR, cached and verified as `frontend`'s says.
-      - name: Restore the OpenAPI generator JAR
-        if: steps.predecessor.outputs.ref != ''
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: node_modules/.openapi-generator
-          key: openapi-generator-jar-${{ hashFiles('scripts/openapi_generator_jar.sha256', 'src/web/openapitools.json', 'src/admin-web/openapitools.json') }}
-
-      - name: Install the candidate's dependencies
-        if: steps.predecessor.outputs.ref != ''
-        # The registry half is asked once per commit, by this workflow's `frontend`.
-        run: python3 scripts/pnpm_install_no_deprecated.py --skip-registry-check
-      # The orchestrator builds the predecessor itself, in a worktree of its ref inside the run directory, and removes
-      # it afterwards; its summary ends with the proof's own lines (predecessor, both highest migrations, the outcome).
-      # The major-entry leg proves from the release the tools image bakes and its gate admits alone (ADR 0098 decision
-      # 3), the one the manifest names as `majorEntry`; it resolves the entry again, from the same tags.
-      - name: Run the upgrade proof (${{ matrix.predecessor.leg }})
-        if: steps.predecessor.outputs.ref != ''
-        env:
-          FLAG: ${{ matrix.predecessor.flag }}
-        run: python3 scripts/run_web_e2e.py "$FLAG"
-      - name: Keep the e2e run directory
-        if: always() && steps.predecessor.outputs.ref != ''
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: upgrade-proof-out-${{ matrix.predecessor.leg }}
-          path: .e2e-out/
-          include-hidden-files: true
-          if-no-files-found: warn
-          retention-days: 7
-
   # Every stage passed (ADR 0091 decision 2): the job publish.yml reads, by its result in this run, before it signs
   # this run's staging — so the build may start beside the tests. `always()` so that a job SKIPPED by design does not
   # skip this one, as a skipped need otherwise would: the one build of the two that this event does not run (`build` on
@@ -1812,7 +1709,6 @@ jobs:
       - stack
       - stack-upgrade
       - stack-restore
-      - upgrade-proof
     if: >-
       always()
       && needs.guards.result == 'success'
@@ -1831,7 +1727,6 @@ jobs:
       && needs.stack-upgrade.result == 'success'
       && (needs.stack-restore.result == 'success' || github.event_name == 'pull_request')
       && contains(fromJSON('["success", "skipped"]'), needs.stack-restore.result)
-      && needs.upgrade-proof.result == 'success'
     permissions:
       contents: read # reads only its needs' results; no checkout
     steps:

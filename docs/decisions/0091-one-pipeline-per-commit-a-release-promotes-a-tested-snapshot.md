@@ -2,7 +2,8 @@
 
 - Status: Accepted
 - Built: partly (not built: decision 5's rerun of moved lanes — a promotion refuses an input it cannot compare, and
-  lane L2's predecessor or lane L3's backup list when it moved, instead — and the snapshot retention job, decision 7);
+  lane L2's predecessor or lane L3's backup list when it moved, instead — and the snapshot retention job); decision 7
+  is built: the jar-level upgrade proof's CI job retired (§ decision 7, *As built*);
   lane L2 is built as decision 6's amendment of 2026-11-26 decides it —
   `scripts/run_stack_upgrade.py`, checks.yml's `stack-upgrade`, attested per leg with the release it upgraded from and
   required by the promotion, first attested by the Publish of `d5ce223da` (run 46018703012: v1.318 and v0.2480);
@@ -338,6 +339,16 @@ several, or one on another tag is refused (`scripts/promote.py` check 1). A save
 7. **The jar-level upgrade proof retires when L2 and L3 gate.** They prove the same data path on the artifact that
    ships; ADR 0057 §7 then names them. The API end-to-end suites stay: fast, fresh per file, and where a wire defect is
    bisected.
+   - **As built (2026-11-28, cr-stack-lane-l3-backup-archive phase 4).** checks.yml's `upgrade-proof` job and its need
+     in `green` are gone; the derivations stay (`default_predecessor_ref`, `major_entry_ref`, `major_entry_proof_ref`,
+     `backup_selection_ref`, `prepare_predecessor`, the record's check), read by lanes L2 and L3, the archive, the chart
+     upgrade check and the tools image's stamp. Their self-test stays in CI under the name of what it now pins,
+     `scripts/upgrade_derivations_selftest.py` (it was `upgrade_proof_selftest.py`): dropping its step would have left
+     the lanes' derivations unpinned. `run_web_e2e.py --upgrade` / `--upgrade-major-entry` stay as a local tool — the
+     fast jar-level bisect of an upgrade defect between two commits — since they share all their machinery with lane
+     L2's start tree; the ordinary web-e2e run of the seed/read pair on one build keeps the pair honest between
+     releases.
+     What proves an upgrade now, for Server Owners: [Upgrade](../../site/src/content/docs/run/upgrade.mdx).
 
 8. **The test concept is published, because it is what stands in for a human review.** veyq's code is written by an
    AI coding agent under the owner's direction and is not reviewed line by line by a person, so what a reader can
