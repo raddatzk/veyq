@@ -238,22 +238,78 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     private val _termsPage = MutableStateFlow<TermsPage?>(null)
 
-    /** Settings' Terms page while it is open (core's `MemberTerms.page`); null when closed. */
+    /** Settings' Terms page while it is open (core's `MemberTerms.editing`); null when closed. */
     internal val termsPage: StateFlow<TermsPage?> = _termsPage.asStateFlow()
 
-    /** Settings' Terms: the open tenant's terms read in the app's language. */
+    /** Settings' Terms: the open tenant's terms read in the app's language, and for an owner the editor's draft. */
     fun openTerms() {
         val t = tenantSession ?: return
         _termsPage.value = TermsPage(loading = true)
         viewModelScope.launch {
-            val shown = me.raddatz.veyq.mobile.session.MemberTerms.page(t, appLanguage())
-            if (_termsPage.value != null) _termsPage.value = TermsPage(loading = false, shown = shown)
+            val editing = me.raddatz.veyq.mobile.session.MemberTerms.editing(t, appLanguage())
+            if (_termsPage.value != null) _termsPage.value = TermsPage(loading = false, editing = editing, draft = editing?.draft)
         }
     }
 
     fun closeTerms() {
         _termsPage.value = null
     }
+
+    private fun editDraft(change: (me.raddatz.veyq.mobile.session.MemberTerms.TermsDraft) -> me.raddatz.veyq.mobile.session.MemberTerms.TermsDraft) {
+        _termsPage.update { p -> p?.draft?.let { p.copy(draft = change(it)) } ?: p }
+    }
+
+    /** The owner's edits of the terms (core's draft rules) and *Save terms* (core's `MemberTerms.save`). */
+    internal val termsEdits = object : TermsEdits {
+        override fun text(lang: String, text: String) = editDraft { it.withText(lang, text) }
+        override fun add(lang: String) = editDraft { it.withLanguage(lang) }
+        override fun remove(lang: String) = editDraft { it.without(lang) }
+        override fun template(lang: String) = editDraft { it.withTemplate(lang) }
+        override fun save() {
+            val t = tenantSession ?: return
+            val draft = _termsPage.value?.draft ?: return
+            _termsPage.update { it?.copy(saving = true) }
+            viewModelScope.launch {
+                val saved = me.raddatz.veyq.mobile.session.MemberTerms.save(t, draft)
+                _termsPage.update { p -> p?.copy(saving = false, draft = saved.draft ?: p.draft, said = saved.notice, round = p.round + 1) }
+            }
+        }
+    }
+
+    private val _members = MutableStateFlow<MembersPage?>(null)
+
+    /** Settings' Members while it is open (core's `TenantMembers`); null when closed. */
+    internal val members: StateFlow<MembersPage?> = _members.asStateFlow()
+
+    /** Settings' Members: the open space's roster, read anew at each open, each *Try again* and after each act that went through. */
+    fun openMembers() {
+        val m = tenantSession?.members ?: return
+        _members.value = MembersPage(loading = true)
+        viewModelScope.launch {
+            val read = m.read()
+            _members.update { it?.copy(loading = false, roster = read) }
+        }
+    }
+
+    fun closeMembers() {
+        _members.value = null
+    }
+
+    private fun memberAct(act: suspend (me.raddatz.veyq.mobile.session.TenantMembers) -> me.raddatz.veyq.mobile.session.TenantMembers.Outcome) {
+        val m = tenantSession?.members ?: return
+        _members.update { it?.copy(working = true) }
+        viewModelScope.launch {
+            val o = act(m)
+            val read = if (o.done) m.read() else null
+            _members.update { p -> p?.copy(working = false, roster = read ?: p.roster, said = o.notice, round = p.round + 1) }
+        }
+    }
+
+    /** A row's *Make co-owner* ([owner]) or *Remove co-owner* (core's `TenantMembers.setRole`). */
+    fun setMemberRole(userId: String, owner: Boolean) = memberAct { it.setRole(userId, owner) }
+
+    /** A row's *Remove member*, after its question (core's `TenantMembers.remove`). */
+    fun removeMember(userId: String, revokeLinks: Boolean) = memberAct { it.remove(userId, revokeLinks) }
 
     private val _whosWho = MutableStateFlow<WhosWhoPage?>(null)
 
@@ -399,6 +455,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         _terms.value = (g as? me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed)?.terms
         if (g !is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed) _termsPage.value = null
         if (g !is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed) _whosWho.value = null
+        if (g !is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed) _members.value = null
         trustLog("gate ${g::class.simpleName}" + when (g) {
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Signed -> ", offer: ${g.offer?.levels}, terms: ${g.terms?.let { "r${it.shown.revision}" } ?: "none"}"
             is me.raddatz.veyq.mobile.session.SessionModel.Gate.Unlock -> ", ${g.record.method}, level: ${g.record.unlockLevel}"
@@ -960,6 +1017,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         override fun openProfile() = this@AppModel.openProfile()
         override fun openTerms() = this@AppModel.openTerms()
         override fun openWhosWho() = this@AppModel.openWhosWho()
+        override fun openMembers() = this@AppModel.openMembers()
         override fun openPasswordChange() = this@AppModel.openPasswordChange()
         override fun openAddressChange() = this@AppModel.openAddressChange()
         override fun openKeyRotation() = this@AppModel.openKeyRotation()

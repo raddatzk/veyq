@@ -64,6 +64,7 @@ fun AppRoot(model: AppModel) {
     val terms by model.terms.collectAsStateWithLifecycle()
     val termsPage by model.termsPage.collectAsStateWithLifecycle()
     val whosWho by model.whosWho.collectAsStateWithLifecycle()
+    val members by model.members.collectAsStateWithLifecycle()
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         // the tenant's terms gate (uc.account.accept-terms) stands in place of the shell, the offer behind it
         val gate = terms
@@ -97,7 +98,9 @@ fun AppRoot(model: AppModel) {
         // one of the account's flows (ADR 0148), over Settings or one's own person page: a dialog of its own
         if (screen is Screen.Signed) accountFlow?.let { AccountFlowDialog(it, model) }
         // Settings' Terms (core's `SettingsSection.TERMS`), over the page
-        if (terms == null) termsPage?.let { TermsPageDialog(it, onClose = model::closeTerms) }
+        if (terms == null) termsPage?.let { TermsPageDialog(it, model.appLanguage(), model.termsEdits, onClose = model::closeTerms) }
+        // Settings' Members (core's `SettingsSection.MEMBERS`), over the page
+        if (terms == null) members?.let { MembersDialog(it, onRetry = model::openMembers, onRole = model::setMemberRole, onRemove = model::removeMember, onClose = model::closeMembers) }
         // Settings' Who's who (core's `SettingsSection.WHOS_WHO`), over the page; a row opens the person's profile
         if (terms == null) whosWho?.let { WhosWhoDialog(it, onRetry = model::openWhosWho, onOpen = model::openPersonFromWhosWho, onClose = model::closeWhosWho) }
         // the account was erased here: the sign-in says so once (the web's `explainEnding('erased')`)

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Gavel
+import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.VerifiedUser
 import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.Edit
@@ -156,7 +157,10 @@ interface SettingsActions {
     /** The open space's Who's who (core's `SettingsSection.WHOS_WHO`, inbox #967). */
     fun openWhosWho() {}
 
-    /** The open space's terms, read-only (core's `SettingsSection.TERMS`, uc.account.accept-terms). */
+    /** The open space's members (core's `SettingsSection.MEMBERS`, uc.spaces.remove-tenant-member). */
+    fun openMembers() {}
+
+    /** The open space's terms, read or edited by an owner (core's `SettingsSection.TERMS`, uc.admin.tenant-terms). */
     fun openTerms() {}
 }
 
@@ -294,6 +298,7 @@ fun SettingsScreen(
                 me.raddatz.veyq.mobile.search.SettingsSection.SECURITY -> security(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.PROFILE -> profile(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.ERASE -> erase(state, actions)
+                me.raddatz.veyq.mobile.search.SettingsSection.MEMBERS -> members(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.WHOS_WHO -> whosWho(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.TERMS -> terms(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.SIGN_OUT -> signOut(state, actions)
@@ -390,6 +395,20 @@ private fun LazyListScope.profile(state: AccountSettings.State, actions: Setting
     }
 }
 
+/** The open space's members (the web's tenant section `tenant-members`): one row opening the page over Settings. */
+private fun LazyListScope.members(state: AccountSettings.State, actions: SettingsActions) {
+    header(me.raddatz.veyq.mobile.search.SettingsSection.MEMBERS.id, { stringResource(R.string.members_title) })
+    item(key = "members") {
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.members_title)) },
+            supportingContent = { Text(stringResource(R.string.members_sub)) },
+            leadingContent = { Icon(Icons.Outlined.Group, null) },
+            colors = listColors(),
+            modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openMembers).testTag("settings-members"),
+        )
+    }
+}
+
 /** Who's who in the open space (the web's tenant section `tenant-people`): one row opening the page over Settings. */
 private fun LazyListScope.whosWho(state: AccountSettings.State, actions: SettingsActions) {
     header(me.raddatz.veyq.mobile.search.SettingsSection.WHOS_WHO.id, { stringResource(R.string.whos_who_title) })
@@ -404,13 +423,13 @@ private fun LazyListScope.whosWho(state: AccountSettings.State, actions: Setting
     }
 }
 
-/** The open space's terms and the operator section, read-only (uc.account.accept-terms; the web's tenant section). */
+/** The open space's terms and the operator section, an owner's to edit (uc.admin.tenant-terms; the web's tenant section). */
 private fun LazyListScope.terms(state: AccountSettings.State, actions: SettingsActions) {
     header(me.raddatz.veyq.mobile.search.SettingsSection.TERMS.id, { stringResource(R.string.terms_settings_title) })
     item(key = "terms") {
         ListItem(
             headlineContent = { Text(stringResource(R.string.terms_settings_title)) },
-            supportingContent = { Text(stringResource(R.string.terms_readonly_note)) },
+            supportingContent = { Text(stringResource(R.string.terms_editor_sub)) },
             leadingContent = { Icon(Icons.Outlined.Gavel, null) },
             colors = listColors(),
             modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openTerms).testTag("settings-terms"),
