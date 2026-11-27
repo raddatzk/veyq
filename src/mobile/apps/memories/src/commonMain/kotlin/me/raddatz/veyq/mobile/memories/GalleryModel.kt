@@ -231,6 +231,12 @@ class GalleryModel(
         /** Medium [item]'s capture time corrected to [overrideMs], or reset for null (`CaptureTime`). Absent: refused. */
         suspend fun captureTime(item: MemoryMedia.Item, overrideMs: Long?): CaptureTime.Outcome = CaptureTime.Outcome.Failed("refused")
 
+        /**
+         * Medium [item]'s override set to [overrideMs] exactly (its seconds kept), or removed for null, online only — one
+         * write of a selection's shift ([SelectionShift]), never queued. Absent: refused.
+         */
+        suspend fun shiftCaptureTime(item: MemoryMedia.Item, overrideMs: Long?): CaptureTime.Outcome = CaptureTime.Outcome.Failed("refused")
+
         /** The picture the node's banner draws — an image, a video's poster — as stored (`Banner.picture`); null for none. Absent: none. */
         suspend fun bannerPicture(): ByteArray? = null
 
@@ -920,6 +926,26 @@ class GalleryModel(
         return CaptureTimeEditor(item.meta?.capturedAt, item.meta?.capturedAtOverride) { overrideMs ->
             runCatching { door.captureTime(item, overrideMs) }.getOrElse { CaptureTime.Outcome.Failed("failed") }.also { reload() }
         }
+    }
+
+    /**
+     * The capture-time shift of the selected [mediaIds] (uc.memory.buckets § Correct a selection's capture time), where
+     * whoever looks may write the meta and online, two or more of them are in the gallery and one has a capture time;
+     * null otherwise. Its anchor is the first of [mediaIds] (in the order they were selected) with a capture time, and
+     * every medium is taken as the rows hold it now: each write states that revision, so a peer's change meanwhile is
+     * refused, never shifted from the peer's value. Its run has the gallery read anew once.
+     */
+    fun selectionShift(mediaIds: List<String>): SelectionShift? {
+        if (!current.rights.editMeta || current.offline != null) return null
+        val items = mediaIds.distinct().mapNotNull { row(it)?.item }
+        if (items.size < 2) return null
+        val anchor = items.firstOrNull { it.meta?.effectiveCapturedAt != null } ?: return null
+        return SelectionShift(
+            anchor, items,
+            one = { item, overrideMs -> runCatching { door.captureTime(item, overrideMs) }.getOrElse { CaptureTime.Outcome.Failed("failed") } },
+            exact = { item, overrideMs -> runCatching { door.shiftCaptureTime(item, overrideMs) }.getOrElse { CaptureTime.Outcome.Failed("failed") } },
+            rereadGallery = { readAnew(); mediaIds.mapNotNull { row(it)?.item } },
+        )
     }
 
     /** The node's facts read anew (an editor saved): the header's line follows. */

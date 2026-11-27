@@ -133,8 +133,8 @@ class MemoryLiveTest {
             }
             val sha = grid?.let { MessageDigest.getInstance("SHA-256").digest(it).joinToString("") { b -> "%02x".format(b) }.take(16) }
             println(
-                "    ${item.name} (${item.type}, ${item.original.size} B, ${item.ownerKey}): ${m?.width}x${m?.height}, " +
-                    "at ${m?.effectiveCapturedAt} (${m?.capturedAtSource}), gps ${m?.gpsLat},${m?.gpsLng} ${m?.placeName ?: ""}; " +
+                "    ${item.name} ${item.mediaId.take(8)} (${item.type}, ${item.original.size} B, ${item.ownerKey}): ${m?.width}x${m?.height}, " +
+                    "at ${m?.effectiveCapturedAt} (${m?.capturedAtSource}, override ${m?.capturedAtOverride}, rev ${item.metaRevision}), gps ${m?.gpsLat},${m?.gpsLng} ${m?.placeName ?: ""}; " +
                     "tile ${grid?.size} B $sha, preview ${preview?.size} B",
             )
             val exif = MediaDetails.exif(tenant, item)

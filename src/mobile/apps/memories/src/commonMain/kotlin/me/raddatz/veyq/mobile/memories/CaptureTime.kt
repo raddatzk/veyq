@@ -60,16 +60,18 @@ object CaptureTime {
 
     /**
      * The correction's read-modify-write over [send] (the seam a test plays a server through): the override set to
-     * [overrideMs] (held to the minute), or removed for null, on the tier as [listed].
+     * [overrideMs] (held to the minute, or as it is where [exact]: a selection's shift keeps each medium's seconds,
+     * [CaptureTimeShift]), or removed for null, on the tier as [listed].
      */
     suspend fun write(
         listed: NodeMetaWrite.State,
         open: (String?) -> JsonObject,
         seal: (JsonObject) -> String?,
         overrideMs: Long?,
+        exact: Boolean = false,
         send: suspend (wrappedMeta: String?, metaRevision: Long) -> NodeMetaWrite.Answer,
     ): Outcome {
-        val wanted = overrideMs?.let(::minute)
+        val wanted = if (exact) overrideMs else overrideMs?.let(::minute)
         return when (val r = ListedTierWrite.write(listed, open, seal, own = ::overrideOf, edit = { corrected(it, wanted) }, send = send)) {
             ListedTierWrite.Result.Done, ListedTierWrite.Result.Unchanged -> Outcome.Done(wanted)
             is ListedTierWrite.Result.Conflict -> Outcome.Conflict(overrideOf(r.raw))
@@ -77,14 +79,14 @@ object CaptureTime {
         }
     }
 
-    /** Medium [item]'s capture time corrected to [epochMs] on the tenant's server. */
-    suspend fun set(tenant: TenantSession, item: MemoryMedia.Item, epochMs: Long): Outcome = onServer(tenant, item, epochMs)
+    /** Medium [item]'s capture time corrected to [epochMs] on the tenant's server (to the minute, or as it is where [exact]). */
+    suspend fun set(tenant: TenantSession, item: MemoryMedia.Item, epochMs: Long, exact: Boolean = false): Outcome = onServer(tenant, item, epochMs, exact)
 
     /** Medium [item]'s correction removed on the tenant's server: its original capture time counts again. */
     suspend fun reset(tenant: TenantSession, item: MemoryMedia.Item): Outcome = onServer(tenant, item, null)
 
-    private suspend fun onServer(tenant: TenantSession, item: MemoryMedia.Item, overrideMs: Long?): Outcome =
-        ListedTierWrite.onServer(tenant, item, Outcome.Failed("node_unreadable")) { listed, open, seal, send -> write(listed, open, seal, overrideMs, send) }
+    private suspend fun onServer(tenant: TenantSession, item: MemoryMedia.Item, overrideMs: Long?, exact: Boolean = false): Outcome =
+        ListedTierWrite.onServer(tenant, item, Outcome.Failed("node_unreadable")) { listed, open, seal, send -> write(listed, open, seal, overrideMs, exact, send) }
 }
 
 /**

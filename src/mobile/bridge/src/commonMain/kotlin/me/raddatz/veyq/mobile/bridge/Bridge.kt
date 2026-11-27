@@ -98,6 +98,7 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import me.raddatz.veyq.mobile.session.addressChange
 import me.raddatz.veyq.mobile.session.erasure
+import me.raddatz.veyq.mobile.session.kitRenewal
 import me.raddatz.veyq.mobile.session.passwordChange
 import me.raddatz.veyq.mobile.session.rotation.keyRotation
 
@@ -220,6 +221,7 @@ internal class AccountFlows(
     val addressChange: () -> me.raddatz.veyq.mobile.session.AddressChange,
     val keyRotation: () -> me.raddatz.veyq.mobile.session.rotation.KeyRotation,
     val erasure: () -> me.raddatz.veyq.mobile.session.AccountErasure,
+    val kitRenewal: () -> me.raddatz.veyq.mobile.session.KitRenewal,
 )
 
 /** One of the account's flows the host opened over the connection [connection]; [open] turns false as it closes. */
@@ -426,6 +428,11 @@ internal class HeldParticipants(val gallery: Long, val model: me.raddatz.veyq.mo
     val open = MutableStateFlow(true)
 }
 
+/** A selection's capture-time shift the host opened ([Call.BucketsShift]) from Contributions view [buckets] of gallery [gallery]. */
+internal class HeldCaptureShift(val gallery: Long, val buckets: Long, val model: me.raddatz.veyq.mobile.memories.SelectionShift) {
+    val open = MutableStateFlow(true)
+}
+
 /** A capture-time editor the host opened ([Call.CaptureTimeOpen]) in lightbox [lightbox] of gallery [gallery]. */
 internal class HeldCaptureTime(val gallery: Long, val lightbox: Long, val model: me.raddatz.veyq.mobile.memories.CaptureTimeEditor) {
     val open = MutableStateFlow(true)
@@ -536,6 +543,8 @@ internal class QueuedDoor(
 /** What the shell's state carries of the writes made offline ([ShellShown.queuedBanner], `queuedHere`, `queuedSaid`). */
 internal class QueuedBeside(
     val banner: Notice? = null, val here: List<me.raddatz.veyq.mobile.offline.QueuedItem> = emptyList(), val said: List<Notice> = emptyList(),
+    /** Beside them, the shell's one-time kit notice ([ShellShown.kitNotice]). */
+    val kitNotice: Notice? = null,
 )
 
 /** An entry editor the host opened on Pot [pot] ([Call.EditorOpen]), typed in with [separator]. */
@@ -756,6 +765,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      */
     private val participantPickers = Registry<HeldParticipants>()
     private val captureTimes = Registry<HeldCaptureTime>()
+    private val captureShifts = Registry<HeldCaptureShift>()
     private val banners = Registry<HeldBanner>()
     private val bannerReaders = Registry<Long>()
     private val persons = Registry<HeldPerson>()
@@ -764,6 +774,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val profiles = Registry<HeldFlow<me.raddatz.veyq.mobile.session.ProfileModel>>()
     private val passwordChanges = Registry<HeldFlow<me.raddatz.veyq.mobile.session.PasswordChange>>()
     private val addressChanges = Registry<HeldFlow<me.raddatz.veyq.mobile.session.AddressChange>>()
+    private val kitRenewals = Registry<HeldFlow<me.raddatz.veyq.mobile.session.KitRenewal>>()
     private val keyRotations = Registry<HeldFlow<me.raddatz.veyq.mobile.session.rotation.KeyRotation>>()
     private val erasures = Registry<HeldFlow<me.raddatz.veyq.mobile.session.AccountErasure>>()
     private val kits = Registry<HeldFlow<me.raddatz.veyq.mobile.account.KitStep>>()
@@ -983,6 +994,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 queuedSaid.value = emptyList()
                 Answer.Done
             }
+            Call.ShellKitNoticeDismiss -> shell?.dismissKitNotice().done()
             Call.HomeGroups -> shell?.current?.let { Answer.Groups(it.lists.groups(it.shell)) } ?: noTenant
             Call.SearchOpen -> tenant.value?.models?.search?.let { make ->
                 val id = ids.incrementAndFetch()
@@ -1495,6 +1507,14 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.BucketsDelete -> buckets[call.buckets]?.let { Answer.BucketsDone(it.model.delete()) } ?: noBuckets
             is Call.BucketsMove -> buckets[call.buckets]?.let { Answer.BucketsDone(it.model.move(call.mediaIds, call.target)) } ?: noBuckets
             is Call.BucketsSeen -> buckets[call.buckets]?.model?.seen().done(Answer.Why.NO_SUCH_BUCKETS)
+            is Call.BucketsToggle -> buckets[call.buckets]?.model?.toggle(call.mediaId).done(Answer.Why.NO_SUCH_BUCKETS)
+            is Call.BucketsClearPicked -> buckets[call.buckets]?.model?.clearPicked().done(Answer.Why.NO_SUCH_BUCKETS)
+            is Call.BucketsShift -> buckets[call.buckets]?.let { held ->
+                val shift = held.model.shift() ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val id = ids.incrementAndFetch()
+                captureShifts.put(id, HeldCaptureShift(held.gallery, call.buckets, shift))
+                Answer.CaptureTimeShiftOpened(id)
+            } ?: noBuckets
             is Call.BucketsLightbox -> buckets[call.buckets]?.let { held ->
                 val page = galleries[held.gallery] ?: return noGallery
                 // one lightbox a gallery, as `Lightbox.Open`'s: the one open before is closed as this one opens
@@ -1504,7 +1524,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 lightboxes.put(id, HeldLightbox(held.gallery, page, box))
                 Answer.LightboxOpened(id)
             } ?: noBuckets
-            is Call.BucketsClose -> buckets.remove(call.buckets)?.let { Answer.Done } ?: noBuckets
+            is Call.BucketsClose -> buckets.remove(call.buckets)?.let {
+                captureShifts.removeIf { it.buckets == call.buckets }.forEach { it.open.value = false }
+                Answer.Done
+            } ?: noBuckets
             is Call.ViewSet -> tenant.value?.models?.shell?.let { s ->
                 s.chooseView(me.raddatz.veyq.mobile.navigation.ViewMode.valueOf(call.mode.name))
                 viewTurned.value++
@@ -1736,6 +1759,14 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 held.model.reset()?.let(::captureSaved) ?: Answer.Refused(Answer.Why.NOT_TAKEN)
             } ?: noCaptureTime
             is Call.CaptureTimeClose -> captureTimes.remove(call.captureTime)?.let { it.open.value = false; Answer.Done } ?: noCaptureTime
+            is Call.CaptureTimeShiftPropose -> captureShifts[call.shift]?.let { held ->
+                if (held.model.propose(call.epochMs)) Answer.Done else Answer.Refused(Answer.Why.NOT_TAKEN)
+            } ?: noCaptureTime
+            is Call.CaptureTimeShiftBack -> captureShifts[call.shift]?.model?.back().done(Answer.Why.NO_SUCH_CAPTURE_TIME)
+            is Call.CaptureTimeShiftOnly -> captureShifts[call.shift]?.let { it.model.onlyThis(); Answer.Done } ?: noCaptureTime
+            is Call.CaptureTimeShiftAll -> captureShifts[call.shift]?.let { it.model.all(); Answer.Done } ?: noCaptureTime
+            is Call.CaptureTimeShiftUndo -> captureShifts[call.shift]?.let { it.model.undo(); Answer.Done } ?: noCaptureTime
+            is Call.CaptureTimeShiftClose -> captureShifts.remove(call.shift)?.let { it.open.value = false; Answer.Done } ?: noCaptureTime
             is Call.BannerPicture -> galleries[call.gallery]?.let { g ->
                 val bytes = g.bannerPicture() ?: return Answer.Refused(Answer.Why.NO_BYTES)
                 payload(bytes)
@@ -1811,6 +1842,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.TrustPerson, Call.TrustWhosWho, is Call.TrustCompareDigits, is Call.TrustCompareScanned, is Call.PasswordChangeOpen,
             is Call.PasswordChangeRun, is Call.PasswordChangeClose, is Call.AddressChangeOpen, is Call.AddressChangeRequest,
             is Call.AddressChangeKit, is Call.AddressChangeClose, is Call.KitSave, is Call.KitConfirm, is Call.KitClose,
+            is Call.KitRenewalOpen, is Call.KitRenew, is Call.KitRenewalClose,
             is Call.KeyRotationOpen, is Call.KeyRotationChooseNewPassword, is Call.KeyRotationProve, is Call.KeyRotationRun, is Call.KeyRotationRefreshLinks,
             is Call.KeyRotationClose, is Call.PasswordChangeCheck, is Call.PasswordChangeEdited, is Call.PasswordChangeUseAnyway,
             is Call.KeyRotationCheck, is Call.KeyRotationEdited, is Call.KeyRotationUseAnyway, is Call.KitRead, is Call.KitClear,
@@ -1824,6 +1856,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     /** The Secret Key control of flow [id] — a password change, an address change or a rotation (ids are unique across them). */
     private fun flowIntake(id: Long): me.raddatz.veyq.mobile.account.KeyIntake? =
         passwordChanges[id]?.model?.intake ?: addressChanges[id]?.model?.intake ?: keyRotations[id]?.model?.intake
+            ?: kitRenewals[id]?.model?.intake
     private val noFlow = Answer.Refused(Answer.Why.NO_SUCH_FLOW)
 
     /**
@@ -2020,6 +2053,20 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.KitOpened(held(kits, HeldFlow(step, held.connection) { it.close() }))
             } ?: noFlow
             is Call.AddressChangeClose -> addressChanges.remove(call.flow)?.close().done(Answer.Why.NO_SUCH_FLOW)
+            is Call.KitRenewalOpen -> {
+                val f = flows(call.connection) ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
+                Answer.FlowOpened(held(kitRenewals, HeldFlow(f.kitRenewal(), call.connection) { it.close() }))
+            }
+            is Call.KitRenew -> kitRenewals[call.flow]?.let { held ->
+                val step = held.model.kit(call.password, call.secretKey) ?: return Answer.Done
+                Answer.KitOpened(held(kits, HeldFlow(step, held.connection) { it.close() }))
+            } ?: noFlow
+            is Call.KitRenewalClose -> kitRenewals.remove(call.flow)?.let { held ->
+                held.close()
+                // Security says which kit the account has now
+                accountPages.values().filter { it.connection == held.connection }.forEach { it.model.refresh() }
+                Answer.Done
+            } ?: noFlow
             // the kit's bytes are the core's alone: written at the path the host's dialog gave, never over the bridge
             is Call.KitSave -> kits[call.kit]?.model?.let { step ->
                 if (step.save(call.path, call.language, call.createdEpochDay)) Answer.Done else Answer.Refused(Answer.Why.NOT_WRITTEN)
@@ -2118,6 +2165,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private fun closeCurationOf(gallery: Long) {
         participantPickers.removeIf { it.gallery == gallery }.forEach { it.open.value = false }
         captureTimes.removeIf { it.gallery == gallery }.forEach { it.open.value = false }
+        captureShifts.removeIf { it.gallery == gallery }.forEach { it.open.value = false }
         banners.removeIf { it.gallery == gallery }.forEach { it.close() }
         bannerReaders.keys().forEach { reader -> if (bannerReaders[reader] == gallery) { bannerReaders.remove(reader); readers.remove(reader) } }
     }
@@ -2851,6 +2899,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         // the tenant's (ADR 0144 decision 8): each watch standing on one delivers null
         participantPickers.removeAll().forEach { it.open.value = false }
         captureTimes.removeAll().forEach { it.open.value = false }
+        captureShifts.removeAll().forEach { it.open.value = false }
         banners.removeAll().forEach { it.close() }
         bannerReaders.removeAll()
         persons.removeAll().forEach { it.open.value = false }
@@ -2886,6 +2935,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         kits.removeAll().forEach { it.close() }
         passwordChanges.removeAll().forEach { it.close() }
         addressChanges.removeAll().forEach { it.close() }
+        kitRenewals.removeAll().forEach { it.close() }
         keyRotations.removeAll().forEach { it.close() }
         erasures.removeAll().forEach { it.close() }
         // the trusted device's links are the tenant's; a new device's (opened before any tenant) stays
@@ -2916,7 +2966,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 val m = open?.models
                 m?.shell?.state?.let { state ->
                     // the writes made offline beside it (ADR 0153 decision 5): the banner's count, the level's, the reconnect's notices
-                    val queued = combine(m.queued?.banner ?: flowOf(null), m.queued?.here ?: flowOf(emptyList()), queuedSaid) { b, h, said -> QueuedBeside(b, h, said) }
+                    val queued = combine(
+                        m.queued?.banner ?: flowOf(null), m.queued?.here ?: flowOf(emptyList()), queuedSaid, m.shell?.kitNotice ?: flowOf(null),
+                    ) { b, h, said, kit -> QueuedBeside(b, h, said, kit) }
                     combine(state, m.pictures, m.picturesRound, hiddenTurned, viewTurned) { s, pictures, round, _, _ -> Triple(s, pictures, round) }
                         .combine(queued) { (s, pictures, round), q -> Update.Shell(s, s?.let { shown(parts, open, it, pictures.keys, round, q) }) }
                 } ?: flowOf(Update.Shell(null))
@@ -2978,6 +3030,17 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Update.CaptureTime(w.captureTime, if (open) CaptureTimeShown(s.atMs, s.corrected, s.originalMs, s.saving, s.said?.let { CurationSaid.valueOf(it.name) }, s.saved) else null)
             }
         } ?: flowOf(Update.CaptureTime(w.captureTime, null))
+        is Watched.CaptureTimeShift -> captureShifts[w.shift]?.let { held ->
+            combine(held.model.state, held.open) { s, open ->
+                Update.CaptureTimeShift(
+                    w.shift,
+                    if (!open) null else CaptureTimeShiftShown(
+                        s.anchorAtMs, s.intro, ShiftStep.valueOf(s.step.name), s.pickedMs, s.all, s.undated, s.progress, s.done, s.refused,
+                        s.undoable, s.closed,
+                    ),
+                )
+            }
+        } ?: flowOf(Update.CaptureTimeShift(w.shift, null))
         is Watched.Banner -> banners[w.banner]?.let { held ->
             combine(held.model.state, held.pick, held.open) { s, pick, open -> Update.Banner(w.banner, if (open) shownBanner(s, pick) else null) }
         } ?: flowOf(Update.Banner(w.banner, null))
@@ -3001,6 +3064,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             ?: flowOf(Update.KeyRotation(w.flow, null))
         is Watched.Erasure -> erasures[w.flow]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.Erasure(w.flow, s.takeIf { open }) } }
             ?: flowOf(Update.Erasure(w.flow, null))
+        is Watched.KitRenewal -> kitRenewals[w.flow]?.let { h ->
+            combine(h.model.state, h.model.intake.state, h.open) { s, k, open -> Update.KitRenewal(w.flow, s.takeIf { open }, k.takeIf { open }) }
+        } ?: flowOf(Update.KitRenewal(w.flow, null))
         is Watched.Kit -> kits[w.kit]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.Kit(w.kit, s.takeIf { open }) } }
             ?: flowOf(Update.Kit(w.kit, null))
         is Watched.Person -> persons[w.person]?.let { held ->
@@ -3133,6 +3199,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             queuedBanner = queued.banner,
             queuedHere = queued.here,
             queuedSaid = queued.said,
+            kitNotice = queued.kitNotice,
             view = open.models.shell?.levelView?.let { ViewModeShown.valueOf(it.name) } ?: ViewModeShown.valueOf(me.raddatz.veyq.mobile.navigation.ViewMode.FIRST.name),
             dropsHere = open.models.shell?.dropLevel(shell) != null,
             level = open.models.shell?.levelPlan(shell)?.let { p ->
@@ -3157,6 +3224,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         rows = s.rows.map { BucketRowShown(it.bucketId, it.label, it.depth, it.mediaCount, it.isPrimary, it.own) },
         selected = s.selected, media = g?.let { page -> s.media.map { galleryRow(page, it) } }.orEmpty(), createsSub = s.createsSub, renames = s.renames,
         moveTargets = s.moveTargets.map { it.bucketId }, loading = s.loading, failed = s.failed, refused = s.refused,
+        picked = s.picked, shifts = s.shifts,
     )
 
     /** An entry editor as the host draws it ([EditorShown]), each field one core function's answer. */
@@ -3218,6 +3286,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         limitUnits = me.raddatz.veyq.mobile.offline.LimitUnit.entries.map { SettingsLimitUnit(it, it.word) },
         // a desktop's page offers no appearance of its own (the system's); the maps' consent where the tenant built them
         sections = s.sections(maps = tenant.value?.models?.shell?.mapsOffered == true, appearance = false),
+        kit = s.kit,
+        kitNews = if (s.kit == me.raddatz.veyq.mobile.account.KitStatus.Standing.OLDER) Notice(me.raddatz.veyq.mobile.account.KitStatus.NEWS) else null,
     )
 
     /** A Pot's settings as the host draws them ([PotSettingsShown]), each field one core function's answer. */
@@ -3835,7 +3905,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 accountFlows = { account, on, open ->
                     AccountFlows(
                         { account.passwordChange() }, { account.addressChange(on ?: account.defaultTenant) },
-                        { account.keyRotation(open = open) }, { account.erasure() },
+                        { account.keyRotation(open = open) }, { account.erasure() }, { account.kitRenewal() },
                     )
                 },
                 squarePicture = squarePicture,

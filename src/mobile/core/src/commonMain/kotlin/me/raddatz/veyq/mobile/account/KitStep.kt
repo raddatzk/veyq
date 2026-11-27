@@ -3,6 +3,7 @@ package me.raddatz.veyq.mobile.account
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import me.raddatz.veyq.mobile.crypto.Primitives
 import me.raddatz.veyq.mobile.words.Msg
@@ -22,6 +23,13 @@ class KitStep internal constructor(
     /** The server's origin, the kit's first address field and its token's `srv`. */
     private val server: String?,
     secretKey: ByteArray,
+    /**
+     * What follows the person's "I saved it" once a file was written, once (ADR 0157 decision 4): the account's kit record
+     * written, whether it was; null where the flow records the kit otherwise (a rotation carries it in its request).
+     */
+    private val kept: (suspend () -> Boolean)? = null,
+    /** Where [kept] runs: the step's own, a test's. */
+    private val scope: kotlinx.coroutines.CoroutineScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default),
 ) {
     private val key: ByteArray = secretKey.copyOf().also { secretKey.fill(0) }
     private var closed = false
@@ -35,6 +43,9 @@ class KitStep internal constructor(
         /** "I saved it" is checked (only once [saved]). */
         val confirmed: Boolean = false,
         @Serializable(with = MsgKey::class) val refusal: Msg? = null,
+        /** The account's kit record after "I saved it": true written, false not ([refusal] then says the kit still
+         *  works, uc.account.renew-emergency-kit E3); null where none is written or not yet. */
+        val recorded: Boolean? = null,
     ) {
         /** The flow may go on past the kit. */
         val ready: Boolean get() = saved && confirmed
@@ -78,7 +89,17 @@ class KitStep internal constructor(
     /** "I saved it": takes only once a file was written. */
     fun confirm(checked: Boolean) {
         _state.value = current.copy(confirmed = checked && current.saved)
+        val record = kept ?: return
+        if (!current.ready || recording) return
+        recording = true
+        // the record goes once the kit is kept, never at render (the web's `onKept`); its key was sealed before the save
+        scope.launch {
+            val written = runCatching { record() }.getOrDefault(false)
+            _state.value = current.copy(recorded = written, refusal = if (written) current.refusal else Msg.KIT_RENEW_NOT_NOTED)
+        }
     }
+
+    private var recording = false
 
     /** The key, for the flow that installs it (the rotation): a copy the caller zeroes. */
     internal fun keyCopy(): ByteArray {

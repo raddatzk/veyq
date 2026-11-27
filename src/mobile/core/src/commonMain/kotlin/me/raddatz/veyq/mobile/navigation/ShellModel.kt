@@ -1,5 +1,7 @@
 package me.raddatz.veyq.mobile.navigation
 
+import kotlinx.coroutines.flow.onStart
+
 import me.raddatz.veyq.mobile.offline.QueuedItem
 import me.raddatz.veyq.mobile.offline.QueuedShown
 import me.raddatz.veyq.mobile.offline.QueuedTray
@@ -378,6 +380,33 @@ class ShellModel(
     val queuedBanner: kotlinx.coroutines.flow.Flow<Notice?>
         get() = tenant.account.outbox?.let { box -> box.changes.map { QueuedShown.banner(box.count()) } }
             ?: kotlinx.coroutines.flow.flowOf(null)
+
+    /**
+     * The one-time "a clearer Emergency Kit exists" notice (ADR 0157 decision 5; the web's `KitRenewalPrompt`): what the
+     * newer kit does better ([me.raddatz.veyq.mobile.account.KitStatus.NEWS]) while the account's last kit is of an older
+     * layout and its notice of this layout was not dismissed on this device ([dismissKitNotice]); null otherwise. It reads
+     * the layout through the account's one read of this unlock, and not at all once dismissed. Online only.
+     */
+    val kitNotice: kotlinx.coroutines.flow.Flow<Notice?>
+        get() {
+            if (kitDismissed.value >= me.raddatz.veyq.mobile.account.KitWriter.LAYOUT) return kotlinx.coroutines.flow.flowOf(null)
+            val status = tenant.account.kitStatus
+            return kotlinx.coroutines.flow.combine(status.state, kitDismissed) { s, dismissed ->
+                me.raddatz.veyq.mobile.account.KitStatus.notice(s, dismissed)
+            }.onStart { runCatching { status.ensure() } }
+        }
+
+    private val kitDismissKey get() = "$KIT_NOTICE_PREFIX${tenant.account.key}"
+    private val kitDismissed = MutableStateFlow(tenant.account.deviceStore.read(kitDismissKey)?.toIntOrNull() ?: 0)
+
+    /**
+     * The notice dismissed ("Not now", or "Go to your kit", which also opens Settings → Security): it never returns on this
+     * device for this account — until a later layout, whose notice is told once more (the layout it spoke of is kept).
+     */
+    fun dismissKitNotice() {
+        tenant.account.deviceStore.write(kitDismissKey, me.raddatz.veyq.mobile.account.KitWriter.LAYOUT.toString())
+        kitDismissed.value = me.raddatz.veyq.mobile.account.KitWriter.LAYOUT
+    }
 
     /** After each reconnect that sent writes made offline: how many went and how many need the person (one notice each). */
     val queuedSent: kotlinx.coroutines.flow.Flow<List<Notice>>
@@ -1285,6 +1314,8 @@ class ShellModel(
         me.raddatz.veyq.mobile.audio.MusicPlayer(newDeck, controls, me.raddatz.veyq.mobile.audio.randomIntOf { tenant.account.suite.p.randomBytes(it) })
 
     companion object {
+        /** The device store's key of the kit notice's dismissal, per account: the layout it spoke of (ADR 0157 decision 5). */
+        const val KIT_NOTICE_PREFIX = "kit-notice:"
         /** The bar's tab that shows the Memories map, no list (`Applications.kt`): a level there offers no view switch. */
         private const val MAP_TAB = "memories.map"
 

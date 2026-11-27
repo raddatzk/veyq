@@ -108,6 +108,9 @@ class AccountSettings<A : Connection, T : Any>(
 
         open suspend fun setBackgroundSync(on: Boolean) {}
 
+        /** Which Emergency Kit the account has (ADR 0157 decision 5, [me.raddatz.veyq.mobile.account.KitStatus]); null: not offered. */
+        open suspend fun kit(): me.raddatz.veyq.mobile.account.KitStatus.Standing? = null
+
         /** Each change of the pins or their fetches: what the section reads anew while it is shown ([followStorage]). */
         open val storageChanges: kotlinx.coroutines.flow.Flow<Unit> get() = kotlinx.coroutines.flow.emptyFlow()
         @PlatformApi
@@ -206,6 +209,13 @@ class AccountSettings<A : Connection, T : Any>(
         val backgroundSync: Boolean? = null,
         /** Why the switch is missing on a phone ([Msg.ACCOUNT_SETTINGS_BACKGROUND_SYNC_MISSING]); null where it shows or nothing is to say. */
         @Serializable(with = MsgKey::class) val backgroundSyncMissing: Msg? = null,
+        /**
+         * Which Emergency Kit the account has, drawn in Security (uc.account.renew-emergency-kit step 2): current, or
+         * [me.raddatz.veyq.mobile.account.KitStatus.Standing.OLDER] — a clearer kit exists, its sentence
+         * [me.raddatz.veyq.mobile.account.KitStatus.NEWS], that the kit the person has keeps working, *Make a new kit*
+         * ([me.raddatz.veyq.mobile.session.KitRenewal]) —, or that it could not be read; null until read.
+         */
+        val kit: me.raddatz.veyq.mobile.account.KitStatus.Standing? = null,
     ) {
         /** Whether "Sign out every other" has anything to end. */
         val hasOthers: Boolean get() = families.orEmpty().any { !it.current }
@@ -441,6 +451,7 @@ class AccountSettings<A : Connection, T : Any>(
         loadStorage()
         attempt { door.email() }.onSuccess { (address, confirmed) -> _state.value = current.copy(email = address, emailConfirmed = confirmed) }
         attempt { door.capabilities() }.onSuccess { _state.value = current.copy(addDevice = DEVICE_LINKING in it) }
+        attempt { door.kit() }.onSuccess { _state.value = current.copy(kit = it) }
         val families = attempt { door.families() }.getOrElse {
             if (current.refusal == null) refuse(Msg.ACCOUNT_SETTINGS_LOAD_FAILED)
             _state.value = current.copy(device = current.device.copy(trust = here.trust()))
@@ -544,6 +555,7 @@ class AccountSettings<A : Connection, T : Any>(
         override suspend fun removeSavedKey(wrap: String) = done { AccountWrapsApi(account.server, account.http).deleteAccountWrap(wrap) }
         override suspend fun capabilities() = account.call { SetupApi(account.server, account.http).getSetupStatus() }.capabilities.map { it.id }.toSet()
         override fun register() = account.register()
+        override suspend fun kit() = account.kitStatus.also { it.ensure() }.current.standing
         override suspend fun storage(): Storage? {
             val o = account.offline ?: return null
             val u = o.usage()

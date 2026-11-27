@@ -148,8 +148,14 @@ class AddressChange(
     internal suspend fun kit(password: String, secretKey: ByteArray): KitStep? = acting.withLock {
         try {
             if (!current.kitOffered) return@withLock null
-            ColdCredential.prove(suite, door.masterKey(), door.keyMaterial(), password, secretKey).fill(0)
-            KitStep(primitives, door.heldEmail(), door.server, secretKey).also { intake.spent() }
+            // the kit's record sealed while the proof holds the Master Key, written once the kit is kept (ADR 0157 decision 4)
+            val mk = ColdCredential.prove(suite, door.masterKey(), door.keyMaterial(), password, secretKey)
+            val record = try {
+                me.raddatz.veyq.mobile.account.KitRecord.seal(suite, mk)
+            } finally {
+                mk.fill(0)
+            }
+            KitStep(primitives, door.heldEmail(), door.server, secretKey, kept = { door.writeKitRecord(record) }).also { intake.spent() }
         } catch (e: ColdCredential.Refused) {
             _state.value = current.copy(refusal = Msg.EMAIL_CHANGE_KIT_REFUSED)
             null

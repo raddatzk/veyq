@@ -37,11 +37,12 @@ import me.raddatz.veyq.mobile.qr.QrMatrix
  */
 object KitWriter {
     /**
-     * The kit layout this writer prints (ADR 0157 decision 1): 1, every kit before ADR 0157 — the web's layout 2 labels
-     * the key "9 blocks in 3 lines", which this page does not yet. A rotation records it in the account's kit record
-     * (`kitRecord`, ADR 0157 decision 4), so the web suggests its clearer kit to an account whose last kit was this one.
+     * The kit layout this writer prints (ADR 0157 decision 1): 2, the web's sheet with the key labelled "9 blocks in 3
+     * lines" (`KitWords.secretKey`); the apps' kits before it were layout 1 and still read (the layout is in no token).
+     * Every flow that makes a kit records it in the account's kit record ([KitRecord], ADR 0157 decision 4), and an
+     * account whose record names an older layout is offered a new kit ([KitStatus]).
      */
-    const val LAYOUT = 1
+    const val LAYOUT = 2
 
     const val PAGE_WIDTH = 595.28
     const val PAGE_HEIGHT = 841.89

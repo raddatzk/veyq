@@ -186,6 +186,18 @@ class MemoriesDispatchTest {
                 return MemoryCreate.Made(NodeAt("s", "c-new", "CHAPTER", name), null)
             }
             override suspend fun cover(nodeId: String): ByteArray? = if (nodeId == "c1") "cover-c1".encodeToByteArray() else null
+            override suspend fun shiftCaptureTime(item: MemoryMedia.Item, overrideMs: Long?): me.raddatz.veyq.mobile.memories.CaptureTime.Outcome {
+                sent += "shift:${item.mediaId}:$overrideMs"
+                items.replaceAll {
+                    if (it.mediaId != item.mediaId) it
+                    else MemoryMedia.Item(
+                        it.scopeId, it.nodeId, it.mediaId, it.original, it.thumbnail, it.preview,
+                        MemoryMedia.Meta(4000, 3000, it.meta?.capturedAt, overrideMs, "exif", null, null, null, null), it.type, it.name, it.ownerKey,
+                        it.blocked, ByteArray(0), metaRevision = it.metaRevision + 1, bucketId = it.bucketId,
+                    )
+                }
+                return me.raddatz.veyq.mobile.memories.CaptureTime.Outcome.Done(overrideMs)
+            }
         }
 
         /** Memories' uploads over the app's queue, each job the core's shape: its tiers prepared ahead, its file read in frames. */
@@ -626,6 +638,30 @@ class MemoriesDispatchTest {
         assertTrue(b1.size < (page.until { u -> (u as Update.Gallery).shown?.rows }).size, "the bucket is fewer than the gallery")
         assertEquals(Answer.Done, b.ask(Call.LightboxClose(l)))
 
+        // a selection's capture-time shift (uc.memory.buckets): two selected, the anchor a, everything by its offset, the Undo
+        val picking = b.watching(Watched.Buckets(id))
+        assertEquals(Answer.Refused(Answer.Why.NOT_OFFERED), b.ask(Call.BucketsShift(id)), "nothing selected: nothing to shift")
+        assertEquals(Answer.Done, b.ask(Call.BucketsToggle(id, "a")))
+        assertEquals(Answer.Done, b.ask(Call.BucketsToggle(id, "clip")))
+        assertEquals(listOf("a", "clip"), picking.until { u -> (u as Update.Buckets).shown?.takeIf { it.shifts } }.picked)
+        val shiftId = (b.ask(Call.BucketsShift(id)) as Answer.CaptureTimeShiftOpened).shift
+        val shift = b.watching(Watched.CaptureTimeShift(shiftId))
+        assertEquals(30_000L, shift.until { u -> (u as Update.CaptureTimeShift).shown }.anchorAtMs)
+        assertEquals(Answer.Refused(Answer.Why.NOT_TAKEN), b.ask(Call.CaptureTimeShiftPropose(shiftId, 30_000)), "nothing moved")
+        assertEquals(Answer.Done, b.ask(Call.CaptureTimeShiftPropose(shiftId, 3_630_000)))
+        assertEquals(ShiftStep.CHOOSE, shift.until { u -> (u as Update.CaptureTimeShift).shown?.takeIf { it.all != null } }.step)
+        assertEquals(Answer.Done, b.ask(Call.CaptureTimeShiftAll(shiftId)))
+        val done = shift.until { u -> (u as Update.CaptureTimeShift).shown?.takeIf { it.step == ShiftStep.DONE && it.undoable } }
+        assertEquals(Notice(Msg.MEMORY_SHIFT_DONE, 2), done.done)
+        assertEquals(setOf("shift:a:3630000", "shift:clip:3620000"), played.sent.filter { it.startsWith("shift:") }.toSet(), "each by the offset, +1 h")
+        assertEquals(Answer.Done, b.ask(Call.CaptureTimeShiftUndo(shiftId)))
+        assertEquals(setOf("shift:a:null", "shift:clip:null"), played.sent.filter { it.startsWith("shift:") }.drop(2).toSet(), "back to none")
+        assertEquals(Answer.Done, b.ask(Call.BucketsClearPicked(id)))
+        // a second one, to be the tenant's: gone with it
+        b.ask(Call.BucketsToggle(id, "a")); b.ask(Call.BucketsToggle(id, "clip"))
+        val second = (b.ask(Call.BucketsShift(id)) as Answer.CaptureTimeShiftOpened).shift
+        assertEquals(Answer.Done, b.ask(Call.BucketsClearPicked(id)))
+
         // a move answers once the moved medium has left the chosen bucket (#990): the state after it says so
         val watched = b.watching(Watched.Buckets(id))
         assertEquals(Answer.BucketsDone(me.raddatz.veyq.mobile.memories.Buckets.Outcome.DONE), b.ask(Call.BucketsMove(id, listOf("a"), "b2")))
@@ -652,6 +688,7 @@ class MemoriesDispatchTest {
         // the view is the tenant's: gone with it
         assertEquals(Answer.Done, b.ask(Call.SessionSignOut("a.example#u1")))
         assertEquals(Answer.Refused(Answer.Why.NO_SUCH_BUCKETS), b.ask(Call.BucketsCreate(id, "After")), "a Contributions view outlived its tenant")
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_CAPTURE_TIME), b.ask(Call.CaptureTimeShiftAll(second)), "a shift outlived its tenant")
         assertEquals(listOf("Sunsets"), buckets.created)
     }
 }

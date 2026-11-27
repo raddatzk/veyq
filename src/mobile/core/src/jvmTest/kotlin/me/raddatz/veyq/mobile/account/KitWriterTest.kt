@@ -80,6 +80,10 @@ class KitWriterTest {
                 "Help: veyq.app/account/forgot-password/", "Confidential · veyq Emergency Kit")) {
                 assertTrue(shown in text, "not on the page: $shown")
             }
+            // layout 2 (ADR 0157): the key's three lines under a label that says they are one key — a kit's first line alone
+            // was once typed as the whole key; the web's kit says the same (kit.pdfSecretKey)
+            assertEquals(2, KitWriter.LAYOUT)
+            assertTrue("SECRET KEY · 9 BLOCKS IN 3 LINES" in text, "the key's label is not layout 2's")
             // the Secret Key, three lines of three groups
             val groups = SecretKeyText.format(p, key()).split('-')
             for (line in 0 until 3) assertTrue(groups.subList(line * 3, line * 3 + 3).joinToString("-") in text, "key line $line")
@@ -91,7 +95,7 @@ class KitWriterTest {
         val bytes = KitWriter.pdf(p, EMAIL, key(), SERVER, KitWords.of("de-DE"), DAY)
         Loader.loadPDF(bytes).use { doc ->
             val text = PDFTextStripper().getText(doc)
-            for (shown in listOf("Notfall-Kit", "Erstellt am 18. November 2026", "„Anmelden“", "Öffne veyq auf dem neuen Gerät",
+            for (shown in listOf("Notfall-Kit", "Erstellt am 18. November 2026", "SECRET KEY · 9 BLÖCKE IN 3 ZEILEN", "„Anmelden“", "Öffne veyq auf dem neuen Gerät",
                 "Hilfe: veyq.app/de/account/forgot-password/", "Könnte es jemand anderes haben?")) {
                 assertTrue(shown in text, "not on the page: $shown")
             }

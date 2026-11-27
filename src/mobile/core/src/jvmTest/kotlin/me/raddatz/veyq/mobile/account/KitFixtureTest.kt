@@ -43,6 +43,15 @@ class KitFixtureTest : KitFixtureCases() {
         found.kit.wipe()
     }
 
+    /** The earlier layout's kit, its token blanked out: read through the QR it drew, as a printed one is. */
+    @Test
+    fun theKitOfTheEarlierLayoutIsReadThroughTheQrItDrew() = runTest {
+        val bytes = withoutToken(fixture("kit-app-layout1.pdf"))
+        val found = assertNotNull(KitImport.read(testPrimitives, bytes, PdfBoxPictures(bytes)), "kit-app-layout1.pdf: no kit read from its page")
+        assertEquals(KitImportTest.KEY_HEX, hex(found.kit.secretKey))
+        found.kit.wipe()
+    }
+
     /** [bytes] with every `veyqkit:` token's letters overwritten by `x` — the file's length and offsets unchanged. */
     private fun withoutToken(bytes: ByteArray): ByteArray {
         val out = bytes.copyOf()

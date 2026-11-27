@@ -61,6 +61,8 @@ internal class AccountCredentialDoor(
 
     override val addressTaken: Boolean get() = account.readdressedFrom != null
 
+    override suspend fun writeKitRecord(sealed: String): Boolean = account.writeKitRecord(sealed)
+
     override suspend fun heldEmail(): String = account.call { AccountEmailApi(account.server, account.http).getAccountEmail() }.email
 
     override suspend fun erasurePreview(): Pair<FlowReply, AccountErasurePreview?> {

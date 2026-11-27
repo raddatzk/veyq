@@ -2,7 +2,6 @@ package me.raddatz.veyq.mobile.session.rotation
 
 import kotlinx.coroutines.CancellationException
 import me.raddatz.veyq.mobile.AppKinds
-import me.raddatz.veyq.mobile.account.KitWriter
 import me.raddatz.veyq.mobile.api.apis.AccountApi
 import me.raddatz.veyq.mobile.api.apis.AccountRotationApi
 import me.raddatz.veyq.mobile.api.apis.FavoritesApi
@@ -37,7 +36,6 @@ import me.raddatz.veyq.mobile.crypto.b64
 import me.raddatz.veyq.mobile.crypto.concat
 import me.raddatz.veyq.mobile.crypto.lp
 import me.raddatz.veyq.mobile.crypto.unb64
-import me.raddatz.veyq.mobile.crypto.utf8
 import me.raddatz.veyq.mobile.session.ColdCredential
 import me.raddatz.veyq.mobile.session.GrantOutcome
 import me.raddatz.veyq.mobile.session.TrustStateRefused
@@ -225,7 +223,7 @@ internal class AccountRotation(
                     identityPins = pins,
                     deviceRegister = register,
                     // the kit this ceremony prints, recorded under MK' as the web's rotation does (ADR 0157 decision 4)
-                    kitRecord = b64(suite.seal(Context("kit-record"), newMk, utf8("{\"layout\":${KitWriter.LAYOUT}}"))),
+                    kitRecord = me.raddatz.veyq.mobile.account.KitRecord.seal(suite, newMk),
                     keyChainStep = KeyChainStepSignatures(b64(stepIdentitySignature), b64(stepProofSignature)),
                     stageId = stage.id,
                     stagedGrantsDigest = b64(digest),
@@ -535,6 +533,8 @@ internal class AccountRotation(
         val material = runCatching { account.keyMaterialNow() }.getOrNull()
             ?: AccountKeyMaterial(account.userId, AccountKeyMaterial.SuiteId.v1, emptyList(), b64(suite.seal(Context("identity-priv"), newMk, concat(lp(identity.kemSeed), lp(identity.signSeed)))))
         account.swapKeys(newMk, identity, material)
+        // the kit this ceremony printed is the account's record now (ADR 0157 decision 4): no clearer kit to suggest
+        account.kitStatus.remember()
         runCatching { oldMarks.carryInto(account.trustMarks, pinsRevision + 1, registerRevision + 1) }
         runCatching { resealFavorites(oldMk, newMk, scopeIds) }
         runCatching { AppKinds.masterKeyRotated(account, oldMk, newMk) }

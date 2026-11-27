@@ -65,6 +65,13 @@ class Contributions(private val gallery: GalleryModel, private val door: Door) :
         val failed: Boolean = false,
         /** The last curation refused or failed; null once seen. */
         val refused: Buckets.Outcome? = null,
+        /**
+         * The media selected in the chosen bucket, in the order they were selected ([toggle]): the first with a capture
+         * time is a shift's anchor ([shift]). Cleared by another bucket's choice; kept on what the bucket still holds.
+         */
+        val picked: List<String> = emptyList(),
+        /** "Shift capture time" is offered for [picked] (two or more, one dated, the meta writable, online). */
+        val shifts: Boolean = false,
     ) {
         val row: Buckets.Row? get() = rows.firstOrNull { it.bucketId == selected }
         /** Whether a sub-bucket may be made under the chosen bucket: a primary (the server nests one level only). */
@@ -97,8 +104,33 @@ class Contributions(private val gallery: GalleryModel, private val door: Door) :
         val rows = Buckets.rows(l, names, door::person, Buckets.mediaOf(Buckets.SELF, items.map { it.item }, door.self).size, door.self)
         _state.update { s ->
             val keep = s.selected?.takeIf { id -> rows.any { it.bucketId == id } } ?: Buckets.preferred(rows)
-            s.copy(rows = rows, selected = keep, media = mediaOf(keep, gallery.current.rows), loading = false, failed = false)
+            val media = mediaOf(keep, gallery.current.rows)
+            val picked = if (keep == s.selected) s.picked.filter { id -> media.any { it.mediaId == id } } else emptyList()
+            s.copy(rows = rows, selected = keep, media = media, loading = false, failed = false, picked = picked, shifts = shifts(picked))
         }
+    }
+
+    // ---- a selection's capture-time shift (uc.memory.buckets § Correct a selection's capture time) ----
+
+    private fun shifts(picked: List<String>) = picked.size >= 2 && gallery.selectionShift(picked) != null
+
+    /** Medium [mediaId] of the chosen bucket selected, or no longer. */
+    fun toggle(mediaId: String) = _state.update { s ->
+        if (s.media.none { it.mediaId == mediaId }) return@update s
+        val picked = if (mediaId in s.picked) s.picked - mediaId else s.picked + mediaId
+        s.copy(picked = picked, shifts = shifts(picked))
+    }
+
+    /** The selection given up. */
+    fun clearPicked() = _state.update { it.copy(picked = emptyList(), shifts = false) }
+
+    /**
+     * The capture-time shift of the selection ([SelectionShift]), where [State.shifts]; null otherwise. Its run reads the
+     * gallery anew and then the buckets; the selection stays, so an Undo or a second shift starts from it.
+     */
+    fun shift(): SelectionShift? {
+        if (!current.shifts) return null
+        return gallery.selectionShift(current.picked)?.also { it.afterRun = { read() } }
     }
 
     /** Bucket [bucketId]'s media among the gallery's [rows], in their order. */
@@ -110,7 +142,10 @@ class Contributions(private val gallery: GalleryModel, private val door: Door) :
     }
 
     /** The picker's choice: the grid narrows to that bucket's media. */
-    fun pick(bucketId: String) = _state.update { s -> if (s.rows.none { it.bucketId == bucketId }) s else s.copy(selected = bucketId, media = mediaOf(bucketId, gallery.current.rows)) }
+    fun pick(bucketId: String) = _state.update { s ->
+        if (s.rows.none { it.bucketId == bucketId }) s
+        else s.copy(selected = bucketId, media = mediaOf(bucketId, gallery.current.rows), picked = if (bucketId == s.selected) s.picked else emptyList(), shifts = if (bucketId == s.selected) s.shifts else false)
+    }
 
     /**
      * The lightbox opened on medium [mediaId] over the chosen bucket's media (the web's `MemoryBuckets.vue` pages the

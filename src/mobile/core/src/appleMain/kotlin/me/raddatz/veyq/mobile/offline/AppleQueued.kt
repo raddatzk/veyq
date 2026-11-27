@@ -23,7 +23,7 @@ import me.raddatz.veyq.mobile.words.Notice
  * until the app said them ([saidSeen]); [saveCopy] writes a refused write's file into the path the save panel gave
  * (core's [FileSink], which leaves nothing there when it did not finish). [close] with the shell.
  */
-class AppleQueued(shell: ShellModel) {
+class AppleQueued(private val shell: ShellModel) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     /** The tray's own model: `ask`, `discard`, `opens`, `copyName`. */
@@ -34,6 +34,12 @@ class AppleQueued(shell: ShellModel) {
 
     /** The banner under the offline one ([ShellModel.queuedBanner]); null while nothing waits. */
     val banner: StateFlow<Notice?> = shell.queuedBanner.stateIn(scope, SharingStarted.Eagerly, null)
+
+    /** Beside the banners, the one-time "a clearer Emergency Kit exists" notice ([ShellModel.kitNotice], ADR 0157). */
+    val kitNotice: StateFlow<Notice?> = shell.kitNotice.stateIn(scope, SharingStarted.Eagerly, null)
+
+    /** The kit notice dismissed ([ShellModel.dismissKitNotice]). */
+    fun dismissKitNotice() = shell.dismissKitNotice()
 
     /** The level shown's writes not sent yet ([ShellModel.queuedHere]). */
     val here: StateFlow<List<QueuedItem>> = shell.queuedHere.stateIn(scope, SharingStarted.Eagerly, emptyList())

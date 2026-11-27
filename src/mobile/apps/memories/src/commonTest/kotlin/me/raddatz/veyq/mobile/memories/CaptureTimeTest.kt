@@ -51,7 +51,7 @@ class CaptureTimeTest {
     }
 
     private suspend fun write(listed: String?, overrideMs: Long?, sent: Sent, revision: Long = 4) =
-        CaptureTime.write(NodeMetaWrite.State(listed?.let(::sealTier), revision), open, seal, overrideMs, sent::send)
+        CaptureTime.write(NodeMetaWrite.State(listed?.let(::sealTier), revision), open, seal, overrideMs, send = sent::send)
 
     @Test
     fun aCorrectionIsSetToTheMinuteBesideTheOriginalEveryOtherFieldInItsPlace() = runTest {
@@ -118,7 +118,7 @@ class CaptureTimeTest {
     @Test
     fun aTierThatDoesNotOpenIsNeverRebuilt() = runTest {
         val sent = Sent()
-        val out = CaptureTime.write(NodeMetaWrite.State("bm90IGEgdGllcg==", 1), open, seal, 1L, sent::send)
+        val out = CaptureTime.write(NodeMetaWrite.State("bm90IGEgdGllcg==", 1), open, seal, 1L, send = sent::send)
         assertEquals(CaptureTime.Outcome.Unreadable, out)
         assertTrue(sent.tiers.isEmpty())
     }

@@ -424,8 +424,8 @@
   },
   "secret_key_typo": {
     "note": "Under every Secret Key field while the typed key is 54 symbols whose check disagrees (KeyIntake.problem TYPO): the web's unlock.secretKeyTypo verbatim.",
-    "en": "This Secret Key has a typo. Compare it with your Emergency Kit, group by group.",
-    "de": "In diesem Secret Key steckt ein Tippfehler. Vergleiche ihn Gruppe für Gruppe mit deinem Notfall-Kit."
+    "en": "This Secret Key has a typo. Compare it with your Emergency Kit, block by block.",
+    "de": "In diesem Secret Key steckt ein Tippfehler. Vergleiche ihn Block für Block mit deinem Notfall-Kit."
   },
   "signin_error_no_tenant": {
     "en": "This server has no space at this address.",
@@ -510,10 +510,86 @@
     "core_text": true
   },
   "kit_pdf_secret_key": {
-    "en": "Secret Key",
-    "de": "Secret Key",
-    "note": "the printed Emergency Kit (the core writes the PDF): the web's kit.pdfSecretKey verbatim",
+    "en": "Secret Key · 9 blocks in 3 lines",
+    "de": "Secret Key · 9 Blöcke in 3 Zeilen",
+    "note": "the printed Emergency Kit (the core writes the PDF, layout 2, ADR 0157): the web's kit.pdfSecretKey verbatim, the label over the key's three lines",
     "core_text": true
+  },
+  "kit_layout_news_2": {
+    "note": "what kit layout 2 does better (ADR 0157 decision 2): said wherever a clearer kit is suggested",
+    "en": "The new kit labels your Secret Key “9 blocks in 3 lines”, so nobody types the first line alone.",
+    "de": "Im neuen Kit steht bei deinem Secret Key „9 Blöcke in 3 Zeilen“, damit niemand nur die erste Zeile eintippt."
+  },
+  "kit_status_title": {
+    "note": "Settings → Security: which kit the account last made (uc.account.renew-emergency-kit)",
+    "en": "Emergency Kit",
+    "de": "Notfall-Kit"
+  },
+  "kit_status_sub": {
+    "en": "Together with your password, it gets you back into your account.",
+    "de": "Zusammen mit deinem Passwort bringt es dich zurück in dein Konto."
+  },
+  "kit_status_current": {
+    "en": "Your Emergency Kit is current.",
+    "de": "Dein Notfall-Kit ist aktuell."
+  },
+  "kit_status_older": {
+    "en": "A clearer Emergency Kit exists.",
+    "de": "Es gibt ein übersichtlicheres Notfall-Kit."
+  },
+  "kit_status_keeps_working": {
+    "en": "The kit you have keeps working: your Secret Key stays the same.",
+    "de": "Dein bisheriges Kit funktioniert weiter: Dein Secret Key bleibt derselbe."
+  },
+  "kit_status_make": {
+    "en": "Make a new kit",
+    "de": "Neues Kit erstellen",
+    "apple_en": "Make a New Kit"
+  },
+  "kit_status_unreadable": {
+    "en": "Which kit you have could not be read just now. Try again later.",
+    "de": "Welches Kit du hast, ließ sich gerade nicht lesen. Versuch es später nochmal."
+  },
+  "kit_renew_title": {
+    "en": "Make a new Emergency Kit",
+    "de": "Neues Notfall-Kit erstellen",
+    "apple_en": "Make a New Emergency Kit"
+  },
+  "kit_renew_sub": {
+    "en": "Enter your password and your Secret Key – type it, or upload or scan your kit. The new kit carries the same Secret Key.",
+    "de": "Gib dein Passwort und deinen Secret Key ein – tippe ihn ein, lade dein Kit hoch oder scanne es. Das neue Kit trägt denselben Secret Key."
+  },
+  "kit_renew_check": {
+    "en": "Check and make the kit",
+    "de": "Prüfen und Kit erstellen",
+    "apple_en": "Check and Make the Kit"
+  },
+  "kit_renew_refused": {
+    "en": "That password or Secret Key didn’t match, so no kit was made.",
+    "de": "Passwort oder Secret Key passen nicht, deshalb wurde kein Kit erstellt."
+  },
+  "kit_renew_failed": {
+    "en": "The check didn’t go through, so no kit was made. Check your connection and try again.",
+    "de": "Die Prüfung hat nicht geklappt, deshalb wurde kein Kit erstellt. Prüfe deine Verbindung und versuche es erneut."
+  },
+  "kit_renew_not_noted": {
+    "note": "a kit saved and kept whose record did not write (uc.account.renew-emergency-kit E3); also after an address change's kit",
+    "en": "Your new kit is saved and works. veyq could not note that you made it, so it may suggest a new kit again – making one again only updates that.",
+    "de": "Dein neues Kit ist gespeichert und funktioniert. veyq konnte sich nicht merken, dass du es erstellt hast, und schlägt vielleicht wieder ein neues vor – ein erneutes Erstellen holt nur das nach."
+  },
+  "kit_notice_title": {
+    "note": "the shell's one-time notice (ADR 0157 decision 5)",
+    "en": "A clearer Emergency Kit exists",
+    "de": "Es gibt ein übersichtlicheres Notfall-Kit"
+  },
+  "kit_notice_open": {
+    "en": "Go to your kit",
+    "de": "Zum Notfall-Kit",
+    "apple_en": "Go to Your Kit"
+  },
+  "kit_notice_dismiss": {
+    "en": "Not now",
+    "de": "Jetzt nicht"
   },
   "kit_pdf_where": {
     "en": "Where you sign in",
@@ -4040,6 +4116,85 @@
   "memory_refused_failed": {
     "en": "Please try again.",
     "de": "Bitte versuche es erneut."
+  },
+  "memory_refused_changed": {
+    "en": "Someone else changed its capture time meanwhile.",
+    "de": "Jemand anderes hat die Aufnahmezeit inzwischen geändert."
+  },
+  "memory_refused_unreadable": {
+    "en": "Its details can’t be opened, so they can’t be changed.",
+    "de": "Die Angaben lassen sich nicht öffnen und daher nicht ändern."
+  },
+  "memory_shift_action": {
+    "note": "a Contributions selection's action and its dialog's title (uc.memory.buckets § Correct a selection's capture time)",
+    "en": "Shift capture time",
+    "de": "Aufnahmezeit verschieben",
+    "apple_en": "Shift Capture Time"
+  },
+  "memory_shift_intro": {
+    "note": "the shift dialog's first line: {1} how many others are selected, {2} the anchor's name (the first selected medium with a capture time)",
+    "en": {
+      "one": "Set the right time of “{2}”. The other one follows by the same offset.",
+      "other": "Set the right time of “{2}”. The other {1:int} follow by the same offset."
+    },
+    "de": {
+      "one": "Stell die richtige Zeit von „{2}“ ein. Das andere folgt um denselben Versatz.",
+      "other": "Stell die richtige Zeit von „{2}“ ein. Die anderen {1:int} folgen um denselben Versatz."
+    }
+  },
+  "memory_shift_next": {
+    "note": "the shift dialog's step from the picked time to the choice",
+    "en": "Continue",
+    "de": "Weiter"
+  },
+  "memory_shift_only_this": {
+    "en": "Only this one",
+    "de": "Nur dieses"
+  },
+  "memory_shift_all": {
+    "note": "{2} the offset, written out (+1 h 12 min)",
+    "en": "All {1:int}, shifted by {2}",
+    "de": "Alle {1:int}, um {2} verschoben"
+  },
+  "memory_shift_undated": {
+    "en": {
+      "one": "{1:int} of them has no capture time and stays as it is.",
+      "other": "{1:int} of them have no capture time and stay as they are."
+    },
+    "de": {
+      "one": "{1:int} davon hat keine Aufnahmezeit und bleibt, wie es ist.",
+      "other": "{1:int} davon haben keine Aufnahmezeit und bleiben, wie sie sind."
+    }
+  },
+  "memory_shift_progress": {
+    "en": "Shifting {1:int} of {2:int}…",
+    "de": "Wird verschoben: {1:int} von {2:int} …"
+  },
+  "memory_shift_days": {
+    "en": "{1:int} d",
+    "de": "{1:int} T."
+  },
+  "memory_shift_hours": {
+    "en": "{1:int} h",
+    "de": "{1:int} Std."
+  },
+  "memory_shift_minutes": {
+    "en": "{1:int} min",
+    "de": "{1:int} Min."
+  },
+  "memory_shift_done": {
+    "en": {
+      "one": "Capture time shifted for {1:int} item",
+      "other": "Capture time shifted for {1:int} items"
+    },
+    "de": {
+      "one": "Aufnahmezeit bei {1:int} Medium verschoben",
+      "other": "Aufnahmezeit bei {1:int} Medien verschoben"
+    }
+  },
+  "memory_shift_refused": {
+    "en": "Not shifted: {1}. {2}",
+    "de": "Nicht verschoben: {1}. {2}"
   },
   "memory_unnamed": {
     "en": "Item {1:int}",

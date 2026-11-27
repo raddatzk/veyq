@@ -245,6 +245,9 @@ fun ShellModel.galleryModel(
                 else me.raddatz.veyq.mobile.memories.CaptureTime.Outcome.Failed("no_room")
             } else if (overrideMs == null) me.raddatz.veyq.mobile.memories.CaptureTime.reset(tenant, item)
             else me.raddatz.veyq.mobile.memories.CaptureTime.set(tenant, item, overrideMs)
+        override suspend fun shiftCaptureTime(item: me.raddatz.veyq.mobile.memories.MemoryMedia.Item, overrideMs: Long?) =
+            if (overrideMs == null) me.raddatz.veyq.mobile.memories.CaptureTime.reset(tenant, item)
+            else me.raddatz.veyq.mobile.memories.CaptureTime.set(tenant, item, overrideMs, exact = true)
         override suspend fun bannerPicture() =
             tenant.node(ref.scopeId, ref.nodeId)?.let { me.raddatz.veyq.mobile.memories.banner.Banner.picture(tenant, it) }
         override suspend fun bannerReader() =

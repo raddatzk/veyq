@@ -73,6 +73,10 @@ internal class PlayedCredentials(
     override suspend fun holdsModerationKey() = moderator
     override suspend fun erase(body: EraseOwnAccountRequest): FlowReply = answer.also { erasures += body }
     override suspend fun erased() { erasedCalls++ }
+    /** The kit records written (ADR 0157 decision 4) and whether the played server takes them. */
+    val kitRecords = mutableListOf<String>()
+    var recordTaken = true
+    override suspend fun writeKitRecord(sealed: String): Boolean = recordTaken.also { kitRecords += sealed }
 
     /** The auth key's public half of [pw] under [address]'s salt, as the server would hold it. */
     fun authPublic(pw: String, address: String = email): ByteArray {

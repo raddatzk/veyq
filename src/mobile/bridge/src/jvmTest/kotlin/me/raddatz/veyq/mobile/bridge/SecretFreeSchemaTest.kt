@@ -48,6 +48,8 @@ class SecretFreeSchemaTest {
         "AddressChange.Request.secretKey" to "the Secret Key the person typed to change the address, on its way to the core's cold proof",
         "AddressChange.Kit.password" to "the password the person typed for a new kit, on its way to the core's cold proof",
         "AddressChange.Kit.secretKey" to "the Secret Key the person typed for a new kit, on its way to the core, which writes it into the file chosen",
+        "Kit.Renew.password" to "the password the person typed for a clearer kit, on its way to the core's cold proof",
+        "Kit.Renew.secretKey" to "the Secret Key the person typed for a clearer kit, on its way to the core, which writes it into the file chosen",
         "KeyRotation.Prove.password" to "the password the person typed at the rotation's gate, on its way to the core's cold proof",
         "KeyRotation.Prove.secretKey" to "the Secret Key the person typed at the rotation's gate, on its way to the core's cold proof",
         "KeyRotation.Prove.newPassword" to "the new password the person chose to install with the new keys, on its way to the core",
@@ -216,6 +218,9 @@ class SecretFreeSchemaTest {
         )
         assertEquals(listOf("userId", "name", "ticked", "togglable"), of("MemberShown"))
         assertEquals(listOf("atMs", "corrected", "originalMs", "saving", "said", "saved"), of("CaptureTimeShown"))
+        assertEquals(
+            listOf("anchorAtMs", "intro", "step", "pickedMs", "all", "undated", "progress", "done", "refused", "undoable", "closed"), of("CaptureTimeShiftShown"),
+        )
         assertEquals(listOf("hasBanner", "picking", "picked", "saving", "progress", "said", "done", "canSave", "canRemove", "tooLargeBound"), of("BannerEditorShown"))
         assertEquals(listOf("medium", "mediaType", "pick"), of("BannerPickedShown"), "a picked file says more than its medium and type: its path echoed?")
         assertEquals(listOf("width", "height", "wide", "surroundWidth", "surroundHeight"), of("BannerFramed"))
@@ -245,7 +250,7 @@ class SecretFreeSchemaTest {
         )
         assertEquals(listOf("offered", "mode", "modeOffered", "chips", "text", "suggestions", "shown", "total"), of("FilterShown"))
         assertEquals(listOf("chip", "label", "rest"), of("ChipShown"))
-        assertEquals(listOf("rows", "selected", "media", "createsSub", "renames", "moveTargets", "loading", "failed", "refused"), of("BucketsShown"))
+        assertEquals(listOf("rows", "selected", "media", "createsSub", "renames", "moveTargets", "loading", "failed", "refused", "picked", "shifts"), of("BucketsShown"))
         assertEquals(listOf("bucketId", "label", "depth", "mediaCount", "isPrimary", "own"), of("BucketRowShown"))
         assertEquals(listOf("x", "y", "size"), of("TileFrame"))
     }

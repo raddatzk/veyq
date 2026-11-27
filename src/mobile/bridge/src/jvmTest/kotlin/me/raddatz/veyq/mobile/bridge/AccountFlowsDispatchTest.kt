@@ -29,6 +29,7 @@ import me.raddatz.veyq.mobile.navigation.TenantRef
 import me.raddatz.veyq.mobile.session.AccountErasure
 import me.raddatz.veyq.mobile.session.AccountSettings
 import me.raddatz.veyq.mobile.session.AddressChange
+import me.raddatz.veyq.mobile.session.KitRenewal
 import me.raddatz.veyq.mobile.session.ColdCredential
 import me.raddatz.veyq.mobile.session.CredentialDoor
 import me.raddatz.veyq.mobile.session.FlowReply
@@ -113,6 +114,8 @@ class AccountFlowsDispatchTest {
         /** Whether the played sign-in took a new address: the address flow offers the kit only then (inbox #1010). */
         var taken = false
         override val addressTaken get() = taken
+        val kitRecords = java.util.concurrent.CopyOnWriteArrayList<String>()
+        override suspend fun writeKitRecord(sealed: String): Boolean = kitRecords.add(sealed)
         override suspend fun erasurePreview() = FlowReply(200) to AccountErasurePreview(listOf(ErasureTenant("ta", "A", emptyList())))
         override suspend fun memberNames(tenantId: String, userIds: List<String>) = emptyMap<String, String>()
         override suspend fun holdsModerationKey() = false
@@ -167,7 +170,7 @@ class AccountFlowsDispatchTest {
             accountFlows = { _, _, _ ->
                 AccountFlows(
                     { PasswordChange(played, p, breach()) }, { AddressChange(played, p) },
-                    { KeyRotation(engine, p, played.email, played.server, breach()) }, { AccountErasure(played, p) },
+                    { KeyRotation(engine, p, played.email, played.server, breach()) }, { AccountErasure(played, p) }, { KitRenewal(played, p) },
                 )
             },
         ) { _ ->
@@ -229,6 +232,22 @@ class AccountFlowsDispatchTest {
         assertTrue(Files.readAllBytes(path).decodeToString(0, 5) == "%PDF-", "the kit was not written where the dialog said")
         assertEquals(Answer.Done, b.ask(Call.KitConfirm(kit, true)))
         kitWatch.until { u -> (u as Update.Kit).shown?.takeIf { it.saved && it.confirmed } }
+        kitWatch.until { u -> (u as Update.Kit).shown?.takeIf { it.recorded == true } }
+        assertEquals(1, played.kitRecords.size, "the address's kit was not recorded once kept (ADR 0157 decision 4)")
+
+        // a clearer kit (ADR 0157 decision 6): a wrong key refused, then the kit, recorded once kept
+        val renew = (b.ask(Call.KitRenewalOpen(connection)) as Answer.FlowOpened).flow
+        val renewWatch = b.watching(Watched.KitRenewal(renew))
+        assertEquals(Answer.Done, b.ask(Call.KitRenew(renew, played.password, "0C5126"), kotlin.time.Duration.parse("60s")))
+        renewWatch.until(kotlin.time.Duration.parse("60s")) { u -> (u as Update.KitRenewal).shown?.takeIf { it.refusal != null } }
+        val renewed = (b.ask(Call.KitRenew(renew, played.password, played.typedKey()), kotlin.time.Duration.parse("60s")) as Answer.KitOpened).kit
+        val renewedWatch = b.watching(Watched.Kit(renewed))
+        assertEquals(Answer.Done, b.ask(Call.KitSave(renewed, dir.resolve("renewed.pdf").toString(), "en", 20_775)))
+        assertEquals(Answer.Done, b.ask(Call.KitConfirm(renewed, true)))
+        renewedWatch.until { u -> (u as Update.Kit).shown?.takeIf { it.recorded == true } }
+        assertEquals(2, played.kitRecords.size)
+        assertEquals(Answer.Done, b.ask(Call.KitRenewalClose(renew)))
+        renewWatch.until { u -> (u as Update.KitRenewal).takeIf { it.shown == null } }
 
         // the rotation: the gate, its kit step, no publish before it is ready, then done
         val rot = (b.ask(Call.KeyRotationOpen(connection)) as Answer.FlowOpened).flow

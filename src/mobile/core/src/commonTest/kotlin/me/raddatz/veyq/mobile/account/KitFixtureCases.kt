@@ -42,7 +42,7 @@ abstract class KitFixtureCases {
     }
 
     /**
-     * `kit-app.pdf`, the kit the core's [KitWriter] wrote: read by its raw token with no page drawn, its first address
+     * `kit-app.pdf`, the kit the core's [KitWriter] writes (layout 2): read by its raw token with no page drawn, its first address
      * field the server's host — and, on every platform the cases run on, written again byte for byte from its inputs
      * (the fixtures' fake data, English, 2026-11-18), so a writer that formats a number or orders a map otherwise on
      * one platform is red there.
@@ -64,6 +64,23 @@ abstract class KitFixtureCases {
             val written = KitWriter.pdf(p, found.kit.email, found.kit.secretKey, found.kit.server, KitWords.of("en"), KIT_APP_DAY)
             assertContentEquals(bytes, written, "kit-app.pdf is not what KitWriter writes here")
         }
+        found.kit.wipe()
+    }
+
+    /**
+     * `kit-app-layout1.pdf`, a kit the core wrote before layout 2 (ADR 0157): still read by its raw token with no page
+     * drawn — a kit's layout is in no token, so every kit printed before keeps opening the account. Never written again.
+     */
+    @Test
+    fun aKitOfTheEarlierLayoutIsStillRead() = runTest {
+        val bytes = fixture("kit-app-layout1.pdf")
+        assertTrue("(SECRET KEY)" in CharArray(bytes.size) { (bytes[it].toInt() and 0xff).toChar() }.concatToString(), "the premise: layout 1's label")
+        val played = KitImportTest.PlayedPictures(qrOn = mapOf(1 to KitImportTest.TOKEN_A))
+        val found = assertNotNull(KitImport.read(p, bytes, played))
+        assertEquals("alex.beispiel@example.org", found.kit.email)
+        assertEquals(KitImportTest.KEY_HEX, hex(found.kit.secretKey))
+        assertEquals("https://familie.example.org", found.kit.server)
+        assertEquals(emptyList(), played.asked)
         found.kit.wipe()
     }
 

@@ -14,6 +14,7 @@ import java.util.GregorianCalendar
 import javax.imageio.IIOImage
 import javax.imageio.ImageIO
 import javax.imageio.ImageWriteParam
+import kotlinx.coroutines.flow.first
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -24,7 +25,8 @@ import me.raddatz.veyq.mobile.session.LiveRun
 import me.raddatz.veyq.mobile.session.LiveHttp
 
 /**
- * A member's upload into a Memory on a running dev instance (`VEYQ_LIVE`): `VEYQ_LIVE_MEMORY_UPLOAD=<memory name>` uploads
+ * A member's upload into a Memory on a running dev instance (`VEYQ_LIVE`): `VEYQ_LIVE_MEMORY_UPLOAD=<memory name>` (made in the
+ * default space where none of that name exists, a throwaway's pass) uploads
  * the web's EXIF fixture photo (`exif-sample.jpg`) with a preview and a thumbnail drawn here, and the web's dated video
  * fixture (`dated.mp4`) with a drawn poster as both tiers, then reads the gallery in a fresh session: each medium listed,
  * its capture time and its source, the photo's position and camera, each original back to the byte, each tier a JPEG.
@@ -52,7 +54,16 @@ class MemoryUploadLiveTest {
             liveRun.device(),
         ) { block -> LiveHttp.client(block) }.let { it.open(it.defaultTenant!!) }
         val tenant = signIn()
-        val memory = tenant.nodes().first { it.kind == "MEMORY" && it.name == name }
+        // a throwaway's pass has none yet: made in the account's default space where no Memory of that name exists
+        val memory = tenant.nodes().firstOrNull { it.kind == "MEMORY" && it.name == name } ?: run {
+            val shell = me.raddatz.veyq.mobile.navigation.ShellModel(
+                tenant, me.raddatz.veyq.mobile.navigation.Hidden({}, emptySet()), me.raddatz.veyq.mobile.navigation.RecentUses({}, emptyList()),
+            ) { System.currentTimeMillis() }
+            shell.load(openLastUsed = false)
+            val scopeId = assertNotNull(me.raddatz.veyq.mobile.navigation.Home.defaultSpace(shell.state.first { it != null }!!.lists.spaces)?.scopeId, "no space")
+            assertNotNull(MemoryCreate.create(tenant, scopeId, null, MemoryCreate.MEMORY, name).node, "the Memory was not made")
+                .let { made -> tenant.forgetTree(); tenant.nodes().first { it.nodeId == made.nodeId } }
+        }
         val now = System.currentTimeMillis()
 
         val photo = File(root, "src/web/src/features/memories/__fixtures__/exif-sample.jpg").readBytes()

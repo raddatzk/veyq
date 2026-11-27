@@ -56,6 +56,12 @@ interface CredentialDoor {
      *  in (ADR 0148 decision 6): what offers the new kit ([AddressChange.State.kitOffered]). */
     val addressTaken: Boolean get() = false
 
+    /**
+     * The account's kit record [sealed] by [me.raddatz.veyq.mobile.account.KitRecord.seal] written once a kit was kept (ADR
+     * 0157 decision 4); whether it was. Absent: never.
+     */
+    suspend fun writeKitRecord(sealed: String): Boolean = false
+
     /** `getAccountEmail`: the address the server holds now — what a new kit prints (the web's confirm page reads it). */
     suspend fun heldEmail(): String = email
 

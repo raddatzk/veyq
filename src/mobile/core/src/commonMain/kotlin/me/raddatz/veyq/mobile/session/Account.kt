@@ -438,6 +438,9 @@ class VeyqAccount private constructor(
     @HiddenFromObjC
     val deviceStore: DeviceStore get() = device.store
 
+    /** Which Emergency Kit the account has, read once per unlock (ADR 0157; [readKitLayout]). */
+    val kitStatus: me.raddatz.veyq.mobile.account.KitStatus by lazy { me.raddatz.veyq.mobile.account.KitStatus { readKitLayout() } }
+
     /** This installation as the account's device register names it: its id there and the label it starts with. */
     @PlatformApi
     @HiddenFromObjC

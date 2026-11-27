@@ -278,6 +278,9 @@ internal sealed class Call {
     /** The reconnect's notices ([ShellShown.queuedSaid]: how many writes made offline were sent, how many need the person) said. */
     @Serializable @SerialName("Shell.QueuedSaidSeen") data object ShellQueuedSaidSeen : Call()
 
+    /** The one-time kit notice ([ShellShown.kitNotice]) dismissed — "Not now", or "Go to your kit" before Settings → Security opens. */
+    @Serializable @SerialName("Shell.KitNoticeDismiss") data object ShellKitNoticeDismiss : Call()
+
     @Serializable @SerialName("Shell.Choose") data class ShellChoose(val application: ApplicationId?) : Call()
     @Serializable @SerialName("Shell.SwitchSpace") data class ShellSwitchSpace(val scopeId: String) : Call()
     @Serializable @SerialName("Shell.Enter") data class ShellEnter(val folder: FolderRef) : Call()
@@ -1379,6 +1382,19 @@ internal sealed class Call {
      */
     @Serializable @SerialName("Buckets.Lightbox") data class BucketsLightbox(val buckets: Long, val mediaId: String) : Call()
     @Serializable @SerialName("Buckets.Seen") data class BucketsSeen(val buckets: Long) : Call()
+
+    /** Medium [mediaId] of the chosen bucket selected, or no longer (`Contributions.toggle`; [BucketsShown.picked]). */
+    @Serializable @SerialName("Buckets.Toggle") data class BucketsToggle(val buckets: Long, val mediaId: String) : Call()
+
+    /** The selection given up (`Contributions.clearPicked`). */
+    @Serializable @SerialName("Buckets.ClearPicked") data class BucketsClearPicked(val buckets: Long) : Call()
+
+    /**
+     * The selection's capture-time shift (`Contributions.shift`, uc.memory.buckets § Correct a selection's capture time):
+     * [Answer.CaptureTimeShiftOpened] for [Watched.CaptureTimeShift]; refused `NOT_OFFERED` where [BucketsShown.shifts] is
+     * false. It closes with [CaptureTimeShiftClose], its Contributions view, its gallery or the tenant.
+     */
+    @Serializable @SerialName("Buckets.Shift") data class BucketsShift(val buckets: Long) : Call()
     @Serializable @SerialName("Buckets.Close") data class BucketsClose(val buckets: Long) : Call()
 
     /** The account's view choice on this device (ADR 0149 decision 8): every level and a person's Memories follow ([ShellShown.view]). */
@@ -1690,6 +1706,21 @@ internal sealed class Call {
     @Serializable @SerialName("CaptureTime.Close") data class CaptureTimeClose(val captureTime: Long) : Call()
 
     /**
+     * The shift's anchor set to [epochMs] (`SelectionShift.propose`, the host's pickers' local time converted by its own
+     * calendar): [Answer.Done] where it moved the anchor (the choice offered), refused `NOT_TAKEN` where it moved nothing.
+     */
+    @Serializable @SerialName("CaptureTime.ShiftPropose") data class CaptureTimeShiftPropose(val shift: Long, val epochMs: Long) : Call()
+    /** Back from the choice to the picker. */
+    @Serializable @SerialName("CaptureTime.ShiftBack") data class CaptureTimeShiftBack(val shift: Long) : Call()
+    /** Only the anchor set (`onlyThis`): answered once written. */
+    @Serializable @SerialName("CaptureTime.ShiftOnly") data class CaptureTimeShiftOnly(val shift: Long) : Call()
+    /** Every selected medium shifted (`all`): answered once every write settled; the progress rides the update. */
+    @Serializable @SerialName("CaptureTime.ShiftAll") data class CaptureTimeShiftAll(val shift: Long) : Call()
+    /** The shift taken back (`undo`): answered once every write settled. */
+    @Serializable @SerialName("CaptureTime.ShiftUndo") data class CaptureTimeShiftUndo(val shift: Long) : Call()
+    @Serializable @SerialName("CaptureTime.ShiftClose") data class CaptureTimeShiftClose(val shift: Long) : Call()
+
+    /**
      * Gallery [gallery]'s banner picture (`GalleryModel.bannerPicture`, ADR 0144 decision 4): an image banner's JPEG or a
      * video banner's poster, whole ([Answer.Bytes]; the host caches it by [BannerShown.picture]); refused `NO_BYTES` where
      * there is none or it does not read — the host then draws no frame.
@@ -1861,6 +1892,15 @@ internal sealed class Call {
     /** A new Emergency Kit with the account's address, once the password and Secret Key passed: [Answer.KitOpened] for [Watched.Kit]. */
     @Serializable @SerialName("AddressChange.Kit") data class AddressChangeKit(val flow: Long, val password: String, val secretKey: String) : Call()
     @Serializable @SerialName("AddressChange.Close") data class AddressChangeClose(val flow: Long) : Call()
+
+    /** A new Emergency Kit where a clearer one exists (core's `KitRenewal`, ADR 0157 decision 6): [Answer.FlowOpened]. */
+    @Serializable @SerialName("Kit.RenewalOpen") data class KitRenewalOpen(val connection: String) : Call()
+
+    /** The kit, once the password and the Secret Key passed the floor: [Answer.KitOpened] for [Watched.Kit]; refused, nothing ([Update.KitRenewal] says why). */
+    @Serializable @SerialName("Kit.Renew") data class KitRenew(val flow: Long, val password: String, val secretKey: String) : Call()
+
+    /** The renewal closed: the account's Settings read anew, so Security says which kit the account has now. */
+    @Serializable @SerialName("Kit.RenewalClose") data class KitRenewalClose(val flow: Long) : Call()
 
     /**
      * The kit written by the core straight into [path], the file the host's save dialog gave (ADR 0137 decision 3) — a
@@ -2292,6 +2332,9 @@ internal sealed class Answer {
     /** A capture-time editor opened ([Call.CaptureTimeOpen]): its id, for [Watched.CaptureTime] and its calls. */
     @Serializable @SerialName("CaptureTimeOpened") data class CaptureTimeOpened(val captureTime: Long) : Answer()
 
+    /** A selection's capture-time shift opened ([Call.BucketsShift]): its id, for [Watched.CaptureTimeShift] and its calls. */
+    @Serializable @SerialName("CaptureTimeShiftOpened") data class CaptureTimeShiftOpened(val shift: Long) : Answer()
+
     /** A banner dialog opened ([Call.BannerOpen]): its id, for [Watched.Banner] and its calls. */
     @Serializable @SerialName("BannerOpened") data class BannerOpened(val banner: Long) : Answer()
 
@@ -2557,6 +2600,9 @@ internal sealed class Watched {
     /** A capture-time editor opened by [Call.CaptureTimeOpen]. */
     @Serializable @SerialName("CaptureTime") data class CaptureTime(val captureTime: Long) : Watched()
 
+    /** A selection's capture-time shift opened by [Call.BucketsShift]. */
+    @Serializable @SerialName("CaptureTimeShift") data class CaptureTimeShift(val shift: Long) : Watched()
+
     /** A banner dialog opened by [Call.BannerOpen]. */
     @Serializable @SerialName("Banner") data class Banner(val banner: Long) : Watched()
 
@@ -2569,6 +2615,7 @@ internal sealed class Watched {
     @Serializable @SerialName("KeyRotation") data class KeyRotation(val flow: Long) : Watched()
     @Serializable @SerialName("Erasure") data class Erasure(val flow: Long) : Watched()
     @Serializable @SerialName("Kit") data class Kit(val kit: Long) : Watched()
+    @Serializable @SerialName("KitRenewal") data class KitRenewal(val flow: Long) : Watched()
 
     /** A search opened by [Call.SearchOpen]. */
     @Serializable @SerialName("Search") data class Search(val search: Long) : Watched()
@@ -2722,6 +2769,9 @@ internal sealed class Update {
     /** A capture-time editor; null once it closed (or its lightbox, gallery or tenant did). */
     @Serializable @SerialName("CaptureTime") data class CaptureTime(val captureTime: Long, val shown: CaptureTimeShown?) : Update()
 
+    /** A selection's capture-time shift; null once it closed (or its view, gallery or tenant did). */
+    @Serializable @SerialName("CaptureTimeShift") data class CaptureTimeShift(val shift: Long, val shown: CaptureTimeShiftShown?) : Update()
+
     /** A banner dialog; null once it closed (or its gallery or tenant did). */
     @Serializable @SerialName("Banner") data class Banner(val banner: Long, val shown: BannerEditorShown?) : Update()
 
@@ -2754,6 +2804,11 @@ internal sealed class Update {
     ) : Update()
     @Serializable @SerialName("Erasure") data class Erasure(val flow: Long, val shown: me.raddatz.veyq.mobile.session.AccountErasure.State?) : Update()
     @Serializable @SerialName("Kit") data class Kit(val kit: Long, val shown: me.raddatz.veyq.mobile.account.KitStep.State?) : Update()
+    @Serializable @SerialName("KitRenewal") data class KitRenewal(
+        val flow: Long,
+        val shown: me.raddatz.veyq.mobile.session.KitRenewal.State?,
+        val kit: me.raddatz.veyq.mobile.account.KeyIntake.IntakeState? = null,
+    ) : Update()
 
     /**
      * A search (ADR 0146 decision 7): core's `SearchShown` as it is — names, parts, words and ids, never a key, a seal or a
@@ -2954,6 +3009,33 @@ internal enum class CurationSaid { CONFLICT, UNREADABLE, FAILED }
 @SerialName("CaptureTimeShown")
 internal class CaptureTimeShown(val atMs: Long?, val corrected: Boolean, val originalMs: Long?, val saving: Boolean, val said: CurationSaid?, val saved: Boolean)
 
+/** Where a selection's capture-time shift stands (`SelectionShift.Step`). */
+@Serializable
+internal enum class ShiftStep { EDIT, CHOOSE, RUN, DONE }
+
+/**
+ * A selection's capture-time shift as the host draws it (`SelectionShift.State`): the anchor's time the picker opens on
+ * ([anchorAtMs], epoch ms the host shows in its zone) and the line naming it ([intro]); the step; the time picked; the
+ * choice to shift all ([all], with the offset written out) and how many stay undated ([undated]); the progress; what
+ * the run or the Undo came to ([done], [refused] one line per reason); the Undo offered ([undoable]); and [closed] once
+ * only the anchor was written (the host closes).
+ */
+@Serializable
+@SerialName("CaptureTimeShiftShown")
+internal class CaptureTimeShiftShown(
+    val anchorAtMs: Long,
+    val intro: Notice,
+    val step: ShiftStep,
+    val pickedMs: Long?,
+    val all: Notice?,
+    val undated: Notice?,
+    val progress: Notice?,
+    val done: Notice?,
+    val refused: List<Notice>,
+    val undoable: Boolean,
+    val closed: Boolean,
+)
+
 /** What the banner dialog says (core's `BannerEditor.Said`): a pick refused, or a save that did not go. */
 @Serializable
 internal enum class BannerSaid { TOO_LARGE, UNREADABLE, VIDEO_UNREADABLE, NOT_MEDIA, STALE, BUSY, FAILED }
@@ -3150,6 +3232,10 @@ internal class BucketsShown(
     val loading: Boolean,
     val failed: Boolean,
     val refused: me.raddatz.veyq.mobile.memories.Buckets.Outcome?,
+    /** The media selected in the chosen bucket, in the order selected ([Call.BucketsToggle]). */
+    val picked: List<String>,
+    /** "Shift capture time" is offered for them ([Call.BucketsShift]). */
+    val shifts: Boolean,
 )
 
 /** One bucket of the picker (`Buckets.Row`): [own] where it is in the caller's own root (their primary, "You" until it exists, and its sub-buckets). */
@@ -3573,6 +3659,13 @@ internal class SettingsShown(
      * out last): the host draws each, whole, every one anchored by its `id` (a search's settings result scrolls there).
      */
     val sections: List<me.raddatz.veyq.mobile.search.SettingsSection> = emptyList(),
+    /**
+     * Which Emergency Kit the account has, drawn in Security (`AccountSettings.State.kit`, ADR 0157 decision 5): current,
+     * older — [kitNews] says what the clearer kit does better, *Make a new kit* opens [Call.KitRenewalOpen] — or unreadable;
+     * null until read.
+     */
+    val kit: me.raddatz.veyq.mobile.account.KitStatus.Standing? = null,
+    val kitNews: Notice? = null,
 )
 
 /** A unit of the storage limit's field and its word. */
@@ -4281,6 +4374,12 @@ internal class ShellShown(
     val offlineBanner: Notice? = null,
     /** Under the offline banner while writes made offline wait: their count (`ShellModel.queuedBanner`); null while none does. */
     val queuedBanner: Notice? = null,
+    /**
+     * The one-time "a clearer Emergency Kit exists" notice (`ShellModel.kitNotice`, ADR 0157 decision 5): the clearer kit's
+     * sentence while it shows, under the notice's title, beside "Go to your kit" and "Not now" ([Call.ShellKitNoticeDismiss]);
+     * null otherwise.
+     */
+    val kitNotice: Notice? = null,
     /**
      * What the level the shell shows holds that is not sent yet (`ShellModel.queuedAt`, ADR 0153 decision 5): the folders, Memories,
      * chapters and files made offline there, each drawn in place among its rows with its state and line.
