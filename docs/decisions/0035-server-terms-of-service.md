@@ -220,8 +220,8 @@ the rule in the Kotlin core, each platform drawing it).
    records nothing. A TV's *Sign out* is its *Remove from this TV*, the one sign-out it has. The bridge carries the
    accept as `Session.AcceptTerms` and Settings' read as `Settings.Terms`.
 3. **The terms are readable at any time**: Settings' Terms (`SettingsSection.TERMS`, after the personal sections as the
-   web's tenant category is) shows the space's terms and the operator section read-only, for owner and member alike;
-   editing them stays the owner's, in the browser ([uc.admin.tenant-terms](../features/admin/use-cases/uc.admin.tenant-terms.md)).
+   web's tenant category is) shows the space's terms and the operator section, read-only for a member; for an owner
+   (`listMyTenants`' role, as the web's panel reads it) it is the web's editor (decision 5 below).
    The record's pointer opens the server's privacy notice in the browser; a TV shows it as a QR code and its address.
 4. **Fail-open, as the web's — our reading, not a reviewed answer.** A terms read that fails (offline, a `5xx`) shows no
    gate. A space's terms bind a member only by their consent: until a member agrees to a new revision the revision they
@@ -232,6 +232,22 @@ the rule in the Kotlin core, each platform drawing it).
    encrypted data on a network blip, a harm the safe side would cause rather than avoid; so the web's choice stands.
    An app left open sees a revision saved meanwhile at its next open of that tenant, where the web sees it at the next
    scope entry: a new revision binds no one before they agree, so the later moment changes what is shown, never what binds.
+
+5. **The owner edits them in the apps as on the web** ([uc.admin.tenant-terms](../features/admin/use-cases/uc.admin.tenant-terms.md),
+   built 2026-11-27): `MemberTerms.editing` reads the terms with the caller's role, and the editor's rules are pure
+   functions on a serialisable draft (`MemberTerms.TermsDraft`, the web's `LocaleMap`). A language that is present
+   exists, even while it is empty. *Add language* offers the languages not present, in the web's order (`en`, `de`).
+   The page warns about a blank language by its own name, because the server drops a blank language on save. The
+   template's question either offers to fill an empty text or warns that it replaces what is written. The preview falls
+   back to the language that has text. The save (`updateTenantTerms`) sends a removed language as absent, and the editor
+   then draws from the server's answer. A `403` is said as the web says it. The starter template is the web's
+   `termsTemplate.ts`, ported as text into `TermsTemplate`; `TermsTemplateIsTheWebsTest` holds the two equal byte for
+   byte. A language's name is its own ("English", "Deutsch"), so it is a core constant, not a catalogue word. Kotlin
+   hosts call the draft's rules directly. The desktops call `Settings.TermsEdit` at each change, an in-process call, so
+   no host derives a rule. Each platform draws the editor its own way: Android a full-screen dialog with Material text
+   fields, Apple a sheet or a pushed page with `TextEditor`, Linux a subpage of the preferences dialog, Windows a
+   `ContentDialog` whose questions are asked in place (one dialog at a time). Proved by `TermsDraftTest`,
+   `TenantMembersTest` and, live as a throwaway, `MembersLiveTest`.
 
 ## Consequences
 

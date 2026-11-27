@@ -128,8 +128,8 @@ shows (`session/MemberTerms`), and while the current pair is not accepted `Gate.
 gate, drawn in place of the shell — the space's text, the operator section, the record's pointer to the privacy notice,
 *I agree* and *Sign out* (a TV's *Remove from this TV*) — with the offer to stay signed in behind it; a moved pair is
 shown anew, a failed accept said, a read that fails shows none (fail-open, as the web's). Settings' **Terms**
-(`SettingsSection.TERMS`, found by the search) shows them read-only. The bridge carries `Session.AcceptTerms` and
-`Settings.Terms`. Held by `TermsGateTest`, `MemberTermsTest`, `PlansAreTheWebsTest`, `DispatchTest` (each bitten) and
+(`SettingsSection.TERMS`, found by the search) shows them read-only, and to an owner the web's editor (§ Members and the
+terms' editor, below). The bridge carries `Session.AcceptTerms` and `Settings.Terms`. Held by `TermsGateTest`, `MemberTermsTest`, `PlansAreTheWebsTest`, `DispatchTest` (each bitten) and
 live by `TermsLiveTest` (a throwaway with a member: the owner's new revision gating both, a moved pair told apart, the
 gate passed). Passed as a throwaway on Android (an API 36 emulator: the gate, *I agree* into the shell, Settings' page,
 *Sign out* to the unlock) and Linux (Broadway: the gate, the offer only after *I agree*, the search's Terms result and
@@ -146,6 +146,20 @@ The bridge carries `Trust.WhosWho`. No TV draws it. Held by `WhosWhoTest` (bitte
 (API 36 emulator, English and German, a row into the profile), iOS (an iPhone 18 Pro simulator, German, a row into the
 profile), Linux (Broadway, a row into the profile) and Windows (the VM, German: *Not verified* and *New* with *Compare safety
 numbers* into the profile); macOS and tvOS built, the Mac's sheet never clicked (the coordinator's).
+**Members and the terms' editor, on all four apps** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) § Members and
+[ADR 0035](../decisions/0035-server-terms-of-service.md) § The apps' gate decision 5, built 2026-11-27;
+uc.spaces.remove-tenant-member, uc.admin.tenant-terms): Settings' **Members** (`SettingsSection.MEMBERS`, `tenant-members`,
+first of the tenant's sections) lists every member with their role and state (`session/TenantMembers`). An owner's row
+offers *Make co-owner*, *Remove co-owner* and *Remove member* (asked first, with the option to turn off every link of the
+space), as the web's row does. An owner's **Terms** is the web's editor over the core's draft (`MemberTerms.TermsDraft`,
+the starter template held to the web's by `TermsTemplateIsTheWebsTest`). The bridge carries `Settings.Members`,
+`Settings.MemberRole`, `Settings.MemberRemove`, `Settings.TermsEditing`, `Settings.TermsEdit` and `Settings.TermsSave`.
+Held by `TenantMembersTest`, `TermsDraftTest`, `TermsTemplateIsTheWebsTest` (each bitten), `PlansAreTheWebsTest` and
+`DispatchTest`, and live by `MembersLiveTest` (a throwaway with a member). Passed as a throwaway with a member on Linux
+(Broadway: the roster, *Make co-owner* and back with their toasts, the removal's question; the editor with *Add
+language*, the blank warning, *Insert template* and *Save terms* to revision 2) and Android (an API 36 emulator: the roster, a
+role changed and back, the member removed with every link turned off, the editor reading Linux's revision 2); Apple built
+(macOS, iOS), Windows built with its tests on the VM; their passes open (inbox #1418).
 **The account's own flows, on all four apps** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md), built 2026-11-19): the web's flows ported into the core and
 held to the shared vectors (`secret_key_proof`, `auth_attestation`, `rotation_stage`, `verification`, `fingerprint`'s
 digits and chain code, `safety_code`, on the JVM and libsodium) — the rename of any device a row names
@@ -713,8 +727,10 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   iPad (a flow's kit scanned with the real camera, the breach notice too), Touch ID and Windows Hello for real, a real
   mailbox, a safety code scanned with real cameras (#912).
 - Not in the apps yet (the owner 2026-11-26: every app is to do what the web does — these are gaps, closed one by one):
-  joining a tenant from an invite, inviting, members and roles, groups and leaving a space, editing a tenant's terms
-  (its owner's; the apps hold the gate and show them, below), finishing a recovery (the apps ask for the reset link; the web finishes it), the trust reset,
+  joining a tenant from an invite and inviting with its pending invites and labels (`changes/cr-apps-invites-and-join.md`),
+  groups (`changes/cr-apps-groups.md`), the rest of the web's Members panel — the space's new lock (alone and as the
+  removal's second option), turning off every link of the space, the tenant icon — and the roster's trust badge (the
+  apps show it in *Who's who*), finishing a recovery (the apps ask for the reset link; the web finishes it), the trust reset,
   the moderation key (#965), the task queue's jobs (#966), reopening where the person left after a restart (#1415), and an in-app choice of appearance and language (the apps follow the system's; the desktops
   have no per-app language of their own).
 - A selection's capture-time shift and the kit's layout 2 (built 2026-11-27, inbox #1417; passed on Linux and by the core's live

@@ -275,6 +275,37 @@ once — the web's `PinPass` (inbox #710, #741) has no port, so a cold large ten
 (inbox #1414). Proved by `WhosWhoTest`, `PlansAreTheWebsTest` and, live as a throwaway with a member,
 `LiveAccountFlowsTest.whosWhoListsTheOtherMemberAsTheirPageShowsThem`; the passes are native-apps § Built, by area.
 
+## Members (built 2026-11-27)
+
+The web's tenant section *Members* (`TenantMembersPanel.vue` over `members.ts`; uc.spaces.remove-tenant-member, ADR 0101
+decision 9) is in the apps too (owner 2026-11-26: every app does what the web does). It was decided as follows:
+
+1. **The roster and its acts are the core's** (`session/TenantMembers`, `TenantSession.members`). The roster lists the
+   TENANT scope's members (`listScopeMembers`) in the server's order. Each real name opens on the device under the tenant
+   key, bound to (tenant scope, member), as the directory's does (`People`). The owner is read from `listMyTenants`' role,
+   as the web's panel reads it. A row offers only what the web's row offers: *Make co-owner* on a member, *Remove
+   co-owner* on an owner, and *Remove member* never on an owner. All three are an owner's only. **Load-bearing:** a
+   member's roster offers no act (`TenantMembersTest`, bitten by offering *Remove* on every row: red). A role change
+   (`setTenantMemberRole`) moves no key, and the last owner's demotion is said as the web says it (`409 last_owner`). The
+   removal (`removeTenantMember`) is the server's cascade. Its one opt-in, to turn off every link of the space, is sent
+   only when ticked. After it the session reopens what moved and finishes the re-keys now due (`reopenMoved`, then
+   `resumeRekeys`), the web's `rekeyClosedScopes`.
+2. **The role shows as a word** ("Owner", "Member"). The web's row prints the enum's code as it is. The roster leaves out
+   the web's trust badge, because *Who's who*, the next section, shows each member's trust.
+3. **Reached as on the web**: Settings' tenant category opens with it (`SettingsSection.MEMBERS`, `tenant-members`, before
+   *Who's who*; `PlansAreTheWebsTest`). Each platform opens it the way it opens *Who's who*. A row's acts are its
+   platform's menu: Android an overflow `DropdownMenu`, Apple a `Menu` and a context menu, Linux a `GtkMenuButton`,
+   Windows a `MenuFlyout`. The removal's question is an alert, a sheet on Apple, and on Windows it is asked in place.
+   The bridge carries `Settings.Members`, `Settings.MemberRole` and `Settings.MemberRemove`.
+4. **Not yet in the apps**, each part of the web's same panel: the space's new lock (on its own, and as the removal's
+   second option), turning off every link of the space, the tenant icon, and inviting with its pending invites. They are
+   listed in native-apps § Open. Leaving a space is no gap: the web has no self-leave (no operation in `scopes` or
+   `tenants`, no use case), and a member leaves only when an owner removes them.
+
+Consequences: proved by `TenantMembersTest`, `PlansAreTheWebsTest`, the bridge's `WireTest`, `SecretFreeSchemaTest` and
+`DispatchTest.theTermsEditorsChangesAreTheCoresDraftAndTheMembersCallsNeedATenant`, and, live as a throwaway with a member,
+`MembersLiveTest`. The passes are in native-apps § Built, by area.
+
 ## Alternatives considered
 
 - **A separate "Trusted devices" screen** — a second list of the same families, which the web does not have.
