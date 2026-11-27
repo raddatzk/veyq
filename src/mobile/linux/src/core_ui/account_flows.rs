@@ -477,6 +477,11 @@ pub(crate) fn kit_page(flow: &Flow, kit: i64, sub: Option<&str>, extra: Option<&
     let check = gtk::CheckButton::builder().label(words::kit_saved_confirm()).sensitive(false).build();
     check.set_widget_name("kit-saved");
     col.append(&check);
+    // the flow's done line once the kit is kept and recorded (the renewal's, the web's kit.renew.done)
+    let done = gtk::Label::builder().wrap(true).xalign(0.0).visible(false).build();
+    done.add_css_class("success");
+    done.set_widget_name("kit-done");
+    col.append(&done);
     if let Some(e) = extra {
         col.append(e);
     }
@@ -514,12 +519,14 @@ pub(crate) fn kit_page(flow: &Flow, kit: i64, sub: Option<&str>, extra: Option<&
             eprintln!("veyq: Kit.Save: {}", crate::core_ui::manage::answer_kind(&answered.map(|(a, _)| a)));
         });
     });
-    let (c, e, dz) = (check.clone(), error.clone(), danger.cloned());
+    let (c, e, dz, dn) = (check.clone(), error.clone(), danger.cloned(), done.clone());
     flow.watch(&Watched::Kit { kit }, move |u| {
         let Update::Kit { shown, .. } = u else { return true };
         let Some(st) = shown else { return false };
         *name.borrow_mut() = st.file_name.clone();
         draw_kit(&st, &c, &e, dz.as_ref(), &drawing);
+        dn.set_visible(st.done.is_some());
+        dn.set_label(&st.done.as_ref().map(|d| said::key(d)).unwrap_or_default());
         true
     });
     page(&words::kit_save_title(), "kit", &col)

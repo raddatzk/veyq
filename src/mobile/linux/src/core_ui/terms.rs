@@ -395,10 +395,39 @@ fn blocks(text: &str) -> Vec<Block> {
                         if let Some(rest) = l.strip_prefix("- ").or_else(|| l.strip_prefix("* ")) { format!("• {rest}") } else { l.to_string() }
                     })
                     .collect();
-                Block { text: lines.join("\n").replace("**", ""), heading: false }
+                Block { text: unemphasized(&lines.join("\n").replace("**", "")), heading: false }
             }
         })
         .collect()
+}
+
+/// [text] with each `*emphasis*` shown as its words: a `*` that opens before a non-space and the next `*` on the line
+/// that closes after one (the operator section's "*Report*", inbox #1418's German pass: the apps drew the stars).
+fn unemphasized(text: &str) -> String {
+    text.split('\n')
+        .map(|line| {
+            let c: Vec<char> = line.chars().collect();
+            let mut drop = vec![false; c.len()];
+            let mut i = 0;
+            while i < c.len() {
+                if c[i] == '*'
+                    && i + 1 < c.len()
+                    && !c[i + 1].is_whitespace()
+                    && c[i + 1] != '*'
+                    && let Some(j) = (i + 1..c.len()).find(|&j| c[j] == '*')
+                    && !c[j - 1].is_whitespace()
+                {
+                    drop[i] = true;
+                    drop[j] = true;
+                    i = j + 1;
+                    continue;
+                }
+                i += 1;
+            }
+            c.iter().zip(drop).filter(|(_, d)| !d).map(|(ch, _)| ch).collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 fn label(text: &str, dim: bool) -> gtk::Label {
@@ -431,5 +460,11 @@ mod tests {
         assert_eq!(b[1].text, "Be kind.\n• one\n• two");
         assert!(b[2].heading && b[2].text == "Contact");
         assert!(!b[3].heading && b[3].text == "Write to us.", "the line under a heading is no heading");
+    }
+
+    #[test]
+    fn an_emphasis_is_shown_as_its_words() {
+        let b = blocks("Use *Report* on what you see.\n* a *b* c\n2 * 3 * 4 stays");
+        assert_eq!(b[0].text, "Use Report on what you see.\n• a b c\n2 * 3 * 4 stays");
     }
 }
