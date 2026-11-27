@@ -481,6 +481,7 @@
     "people_open": ["people.open"],
     "people_profile": ["people.profile"],
     "people_remove_confirm": ["expenses.people.removeConfirm"],
+    "people_retry": ["people.retry"],
     "people_unknown_member": ["people.unknownMember"],
     "pot_delete_confirm": ["expenses.deleteConfirm"],
     "pot_expense_by": ["expenses.entries.expenseBy"],
@@ -811,7 +812,17 @@
     "upload_cancel_all": ["upload.cancelAll"],
     "upload_close": ["upload.close"],
     "upload_retry": ["upload.retry"],
-    "upload_title": ["upload.title"]
+    "upload_title": ["upload.title"],
+    "verify_trust_rolled_back": ["verify.trustRolledBack"],
+    "verify_trust_unreadable": ["verify.trustUnreadable"],
+    "whos_who_compare": ["whoIsWho.compare"],
+    "whos_who_empty": ["whoIsWho.empty"],
+    "whos_who_load_failed": ["whoIsWho.loadFailed"],
+    "whos_who_loading": ["whoIsWho.loading"],
+    "whos_who_open_profile": ["whoIsWho.openProfile"],
+    "whos_who_sub": ["whoIsWho.sub"],
+    "whos_who_title": ["whoIsWho.navTitle", "whoIsWho.title"],
+    "whos_who_unavailable": ["whoIsWho.unavailable"]
   },
   "apart": [
     {"app": "cover_choose", "web": "profilePicture.choose", "why": "the profile picture's chooser (Bild wählen); the app's is a cover's, worded as the web's cover chooser node.cover.choose (Bild auswählen)"},

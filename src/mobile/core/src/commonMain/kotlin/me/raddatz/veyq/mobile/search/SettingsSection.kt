@@ -14,9 +14,9 @@ import me.raddatz.veyq.mobile.words.Msg
  * cr-apps-structure-from-core-plans' Q3): appearance, maps, sessions, password, add a device, security, profile, erase —
  * `SettingsOrderIsTheWebsTest` reads it there — with the app-only sections beside their kin: offline storage after maps,
  * this device and saved keys after sessions, the account and its address (the apps' own) where the web's password is;
- * then the tenant's terms (the one tenant section the apps offer so far, read-only); Sign out ends the list, as it ends
- * the apps' page. The web's sections the apps do not offer (trust reset, moderation, the tenant's others) arrive with those
- * sections.
+ * then the tenant's sections the apps offer, in the web's tenant order — Who's who, then the terms (read-only); Sign out
+ * ends the list, as it ends the apps' page. The web's sections the apps do not offer (trust reset, moderation, the
+ * tenant's others) arrive with those sections.
  */
 @me.raddatz.veyq.mobile.navigation.Plan
 @Serializable
@@ -34,6 +34,13 @@ enum class SettingsSection(val id: String, val word: Msg, val keywords: Msg) {
     SECURITY("security", Msg.ROTATION_TITLE, Msg.SEARCH_WORDS_SECURITY),
     PROFILE("profile", Msg.PROFILE_TITLE, Msg.SEARCH_WORDS_PROFILE),
     ERASE("erase", Msg.ERASURE_TITLE, Msg.SEARCH_WORDS_ERASE),
+    /**
+     * Who's who in the open tenant (uc.spaces.enforce-verified-identities main flow 5; the web's tenant section
+     * `tenant-people`, every member's): every other member's state there, a row opening their profile
+     * ([me.raddatz.veyq.mobile.session.PersonTrust.whosWho]). After the personal sections, before the terms, as the web's
+     * tenant category orders them.
+     */
+    WHOS_WHO("tenant-people", Msg.WHOS_WHO_TITLE, Msg.SEARCH_WORDS_WHOS_WHO),
     /**
      * The open tenant's terms, read-only (uc.account.accept-terms; the web's tenant section `terms`, member-readable): the
      * space's own text and the operator section after it ([me.raddatz.veyq.mobile.session.MemberTerms.page]). The web lists
@@ -60,7 +67,7 @@ enum class SettingsSection(val id: String, val word: Msg, val keywords: Msg) {
                 STORAGE -> gates.storage
                 MAPS -> gates.maps
                 APPEARANCE -> gates.appearance
-                SESSIONS, DEVICE, SAVED_KEYS, ACCOUNT, EMAIL, PASSWORD, SECURITY, PROFILE, ERASE, TERMS, SIGN_OUT -> true
+                SESSIONS, DEVICE, SAVED_KEYS, ACCOUNT, EMAIL, PASSWORD, SECURITY, PROFILE, ERASE, WHOS_WHO, TERMS, SIGN_OUT -> true
             }
         }
 

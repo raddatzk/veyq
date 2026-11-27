@@ -131,6 +131,76 @@ class PersonTrust internal constructor(private val tenant: TenantSession) {
         )
     }
 
+    /**
+     * *Who's who* in this tenant (the web's `loadPeopleOverview`, inbox #967): the tenant's members read anew, each other
+     * member anchored as their page anchors them (which moves the pin, as every anchor check does — the only write), the
+     * pins read once, the verifications listed once and counted for the anchored alone, and a key chain read for the
+     * rotation's date only where the pin is not the chain's genesis at the served head. A check that fails for a request
+     * leaves that member UNCHECKED; a pin store this device refuses is said ([WhosWho.refused]), never read as nobody.
+     */
+    suspend fun whosWho(): WhosWho = try {
+        loadWhosWho()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: TrustStateRefused) {
+        WhosWho.refused(e.code)
+    } catch (e: Exception) {
+        WhosWho.FAILED
+    }
+
+    private suspend fun loadWhosWho(): WhosWho {
+        val (key, epoch) = tenant.scopeKey(tenantId) ?: return WhosWho.UNAVAILABLE
+        val members = account.members(tenant.base, tenantId, tenantId) ?: return WhosWho.UNAVAILABLE
+        val view = TenantView.of(tenantId, members, key, epoch.toLong(), suite, account.anchoringOfAccount)
+        val byId = members.associateBy { it.userId }
+        val names = People.of(JoinRecords(suite), tenantId, key, epoch.toLong(), members).mapValues { it.value.displayName }
+        val listed = WhosWho.listed(account.userId, members)
+        val checks = LinkedHashMap<String, WhosWho.Companion.Check>()
+        for (m in listed) {
+            checks[m.userId] = try {
+                val anchor = account.anchoringOfAccount.anchorIdentity(m.userId, ServedIdentity(m.identityPublicKey, m.keyChainHead), view)
+                if (anchor == Anchor.ANOMALY) WhosWho.Companion.Check.ANOMALY else WhosWho.Companion.Check.ANCHORED
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: TrustStateRefused) {
+                throw e
+            } catch (e: Exception) {
+                WhosWho.Companion.Check.UNCHECKED
+            }
+        }
+        val anchored = listed.filter { checks[it.userId] == WhosWho.Companion.Check.ANCHORED }
+        val pins = if (anchored.isEmpty()) emptyMap() else account.pinsOfAccount()
+        val counted = if (anchored.isEmpty()) emptyMap() else try {
+            verifiedBy(view, byId, anchored)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: TrustStateRefused) {
+            throw e
+        } catch (e: Exception) {
+            emptyMap() // a *verified* falls away, nothing else does (the web's `countedFor`)
+        }
+        val rotations = anchored.associate { m ->
+            val pin = pins[m.userId]
+            // a pin AT the served head with index 0 is the chain's genesis: nothing rotated, nothing to read
+            m.userId to if (pin != null && pin.head == m.keyChainHead && pin.index == 0L) null else rotationOf(m)
+        }
+        return WhosWho.assemble(account.userId, members, checks, pins, counted, rotations, names, now())
+    }
+
+    /** When [m]'s newest step — a rotation — was made, from their chain; null for a chain that does not end at the served
+     *  head, a genesis, or a failed read. */
+    private suspend fun rotationOf(m: ScopeMember): Long? {
+        val chain = try {
+            account.keyChainOf(m.userId)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        } ?: return null
+        val newest = chain.steps.maxByOrNull { it.index } ?: return null
+        return if (newest.index >= 1 && chain.head == m.keyChainHead) epochMs(newest.createdAt) else null
+    }
+
     /** The members whose verification of [subjectUserId]'s served head counts here — one's own page included, which shows
      *  no state: what the live case reads to see each member read the other's row. */
     internal suspend fun countedOf(subjectUserId: String): List<String> {

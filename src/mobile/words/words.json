@@ -6492,6 +6492,58 @@
     "en": "The terms just changed — please review the updated revision and agree again.",
     "de": "Die Bedingungen haben sich gerade geändert — bitte sieh dir die aktualisierte Fassung an und stimme erneut zu."
   },
+  "whos_who_title": {
+    "note": "Settings' section and page of a space's Who's who (SettingsSection.WHOS_WHO)",
+    "en": "Who’s who",
+    "de": "Wer ist wer",
+    "apple_en": "Who’s Who"
+  },
+  "whos_who_sub": {
+    "en": "Everyone you share this space with: whose key your app confirms, who verified them, and who has a new identity.",
+    "de": "Alle, mit denen du diesen Bereich teilst: wessen Schlüssel deine App bestätigt, wer sie verifiziert hat und wer eine neue Identität hat."
+  },
+  "whos_who_loading": {
+    "en": "Checking everyone’s key…",
+    "de": "Die Schlüssel werden geprüft…"
+  },
+  "whos_who_load_failed": {
+    "en": "Could not check everyone’s key. Please try again.",
+    "de": "Die Schlüssel konnten nicht geprüft werden. Bitte versuche es erneut."
+  },
+  "whos_who_unavailable": {
+    "en": "This space can’t be opened on this device right now, so no key can be checked.",
+    "de": "Dieser Bereich lässt sich auf diesem Gerät gerade nicht öffnen, daher kann kein Schlüssel geprüft werden."
+  },
+  "whos_who_empty": {
+    "en": "Nobody else is in this space yet.",
+    "de": "Außer dir ist noch niemand in diesem Bereich."
+  },
+  "whos_who_compare": {
+    "en": "Compare safety numbers",
+    "de": "Sicherheitsnummern vergleichen",
+    "apple_en": "Compare Safety Numbers"
+  },
+  "whos_who_open_profile": {
+    "note": "a row's accessible name: {1} the member's display name",
+    "en": "Open {1}’s profile",
+    "de": "Profil von {1} öffnen"
+  },
+  "verify_trust_rolled_back": {
+    "en": "The server returned an older list of the keys you trust than this device has already seen. Nothing is shared with a key it cannot check until the current list is back.",
+    "de": "Der Server hat eine ältere Liste deiner vertrauten Schlüssel geliefert, als dieses Gerät schon gesehen hat. Mit Schlüsseln, die sich nicht prüfen lassen, wird nichts geteilt, bis die aktuelle Liste wieder da ist."
+  },
+  "verify_trust_unreadable": {
+    "en": "The list of the keys you trust could not be opened. Nothing is shared with a key it cannot check until it can be read again.",
+    "de": "Die Liste deiner vertrauten Schlüssel ließ sich nicht öffnen. Mit Schlüsseln, die sich nicht prüfen lassen, wird nichts geteilt, bis sie wieder lesbar ist."
+  },
+  "people_retry": {
+    "en": "Try again",
+    "de": "Erneut versuchen"
+  },
+  "search_words_whos_who": {
+    "en": "who's who, members, people, verify, verified, safety number, key, identity",
+    "de": "Wer ist wer, Mitglieder, Personen, verifizieren, verifiziert, Sicherheitsnummer, Schlüssel, Identität"
+  },
   "terms_settings_title": {
     "note": "Settings' section of the tenant's terms (SettingsSection.TERMS): read-only in the apps",
     "en": "Terms",

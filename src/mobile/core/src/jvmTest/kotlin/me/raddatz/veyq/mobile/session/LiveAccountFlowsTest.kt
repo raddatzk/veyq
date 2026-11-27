@@ -74,6 +74,40 @@ class LiveAccountFlowsTest {
         }
     }
 
+    /** Who's who (inbox #967, uc.spaces.enforce-verified-identities main flow 5): each lists the other — never itself — in
+     *  the state the other's page shows, and the owner's verification of the member reads as its own, the compare gone. */
+    @Test
+    fun whosWhoListsTheOtherMemberAsTheirPageShowsThem() {
+        val origin = Throwaway.origin()
+        val t = Throwaway.accounts()
+        assertTrue(t.hasMember, "the throwaway has no member: create it with --with-member")
+        runTest(timeout = 4.minutes) {
+            val owner = session(origin, t, "VEYQ")
+            val member = session(origin, t, "VEYQ_USER2")
+            val ownerId = owner.account.userId
+            val memberId = member.account.userId
+            assertNotNull(owner.personTrust.person(memberId))
+            assertEquals(PersonTrust.Outcome.VERIFIED, owner.personTrust.compareDigits(memberId, true))
+
+            val ownersList = owner.personTrust.whosWho()
+            assertNull(ownersList.said, "the owner's Who's who said ${ownersList.said}")
+            assertEquals(listOf(memberId), ownersList.people.map { it.userId }, "the owner lists the member alone")
+            val m = ownersList.people.single()
+            assertEquals(WhosWho.State.VERIFIED, m.state)
+            assertTrue(m.verifiedByMe)
+            assertFalse(m.compare, "a member this account verified offers no compare")
+
+            val membersList = member.personTrust.whosWho()
+            assertNull(membersList.said, "the member's Who's who said ${membersList.said}")
+            assertEquals(listOf(ownerId), membersList.people.map { it.userId }, "the member lists the owner alone")
+            val o = membersList.people.single()
+            val page = assertNotNull(member.personTrust.person(ownerId))
+            assertEquals(if (page.anomaly) WhosWho.State.CANT_CONFIRM else if (page.verified) WhosWho.State.VERIFIED else WhosWho.State.NOT_VERIFIED, o.state)
+            assertEquals(page.verifiedByMe, o.verifiedByMe)
+            assertEquals(page.isNew, o.isNew)
+        }
+    }
+
     /** uc.spaces.edit-profile (ADR 0148 decision 2): the owner's name set through the core, read by the member's directory. */
     @Test
     fun aNameSetIsReadByTheOtherMember() {

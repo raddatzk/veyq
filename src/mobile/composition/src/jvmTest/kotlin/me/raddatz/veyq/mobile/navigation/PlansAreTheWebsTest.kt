@@ -37,10 +37,26 @@ class PlansAreTheWebsTest {
                 SettingsSection.APPEARANCE, SettingsSection.MAPS, SettingsSection.STORAGE, SettingsSection.SESSIONS,
                 SettingsSection.DEVICE, SettingsSection.SAVED_KEYS, SettingsSection.ACCOUNT, SettingsSection.EMAIL,
                 SettingsSection.PASSWORD, SettingsSection.ADD_DEVICE, SettingsSection.SECURITY, SettingsSection.PROFILE,
-                SettingsSection.ERASE, SettingsSection.TERMS, SettingsSection.SIGN_OUT,
+                SettingsSection.ERASE, SettingsSection.WHOS_WHO, SettingsSection.TERMS, SettingsSection.SIGN_OUT,
             ),
             all,
         )
+    }
+
+    /**
+     * The tenant's sections the apps offer are the web's tenant category's, in its order (`sections.ts`' `key: 'tenant'`),
+     * after the personal ones: Who's who (`tenant-people`) before the terms (inbox #967).
+     */
+    @Test
+    fun theTenantSectionsAreTheWebsInTheirOrder() {
+        val text = read("features/settings/sections.ts")
+        val tenant = text.substring(text.indexOf("key: 'tenant'"), text.indexOf("key: 'groups'"))
+        val web = Regex("""\bid:\s*'([a-z-]+)'""").findAll(tenant).map { it.groupValues[1] }.toList()
+        val all = SettingsSection.offered(SettingsSection.Gates(addDevice = false, storage = false, maps = false, appearance = false))
+        val offered = all.map { it.id }.filter { it in web }
+        assertEquals(listOf("tenant-people", "terms"), offered, "the tenant sections the apps offer")
+        assertEquals(web.filter { it in offered }, offered, "in the web's tenant order (sections.ts)")
+        assertEquals(listOf(SettingsSection.WHOS_WHO, SettingsSection.TERMS, SettingsSection.SIGN_OUT), all.takeLast(3))
     }
 
     /**

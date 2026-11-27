@@ -555,6 +555,9 @@ class VeyqAccount private constructor(
     /** This account's pin of [userId], as the sealed pin store holds it. */
     internal suspend fun pinOf(userId: String): Trust.Pin? = pins.load().pins[userId]
 
+    /** Every pin of this account, the store read once (Who's who reads them for all its members at one go). */
+    internal suspend fun pinsOfAccount(): Map<String, Trust.Pin> = pins.load().pins
+
     /** A signature by this account's identity — the verification statement's (ADR 0111 decision 12). The private key
      *  stays in this account; only the signature leaves. */
     internal fun identitySign(message: ByteArray): ByteArray = primitives.ed25519Sign(identity.signSeed, message)

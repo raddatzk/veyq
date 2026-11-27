@@ -1808,7 +1808,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.SettingsRenameFamily, Call.ProfileOpen, is Call.ProfileUsername, is Call.ProfileFirstName, is Call.ProfileLastName,
             is Call.ProfileConsent, is Call.ProfilePicture, is Call.ProfileRemovePicture, is Call.ProfileDiscardPicture,
             is Call.ProfilePictureBytes, is Call.ProfileSave, is Call.ProfileClose, Call.TrustMine, is Call.TrustMineCode,
-            is Call.TrustPerson, is Call.TrustCompareDigits, is Call.TrustCompareScanned, is Call.PasswordChangeOpen,
+            is Call.TrustPerson, Call.TrustWhosWho, is Call.TrustCompareDigits, is Call.TrustCompareScanned, is Call.PasswordChangeOpen,
             is Call.PasswordChangeRun, is Call.PasswordChangeClose, is Call.AddressChangeOpen, is Call.AddressChangeRequest,
             is Call.AddressChangeKit, is Call.AddressChangeClose, is Call.KitSave, is Call.KitConfirm, is Call.KitClose,
             is Call.KeyRotationOpen, is Call.KeyRotationChooseNewPassword, is Call.KeyRotationProve, is Call.KeyRotationRun, is Call.KeyRotationRefreshLinks,
@@ -1970,6 +1970,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 val shown = t.person(call.userId)
                 Answer.PersonTrust(shown, shown?.status)
             } ?: noTenant
+            Call.TrustWhosWho -> tenant.value?.models?.trust?.let { t -> Answer.WhosWho(t.whosWho()) } ?: noTenant
             is Call.TrustCompareDigits -> tenant.value?.models?.trust?.let { t -> Answer.TrustOutcome(t.compareDigits(call.userId, call.match)) } ?: noTenant
             is Call.TrustCompareScanned -> tenant.value?.models?.trust?.let { t ->
                 val found = (scans[call.scan]?.current as? me.raddatz.veyq.mobile.qr.QrScan.State.Found<*>)?.value as? SafetyCode

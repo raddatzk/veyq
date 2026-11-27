@@ -1811,6 +1811,10 @@ internal sealed class Call {
     /** Another member's state on their page (`PersonTrust.person`): [Answer.PersonTrust]. */
     @Serializable @SerialName("Trust.Person") data class TrustPerson(val userId: String) : Call()
 
+    /** Settings' *Who's who* (`SettingsSection.WHOS_WHO`, core's `PersonTrust.whosWho`, inbox #967): every other member of the
+     *  open tenant with their state, read anew at each call. [Answer.WhosWho]; refused without a tenant. */
+    @Serializable @SerialName("Trust.WhosWho") data object TrustWhosWho : Call()
+
     /** The digits compared aloud: "They match" ([match]) or not (`PersonTrust.compareDigits`): [Answer.TrustOutcome]. */
     @Serializable @SerialName("Trust.CompareDigits") data class TrustCompareDigits(val userId: String, val match: Boolean) : Call()
 
@@ -2324,6 +2328,9 @@ internal sealed class Answer {
 
     /** Another member's state on their page; null where they are no member here. */
     @Serializable @SerialName("PersonTrust") data class PersonTrust(val shown: me.raddatz.veyq.mobile.session.PersonTrust.Shown?, val status: me.raddatz.veyq.mobile.session.PersonTrust.Status?) : Answer()
+
+    /** [Call.TrustWhosWho]: the list, or the one line said in its place (`said`, with `retry` where *Try again* is offered). */
+    @Serializable @SerialName("WhosWho") data class WhosWho(val whosWho: me.raddatz.veyq.mobile.session.WhosWho) : Answer()
 
     /** What a compare came to. */
     @Serializable @SerialName("TrustOutcome") data class TrustOutcome(val outcome: me.raddatz.veyq.mobile.session.PersonTrust.Outcome) : Answer()
