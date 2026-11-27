@@ -1,0 +1,187 @@
+name: Archive
+
+# The backup archive (ADR 0091 decision 6, amended 2026-11-26): for one release, a backup of an instance that release's
+# own seeder filled — the published release installed and verified, seeded, `veyqctl backup` with its object pool and
+# the key apart — published once as the signed OCI artifact `ghcr.io/<owner>/veyq-backups:<major>.<minor>` beside the
+# release's images. Lane L3 restores what it holds (cr-stack-lane-l3-backup-archive). Two ways in:
+#
+#   - `release.yml`'s `archive` job calls it after a release is published (`workflow_call`): every release is archived.
+#   - Actions → Archive → Run workflow on `main` with a tag (`workflow_dispatch`): a release that is already out — the
+#     releases from before this workflow, written once each, oldest first (that CR's phase 2) — or a re-run after a
+#     failure. A failure here never touches the release, which is published and immutable by then.
+#
+# This file is the ARCHIVE identity: keyless signing names the workflow that holds the signing job, the called one when
+# `release.yml` calls it (`job_workflow_ref`), so an archive is signed as `archive.yml` on `main` or `release/<major>.x`
+# either way — never as the release (`veyqctl` and the Run page accept `release.yml` alone), and lane L3 accepts
+# nothing else as an archive. `scripts/archive_backup.py identity` states it, and scripts/validate_release_identity.py
+# holds it to this file, to those branches, and to nothing else.
+#
+# Written once: a tag that exists is a notice and nothing is written, built or installed (as Publish treats a commit
+# with its `snapshot-` tag). The order of the writes, and what a failure after each leaves:
+#   1. the blobs and the manifest, pushed by digest, untagged — a failure leaves an untagged manifest no reader names;
+#   2. the signature on that digest — a failure leaves a signed manifest nobody names, and a re-run writes again;
+#   3. the tag (`archive_backup.py publish`, read once more first) — the last write, read back.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "The release to archive, v<major>.<minor>"
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "The release to archive, v<major>.<minor> (written once: an archived release is a notice)"
+        type: string
+        required: true
+
+permissions: {}
+
+# oras, the OCI client the archive is pushed with (cosign's own `attach` and `upload` are deprecated upstream and name
+# oras as their successor): the official release tarball, checked against this SHA-256 before it runs, as Helm's in
+# checks.yml. Measured 2026-11-27: oras_1.4.0_checksums.txt, the tarball's own hash and GitHub's asset digest of
+# oras-project/oras v1.4.0 all agree. Renovate bumps the version; scripts/pin_follow.py oras writes the hash.
+env:
+  ORAS_VERSION: v1.4.0
+  ORAS_SHA256: d8e1dce2fd8ce996f1d901845b688eb0cf505a6082897606f053825bb47935d1
+
+jobs:
+  archive:
+    name: Archive the backup of ${{ inputs.tag }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # One run per release at a time, never cancelled: two runs of one tag push one after the other, and the second
+    # finds the first's tag.
+    concurrency:
+      group: veyq-archive-${{ inputs.tag }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write # the artifact, its signature and its tag in GHCR
+      id-token: write # keyless cosign signing via GitHub OIDC: the archive identity
+    env:
+      TAG: ${{ inputs.tag }}
+      REGISTRY: ghcr.io/${{ github.repository_owner }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Every tag and the whole history: the release's own tree (its seeder, its lockfile, its pin file) is a
+          # worktree of its tag, which may sit on a `release/<old>.x` branch this ref does not reach.
+          fetch-depth: 0
+
+      # PyYAML as exact, hashed wheels only: this job holds the archive identity's OIDC token and the registry
+      # (validate_release_identity.py assertion 15).
+      - name: Set up the scripts' Python
+        run: |
+          python3 -m venv "${RUNNER_TEMP}/venv"
+          "${RUNNER_TEMP}/venv/bin/pip" install --quiet --require-hashes --only-binary :all: -r scripts/requirements-release.txt
+
+      - name: Install oras (pinned tarball)
+        run: |
+          set -euo pipefail
+          tarball="oras_${ORAS_VERSION#v}_linux_amd64.tar.gz"
+          curl -fsSLo "${RUNNER_TEMP}/${tarball}" "https://github.com/oras-project/oras/releases/download/${ORAS_VERSION}/${tarball}"
+          echo "${ORAS_SHA256}  ${RUNNER_TEMP}/${tarball}" | sha256sum --check --strict -
+          mkdir -p "${RUNNER_TEMP}/oras"
+          tar -xzf "${RUNNER_TEMP}/${tarball}" -C "${RUNNER_TEMP}/oras" oras
+          echo "${RUNNER_TEMP}/oras" >> "$GITHUB_PATH"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Stage 0 alone: the tag and this run's ref checked (an archive is signed on a publishing branch only), and the
+      # archive's tag read. Archived already: a notice, and every step below is skipped.
+      - name: Is the release archived already?
+        id: check
+        run: |
+          "${RUNNER_TEMP}/venv/bin/python" scripts/archive_backup.py check --tag "$TAG" --registry "$REGISTRY" \
+            --ref "$GITHUB_REF" --outputs "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        if: steps.check.outputs.needed == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "26"
+
+      # pnpm at exactly the version package.json pins in `packageManager` (validate_pnpm_installs_gated.py holds the
+      # two equal): the release's tree installs with its own lockfile, under the pnpm it pins itself.
+      - name: Install pnpm
+        if: steps.check.outputs.needed == 'true'
+        run: npm install -g pnpm@12.23.0
+
+      # The release's own veyqctl verifies its manifest and both images with cosign; the same cosign signs below. The
+      # version publish.yml signs with (scripts/validate_release_identity.py holds them equal).
+      - name: Install cosign
+        if: steps.check.outputs.needed == 'true'
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: v3.1.4
+
+      # Installed and seeded by the release itself, backed up by its own veyqctl, pushed by digest and untagged.
+      # `gh release download` reads the release's files with the job's token.
+      - name: Archive ${{ inputs.tag }}
+        id: archive
+        if: steps.check.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          "${RUNNER_TEMP}/venv/bin/python" scripts/archive_backup.py archive --tag "$TAG" --registry "$REGISTRY" \
+            --ref "$GITHUB_REF" --outputs "$GITHUB_OUTPUT"
+
+      - name: Sign the archive
+        if: steps.archive.outputs.written == 'true'
+        env:
+          REPOSITORY: ${{ steps.check.outputs.repository }}
+          DIGEST: ${{ steps.archive.outputs.digest }}
+        run: |
+          set -euo pipefail
+          cosign sign --yes "${REPOSITORY}@${DIGEST}"
+
+      # The signature read back under the archive identity — it must pass — and under the release identity, which it
+      # must not: an archive is never taken for a release. Both identities come from the scripts that state them.
+      - name: Verify the signature under the archive identity, and not under the release's
+        if: steps.archive.outputs.written == 'true'
+        env:
+          REPOSITORY: ${{ steps.check.outputs.repository }}
+          DIGEST: ${{ steps.archive.outputs.digest }}
+        run: |
+          set -euo pipefail
+          issuer="$("${RUNNER_TEMP}/venv/bin/python" scripts/archive_backup.py identity | sed -n 's/^issuer=//p')"
+          identity="$("${RUNNER_TEMP}/venv/bin/python" scripts/archive_backup.py identity | sed -n 's/^identity=//p')"
+          release="$("${RUNNER_TEMP}/venv/bin/python" scripts/promote.py release-identity | sed -n 's/^identity=//p')"
+          echo "under the archive identity ${identity}:"
+          cosign verify --certificate-oidc-issuer "$issuer" --certificate-identity-regexp "$identity" \
+            "${REPOSITORY}@${DIGEST}" > /dev/null
+          echo "verified."
+          echo "under the release identity ${release}:"
+          if cosign verify --certificate-oidc-issuer "$issuer" --certificate-identity-regexp "$release" \
+              "${REPOSITORY}@${DIGEST}" > /dev/null; then
+            echo "the archive verifies as a RELEASE — its signing identity is not the archive's alone" >&2
+            exit 1
+          fi
+          echo "refused, as it must be."
+
+      - name: Name the archive (the last write)
+        if: steps.archive.outputs.written == 'true'
+        env:
+          DIGEST: ${{ steps.archive.outputs.digest }}
+        run: |
+          "${RUNNER_TEMP}/venv/bin/python" scripts/archive_backup.py publish --tag "$TAG" --registry "$REGISTRY" \
+            --digest "$DIGEST"
+
+      # The run directory: the release's files, the instance's home with its capture, every step's log and the
+      # artifact as pushed. It holds the secrets of a throwaway instance that no longer exists, as the artifact does.
+      - name: Keep the run directory
+        if: always() && steps.check.outputs.needed == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: archive-out-${{ inputs.tag }}
+          path: .e2e-stack-out/
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7

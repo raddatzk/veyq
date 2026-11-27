@@ -32,6 +32,12 @@ on the repository's Python 3.9. No language model anywhere, and no release-note 
      `<url>.sha256` and the hash of the zip itself (streamed, never kept). The wrapper JAR is left alone on purpose: a
      newer distribution runs under an older JAR (`src/backend/` runs 9.9.2 under 9.9.0's), and
      `scripts/gradle_wrapper_jar.sha256` pins the JAR that is there.
+  5. **oras** — the oras tarball pin of `archive.yml`: `ORAS_VERSION` and `ORAS_SHA256` in its `env:` (the OCI client
+     the backup archive is pushed with, cr-stack-lane-l3-backup-archive). The SHA-256 of
+     `oras_<X.Y.Z>_linux_amd64.tar.gz` is obtained three ways and taken only when all three agree: the line naming that
+     file in the release's own `oras_<X.Y.Z>_checksums.txt`, the hash of the tarball itself (streamed, never kept), and
+     the `digest` GitHub's release API reports for that asset of `oras-project/oras` `<v>`. The "Measured <date>: …"
+     sentence above the pin is moved to `<v>` and today's UTC date.
 
 **What makes it refuse** (exit 1, nothing written), each a case in `pin_follow_selftest.py`: the three workflows name
 different Helm versions, or one names none or two; the three Helm checksum sources disagree, or one is missing, or
@@ -40,7 +46,9 @@ Central's `.sha1` or `.md5`; a requirements block whose version PyPI publishes n
 line in the file that is no hashed requirement; no tracked wrapper properties file, one whose `distributionUrl` or
 `distributionSha256Sum` line is missing, malformed or there twice, a `distributionUrl` that is no
 `https://services.gradle.org/distributions/gradle-<X.Y[.Z]>-(bin|all).zip`, a `.sha256` that is not exactly one
-64-hex value, or a zip that does not hash to it. An upstream answering 429 or 5xx is retried with backoff (Maven
+64-hex value, or a zip that does not hash to it; an `ORAS_VERSION` that is no `vX.Y.Z`, the three oras sources
+disagreeing or one missing (a checksums file naming the tarball on no line or on two, an asset with no `sha256:`
+digest), or the oras release being a draft or a prerelease. An upstream answering 429 or 5xx is retried with backoff (Maven
 Central rate-limits CI) before it counts as a refusal.
 
 **Its limits — what a green run does NOT prove.** All three Helm sources are served by the Helm project; they agree
@@ -52,12 +60,15 @@ PyPI's word for its own files, exactly as the requirements file's header says. P
 and the date (which CPython versions the wheels cover, say) is not rewritten. Both Gradle sources are
 services.gradle.org's: their agreement proves the zip's bytes match the sum published beside them, not that Gradle's
 server is honest (the distribution's signature is not checked); and the wrapper JAR is not refreshed — a release that
-needs a newer JAR is a hand-made change.
+needs a newer JAR is a hand-made change. The three oras sources are the oras project's GitHub release and GitHub's
+own record of its asset: they agree when nothing was swapped in transit or after upload, not when the project's release
+itself was compromised (the `.asc` signatures beside the tarballs are not checked; no gpg in Renovate's container).
 
     python3 scripts/pin_follow.py [--root DIR] helm
     python3 scripts/pin_follow.py [--root DIR] openapi-generator-jar
     python3 scripts/pin_follow.py [--root DIR] pypi-hashes FILE
     python3 scripts/pin_follow.py [--root DIR] gradle-distribution
+    python3 scripts/pin_follow.py [--root DIR] oras
 
 `--root` (default: this repository) is the tree to read and write; FILE is relative to it.
 """
@@ -96,6 +107,8 @@ GENERATOR_CONFIGS = (repo_layout.rel(repo_layout.WEB / "openapitools.json"),
                      repo_layout.rel(repo_layout.ADMIN_WEB / "openapitools.json"))
 VERSION_CATALOG = repo_layout.rel(repo_layout.BACKEND / "gradle/libs.versions.toml")
 JAR_PIN_FILE = "scripts/openapi_generator_jar.sha256"
+# The one workflow that installs oras (the backup archive's OCI client); the sentence above its pin says how it was measured.
+ORAS_WORKFLOW = ".github/workflows/archive.yml"
 
 # --- upstream addresses ------------------------------------------------------------------------------------------------
 
@@ -104,6 +117,8 @@ HELM_RELEASE = "https://api.github.com/repos/helm/helm/releases/tags/{v}"
 CENTRAL_JAR = ("https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/{v}/"
                "openapi-generator-cli-{v}.jar")
 PYPI_RELEASE = "https://pypi.org/pypi/{name}/{version}/json"
+ORAS_DOWNLOAD = "https://github.com/oras-project/oras/releases/download/{v}/{name}"
+ORAS_RELEASE = "https://api.github.com/repos/oras-project/oras/releases/tags/{v}"
 
 HELM_VERSION = re.compile(r"v\d+\.\d+\.\d+")
 GENERATOR_VERSION = re.compile(r"\d+\.\d+\.\d+")
@@ -559,6 +574,68 @@ def follow_gradle_distribution(root: pathlib.Path) -> None:
     write_all(root, new)
 
 
+# --- 5. oras ----------------------------------------------------------------------------------------------------------
+
+ORAS_MEASURED = re.compile(r"Measured (?P<date>\d{4}-\d{2}-\d{2}): (?P<rest>oras_.*?)all agree\.", re.DOTALL)
+
+
+def oras_checksum_line(body: bytes, filename: str, what: str) -> str:
+    """The one 64-hex sum a `checksums.txt` (`<hex>  <name>` per line) gives for `filename`."""
+    try:
+        lines = body.decode("ascii").splitlines()
+    except UnicodeDecodeError:
+        raise Refusal(f"{what} is not ASCII") from None
+    sums = [parts[0].lower() for parts in (line.split() for line in lines)
+            if len(parts) == 2 and parts[1].lstrip("*") == filename]
+    if len(sums) != 1 or not HEX64.fullmatch(sums[0]):
+        raise Refusal(f"{what} names {filename} on {len(sums)} line(s) with a 64-hex sum, not one")
+    return sums[0]
+
+
+def follow_oras(root: pathlib.Path) -> None:
+    text = read(root, ORAS_WORKFLOW)
+    version = env_line(text, "ORAS_VERSION", ORAS_WORKFLOW).group("value").strip("\"'")
+    if not HELM_VERSION.fullmatch(version):
+        raise Refusal(f"ORAS_VERSION `{version}` is no `vX.Y.Z`")
+    bare = version[1:]
+    filename = f"oras_{bare}_linux_amd64.tar.gz"
+    sums_name = f"oras_{bare}_checksums.txt"
+    listed = oras_checksum_line(get_ok(ORAS_DOWNLOAD.format(v=version, name=sums_name), f"oras's {sums_name}").body,
+                                filename, sums_name)
+    hashed = get_ok(ORAS_DOWNLOAD.format(v=version, name=filename), "the oras tarball",
+                    digests=("sha256",)).digests["sha256"]
+    raw = get_ok(ORAS_RELEASE.format(v=version), "the GitHub release of oras-project/oras", github_headers()).body
+    try:
+        release = json.loads(raw)
+    except ValueError:
+        raise Refusal(f"the GitHub release of oras {version} is not JSON") from None
+    if not isinstance(release, dict) or release.get("tag_name") != version:
+        raise Refusal(f"the GitHub release fetched for oras {version} is tagged "
+                      f"{release.get('tag_name') if isinstance(release, dict) else '?'!r}")
+    if release.get("draft") or release.get("prerelease"):
+        raise Refusal(f"oras {version} is a draft or a prerelease on GitHub — not a version to pin")
+    digests = [str(a.get("digest") or "") for a in release.get("assets") or [] if isinstance(a, dict)
+               and a.get("name") == filename]
+    if len(digests) != 1 or not re.fullmatch(r"sha256:[0-9a-f]{64}", digests[0]):
+        raise Refusal(f"GitHub's release of oras {version} lists {len(digests)} asset(s) named {filename} with a "
+                      f"sha256 digest, not one")
+    recorded = digests[0].split(":", 1)[1]
+    if not (listed == hashed == recorded):
+        raise Refusal(f"the three SHA-256 sources for {filename} disagree — {sums_name}: {listed}, the tarball itself: "
+                      f"{hashed}, GitHub's asset digest: {recorded}")
+    line = env_line(text, "ORAS_SHA256", ORAS_WORKFLOW)
+    new = text[:line.start("value")] + listed + text[line.end("value"):]
+    measured = list(ORAS_MEASURED.finditer(new))
+    if len(measured) != 1:
+        raise Refusal(f"{ORAS_WORKFLOW} has {len(measured)} \"Measured <date>: oras_… all agree.\" sentences, not one "
+                      f"— the comment drifted from the form this tool rewrites")
+    sentence = measured[0]
+    rewritten = f"Measured {today()}: " + re.sub(r"\d+\.\d+\.\d+", bare, sentence.group("rest")) + "all agree."
+    new = new[:sentence.start()] + rewritten + new[sentence.end():]
+    print(f"oras {version}: {listed} (its checksums file, the tarball and GitHub's asset digest agree)")
+    write_all(root, {ORAS_WORKFLOW: new})
+
+
 # --- command line ------------------------------------------------------------------------------------------------------
 
 def main(argv: "Iterable[str] | None" = None) -> int:
@@ -571,6 +648,7 @@ def main(argv: "Iterable[str] | None" = None) -> int:
     pypi = sub.add_parser("pypi-hashes", help="a hashed requirements file's wheel hashes")
     pypi.add_argument("file", help="the requirements file, relative to --root")
     sub.add_parser("gradle-distribution", help="distributionSha256Sum in every tracked gradle-wrapper.properties")
+    sub.add_parser("oras", help="the oras tarball's SHA-256 in archive.yml")
     args = parser.parse_args(list(argv) if argv is not None else None)
     root = args.root.resolve()
     try:
@@ -580,6 +658,8 @@ def main(argv: "Iterable[str] | None" = None) -> int:
             follow_generator_jar(root)
         elif args.command == "gradle-distribution":
             follow_gradle_distribution(root)
+        elif args.command == "oras":
+            follow_oras(root)
         else:
             follow_pypi_hashes(root, args.file)
     except Refusal as refusal:

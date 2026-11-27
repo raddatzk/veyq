@@ -2,7 +2,7 @@
 """Guard that a veyq release has an identity, that the identity comes from the tree, and that every artifact
 naming a release names a shape the pipeline actually emits (ADR 0057).
 
-**What it asserts.** Fourteen things (11 retired from this pipeline with the release kind, below), in the order a
+**What it asserts.** Seventeen things (11 retired from this pipeline with the release kind, below), in the order a
 snapshot happens. **Two files, one path of bytes** (ADR 0091 decisions 2 and 5, amended 2026-11-07,
 cr-workflows-split-pipeline-callers): `checks.yml` is the pipeline — every push and pull request — and a push to `main`
 or `release/<major>.x` STAGES its images (`kind == 'stage'`); `publish.yml` runs no pipeline and builds nothing, and
@@ -106,10 +106,11 @@ manifests, the image signatures, the predicates and the tag each name it.
      (cosign 3 writes the Sigstore bundle by default, and only its `=false` spelling still writes the legacy one).
  14. **The promotion** (`.github/workflows/release.yml`, ADR 0091 decision 5): the file the release identity names
      exists; it is started by `workflow_dispatch` alone, whose one input is the boolean `unscheduled_major` (default
-     false); it runs in concurrency group `veyq-release`, never cancelled, under `permissions: {}`, and its five jobs
+     false); it runs in concurrency group `veyq-release`, never cancelled, under `permissions: {}`, and its six jobs
      hold exactly — `check` contents write (draft listing) and packages read, `promote` packages and id-token write,
-     `publish` contents write, `channels` packages write, `refused` contents write; `promote` needs `check`, `publish`
-     both, `channels` runs only once `publish` says published, `refused` never after it. No step builds (a build-push
+     `publish` contents write, `channels` packages write, `refused` contents write, `archive` (a call of `archive.yml`
+     alone, assertion 18) packages and id-token write; `promote` needs `check`, `publish` both, `channels` and `archive`
+     run only once `publish` says published — `archive` handed exactly that release's tag — `refused` never after it. No step builds (a build-push
      action, `docker build`, `buildx build`, a Gradle or pnpm run); only `publish` and `refused` write to the repository
      or a GitHub Release; `<major>` and `latest` are named in `channels` alone. `publish` publishes the draft in one
      step (`draft=false`), after it verifies the files against `veyqctl`'s own identity (`scripts/promote.py
@@ -145,6 +146,23 @@ manifests, the image signatures, the predicates and the tag each name it.
      (publish.yml's) and a push or a pull request in another (checks.yml's), per ref, never cancelled in progress: two
      publishing runs then go one after the other, so the later one sees the earlier one's tag, and a push neither waits
      for a snapshot nor gets a pending scheduled run cancelled by queueing behind it.
+ 18. **Every signature names an identity this guard knows, and the archive's names nothing else** (ADR 0091 decision
+     6). Keyless signing names the workflow file that holds the signing job, so every file under `.github/workflows/`
+     with a job that runs `cosign sign`, `sign-blob`, `attest` or `attest-blob` is one of `SIGNING_WORKFLOWS` —
+     publish.yml (the snapshot), release.yml (the release), archive.yml (the archive) — and each listed file signs; a job
+     that calls a workflow (`uses:`) and hands it `id-token: write` calls a listed one (it signs under the called file's
+     name). The archive identity — `scripts/archive_backup.py`'s `IDENTITY_REGEXP`, with GitHub's issuer, the one
+     `archive.yml` verifies its signature against and lane L3 will pin — accepts `archive.yml` on every branch assertion
+     2's scenarios publish from, and rejects every other workflow on those branches (release.yml and publish.yml
+     named apart), a non-release branch, a pull-request or tag ref, another owner, an owner or repository whose name
+     only starts with ours, and the right identity quoted inside another URL; and `veyqctl`'s release identity rejects
+     the archive's. `archive.yml` is started by `workflow_call` and `workflow_dispatch` alone, each taking exactly a
+     required string `tag`, under `permissions: {}`, with one job `archive` holding exactly contents read, packages
+     and id-token write, one concurrency group per tag never cancelled; it states no identity of its own (no `@refs/`);
+     its steps check, archive (untagged), sign, verify (under the archive identity and against the release's, both read
+     from the scripts that state them) and name the archive (`archive_backup.py publish`) once each and in that order;
+     it signs with publish.yml's cosign, installed before; and its check and archive steps hand the run's ref.
+     Assertions 15 and 16 read it as they read release.yml.
   8. **The chart is the snapshot's third artifact** (ADR 0064). The refuse step checks `--image` for every published
      image (the build matrix) AND `--chart charts/<name>` (`Chart.yaml`'s `name`) under the workflow's own registry; the
      step that runs `helm package` sets `--version` and `--app-version` to the tree-derived version's `-SNAPSHOT`
@@ -286,6 +304,13 @@ The publishable commit's hold was bought by a live defect (2026-11-08, Publish r
 Checks run and Publish was red — weekly and on a dispatch — whenever main's tip was docs-only. Publish now publishes
 the newest tested ancestor, and the hold keeps a later edit from naming HEAD again anywhere a name is written.
 
+Assertion 18 came with the backup archive (cr-stack-lane-l3-backup-archive phase 1, 2026-11-27), no incident: it
+added a third file that signs, and nothing held which files sign at all — a fourth one would have signed under an
+identity no verification pins, and an archive identity one character too wide (`(archive|release)\.yml`) would let an
+archive verify as a release, or a release as an archive. Each of its holds was bitten once: a new workflow that signs,
+archive.yml's entry dropped from the list, that widened identity, the tag set before the signature, release.yml's
+`archive` ungated from the publication, and the archive run without the run's ref.
+
 Assertion 12 came with heavy-stage finding B1 (2026-10-24), which suspected the cache and found the labels instead.
 The cache was innocent (above); the labels were not. The app image set no label at all, so `docker inspect` showed its
 Ubuntu base's `version` 22.04 and no revision; the admin image showed nginx's `licenses` (Apache-2.0), `source`,
@@ -349,6 +374,13 @@ cosign it pins by sha256), and a `cosign` fetched another way — a `curl`, anot
 Assertion 13's limits. It reads the workflow, not the registry: that `cosign attest` stored the predicate where a
 promotion finds it is a run's to show. The predicates' own refusals (a missing, extra, failed or inconsistent leg) are
 `scripts/snapshot_selftest.py`'s, which `guards` runs; this assertion holds the arguments the workflow hands them.
+
+Assertion 18's limits. A signature is recognised by its `cosign` line: one made through a variable, a script, another
+signer or an action is not seen, and `id-token: write` alone is no signature (site.yml's Pages deploy holds it for
+GitHub's own OIDC). That keyless signing from a called workflow carries the called file's name (`job_workflow_ref`) is
+GitHub's and Fulcio's documented behaviour, read, not measured here; the archive's own verify step (under its identity,
+and refused under the release's) is what a run shows. The probe list of rejected identities is the same kind as
+assertion 7's: a list of ways a pattern is too wide, not a proof that no other string is accepted.
 
 Assertion 14's limits. It reads the file's lines and job graph, not GitHub: that a draft can be moved onto another tag,
 that `gh release upload` finds a draft by its tag, that `make_latest` and the immutable-releases setting behave as the
@@ -475,6 +507,22 @@ VERIFY_PAGE = ROOT / "site/src/content/docs/run/verify-a-release.md"
 # not — they are the chart's `home:` (assertion 7), so a move of the repository changes that one line and this guard
 # names every line that must follow it (`veyqctl`'s constant, the Run page's commands, the chart's image defaults).
 RELEASE_WORKFLOW = ".github/workflows/release.yml"
+# The workflow whose keyless signature says "archive" (ADR 0091 decision 6; assertion 18), and the identity it signs
+# under: string constants of scripts/archive_backup.py, where lane L3 reads them, read here without importing it.
+ARCHIVE_SCRIPT = ROOT / "scripts/archive_backup.py"
+
+
+def module_strings(path: pathlib.Path) -> dict[str, str]:
+    """A module's module-level string constants, read without importing it; {} when the file is gone."""
+    if not path.is_file():
+        return {}
+    return {node.targets[0].id: node.value.value for node in ast.parse(path.read_text()).body
+            if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+            and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)}
+
+
+ARCHIVE_CONSTANTS = module_strings(ARCHIVE_SCRIPT)
+ARCHIVE_WORKFLOW_FILE = ARCHIVE_CONSTANTS.get("ARCHIVE_WORKFLOW", "")
 
 # The tree-derived version, as the workflow refers to it. Every release-naming step must key on THIS and not on
 # a registry query, a `git describe`, or a hand-typed literal.
@@ -2242,6 +2290,8 @@ RELEASE_JOBS = {
     "publish": {"contents": "write"},
     "channels": {"contents": "read", "packages": "write"},
     "refused": {"contents": "write"},
+    # A called workflow's job: what it grants is the most `archive.yml` may use (assertion 18 holds that file).
+    "archive": {"contents": "read", "packages": "write", "id-token": "write"},
 }
 BUILD_RUN = re.compile(r"\b(?:docker\s+build|buildx\s+build|gradlew|pnpm\s|npm\s|quarkusBuild)\b")
 PUBLISH_DRAFT = re.compile(r"-F\s+draft=false\b")
@@ -2292,14 +2342,29 @@ else:
         return {raw} if isinstance(raw, str) else {str(n) for n in raw}
 
     for job, needed in (("promote", {"check"}), ("publish", {"check", "promote"}), ("channels", {"check", "publish"}),
-                        ("refused", {"check", "promote", "publish"})):
+                        ("refused", {"check", "promote", "publish"}), ("archive", {"check", "publish"})):
         if not needed <= rneeds(job):
             fail(f"{RELEASE_WORKFLOW}: job `{job}` does not need {sorted(needed - rneeds(job))} — the order is check, "
-                 f"promote, publish, then the channels; `refused` reads all three")
+                 f"promote, publish, then the channels and the archive; `refused` reads all three")
     channels_if = " ".join(str((rjobs.get("channels") or {}).get("if") or "").split())
     if "needs.publish.outputs.published == 'true'" not in channels_if or "||" in channels_if:
         fail(f"{RELEASE_WORKFLOW}: `channels` runs on `{channels_if}` — `<major>` and `latest` move only once the release "
              f"is published, or they point at a release that does not exist")
+    # The archive (ADR 0091 decision 6): the called `archive.yml`, for exactly the release just published, and only
+    # once it is — a failure there never reaches the release, which is immutable by then.
+    archive_job = rjobs.get("archive") or {}
+    archive_if = " ".join(str(archive_job.get("if") or "").split())
+    if str(archive_job.get("uses") or "") != f"./{ARCHIVE_WORKFLOW_FILE}" or set(archive_job) - {
+            "name", "needs", "if", "permissions", "uses", "with"}:
+        fail(f"{RELEASE_WORKFLOW}: `archive` is no call of `./{ARCHIVE_WORKFLOW_FILE}` alone (uses "
+             f"`{archive_job.get('uses')}`, keys {sorted(archive_job)}) — every release is archived by that workflow, "
+             f"under its identity (assertion 18)")
+    if "needs.publish.outputs.published == 'true'" not in archive_if or "||" in archive_if:
+        fail(f"{RELEASE_WORKFLOW}: `archive` runs on `{archive_if}` — a release is archived once it is published, "
+             f"never before (its files are read from the published release)")
+    if (archive_job.get("with") or {}) != {"tag": "v${{ needs.check.outputs.version }}"}:
+        fail(f"{RELEASE_WORKFLOW}: `archive` is handed {archive_job.get('with')} — exactly the release this run "
+             f"published, `tag: v${{{{ needs.check.outputs.version }}}}`")
     refused_if = " ".join(str((rjobs.get("refused") or {}).get("if") or "").split())
     if "needs.publish.outputs.published != 'true'" not in refused_if:
         fail(f"{RELEASE_WORKFLOW}: `refused` runs on `{refused_if}` — it puts a draft back, so never after publication")
@@ -2425,6 +2490,173 @@ for other in sorted(WORKFLOW.parent.glob("*.y*ml")):
             fail(f"{other.relative_to(ROOT)}:{number} writes a GitHub Release — only {RELEASE_WORKFLOW}, the release "
                  f"identity, does")
 
+# ---- 18. every signature names an identity this guard knows, and the archive's names nothing else ----------------
+# Keyless signing names the workflow file that holds the signing job, so each file that signs IS an identity: publish.yml
+# the snapshot's, release.yml the release's (assertion 7), archive.yml the archive's (ADR 0091 decision 6). A fourth file
+# that signs is an identity nothing verifies against and nobody decided on; and a listed one that no longer signs is a
+# stale entry. A job that calls another workflow (`uses:`) signs under the CALLED file's name (`job_workflow_ref`), so it
+# may hold `id-token: write` only to hand it to a listed one.
+SIGNING_WORKFLOWS = {
+    rel_of(WORKFLOW): "the snapshot identity (scripts/promote.py's, assertion 13)",
+    RELEASE_WORKFLOW: "the release identity (veyqctl's and the Run page's, assertion 7)",
+    ARCHIVE_WORKFLOW_FILE or ".github/workflows/archive.yml": "the archive identity (scripts/archive_backup.py's)",
+}
+SIGNS = re.compile(r"\bcosign\s+(?:sign|sign-blob|attest|attest-blob)\b")
+archive_summary = ""
+
+
+def id_token_writes(permissions: object) -> bool:
+    return permissions == "write-all" or (isinstance(permissions, dict) and str(permissions.get("id-token")) == "write")
+
+
+signers: dict[str, list[str]] = {}
+for wf in sorted(WORKFLOW.parent.glob("*.y*ml")):
+    rel = rel_of(wf)
+    try:
+        wdoc = yaml.safe_load(wf.read_text()) or {}
+    except yaml.YAMLError:
+        continue  # validate_pipeline_shape.py names a file that does not parse
+    default = wdoc.get("permissions")
+    for job_name, job in (wdoc.get("jobs") or {}).items():
+        if not isinstance(job, dict):
+            continue
+        steps = [st for st in job.get("steps") or [] if isinstance(st, dict)]
+        signing = [st.get("name") or "?" for st in steps if SIGNS.search(str(st.get("run") or "").replace("\\\n", " "))]
+        called = str(job.get("uses") or "")
+        if id_token_writes(job.get("permissions", default)) and called:
+            target = called.removeprefix("./")
+            if target not in SIGNING_WORKFLOWS:
+                fail(f"{rel}: job `{job_name}` hands `id-token: write` to `{called}`, which is no workflow this guard "
+                     f"knows as a signing identity ({', '.join(sorted(SIGNING_WORKFLOWS))}) — a called workflow signs "
+                     f"under its own name")
+        elif signing:
+            # `id-token: write` alone is no signature: site.yml's Pages deploy holds it for GitHub's own OIDC.
+            signers.setdefault(rel, []).append(job_name)
+            if rel not in SIGNING_WORKFLOWS:
+                fail(f"{rel}: job `{job_name}` signs (step(s) {', '.join(signing)}) — keyless "
+                     f"signing names this file, an identity no verification here pins and nobody decided on. A file "
+                     f"that signs is listed in SIGNING_WORKFLOWS with the identity it is, and held like the others")
+for rel, what in SIGNING_WORKFLOWS.items():
+    if rel not in signers:
+        fail(f"{rel} is listed as {what}, and no job of it signs (or the file is gone) — a stale identity is one a "
+             f"verification would pin for nothing")
+
+# The archive's identity: archive.yml on the branches a release is promoted from, and nothing else — above all never
+# the release's (an archive would verify as a release) and never the snapshot's.
+ARCHIVE_FILE = ROOT / (ARCHIVE_WORKFLOW_FILE or ".github/workflows/archive.yml")
+archive_identity = ARCHIVE_CONSTANTS.get("IDENTITY_REGEXP")
+if not ARCHIVE_SCRIPT.is_file() or not ARCHIVE_WORKFLOW_FILE or archive_identity is None:
+    fail(f"{rel_of(ARCHIVE_SCRIPT)} assigns no `ARCHIVE_WORKFLOW` / `IDENTITY_REGEXP` string constant — where the archive "
+         f"identity is stated, so assertion 18 checked NOTHING of it")
+elif ARCHIVE_CONSTANTS.get("OIDC_ISSUER") != OIDC_ISSUER:
+    fail(f"{rel_of(ARCHIVE_SCRIPT)}'s OIDC_ISSUER is {ARCHIVE_CONSTANTS.get('OIDC_ISSUER')!r}, not GitHub's {OIDC_ISSUER}")
+elif upstream is not None:
+    owner, repo = upstream.group(1), upstream.group(2)
+
+    def asan(ref: str, workflow: str = ARCHIVE_WORKFLOW_FILE, slug: str = f"{owner}/{repo}") -> str:
+        return f"https://github.com/{slug}/{workflow}@{ref}"
+
+    a_accepted = {f"an archive written on `{b}`": asan(f"refs/heads/{b}") for b in publishing_branches}
+    a_rejected = {
+        **{f"`{rel_of(w)}` on `{b}`": asan(f"refs/heads/{b}", workflow=rel_of(w))
+           for w in sorted(WORKFLOW.parent.glob("*.y*ml")) if rel_of(w) != ARCHIVE_WORKFLOW_FILE
+           for b in publishing_branches},
+        **{f"the release identity (`{RELEASE_WORKFLOW}`) on `{b}`": asan(f"refs/heads/{b}", workflow=RELEASE_WORKFLOW)
+           for b in publishing_branches},
+        **{f"a run on `{b}`, not a release branch": asan(f"refs/heads/{b}") for b in
+           non_release_branches(version_match.group(1) if version_match else "1")},
+        "a pull request ref": asan("refs/pull/1/merge"),
+        "a tag ref": asan(f"refs/tags/v{version_value}.0"),
+        "another owner's repository": asan("refs/heads/main", slug=f"not-{owner}/{repo}"),
+        "an owner whose name only starts with ours": asan("refs/heads/main", slug=f"{owner}x/{repo}"),
+        f"a repository whose name only starts with `{repo}`": asan("refs/heads/main", slug=f"{owner}/{repo}-fork"),
+        "the right identity quoted inside another URL": "https://evil.example/" + asan("refs/heads/main"),
+    }
+    try:
+        archive_rx = re.compile(archive_identity)
+    except re.error as e:
+        archive_rx = None
+        fail(f"{rel_of(ARCHIVE_SCRIPT)}: the archive identity `{archive_identity}` does not compile: {e}")
+    if archive_rx is not None:
+        if not a_accepted:
+            fail("assertion 2's scenarios found no publishing branch, so the archive identity was checked against NOTHING")
+        for what, subject in a_accepted.items():
+            if archive_rx.search(subject) is None:
+                fail(f"the archive identity `{archive_identity}` rejects {what} ({subject}) — a genuine archive "
+                     f"would not verify")
+        for what, subject in a_rejected.items():
+            if archive_rx.search(subject) is not None:
+                fail(f"the archive identity `{archive_identity}` accepts {what} ({subject}) — an archive is "
+                     f"`{ARCHIVE_WORKFLOW_FILE}`'s signature and nothing else's")
+    # And the release identity refuses the archive's, named apart whether or not assertion 7's glob still finds it.
+    tool_identity = veyqctl_identity()[1]
+    if tool_identity:
+        for b in publishing_branches:
+            if re.search(tool_identity, asan(f"refs/heads/{b}")):
+                fail(f"veyqctl's release identity accepts the archive identity on `{b}` — an archive would verify as "
+                     f"a release")
+
+    # The archive workflow: what it may be started by, hold and do, and the order of its writes.
+    if not ARCHIVE_FILE.is_file():
+        fail(f"{ARCHIVE_WORKFLOW_FILE} is missing — the archive identity names a workflow that does not exist")
+    else:
+        adoc = yaml.safe_load(ARCHIVE_FILE.read_text()) or {}
+        atext = ARCHIVE_FILE.read_text()
+        atriggers = adoc.get("on", adoc.get(True)) or {}
+        if set(atriggers) != {"workflow_call", "workflow_dispatch"}:
+            fail(f"{ARCHIVE_WORKFLOW_FILE} triggers on {sorted(map(str, atriggers))} — exactly `workflow_call` (a "
+                 f"release, from {RELEASE_WORKFLOW}) and `workflow_dispatch` (a release already out)")
+        for trigger in ("workflow_call", "workflow_dispatch"):
+            inputs = ((atriggers.get(trigger) or {}) if isinstance(atriggers.get(trigger), dict) else {}).get("inputs") or {}
+            tag_input = inputs.get("tag") or {}
+            if set(inputs) != {"tag"} or tag_input.get("type") != "string" or tag_input.get("required") is not True:
+                fail(f"{ARCHIVE_WORKFLOW_FILE}'s `{trigger}` takes {sorted(inputs)} — exactly a required string `tag`")
+        if adoc.get("permissions") != {}:
+            fail(f"{ARCHIVE_WORKFLOW_FILE} grants {adoc.get('permissions')} to every job — `permissions: {{}}`")
+        ajobs = adoc.get("jobs") or {}
+        want = {"contents": "read", "packages": "write", "id-token": "write"}
+        if list(ajobs) != ["archive"] or (ajobs.get("archive") or {}).get("permissions") != want:
+            fail(f"{ARCHIVE_WORKFLOW_FILE} has the jobs {sorted(ajobs)} — one, `archive`, holding exactly {want}")
+        aconcurrency = (ajobs.get("archive") or {}).get("concurrency") or {}
+        if aconcurrency.get("cancel-in-progress") is not False or "inputs.tag" not in str(aconcurrency.get("group")):
+            fail(f"{ARCHIVE_WORKFLOW_FILE}: `archive`'s concurrency is {aconcurrency} — one group per tag, never "
+                 f"cancelled: two runs of one release push one after the other, and the second finds the first's tag")
+        if "@refs/" in atext:
+            fail(f"{ARCHIVE_WORKFLOW_FILE} states a certificate identity of its own — the archive's is "
+                 f"{rel_of(ARCHIVE_SCRIPT)}'s and the release's veyqctl's, each read from where it is written")
+        asteps = job_steps(adoc, "archive")
+
+        def at(pattern: str) -> list[int]:
+            return [i for i, st in enumerate(asteps) if re.search(pattern, str(st.get("run") or "").replace("\\\n", " "))]
+
+        checked, archived = at(r"archive_backup\.py\s+check\b"), at(r"archive_backup\.py\s+archive\b")
+        signed, named = at(r"\bcosign\s+sign\b"), at(r"archive_backup\.py\s+publish\b")
+        verified = [i for i in at(r"\bcosign\s+verify\b") if re.search(
+            r"archive_backup\.py\s+identity", str(asteps[i].get("run") or ""))
+            and re.search(r"promote\.py\s+release-identity", str(asteps[i].get("run") or ""))]
+        installs = [i for i, st in enumerate(asteps) if str(st.get("uses") or "").startswith(COSIGN_INSTALLER)]
+        order = [("checks whether the release is archived", checked), ("archives", archived), ("signs", signed),
+                 ("verifies under the archive identity and against the release's", verified), ("names it", named)]
+        if any(len(found) != 1 for _, found in order):
+            fail(f"{ARCHIVE_WORKFLOW_FILE}: `archive` must run each of these in one step — "
+                 + ", ".join(f"{what} ({len(found)})" for what, found in order))
+        elif [found[0] for _, found in order] != sorted(found[0] for _, found in order):
+            fail(f"{ARCHIVE_WORKFLOW_FILE}: `archive`'s writes are out of order — check, archive (pushed untagged), "
+                 f"sign, verify, and the tag LAST (`archive_backup.py publish`): a tag set before the signature names an "
+                 f"archive nobody can verify, and it is written once")
+        elif not installs or min(installs) > signed[0] or any(
+                str((asteps[i].get("with") or {}).get("cosign-release")) != signing_cosign for i in installs):
+            fail(f"{ARCHIVE_WORKFLOW_FILE}: `archive` signs with a cosign that is not installed before it as "
+                 f"`cosign-release: {signing_cosign}`, publish.yml's — one cosign signs veyq (inbox #474)")
+        for i in archived + checked:
+            if '--ref "$GITHUB_REF"' not in str(asteps[i].get("run") or ""):
+                fail(f"{ARCHIVE_WORKFLOW_FILE}: step `{asteps[i].get('name')}` does not hand the run's ref "
+                     f"(`--ref \"$GITHUB_REF\"`) — a dispatch from another branch would write an archive whose "
+                     f"signature never verifies, under a tag that is written once")
+        archive_summary = (f"; the {len(SIGNING_WORKFLOWS)} signing workflows are the {len(SIGNING_WORKFLOWS)} known "
+                           f"identities, and the archive's accepts {len(a_accepted)} and rejects {len(a_rejected)} "
+                           f"others, the release's among them")
+
 # ---- 15. a job that can write installs no Python package it has not pinned by hash ---------------------------------
 # Code PyPI serves at install time runs with the job's token: in `release.yml`'s `promote` the release identity's OIDC
 # token, in `check` the drafts, in the pipeline's `build` the registry. So every `pip install` of every `release.yml` job,
@@ -2445,9 +2677,11 @@ def can_write(permissions: object) -> bool:
 held_installs = 0
 requirement_files: set[str] = set()
 RELEASE_PATH = ROOT / RELEASE_WORKFLOW
+ARCHIVE_PATH = ROOT / (ARCHIVE_WORKFLOW_FILE or ".github/workflows/archive.yml")
 for wf_path, wf_doc, every_job in (
         (WORKFLOW, publish_doc, False), (CHECKS, checks_doc, False),
-        (RELEASE_PATH, yaml.safe_load(RELEASE_PATH.read_text()) or {} if RELEASE_PATH.is_file() else {}, True)):
+        (RELEASE_PATH, yaml.safe_load(RELEASE_PATH.read_text()) or {} if RELEASE_PATH.is_file() else {}, True),
+        (ARCHIVE_PATH, yaml.safe_load(ARCHIVE_PATH.read_text()) or {} if ARCHIVE_PATH.is_file() else {}, True)):
     if not wf_doc:
         continue
     default_permissions = wf_doc.get("permissions")
@@ -2503,7 +2737,8 @@ pip_summary = (f"; every one of the {held_installs} `pip install`(s) of a job th
 STATUS_FUNCTION = re.compile(r"\b(?:always|cancelled|failure|success)\s*\(\s*\)")
 gates_checked = 0
 for wf_path, wf_doc in ((WORKFLOW, publish_doc), (CHECKS, checks_doc),
-                       (RELEASE_PATH, yaml.safe_load(RELEASE_PATH.read_text()) or {} if RELEASE_PATH.is_file() else {})):
+                       (RELEASE_PATH, yaml.safe_load(RELEASE_PATH.read_text()) or {} if RELEASE_PATH.is_file() else {}),
+                       (ARCHIVE_PATH, yaml.safe_load(ARCHIVE_PATH.read_text()) or {} if ARCHIVE_PATH.is_file() else {})):
     wf_jobs = wf_doc.get("jobs") or {}
 
     def direct_needs(name: str) -> list[str]:
@@ -2752,5 +2987,5 @@ print(
     f"the {len(recipe_assets)} recipe file(s) the derivation names ({', '.join(recipe_assets)}), {written_tags} written-down image "
     f"tag(s) name a shape the pipeline emits, and the production stack names its own project "
     f"(`name: {prod_project}`) with nothing in durable state instructing the flag it replaced{verify_summary}"
-    f"{release_summary}{pip_summary}{publish_summary}"
+    f"{release_summary}{archive_summary}{pip_summary}{publish_summary}"
 )

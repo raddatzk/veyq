@@ -3,7 +3,9 @@
 - Status: Accepted
 - Built: partly (not built: decision 3's lane L3, decision 5's rerun of moved lanes — a promotion refuses an input it
   cannot compare, and lane L2's predecessor when it moved, instead — and the snapshot retention job, decision 6's
-  archive and L3, decision 7; lane L2 is built as decision 6's amendment of 2026-11-26 decides it —
+  lane L3 and the archive's backfill, decision 7 (the archive's workflow is built — `.github/workflows/archive.yml`,
+  `scripts/archive_backup.py`, called by `release.yml` after every promotion and dispatched for a release already
+  out — and no release is archived yet); lane L2 is built as decision 6's amendment of 2026-11-26 decides it —
   `scripts/run_stack_upgrade.py`, checks.yml's `stack-upgrade`, attested per leg with the release it upgraded from and
   required by the promotion, first attested by the Publish of `d5ce223da` (run 46018703012: v1.318 and v0.2480);
   decision 5's snapshot —

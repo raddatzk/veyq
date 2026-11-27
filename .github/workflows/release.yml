@@ -31,6 +31,9 @@ name: Release
 #   channels  packages: write — `<major>` and, from `main`, `latest`, only after the release is published.
 #   refused   contents: write — on a failure before publication: the git tag and the draft put back, and why written
 #             into the draft's notes. A failed promotion leaves a draft, never a release.
+#   archive   calls archive.yml (contents: read, packages: write, id-token: write, granted to it) once the release is
+#             published: a backup of an instance the release's own seeder filled, signed under the ARCHIVE identity
+#             (ADR 0091 decision 6). Its failure leaves the release as it is; a dispatch of archive.yml writes it later.
 on:
   workflow_dispatch:
     inputs:
@@ -493,6 +496,23 @@ jobs:
             done
             echo "${REGISTRY}/${image}: ${MAJOR}$([[ "$LATEST" == "true" ]] && echo ', latest') = ${digest}"
           done
+
+  # Every release is archived (ADR 0091 decision 6): its published files installed and seeded by its own code, backed
+  # up by its own veyqctl and pushed as `veyq-backups:<major>.<minor>`, once. archive.yml signs under its OWN name
+  # (`job_workflow_ref`), so this job grants `id-token` only to hand it on.
+  archive:
+    name: Archive the release's backup
+    needs:
+      - check
+      - publish
+    if: always() && needs.publish.outputs.published == 'true'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    uses: ./.github/workflows/archive.yml
+    with:
+      tag: v${{ needs.check.outputs.version }}
 
   refused:
     name: Put the draft back and write why into it

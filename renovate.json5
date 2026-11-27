@@ -49,6 +49,15 @@
     },
     {
       customType: "regex",
+      description: "oras, the backup archive's OCI client: `ORAS_VERSION` in archive.yml's `env:`. Its SHA-256 follows (pin_follow.py oras).",
+      managerFilePatterns: ["/^\\.github/workflows/archive\\.yml$/"],
+      matchStrings: ["ORAS_VERSION: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
+      depNameTemplate: "oras",
+      packageNameTemplate: "oras-project/oras",
+      datasourceTemplate: "github-releases",
+    },
+    {
+      customType: "regex",
       description: "Versions in the backend's catalog that no library entry references, read only by build code (the toolchain's Java, the versions `liftedAboveBom` in core's build.gradle.kts): Renovate's gradle manager extracts a [versions] entry only through a library's `version.ref` (found by scripts/pin_inventory.py).",
       managerFilePatterns: ["/^src/backend/gradle/libs\\.versions\\.toml$/"],
       matchStrings: [
@@ -243,6 +252,17 @@
       postUpgradeTasks: {
         commands: ["python3 scripts/pin_follow.py helm"],
         fileFilters: [".github/workflows/*.yml"],
+        executionMode: "branch",
+      },
+    },
+    {
+      description: "oras's one workflow pin, with its tarball's SHA-256.",
+      matchDepNames: ["oras"],
+      groupName: "oras",
+      // The tarball's SHA-256, read three ways and required equal: its checksums file, its bytes, GitHub's asset digest.
+      postUpgradeTasks: {
+        commands: ["python3 scripts/pin_follow.py oras"],
+        fileFilters: [".github/workflows/archive.yml"],
         executionMode: "branch",
       },
     },
