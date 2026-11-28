@@ -42,6 +42,11 @@ export interface Stack {
     plannedDate: string
     unscheduled: string
   }
+  /**
+   * Lane L2 only (`scripts/run_stack_upgrade.py`): the upgrade record the starting release's seeder wrote, in the run
+   * directory, which the `upgrade` project reads (`tests/upgrade/`). Absent in lane L1, which has no such record.
+   */
+  upgradeRecord?: string
   /** Where the run keeps its evidence: traces, the report, the state the setup project hands on. */
   outDir: string
 }

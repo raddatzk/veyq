@@ -368,6 +368,10 @@ the same steps on its own date:
    adapter of every older major in the window, proved by a CI job against that major's server image, before
    `VERSION` moves. Major 2's train is the first to need one (major 1's adapter); none is built before it (ADR 0085
    § Consequences). The web client and admin-web otherwise ship in the server's image and need nothing here.
+   **The docs site needs no step:** the bump's push runs `site.yml`, which builds the old major's docs from its
+   newest release tag, keeps them on the branch `site-versions` and serves them under `/v<old>/` beside the new
+   major's ([ADR 0087](../docs/decisions/0087-published-docs-are-a-starlight-site-docs-is-for-development.md) decision
+   6). Look at that run's **Build the older versions** job: it is the first real version built (inbox #868).
 2. **The old major's last release, on the commit before the bump:** promote that commit's snapshot from `main`.
 3. **The release branch, cut from that release's tag.** Its own history counts on from it, so its first fix is
    `<old>.<n+1>`. The train ends every branch cut before it, so those get no more releases.
@@ -396,8 +400,8 @@ major from, and its manifest names it as `majorEntry`, the one `veyqctl` enters 
 (`run_web_e2e.py --upgrade-major-entry`, `chart_upgrade_check.py --upgrade-major-entry`,
 `release_assets.py --major-entry`, `release_assets.produce`: one derivation, ADR 0085 § Consequences). A snapshot
 bakes the entry when it is built, so a release of major N promotes a snapshot built **after** that fix release. Until
-that release exists, an instance on the fix release cannot enter the new major. Not built is lane L3's archive holding
-that release (ADR 0096, inbox #461).
+that release exists, an instance on the fix release cannot enter the new major. Once it is released, `archive.yml`
+archives it like every release, and lane L3 restores it as the new major entry (ADR 0096, ADR 0091 decision 6).
 
 **What a run on GitHub has shown, and what it still must,** is inbox #471: the first snapshot (of a push, before
 2026-11-07), its signatures and attestations; the dispatched (from 2026-11-07) and the weekly (2026-11-09) snapshot with their tag; the first

@@ -13,6 +13,12 @@
 // those three left, never from another feature spec. A new spec goes into its domain's folder; a new folder is a new
 // project and must be a new leg (`shards.test.mjs` holds both, ADR 0090 decision 7).
 //
+// One project belongs to no L1 leg: `upgrade` (`tests/upgrade/`), the browser half of lanes L2 and L3 (ADR 0091
+// decision 6), which opens what a published release's own seeder wrote after `veyqctl upgrade` took the instance to the
+// candidate (L2) or the candidate's `veyqctl restore` put that release's archived backup into a fresh install (L3). It
+// has no dependency — that instance was set up by the seeder, not by `setup` — and only `scripts/run_stack_upgrade.py`
+// and `scripts/run_stack_restore.py` select it (`--project=upgrade`), each on an instance of its own.
+//
 // It runs inside the Playwright image the overlay pins, on the run's compose network — never on the host — so a
 // laptop runs exactly what CI runs (ADR 0090 decision 3): `scripts/run_stack_e2e.py` starts it.
 import { defineConfig, devices } from '@playwright/test'
@@ -26,6 +32,8 @@ const outDir = booted ? stack().outDir : 'test-results'
 // The instance-wide state other feature scenarios read, set up in every leg: the folder `features/instance/` is the
 // dependency project `instance` (below), every other folder a domain.
 const INSTANCE = 'instance'
+// Lanes L2's and L3's project (the header says why no leg of lane L1 runs it).
+const UPGRADE = 'upgrade'
 const FEATURES = fileURLToPath(new URL('./tests/features/', import.meta.url))
 export const DOMAINS = readdirSync(FEATURES, { withFileTypes: true })
   .filter((entry) => entry.isDirectory() && entry.name !== INSTANCE)
@@ -77,6 +85,7 @@ export default defineConfig({
   },
   projects: [
     { name: 'setup', testMatch: /setup\/.*\.setup\.ts/ },
+    { name: UPGRADE, testMatch: /upgrade\/[^/]+\.spec\.ts$/ },
     // The scenarios start from the instance the setup project left (instance.json in the run directory).
     { name: 'scenarios', testMatch: /scenarios\/.*\.spec\.ts/, dependencies: ['setup'] },
     // The instance-wide state the feature scenarios read, in every leg (`features/instance/`): instance-mail.spec.ts sets

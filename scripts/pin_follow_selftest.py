@@ -4,7 +4,8 @@ upstream answers — and the forgeries it must refuse: one Helm checksum source 
 source once), workflows that pin different Helm versions, a JAR that does not match Central's `.sha1` or `.md5`,
 surfaces that run different generator versions, a PyPI release with no wheel for the file, a Gradle `.sha256` that the
 zip does not hash to or that is no bare 64-hex value, a wrapper properties file whose lines are missing, doubled,
-malformed or point off services.gradle.org. Also: a 429 and a 503 are retried, and every refusal leaves the tree as it
+malformed or point off services.gradle.org, and an oras checksum source that disagrees with the other two (each source once),
+a checksums file naming the tarball twice, an oras prerelease. Also: a 429 and a 503 are retried, and every refusal leaves the tree as it
 was. No network: the module's one fetch function is replaced (the Gradle cases run a local `git init`, since the
 wrapper files are found by `git ls-files`).
 
@@ -447,6 +448,101 @@ with tempfile.TemporaryDirectory() as scratch:
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
         code = pf.main(["--root", str(root), "gradle-distribution"])
     check("gradle cli: a good run exits 0", code == 0 and SUM_A in (root / LAUNCHER).read_text())
+
+
+# --- 5. oras -----------------------------------------------------------------------------------------------------------
+
+OLD_ORAS, NEW_ORAS = "v1.4.0", "v1.5.0"
+ORAS_TAR = b"forged oras tarball bytes"
+ORAS_SHA = hashlib.sha256(ORAS_TAR).hexdigest()
+ORAS_FILE = "oras_1.5.0_linux_amd64.tar.gz"
+ORAS_SUMS_URL = pf.ORAS_DOWNLOAD.format(v=NEW_ORAS, name="oras_1.5.0_checksums.txt")
+ORAS_TAR_URL = pf.ORAS_DOWNLOAD.format(v=NEW_ORAS, name=ORAS_FILE)
+ORAS_RELEASE_URL = pf.ORAS_RELEASE.format(v=NEW_ORAS)
+
+
+def oras_workflow(version: str = NEW_ORAS) -> str:
+    return ("name: Archive\n# oras, pinned. Measured 2026-11-27: oras_1.4.0_checksums.txt, the tarball's own hash and "
+            "GitHub's asset digest of\n# oras-project/oras v1.4.0 all agree. Renovate bumps the version.\n"
+            f"env:\n  ORAS_VERSION: {version}\n  ORAS_SHA256: {sha(1)}\n\njobs:\n  archive:\n    steps:\n"
+            "      - run: echo \"${ORAS_VERSION}\"\n")
+
+
+def oras_checks(version: str = NEW_ORAS) -> str:
+    """checks.yml's copy of the pin: lane L3 reads the archive with the same oras, no sentence of its own."""
+    return (f"name: Checks\nenv:\n  HELM_VERSION: v4.3.2\n  ORAS_VERSION: {version}\n  ORAS_SHA256: {sha(1)}\n\n"
+            "jobs:\n  stack-restore:\n    steps:\n      - run: echo \"${ORAS_VERSION}\"\n")
+
+
+ORAS_CHECKS = pf.ORAS_WORKFLOWS[1]
+ORAS_APPS = pf.ORAS_WORKFLOWS[2:]  # publish.yml and release.yml: the desktop apps' packages are named with the same oras
+
+
+def oras_apps(version: str = NEW_ORAS) -> str:
+    """publish.yml's or release.yml's copy of the pin, beside its Helm pin, no sentence of its own."""
+    return (f"name: Apps\nenv:\n  HELM_VERSION: v4.3.2\n  ORAS_VERSION: {version}\n  ORAS_SHA256: {sha(1)}\n\n"
+            "jobs:\n  promote:\n    steps:\n      - run: echo \"${ORAS_VERSION}\"\n")
+
+
+def oras_tree(version: str = NEW_ORAS, copies: str | None = None) -> dict:
+    copies = copies or version
+    return {pf.ORAS_WORKFLOW: oras_workflow(version), ORAS_CHECKS: oras_checks(copies),
+            **{rel: oras_apps(copies) for rel in ORAS_APPS}}
+
+
+def oras_upstream(listed: str = ORAS_SHA, tarball: bytes = ORAS_TAR, recorded: str = ORAS_SHA,
+                  prerelease: bool = False, sums: bytes | None = None) -> Upstream:
+    checksums = sums if sums is not None else (f"{sha(7)}  oras_1.5.0_darwin_arm64.tar.gz\n{listed}  {ORAS_FILE}\n"
+                                               f"{sha(8)}  oras_1.5.0_linux_arm64.tar.gz\n").encode()
+    release = {"tag_name": NEW_ORAS, "draft": False, "prerelease": prerelease,
+               "assets": [{"name": "oras_1.5.0_darwin_arm64.tar.gz", "digest": f"sha256:{sha(7)}"},
+                          {"name": ORAS_FILE, "digest": f"sha256:{recorded}"}]}
+    return Upstream({ORAS_SUMS_URL: checksums, ORAS_TAR_URL: tarball, ORAS_RELEASE_URL: json.dumps(release).encode()})
+
+
+print("oras")
+with tempfile.TemporaryDirectory() as scratch:
+    root = pathlib.Path(scratch)
+    write_tree(root, oras_tree())
+    pf.fetch = upstream = oras_upstream()
+    refusal = quiet(pf.follow_oras, root)
+    after = snapshot(root)[pf.ORAS_WORKFLOW]
+    check("oras: the agreed sum is written", refusal is None and f"ORAS_SHA256: {ORAS_SHA}\n" in after, str(refusal))
+    check("oras: ... into checks.yml's copy too, and nothing else of it changes",
+          snapshot(root)[ORAS_CHECKS] == oras_checks().replace(sha(1), ORAS_SHA), snapshot(root)[ORAS_CHECKS])
+    check("oras: ... and into publish.yml's and release.yml's copies, nothing else of them changed",
+          all(snapshot(root)[rel] == oras_apps().replace(sha(1), ORAS_SHA) for rel in ORAS_APPS),
+          str({rel: snapshot(root)[rel] for rel in ORAS_APPS}))
+    check("oras: the Measured sentence names the new version and today",
+          f"Measured {TODAY}: oras_1.5.0_checksums.txt" in after and "oras-project/oras v1.5.0 all agree." in after
+          and "1.4.0" not in after, after)
+    check("oras: the rest of the workflow is untouched",
+          after.replace(ORAS_SHA, sha(1)).replace(TODAY, "2026-11-27").replace("1.5.0", "1.4.0")
+          == oras_workflow(OLD_ORAS))
+    check("oras: the tarball was fetched for its hash only", upstream.calls.count(ORAS_TAR_URL) == 1)
+    before = snapshot(root)
+    quiet(pf.follow_oras, root)
+    check("oras: a second run changes nothing (idempotent)", snapshot(root) == before)
+
+    for label, forged in (("the checksums file", oras_upstream(listed=sha(9))),
+                          ("the tarball's own hash", oras_upstream(tarball=b"other bytes")),
+                          ("GitHub's asset digest", oras_upstream(recorded=sha(9)))):
+        write_tree(root, oras_tree())
+        refuses(f"oras FORGERY: {label} disagrees with the other two", root, forged, pf.follow_oras, root,
+                says="disagree")
+    refuses("oras: a checksums file naming the tarball twice is refused", root,
+            oras_upstream(sums=f"{ORAS_SHA}  {ORAS_FILE}\n{ORAS_SHA}  {ORAS_FILE}\n".encode()), pf.follow_oras, root,
+            says="2 line(s)")
+    refuses("oras: a prerelease is refused", root, oras_upstream(prerelease=True), pf.follow_oras, root,
+            says="prerelease")
+    write_tree(root, oras_tree("latest"))
+    refuses("oras: a version that is no vX.Y.Z is refused before any fetch", root, Upstream({}), pf.follow_oras, root,
+            says="no `vX.Y.Z`")
+    check("oras: ... and nothing was fetched", pf.fetch.calls == [])
+    write_tree(root, oras_tree(copies=OLD_ORAS))
+    refuses("oras: the workflows naming different versions is refused before any fetch", root, Upstream({}),
+            pf.follow_oras, root, says="different oras versions")
+    check("oras: ... and nothing was fetched", pf.fetch.calls == [])
 
 
 # --- the command line --------------------------------------------------------------------------------------------------

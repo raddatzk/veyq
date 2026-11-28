@@ -1,0 +1,36 @@
+---
+// Starlight's Banner, with one addition (ADR 0087 decision 6): in a version build (VEYQ_SITE_VERSION set), every page
+// says which major it documents and links the current docs at the root, in the page's language. The root build has
+// no such line. The link is absolute: a root-relative one would be taken for an internal link the base was forgotten
+// on (scripts/site_version_check.py), and it must leave the version.
+import Default from '@astrojs/starlight/components/Banner.astro';
+import { VEYQ_SITE_VERSION } from 'astro:env/server';
+
+const de = Astro.locals.starlightRoute.lang === 'de';
+const current = new URL(de ? '/de/start/' : '/start/', Astro.site).href;
+---
+
+{
+  VEYQ_SITE_VERSION && (
+    <div class="veyq-version" data-pagefind-ignore>
+      {de ? `Das ist die Dokumentation von veyq ${VEYQ_SITE_VERSION}, einer älteren Version. ` : `These are the docs of veyq ${VEYQ_SITE_VERSION}, an older version. `}
+      <a href={current}>{de ? 'Zur aktuellen Dokumentation' : 'Go to the current docs'}</a>
+    </div>
+  )
+}
+<Default />
+
+<style>
+  .veyq-version {
+    padding: var(--sl-nav-pad-y) var(--sl-nav-pad-x);
+    background-color: var(--sl-color-banner-bg, var(--sl-color-bg-accent));
+    color: var(--sl-color-banner-text, var(--sl-color-text-invert));
+    line-height: var(--sl-line-height-headings);
+    text-align: center;
+    text-wrap: balance;
+    box-shadow: var(--sl-shadow-sm);
+  }
+  .veyq-version a {
+    color: inherit;
+  }
+</style>

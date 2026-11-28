@@ -20,7 +20,7 @@ import subprocess
 import sys
 import urllib.request
 
-SCHEMATHESIS = "schemathesis==4.33.4"
+SCHEMATHESIS = "schemathesis==4.34.2"
 HEADER = (
     "# Schemathesis and everything it installs, each pinned to its version and to the SHA-256 of every wheel it may\n"
     "# install on linux/amd64 and linux/arm64 under CPython 3.13 (`pip install --require-hashes` in ./Dockerfile).\n"

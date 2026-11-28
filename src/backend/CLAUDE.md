@@ -229,15 +229,15 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   checksum of every applied migration at `migrate-at-start`, so a one-word fix to a `--` comment fails startup on
   every instance that already ran it; `%dev` hides this behind `repair-at-start=true`, so it is green exactly where
   you would test it and red only on somebody else's server. A migration's comment is a historical artifact:
-  correct the live copy of that rule (the entity KDoc, the ADR) and leave the file alone. **Until the first
-  release** (the owner declares it on the pin file's `release:` line; `none` today) a baseline may still change,
-  but only together with its pin line in the same commit, so the change is a visible diff — and every existing
-  database, dev ones included, is then recreated (`docker compose -f infra/docker/docker-compose.yml down -v`; repair does
-  not rescue a changed baseline). From the release on the rule is absolute: a released migration is only followed
-  by a new one. The upgrade proof (`python3 scripts/run_web_e2e.py --upgrade`, `site/src/content/docs/run/upgrade.mdx`) runs
-  against the previous commit until then and against the release from then on; **the commit that sets `release:`
-  also enables its CI job** (`checks.yml`'s `upgrade-proof`: delete its `if: false` and the `"skipped"` its `green`
-  gate tolerates for it), because only then does a red proof mean a release that must not publish.
+  correct the live copy of that rule (the entity KDoc, the ADR) and leave the file alone. **Since major 1** (the
+  commit that set `VERSION` to 1 also set the pin file's `release:` line to `202611070833`, the three baselines
+  v0.2480 shipped) the rule is absolute: a released migration is only followed by a new one. The guard cannot tell an edit
+  from a re-pin, so an edit plus its pin line is still green — the `release:` line documents the freeze, review
+  holds it. Before it a baseline could still change together with its pin line, every database then
+  recreated; that is how the history was folded into the three. The upgrade proof
+  (`python3 scripts/run_web_e2e.py --upgrade`, `site/src/content/docs/run/upgrade.mdx`) runs against the newest
+  release (`v<major>.<minor>`) and gates every commit: the commit that set `release:` enabled its CI job
+  (`checks.yml`'s `upgrade-proof`).
   Column types: `TEXT` for opaque base64 (65 535 bytes on MariaDB, so a base64 cap must be ≤ 65 532 —
   guarded by `scripts/validate_maxlength_storage.py`), `MEDIUMTEXT` where a cap needs more (16 MiB), `VARCHAR`
   for short, and **`UUID` (MariaDB's native type) for every id and id reference that is exactly a UUID** (inbox #387): the entities

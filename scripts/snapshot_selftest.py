@@ -116,6 +116,81 @@ mixed[0]["images"] = {"veyq": D3, "veyq-admin": D2}
 check(refused(snapshot.predicates, mixed, "L1", ARCHS, SHARDS, SHA, "r"), "two app digests in one architecture attested")
 check(refused(snapshot.predicates, [], "L1", [], SHARDS, SHA, "r"), "an empty expectation attests nothing and passes")
 
+# Lane L2: every record carries its predecessor — the release it upgraded from, or none — and the predicate names it
+# per leg; no other lane records one.
+NEWEST = {"tag": "v1.318", "images": {"veyq": D3, "veyq-admin": D4}}
+check(refused(snapshot.lane_result, "L2", "amd64", "newest", SHA, SET, {"veyq": D1}), "an L2 leg records no predecessor")
+check(refused(snapshot.lane_result, "L1", "amd64", "x", SHA, SET, {"veyq": D1}, NEWEST, True),
+      "an L1 leg records a predecessor")
+check(refused(snapshot.lane_result, "L2", "amd64", "newest", SHA, SET, {"veyq": D1}, {"tag": "1.318", "images": {}}, True),
+      "a predecessor that names no release tag is recorded")
+check(refused(snapshot.lane_result, "L2", "amd64", "newest", SHA, SET, {"veyq": D1},
+              {"tag": "v1.318", "images": {"veyq": D3}}, True), "a predecessor without its admin digest is recorded")
+check(snapshot.lane_result("L2", "amd64", "major-entry", SHA, SET, {"veyq": D1}, None, True)["predecessor"] is None,
+      "a leg with no release to start from does not record none")
+
+
+def upgrade_legs_of(newest=NEWEST, entry=None, **override) -> list[dict]:
+    out = []
+    for arch, images in (("amd64", {"veyq": D1, "veyq-admin": D2}), ("arm64", {"veyq": D3, "veyq-admin": D4})):
+        for leg, predecessor in (("newest", newest), ("major-entry", entry)):
+            out.append(snapshot.lane_result("L2", arch, leg, SHA, SET, images, predecessor, True))
+    for record in out:
+        record.update(override)
+    return out
+
+
+got = snapshot.predicates(upgrade_legs_of(), "L2", ARCHS, ["major-entry", "newest"], SHA, "https://run")
+check(got["arm64"]["inputs"]["predecessor"] == {"newest": NEWEST, "major-entry": None},
+      f"the L2 predicate names {got['arm64']['inputs']['predecessor']} as its predecessors")
+moved = upgrade_legs_of()
+moved[2]["predecessor"] = {"tag": "v1.312", "images": {"veyq": D3, "veyq-admin": D4}}
+check(refused(snapshot.predicates, moved, "L2", ARCHS, ["major-entry", "newest"], SHA, "r"),
+      "two architectures that started one leg from different releases are attested as one")
+lost = upgrade_legs_of()
+del lost[0]["predecessor"]
+check(refused(snapshot.predicates, lost, "L2", ARCHS, ["major-entry", "newest"], SHA, "r"),
+      "an L2 record without its predecessor is attested")
+smuggled = legs()
+smuggled[0]["predecessor"] = NEWEST
+check(refused(snapshot.predicates, smuggled, "L1", ARCHS, SHARDS, SHA, "r"), "an L1 record's predecessor is attested")
+
+# Lane L3: every shard's record carries the backups it restored — `[]` for a shard the selection left empty — and the
+# predicate names the union, in version order, each tag in one shard only; no other lane records backups.
+B0, B1, B2 = ({"tag": t, "digest": d} for t, d in (("v0.2480", D1), ("v1.10", D2), ("v1.9", D3)))
+check(refused(snapshot.lane_result, "L3", "amd64", "1", SHA, SET, {"veyq": D1}), "an L3 shard records no backups")
+check(refused(snapshot.lane_result, "L2", "amd64", "newest", SHA, SET, {"veyq": D1}, None, True, [B0], True),
+      "an L2 leg records backups")
+check(refused(snapshot.lane_result, "L3", "amd64", "1", SHA, SET, {"veyq": D1}, None, False, [{"tag": "1.0", "digest": D1}],
+              True), "a backup that names no release tag is recorded")
+check(refused(snapshot.lane_result, "L3", "amd64", "1", SHA, SET, {"veyq": D1}, None, False, [{"tag": "v1.0"}], True),
+      "a backup without its artifact digest is recorded")
+check(refused(snapshot.lane_result, "L3", "amd64", "1", SHA, SET, {"veyq": D1}, None, False, [B1, B1], True),
+      "a shard naming one backup twice is recorded")
+check(snapshot.lane_result("L3", "amd64", "1", SHA, SET, {"veyq": D1}, None, False, [B1, B2], True)["backups"]
+      == [B2, B1], "a shard's backups are not recorded in version order (v1.9 before v1.10)")
+check(snapshot.lane_result("L3", "amd64", "3", SHA, SET, {"veyq": D1}, None, False, [], True)["backups"] == [],
+      "a shard the selection left empty does not record none")
+
+
+def restore_shards_of(per_shard=(([B0, B2]), [B1], [])) -> list[dict]:
+    return [snapshot.lane_result("L3", "amd64", str(i), SHA, SET, {"veyq": D1, "veyq-admin": D2}, None, False, backups,
+                                 True) for i, backups in enumerate(per_shard, 1)]
+
+
+got = snapshot.predicates(restore_shards_of(), "L3", ["amd64"], ["1", "2", "3"], SHA, "https://run")
+check(got["amd64"]["inputs"] == {"assetSet": SET, "predecessor": None, "backups": [B0, B2, B1]},
+      f"the L3 predicate names {got['amd64']['inputs']} as its inputs")
+check(refused(snapshot.predicates, restore_shards_of(([B0, B2], [B1, B2], [])), "L3", ["amd64"], ["1", "2", "3"], SHA, "r"),
+      "one backup restored by two shards is attested")
+lost = restore_shards_of()
+del lost[2]["backups"]
+check(refused(snapshot.predicates, lost, "L3", ["amd64"], ["1", "2", "3"], SHA, "r"),
+      "an L3 record without its backups (not even none) is attested")
+smuggled = legs()
+smuggled[0]["backups"] = [B0]
+check(refused(snapshot.predicates, smuggled, "L1", ARCHS, SHARDS, SHA, "r"), "an L1 record's backups are attested")
+
 # ---- write-once ---------------------------------------------------------------------------------------------------
 index = json.dumps({"mediaType": snapshot.INDEX_TYPES[0], "manifests": [{"digest": D1}, {"digest": D2}]})
 check(snapshot.children(index) == {D1, D2}, "an index's children are not its entries")
@@ -138,6 +213,11 @@ check(refused(snapshot.decide, "i", {"0.3-SNAPSHOT": index, f"sha-{SHA}": other}
 
 # ---- the Checks run a snapshot is made from --------------------------------------------------------------------
 ARCHS, DOMAINS = ["amd64", "arm64"], ["account", "memories"]
+LEGS = ["major-entry", "newest"]
+# Lane L2 runs on amd64 alone (ADR 0091 decision 6, amended 2026-11-27), lane L1 on both.
+UPGRADE_ARCHS = ["amd64"]
+# Lane L3 too, on a push (a snapshot is made from a push run alone), in three shards.
+RSHARDS, RESTORE_ARCHS = ["1", "2", "3"], ["amd64"]
 
 
 def run_of(**override) -> dict:
@@ -149,11 +229,13 @@ def run_of(**override) -> dict:
 
 
 def jobs_of(drop: str = "", **conclusions) -> list[dict]:
-    names = [snapshot.GATE_JOB_NAME] + [snapshot.LANE_JOB_NAME.format(arch=a, domain=d) for a in ARCHS for d in DOMAINS]
+    names = ([snapshot.GATE_JOB_NAME] + [snapshot.LANE_JOB_NAME.format(arch=a, domain=d) for a in ARCHS for d in DOMAINS]
+             + [snapshot.UPGRADE_JOB_NAME.format(arch=a, leg=leg) for a in UPGRADE_ARCHS for leg in LEGS]
+             + [snapshot.RESTORE_JOB_NAME.format(arch=a, shard=sh) for a in RESTORE_ARCHS for sh in RSHARDS])
     return [{"name": n, "run_attempt": 2, "conclusion": conclusions.get(n, "success")} for n in names if n != drop]
 
 
-good = snapshot.checks_verdict(run_of(), jobs_of(), ARCHS, DOMAINS)
+good = snapshot.checks_verdict(run_of(), jobs_of(), ARCHS, DOMAINS, LEGS, UPGRADE_ARCHS, RSHARDS, RESTORE_ARCHS)
 check(good == {"run_id": "7", "run_url": "https://github.com/o/veyq/actions/runs/7", "attempt": "2"},
       f"a wholly green Checks run is not the one: {good}")
 newer = run_of(id=8, run_number=71, conclusion="failure")
@@ -195,25 +277,52 @@ got, t, fetched = awaited(["queued", "in_progress", "completed"], 7200, start="p
 check(got["status"] == "completed" and fetched == 3 and t.now == 180,
       f"a running Checks run is not re-read each minute until it completes: {got['status']}, {fetched} reads, {t.now}s")
 got, t, fetched = awaited([], 150)
-check(got["status"] != "completed" and t.now == 150 and refused(snapshot.checks_verdict, got, jobs_of(), ARCHS, DOMAINS),
+check(got["status"] != "completed" and t.now == 150 and refused(snapshot.checks_verdict, got, jobs_of(), ARCHS, DOMAINS, LEGS, UPGRADE_ARCHS, RSHARDS, RESTORE_ARCHS),
       f"the wait runs past its bound, or a run still going after it is published from: {t.now}s, {t.slept}")
 got, t, fetched = awaited(["completed"], 7200, start="completed")
 check(fetched == 0 and not t.slept, "a completed run is waited for")
-check(refused(snapshot.checks_verdict, run_of(status="in_progress", conclusion=None), jobs_of(), ARCHS, DOMAINS),
+check(refused(snapshot.checks_verdict, run_of(status="in_progress", conclusion=None), jobs_of(), ARCHS, DOMAINS, LEGS, UPGRADE_ARCHS, RSHARDS, RESTORE_ARCHS),
       "a running Checks run is published from")
-check(refused(snapshot.checks_verdict, run_of(conclusion="cancelled"), jobs_of(), ARCHS, DOMAINS),
+check(refused(snapshot.checks_verdict, run_of(conclusion="cancelled"), jobs_of(), ARCHS, DOMAINS, LEGS, UPGRADE_ARCHS, RSHARDS, RESTORE_ARCHS),
       "a Checks run cancelled by hand is published from")
-check(refused(snapshot.checks_verdict, run_of(conclusion="failure"), jobs_of(), ARCHS, DOMAINS),
+check(refused(snapshot.checks_verdict, run_of(conclusion="failure"), jobs_of(), ARCHS, DOMAINS, LEGS, UPGRADE_ARCHS, RSHARDS, RESTORE_ARCHS),
       "a red Checks run is published from")
-check(refused(snapshot.checks_verdict, run_of(), jobs_of(**{snapshot.GATE_JOB_NAME: "skipped"}), ARCHS, DOMAINS),
+check(refused(snapshot.checks_verdict, run_of(), jobs_of(**{snapshot.GATE_JOB_NAME: "skipped"}), ARCHS, DOMAINS, LEGS, UPGRADE_ARCHS, RSHARDS, RESTORE_ARCHS),
       "a run whose gate did not pass is published from")
 lane = snapshot.LANE_JOB_NAME.format(arch="arm64", domain="memories")
-check(refused(snapshot.checks_verdict, run_of(), jobs_of(drop=lane), ARCHS, DOMAINS),
+check(refused(snapshot.checks_verdict, run_of(), jobs_of(drop=lane), ARCHS, DOMAINS, LEGS, UPGRADE_ARCHS, RSHARDS, RESTORE_ARCHS),
       "a run without an arm64 lane leg is published from")
-check(refused(snapshot.checks_verdict, run_of(), jobs_of(**{lane: "cancelled"}), ARCHS, DOMAINS),
+check(refused(snapshot.checks_verdict, run_of(), jobs_of(**{lane: "cancelled"}), ARCHS, DOMAINS, LEGS, UPGRADE_ARCHS, RSHARDS, RESTORE_ARCHS),
       "a run whose lane leg was cancelled is published from")
+upgrade = snapshot.UPGRADE_JOB_NAME.format(arch="amd64", leg="major-entry")
+check(refused(snapshot.checks_verdict, run_of(), jobs_of(drop=upgrade), ARCHS, DOMAINS, LEGS, UPGRADE_ARCHS, RSHARDS, RESTORE_ARCHS),
+      "a run without an arm64 lane L2 leg is published from")
+check(refused(snapshot.checks_verdict, run_of(), jobs_of(**{upgrade: "failure"}), ARCHS, DOMAINS, LEGS, UPGRADE_ARCHS, RSHARDS, RESTORE_ARCHS),
+      "a run whose lane L2 leg failed is published from")
+check(refused(snapshot.checks_verdict, run_of(), jobs_of(), ARCHS, DOMAINS, [], UPGRADE_ARCHS, RSHARDS, RESTORE_ARCHS),
+      "a commit whose checks.yml names no lane L2 leg is published from")
+# Its L2 jobs present and green, so only the architecture rule can refuse it.
+riscv = jobs_of() + [{"name": snapshot.UPGRADE_JOB_NAME.format(arch="riscv64", leg=leg), "run_attempt": 2,
+                      "conclusion": "success"} for leg in LEGS]
+check(refused(snapshot.checks_verdict, run_of(), riscv, ARCHS, DOMAINS, LEGS, ["amd64", "riscv64"], RSHARDS, RESTORE_ARCHS),
+      "a lane L2 architecture lane L1 never booted is accepted")
+check(refused(snapshot.checks_verdict, run_of(), jobs_of(), ARCHS, DOMAINS, LEGS, [], RSHARDS, RESTORE_ARCHS),
+      "a lane L2 matrix without an architecture is accepted")
+check(not refused(snapshot.checks_verdict, run_of(), jobs_of(), ARCHS, DOMAINS, LEGS, UPGRADE_ARCHS, RSHARDS, RESTORE_ARCHS),
+      "lane L2 on amd64 alone, lane L1 on both, is refused")
+restore = snapshot.RESTORE_JOB_NAME.format(arch="amd64", shard="2")
+check(refused(snapshot.checks_verdict, run_of(), jobs_of(drop=restore), ARCHS, DOMAINS, LEGS, UPGRADE_ARCHS, RSHARDS,
+              RESTORE_ARCHS), "a run without a lane L3 shard is published from")
+check(refused(snapshot.checks_verdict, run_of(), jobs_of(**{restore: "skipped"}), ARCHS, DOMAINS, LEGS, UPGRADE_ARCHS,
+              RSHARDS, RESTORE_ARCHS), "a run whose lane L3 shard was skipped (a pull request's) is published from")
+check(refused(snapshot.checks_verdict, run_of(), jobs_of(), ARCHS, DOMAINS, LEGS, UPGRADE_ARCHS, [], RESTORE_ARCHS),
+      "a commit whose checks.yml names no lane L3 shard is published from")
+check(refused(snapshot.checks_verdict, run_of(), jobs_of() + [
+          {"name": snapshot.RESTORE_JOB_NAME.format(arch="riscv64", shard=sh), "run_attempt": 2, "conclusion": "success"}
+          for sh in RSHARDS], ARCHS, DOMAINS, LEGS, UPGRADE_ARCHS, RSHARDS, ["amd64", "riscv64"]),
+      "a lane L3 architecture lane L1 never booted is accepted")
 stale = [dict(j, run_attempt=1) for j in jobs_of()]
-check(refused(snapshot.checks_verdict, run_of(), stale, ARCHS, DOMAINS), "an older attempt's jobs are read")
+check(refused(snapshot.checks_verdict, run_of(), stale, ARCHS, DOMAINS, LEGS, UPGRADE_ARCHS, RSHARDS, RESTORE_ARCHS), "an older attempt's jobs are read")
 
 # ---- the publishable commit: a docs-only HEAD publishes its newest tested ancestor -----------------------------------
 PATTERNS = ["**/*.md", "docs/**", "site/**"]
@@ -339,7 +448,17 @@ with tempfile.TemporaryDirectory(prefix="snapshot_walk_") as tmp:
     archs, domains = snapshot.stack_matrix(repo)
     jobs = {"jobs": [{"name": n, "run_attempt": 2, "conclusion": "success"} for n in
                      [snapshot.GATE_JOB_NAME] + [snapshot.LANE_JOB_NAME.format(arch=a, domain=d)
-                                                 for a in archs for d in domains]]}
+                                                 for a in archs for d in domains]
+                     + [snapshot.UPGRADE_JOB_NAME.format(arch=a, leg=leg) for a in snapshot.upgrade_archs(repo)
+                        for leg in snapshot.upgrade_legs(repo)]
+                     + [snapshot.RESTORE_JOB_NAME.format(arch=a, shard=sh) for a in snapshot.restore_archs(repo)
+                        for sh in snapshot.restore_shards(repo)]]}
+    check(snapshot.upgrade_legs(repo) == LEGS, f"checks.yml's lane L2 legs are {snapshot.upgrade_legs(repo)}, not {LEGS}")
+    check(snapshot.upgrade_archs(repo) == UPGRADE_ARCHS,
+          f"checks.yml's lane L2 runs on {snapshot.upgrade_archs(repo)}, not {UPGRADE_ARCHS}")
+    check(snapshot.restore_shards(repo) == RSHARDS and snapshot.restore_archs(repo) == RESTORE_ARCHS,
+          f"checks.yml's lane L3 runs shards {snapshot.restore_shards(repo)} on {snapshot.restore_archs(repo)}, not "
+          f"{RSHARDS} on {RESTORE_ARCHS}")
     real_gh = snapshot._gh_json
     snapshot._gh_json = lambda url: (jobs if "/jobs?" in url else green if f"head_sha={tested}" in url
                                      else {"workflow_runs": []})

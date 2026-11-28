@@ -192,7 +192,7 @@ jobs:
       # switches itself to the pinned version.
       - name: Install pnpm
         if: runner.environment == 'github-hosted'
-        run: npm install -g pnpm@12.22.0
+        run: npm install -g pnpm@12.23.0
 
       # The incremental report is the CI cache (ADR 0045 §4): Stryker re-tests only mutants whose code or
       # covering tests changed since the cached run. Restored best-effort (restore-keys), a fresh copy saved

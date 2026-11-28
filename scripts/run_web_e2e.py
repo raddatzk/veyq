@@ -1584,30 +1584,32 @@ def changed_migrations(before: dict[str, str], after: dict[str, str]) -> list[st
     return changed + removed
 
 
-# Flyway's own words for refusing a restored schema at the candidate's start (`migrate-at-start` validates first). The
-# boot log is where they land; each is named so a red proof says WHICH migration and why, not "the JVM exited".
+# Flyway's own words for refusing the predecessor's schema at the candidate's start (`migrate-at-start` validates
+# first) — restored by the jar-level proof, upgraded in place by lane L2 (`run_stack_upgrade.py`), so the sentences
+# name neither. The boot log is where they land; each is named so a red run says WHICH migration and why, not "the JVM
+# exited".
 FLYWAY_REFUSALS = (
     (re.compile(r"Migration checksum mismatch for migration version (\S+?)\.?$", re.M),
-     "Flyway refused the restored schema: migration V{} was applied by the predecessor with another checksum than "
-     "the candidate's file — a migration changed between the two builds"),
+     "Flyway refused the predecessor's schema: migration V{} was applied by the predecessor with another checksum "
+     "than the candidate's file — a migration changed between the two builds"),
     (re.compile(r"Detected applied migration not resolved locally: (\S+?)\.?$", re.M),
-     "Flyway refused the restored schema: migration V{} was applied by the predecessor and the candidate no longer "
-     "carries it"),
+     "Flyway refused the predecessor's schema: migration V{} was applied by the predecessor and the candidate no "
+     "longer carries it"),
     (re.compile(r"Detected resolved migration not applied to database: (\S+?)\.?$", re.M),
-     "Flyway refused the restored schema: the candidate's migration V{} sorts below the restored history, which "
-     "outOfOrder=false refuses"),
+     "Flyway refused the predecessor's schema: the candidate's migration V{} sorts below the predecessor's history, "
+     "which outOfOrder=false refuses"),
 )
 
 
 def flyway_cause(log_text: str) -> str | None:
-    """Name Flyway's refusal of a restored schema from a boot log, or None when the log holds none."""
+    """Name Flyway's refusal of the predecessor's schema from a boot log, or None when the log holds none."""
     for pattern, sentence in FLYWAY_REFUSALS:
         found = pattern.search(log_text)
         if found:
             return sentence.format(found.group(1))
     if "Validate failed" in log_text:
         line = next(line for line in log_text.splitlines() if "Validate failed" in line)
-        return f"Flyway refused the restored schema: {line.strip()[-300:]}"
+        return f"Flyway refused the predecessor's schema: {line.strip()[-300:]}"
     return None
 
 
@@ -1785,6 +1787,61 @@ def major_entry_ref(major: int | None = None, root: Path = REPO) -> str | None:
     return major_entry(candidate_major(root) if major is None else major, tags)
 
 
+def release_order(tag: str) -> tuple[int, int]:
+    """A `v<major>.<minor>` tag's place in version order (`v1.10` after `v1.9`)."""
+    m = RELEASE_TAG.match(tag)
+    if not m:
+        raise ValueError(f"{tag!r} is no release tag v<major>.<minor>")
+    return int(m.group(1)), int(m.group(2))
+
+
+def backup_selection(major: int, tags: list[str], highest_of) -> list[tuple[str, str]]:
+    """The archived backups lane L3 restores into a candidate of `major` (ADR 0091 decision 6, amended 2026-11-26,
+    point 4), as `(tag, its highest migration)` in version order: the releases of `major` among `tags` GROUPED by the
+    highest migration of their own pin file (`highest_of(tag)`, a schema state), the OLDEST release of each group — Flyway
+    runs the same migrations in the same order from any release of a state — plus the major entry ([major_entry]), the
+    one release a new major is entered from. Derived, never listed: a release that opens a new state joins the
+    selection, and a fix release on `release/<major-1>.x` moves the entry. `tags` is EVERY release tag
+    ([backup_selection_ref]: `git tag --list`), as for [major_entry]. A release whose pin file names no migration is
+    refused: every release carries the baselines, so its state is unreadable, never empty."""
+    def state(tag: str) -> str:
+        found = highest_of(tag)
+        if not found:
+            raise ValueError(f"{tag}'s {PIN_FILE} names no migration, so its schema state cannot be read")
+        return found
+
+    releases = sorted((tag for tag in tags if (m := RELEASE_TAG.match(tag)) and int(m.group(1)) == major),
+                      key=release_order)
+    oldest: dict[str, str] = {}
+    for tag in releases:
+        oldest.setdefault(state(tag), tag)
+    entry = major_entry(major, tags)
+    chosen = sorted({*oldest.values(), *([entry] if entry else [])}, key=release_order)
+    return [(tag, state(tag)) for tag in chosen]
+
+
+def backup_selection_ref(root: Path = REPO) -> list[tuple[str, str]]:
+    """[backup_selection] for this checkout's major, fed with EVERY `v*` tag and each tag's own pin file (`git show
+    <tag>:scripts/applied_migrations.sha256`) — `git tag --list`, not `--merged`, as [major_entry_ref]. While the pin
+    file says `release: none` no tag is read and the selection is empty. Raises ValueError where a tag's pin file
+    cannot be read. Lane L3 (`run_stack_restore.py`) and the promotion's comparison of its backup list resolve it here:
+    ONE derivation of what L3 restores."""
+    release = read_release((root / PIN_FILE).read_text())
+    if release == "none":
+        return []
+    tags = git("tag", "--list", "v*", cwd=root).splitlines()
+
+    def highest_of(tag: str) -> str | None:
+        shown = subprocess.run(["git", "show", f"refs/tags/{tag}:{PIN_FILE}"], cwd=str(root), capture_output=True,
+                               text=True)
+        if shown.returncode != 0:
+            raise ValueError(f"{tag} carries no {PIN_FILE} ({shown.stderr.strip()[-200:]}), so its schema state "
+                             f"cannot be read")
+        return highest_migration(pinned_migrations(shown.stdout))
+
+    return backup_selection(candidate_major(root), tags, highest_of)
+
+
 def major_entry_proof_ref(root: Path = REPO) -> tuple[str | None, str]:
     """(the second predecessor's ref or None, the line saying which and why): [second_predecessor] of this checkout's
     default predecessor and its major entry. Raises ValueError where either refuses. The upgrade proof's
@@ -1836,10 +1893,15 @@ def predecessor_web_sources(commit: str) -> list[str]:
                *(f"{path}/src" for path in repo_layout.surface_paths(repo_layout.WEB))).splitlines()
 
 
-def prepare_predecessor(ref: str | None, workdir: Path) -> Predecessor:
+def prepare_predecessor(ref: str | None, workdir: Path, *, jar: bool = True,
+                        install_args: tuple[str, ...] = ()) -> Predecessor:
     """A detached worktree of the predecessor in the run directory, built as its own CI would: its web dependencies
     installed (which generates its client — `web`'s `prepare`) and its fast-jar built. Its suites run from there, never
     from this tree ([Build]); [remove_predecessor] deletes it once the group has run.
+
+    Lane L2 (`run_stack_upgrade.py`) builds its starting release's tree here too, without the jar (`jar=False`: its
+    instance runs the release's published images) and, on a host whose platform is not the suite container's,
+    with `install_args` — the extra `--os`/`--cpu`/`--libc` a pnpm install takes for that container's native packages.
 
     The install is a plain install of the predecessor's lockfile, not `pnpm_install_no_deprecated.py`: that lockfile
     passed the gate when it was the candidate, and a package deprecated SINCE would turn an upgrade proof red for a
@@ -1857,10 +1919,16 @@ def prepare_predecessor(ref: str | None, workdir: Path) -> Predecessor:
     atexit.register(remove_worktree, tree)
     # The predecessor's surfaces where ITS layout puts them, which may be the one before ADR 0106 stage 2.
     backend, web = repo_layout.surface_in(tree, repo_layout.BACKEND), repo_layout.surface_in(tree, repo_layout.WEB)
-    install = (["pnpm", "install", "--frozen-lockfile"] if (tree / "pnpm-lock.yaml").is_file()
-               else ["npm", "ci", "--no-audit", "--no-fund"])
-    for label, cmd, cwd in (("install", install, tree),
-                            ("gradle", ["./gradlew", "--no-daemon", "--console=plain", "quarkusBuild"], backend)):
+    if (tree / "pnpm-lock.yaml").is_file():
+        install = ["pnpm", "install", "--frozen-lockfile", *install_args]
+    elif install_args:
+        raise SystemExit(f"[e2e] UPGRADE PROOF: the predecessor {asked} installs with npm, which takes no {install_args}")
+    else:
+        install = ["npm", "ci", "--no-audit", "--no-fund"]
+    steps = [("install", install, tree)]
+    if jar:
+        steps.append(("gradle", ["./gradlew", "--no-daemon", "--console=plain", "quarkusBuild"], backend))
+    for label, cmd, cwd in steps:
         out = workdir / f"predecessor-{label}.log"
         log(f"upgrade proof: building the predecessor ({' '.join(cmd)}) -> {shown(out)}")
         with out.open("w") as handle:
@@ -1868,11 +1936,11 @@ def prepare_predecessor(ref: str | None, workdir: Path) -> Predecessor:
         if result.returncode != 0:
             tail(out)
             raise SystemExit(f"[e2e] UPGRADE PROOF: the predecessor's {label} step failed (exit {result.returncode})")
-    jar = backend / JAR_IN_BACKEND
-    if not jar.is_file() or not (web / "src" / "api" / "generated").is_dir():
-        raise SystemExit(f"[e2e] UPGRADE PROOF: the predecessor built no jar at {shown(jar)} or generated no client")
+    built = backend / JAR_IN_BACKEND
+    if (jar and not built.is_file()) or not (web / "src" / "api" / "generated").is_dir():
+        raise SystemExit(f"[e2e] UPGRADE PROOF: the predecessor built no jar at {shown(built)} or generated no client")
     return Predecessor(asked, commit, git("show", f"{commit}:{PIN_FILE}"),
-                       Build(f"predecessor {commit[:12]}", tree, jar))
+                       Build(f"predecessor {commit[:12]}", tree, built))
 
 
 def remove_predecessor(predecessor: Predecessor | None) -> None:

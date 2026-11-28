@@ -1,0 +1,34 @@
+---
+// Starlight's SocialIcons, with the older versions in front of them (ADR 0087 decision 6): the root build names every
+// older major the deploy serves beside it (VEYQ_SITE_OLDER), each linking that version's start page in the page's
+// language. Empty until a major 2 is released, and always empty in a version build, so nothing renders then.
+import Default from '@astrojs/starlight/components/SocialIcons.astro';
+import { VEYQ_SITE_OLDER } from 'astro:env/server';
+
+const older = (VEYQ_SITE_OLDER ?? '').split(',').filter(Boolean);
+const de = Astro.locals.starlightRoute.lang === 'de';
+---
+
+{
+  older.length > 0 && (
+    <span class="veyq-older sl-flex">
+      {de ? 'Ältere Versionen:' : 'Older versions:'}
+      {older.map((major) => (
+        <a href={`/v${major}/${de ? 'de/' : ''}start/`}>v{major}</a>
+      ))}
+    </span>
+  )
+}
+<Default />
+
+<style>
+  .veyq-older {
+    gap: 0.5em;
+    align-items: center;
+    font-size: var(--sl-text-sm);
+    color: var(--sl-color-gray-2);
+  }
+  .veyq-older a {
+    color: var(--sl-color-text-accent);
+  }
+</style>

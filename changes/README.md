@@ -706,6 +706,12 @@ during cr-e2e-orchestrator:
   is **no longer true** (measured 2026-08-17: `git branch -a` → `main` alone, and all seven workflow files are on
   it). Keep the gate written down anyway — it is a property of `workflow_dispatch`, not of one branch, and the
   next long-lived branch meets it again.
+- **An implementer does not push, so a done-when only CI or a Publish can observe is written in two halves.**
+  `cr-stack-lane-l2-upgrade-in-place`'s phase 3 asked for a pull request's run, a push's run and a dispatched
+  Publish's attestation — none of which its implementer, barred from pushing, could meet; only the brief saying so
+  up front saved a hand-back. Write such a done-when as *"locally: …; observed after the owner's push: …"*, and the
+  CR stays until the second half is observed (that CR's: both L2 legs green on the pull request and the push, and
+  the Publish's attestation read back with `cosign verify-attestation`).
 - **A third gate now outranks both, and it is the one in force: there is no remote.** `git remote -v` is empty
   (measured 2026-08-17), so **no CI run has executed in this repository** — not the trust chain, not `ci.yml`,
   not `web-e2e`. (The runs that admitted backend's, web's and web-e2e's rows predate its 2026-08-06 import, so a

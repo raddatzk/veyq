@@ -79,36 +79,48 @@ manifests, the image signatures, the predicates and the tag each name it.
      published before every stage is green. So every other job of `checks.yml` is in its gate job's (`green`)
      `needs:`, found by reading the file's jobs, never listed; when the gate's `if:` calls a status function
      (`always()`, `failure()`, `cancelled()`) — which lets it run past a failed or skipped need — the condition requires
-     `needs.<job>.result == 'success'` of every need, the one exception a job that runs by design on no event (`if:
+     `needs.<job>.result == 'success'` of every need, the exceptions a job that runs by design on no event (`if:
      false`, the disabled upgrade proof) or on one event alone (`if: github.event_name == '<event>'`, the two image
-     builds), whose `skipped` it may accept alongside `success`; and `snapshot` is gated on `checks-run`'s verdict,
+     builds), whose `skipped` it may accept alongside `success`, and a push-only lane (`PUSH_ONLY_LANES`, lane L3),
+     accepted by exactly two terms — `success` unless the event is a pull request, and `success` or `skipped` — so
+     only a pull request may skip it; and `snapshot` is gated on `checks-run`'s verdict,
      which publishes only a Checks run whose gate concluded `success` (scripts/snapshot.py, selftested).
- 10. **The snapshot waits on lane L1** (ADR 0090 decision 2). Assertion 9 holds the snapshot to the jobs the file
-     has, and cannot see one that is gone; so the job that runs `scripts/run_stack_e2e.py` — found by what it runs,
-     never by its name — must exist, need `build`, run on every architecture the build matrix publishes, and be in
-     the gate's `needs:` with `needs.<lane>.result == 'success'` among its `&&` terms.
- 13. **Each lane's result is attested by the snapshot, never by the lane** (ADR 0091 decision 5). The lane's job
-     records each green leg (`scripts/snapshot.py lane-result`, gated like every write) and holds no `id-token`; the
-     `snapshot` job assembles the predicates once (`scripts/snapshot.py predicates`) with `--arch` and `--shard` equal
-     to the lane matrix's `arch` and `domain`, read from the file, and runs `cosign attest --type "$PREDICATE_TYPE"`
-     with that variable set to `scripts/snapshot.py`'s `PREDICATE_TYPE`, after the predicates and after every image
-     signature.
+ 10. **The snapshot waits on lanes L1, L2 and L3** (ADR 0090 decision 2, ADR 0091 decision 3). Assertion 9 holds the
+     snapshot to the jobs the file has, and cannot see one that is gone; so the job of each lane — found by the
+     orchestrator it runs (`LANE_ORCHESTRATORS`: `scripts/run_stack_e2e.py`, `scripts/run_stack_upgrade.py`,
+     `scripts/run_stack_restore.py`), never by its name — must exist, need `build`, run on every architecture the build
+     matrix publishes (lane L1; lanes L2 and L3, which prove the data path, on a non-empty subset of them — amd64, ADR
+     0091 decision 6 amended 2026-11-27), and be in the gate's `needs:` with `needs.<lane>.result == 'success'` among
+     its `&&` terms (lane L3, which runs on a push alone — `github.event_name == 'push'` an `&&` term of its `if:`, and no
+     other lane's — by assertion 9's two push-only terms); and lane L2's job is named as `scripts/snapshot.py` reads it
+     (`UPGRADE_JOB_NAME`), as L1's is.
+ 13. **Each lane's result is attested by the snapshot, never by the lane** (ADR 0091 decision 5). Each lane's job
+     records each green leg (`scripts/snapshot.py lane-result --lane <its lane>`, gated like every write; lane L2's with
+     `--predecessor` and lane L3's with `--backups`, no other lane's) and holds no `id-token`; the `snapshot` job
+     assembles each lane's predicates once (`scripts/snapshot.py predicates --lane <lane>`) with `--arch` and `--shard`
+     equal to that lane's matrix `arch` and its leg key (L1's `domain`, L2's `leg`, L3's `shard`), read from the file,
+     and runs `cosign attest --type
+     "$PREDICATE_TYPE"` with that variable set to `scripts/snapshot.py`'s `PREDICATE_TYPE`, after the predicates and
+     after every image signature.
  11. **(Retired here.)** A release's one immutable GitHub Release, created last (ADR 0096 decision 3), left this
      pipeline with the release kind: a release is a promotion of a snapshot in a workflow of its own, and assertion
      14 holds it there. What stays of it here: **the
      cosign that signs is the line operators verify with** (inbox #474): exactly one `sigstore/cosign-installer` step
-     in the file, in the `snapshot` job before every step that runs `cosign`, with `cosign-release` an exact
+     in the file outside the stack lanes' jobs, in the `snapshot` job before every step that runs `cosign` (lane L2's
+     installer is a cosign that verifies, through the starting release's `veyqctl`, and lane L3's one that verifies the
+     archive's signature, each held to the same version as release.yml's), with `cosign-release` an exact
      `v<major>.<minor>.<patch>` no older than `src/tools/veyqctl.py`'s `COSIGN_MIN_VERSION` — never the installer's
      default, which lags — and no `cosign` line anywhere passes the deprecated flag that chose the bundle format
      (cosign 3 writes the Sigstore bundle by default, and only its `=false` spelling still writes the legacy one).
  14. **The promotion** (`.github/workflows/release.yml`, ADR 0091 decision 5): the file the release identity names
      exists; it is started by `workflow_dispatch` alone, whose one input is the boolean `unscheduled_major` (default
-     false); it runs in concurrency group `veyq-release`, never cancelled, under `permissions: {}`, and its seven jobs
+     false); it runs in concurrency group `veyq-release`, never cancelled, under `permissions: {}`, and its eight jobs
      hold exactly — `check` contents write (draft listing) and packages read, `apps` contents and packages read,
      `msix-sign` contents read, `promote` packages and id-token write, `publish` contents write, `channels` packages
-     write, `refused` contents write; `apps` needs `check`, `msix-sign` both, `promote` all three, `publish` `check` and
-     `promote`, `channels` runs only once `publish` says published, `refused` never after it and whenever any job
-     before publication failed. No step builds (a build-push
+     write, `refused` contents write, `archive` (a call of `archive.yml` alone, assertion 18) packages and id-token
+     write; `apps` needs `check`, `msix-sign` both, `promote` all three, `publish` `check` and `promote`, `channels` and
+     `archive` run only once `publish` says published — `archive` handed exactly that release's tag — `refused` never
+     after it and whenever any job before publication failed. No step builds (a build-push
      action, `docker build`, `buildx build`, a Gradle or pnpm run); only `publish` and `refused` write to the repository
      or a GitHub Release; `<major>` and `latest` are named in `channels` alone. `publish` publishes the draft in one
      step (`draft=false`), after it verifies the files against `veyqctl`'s own identity (`scripts/promote.py
@@ -118,7 +130,8 @@ manifests, the image signatures, the predicates and the tag each name it.
      and the manifest into the producer's reserved bundle names, and each app file of the manifest's `apps` into its
      own `<name>.bundle` in one loop over that list; it packages the chart from the snapshot's commit as
      `$VERSION` and signs it. Every job that runs cosign installs publish.yml's cosign first, the Helm pin is the
-     pipeline's and publish.yml's (each states it: a caller's env does not reach a called workflow),
+     pipeline's and publish.yml's (each states it: a caller's env does not reach a called workflow), the oras pin is
+     archive.yml's and the pipeline's (lane L3 reads the archive with the oras it was written with),
      the file states no certificate identity of its own, and no other workflow writes a GitHub Release (a `gh api`
      write by `-X` or `--method`) but publish.yml's draft line, held by assertion 3. What
      `scripts/promote.py` decides — every refusal — is `scripts/promote_selftest.py`'s, which `check` and the
@@ -145,7 +158,24 @@ manifests, the image signatures, the predicates and the tag each name it.
      (publish.yml's) and a push or a pull request in another (checks.yml's), per ref, never cancelled in progress: two
      publishing runs then go one after the other, so the later one sees the earlier one's tag, and a push neither waits
      for a snapshot nor gets a pending scheduled run cancelled by queueing behind it.
- 18. **The desktop apps' packages go the images' way, and the MSIX's signer reaches one job** (ADR 0139 decisions 7, 8,
+ 18. **Every signature names an identity this guard knows, and the archive's names nothing else** (ADR 0091 decision
+     6). Keyless signing names the workflow file that holds the signing job, so every file under `.github/workflows/`
+     with a job that runs `cosign sign`, `sign-blob`, `attest` or `attest-blob` is one of `SIGNING_WORKFLOWS` —
+     publish.yml (the snapshot), release.yml (the release), archive.yml (the archive) — and each listed file signs; a job
+     that calls a workflow (`uses:`) and hands it `id-token: write` calls a listed one (it signs under the called file's
+     name). The archive identity — `scripts/archive_backup.py`'s `IDENTITY_REGEXP`, with GitHub's issuer, the one
+     `archive.yml` verifies its signature against and lane L3 will pin — accepts `archive.yml` on every branch assertion
+     2's scenarios publish from, and rejects every other workflow on those branches (release.yml and publish.yml
+     named apart), a non-release branch, a pull-request or tag ref, another owner, an owner or repository whose name
+     only starts with ours, and the right identity quoted inside another URL; and `veyqctl`'s release identity rejects
+     the archive's. `archive.yml` is started by `workflow_call` and `workflow_dispatch` alone, each taking exactly a
+     required string `tag`, under `permissions: {}`, with one job `archive` holding exactly contents read, packages
+     and id-token write, one concurrency group per tag never cancelled; it states no identity of its own (no `@refs/`);
+     its steps check, archive (untagged), sign, verify (under the archive identity and against the release's, both read
+     from the scripts that state them) and name the archive (`archive_backup.py publish`) once each and in that order;
+     it signs with publish.yml's cosign, installed before; and its check and archive steps hand the run's ref.
+     Assertions 15 and 16 read it as they read release.yml.
+ 19. **The desktop apps' packages go the images' way, and the MSIX's signer reaches one job** (ADR 0139 decisions 7, 8,
      10 and 12). `apps-stage` stages exactly `scripts/snapshot.py`'s `APP_PLATFORMS`, each under its file name; the
      snapshot runs `snapshot.py staged` and `check-unpublished` with `--apps`, names each package
      `<version>-SNAPSHOT-<platform>` and `sha-<commit>-<platform>` by the digest the Checks run kept and signs it by
@@ -294,7 +324,7 @@ write, the version step staging a pull request, a tag pushed by git, a Helm pin 
 (cr-desktop-app-packaging phase 5, 2026-11-13) came with no incident either; each of its holds was bitten once:
 `packages: write` on a build job, `apps-stage` on every event, a checkout in it, an ORAS push from another job, another
 package pushed, the push step ungated (red on `oras login`, which the write pattern now names), no push at all.
-Assertion 18 came with the release side of the packages (cr-desktop-app-packaging phase 6, 2026-11-13), no incident;
+Assertion 19 came with the release side of the packages (cr-desktop-app-packaging phase 6, 2026-11-13), no incident;
 each hold was bitten once, in a copy of the tree of its own: the environment dropped from `msix-sign`, a signer secret
 in another job's env, another action in `msix-sign`, a secret on a command line, `msix-sign` off Windows or widened
 to `packages: read`, `promote` not waiting for it, `refused` not reading its failure, an ORAS pin that differs, ORAS
@@ -306,6 +336,13 @@ The publishable commit's hold was bought by a live defect (2026-11-08, Publish r
 `3ae1ae01c` and its parent changed only `site/**` and `docs/**`, which checks.yml's push filter ignores, so HEAD had no
 Checks run and Publish was red — weekly and on a dispatch — whenever main's tip was docs-only. Publish now publishes
 the newest tested ancestor, and the hold keeps a later edit from naming HEAD again anywhere a name is written.
+
+Assertion 18 came with the backup archive (cr-stack-lane-l3-backup-archive phase 1, 2026-11-27), no incident: it
+added a third file that signs, and nothing held which files sign at all — a fourth one would have signed under an
+identity no verification pins, and an archive identity one character too wide (`(archive|release)\.yml`) would let an
+archive verify as a release, or a release as an archive. Each of its holds was bitten once: a new workflow that signs,
+archive.yml's entry dropped from the list, that widened identity, the tag set before the signature, release.yml's
+`archive` ungated from the publication, and the archive run without the run's ref.
 
 Assertion 12 came with heavy-stage finding B1 (2026-10-24), which suspected the cache and found the labels instead.
 The cache was innocent (above); the labels were not. The app image set no label at all, so `docker inspect` showed its
@@ -370,6 +407,13 @@ cosign it pins by sha256), and a `cosign` fetched another way — a `curl`, anot
 Assertion 13's limits. It reads the workflow, not the registry: that `cosign attest` stored the predicate where a
 promotion finds it is a run's to show. The predicates' own refusals (a missing, extra, failed or inconsistent leg) are
 `scripts/snapshot_selftest.py`'s, which `guards` runs; this assertion holds the arguments the workflow hands them.
+
+Assertion 18's limits. A signature is recognised by its `cosign` line: one made through a variable, a script, another
+signer or an action is not seen, and `id-token: write` alone is no signature (site.yml's Pages deploy holds it for
+GitHub's own OIDC). That keyless signing from a called workflow carries the called file's name (`job_workflow_ref`) is
+GitHub's and Fulcio's documented behaviour, read, not measured here; the archive's own verify step (under its identity,
+and refused under the release's) is what a run shows. The probe list of rejected identities is the same kind as
+assertion 7's: a list of ways a pattern is too wide, not a proof that no other string is accepted.
 
 Assertion 14's limits. It reads the file's lines and job graph, not GitHub: that a draft can be moved onto another tag,
 that `gh release upload` finds a draft by its tag, that `make_latest` and the immutable-releases setting behave as the
@@ -482,8 +526,24 @@ BUILD_JOB, LOCAL_BUILD_JOB = "build", "build-local"
 # The desktop apps' packages (ADR 0139 decision 10): staged as OCI artifacts under this package by this job alone.
 APPS_STAGE_JOB, APPS_PACKAGE = "apps-stage", "veyq-apps"
 ORAS_WRITE = re.compile(r"\boras\s+(?:push|login|tag|attach|cp|copy|manifest\s+push|blob\s+push)\b")
-# Lane L1's orchestrator: assertion 10 finds the lane's job by running it, never by the job's name.
-LANE_ORCHESTRATOR = "scripts/run_stack_e2e.py"
+# The stack lanes' orchestrators: assertion 10 finds each lane's job by what it runs, never by the job's name, and
+# assertion 13 reads its legs from the matrix key named here (lane L1's domains, lane L2's starting releases).
+LANE_ORCHESTRATORS = {"L1": ("scripts/run_stack_e2e.py", "domain"), "L2": ("scripts/run_stack_upgrade.py", "leg"),
+                      "L3": ("scripts/run_stack_restore.py", "shard")}
+# The lanes that boot every architecture the build publishes; every other lane proves the data path, which no
+# architecture changes, and runs on a non-empty subset of them (ADR 0091 decision 6, amended 2026-11-27).
+EVERY_ARCH_LANES = {"L1"}
+# The lanes that run on a push alone (ADR 0091 decision 6, amended 2026-11-26 point 5: a pull request keeps lane L2):
+# the job's `if:` holds `github.event_name == 'push'` as an `&&` term, and the gate accepts it skipped on a pull request
+# and nowhere else — by exactly the two `&&` terms PUSH_ONLY_GATE names, so on a push it must pass.
+PUSH_ONLY_LANES = {"L3"}
+PUSH_ONLY_IF = "github.event_name == 'push'"
+
+
+def push_only_gate(job: str) -> set[str]:
+    """The gate's two `&&` terms for a push-only lane job: success on a push, success or skipped on a pull request."""
+    return {f"(needs.{job}.result == 'success' || github.event_name == 'pull_request')",
+            f"contains(fromJSON('[\"success\", \"skipped\"]'), needs.{job}.result)"}
 # The snapshot's decisions (assertion 13): a lane leg's record, the predicates, the write-once refusal.
 SNAPSHOT_SCRIPT = "scripts/snapshot.py"
 CHART_DIR = repo_layout.CHART_DIR
@@ -495,6 +555,22 @@ VERIFY_PAGE = ROOT / "site/src/content/docs/run/verify-a-release.md"
 # not — they are the chart's `home:` (assertion 7), so a move of the repository changes that one line and this guard
 # names every line that must follow it (`veyqctl`'s constant, the Run page's commands, the chart's image defaults).
 RELEASE_WORKFLOW = ".github/workflows/release.yml"
+# The workflow whose keyless signature says "archive" (ADR 0091 decision 6; assertion 18), and the identity it signs
+# under: string constants of scripts/archive_backup.py, where lane L3 reads them, read here without importing it.
+ARCHIVE_SCRIPT = ROOT / "scripts/archive_backup.py"
+
+
+def module_strings(path: pathlib.Path) -> dict[str, str]:
+    """A module's module-level string constants, read without importing it; {} when the file is gone."""
+    if not path.is_file():
+        return {}
+    return {node.targets[0].id: node.value.value for node in ast.parse(path.read_text()).body
+            if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+            and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)}
+
+
+ARCHIVE_CONSTANTS = module_strings(ARCHIVE_SCRIPT)
+ARCHIVE_WORKFLOW_FILE = ARCHIVE_CONSTANTS.get("ARCHIVE_WORKFLOW", "")
 
 # The tree-derived version, as the workflow refers to it. Every release-naming step must key on THIS and not on
 # a registry query, a `git describe`, or a hand-typed literal.
@@ -1542,8 +1618,15 @@ if workflow_doc:
         # (`if: false`) or on one event alone (`if: github.event_name == '<event>'`, the two builds) may be accepted
         # as `skipped` too.
         terms = {" ".join(t.split()) for t in publish_if.split("&&")}
+        # The push-only lanes' jobs, found as assertion 10 finds every lane's: by the orchestrator they run.
+        push_only_jobs = {str(name) for name, job in jobs.items() if isinstance(job, dict) and any(
+            LANE_ORCHESTRATORS[lane_id][0] in str(st.get("run") or "")
+            for lane_id in PUSH_ONLY_LANES for st in job_steps(workflow_doc, name))}
         for need in gate_needs:
             accepted = f"needs.{need}.result == 'success'" in terms
+            if not accepted and need in push_only_jobs:
+                # A push-only lane: accepted skipped on a pull request alone, and only while its job runs on a push alone.
+                accepted = push_only_gate(need) <= terms
             need_if = " ".join(str((jobs.get(need) or {}).get("if")).split())
             by_design = need_if in ("False", "false") or bool(re.fullmatch(r"github\.event_name == '[a-z_]+'", need_if))
             if not accepted and by_design:
@@ -1553,7 +1636,8 @@ if workflow_doc:
                     f"the `{GATE_JOB}` job's `if:` calls a status function, which lets it run past a failed "
                     f"need, but it does not require `needs.{need}.result == 'success'` as one of its `&&` terms — a "
                     f"publish would go ahead on a red `{need}` (ADR 0091 decision 2). Only a job that is literally "
-                    f"`if: false`, or runs on one event alone, may be accepted as `skipped` too."
+                    f"`if: false`, or runs on one event alone, may be accepted as `skipped` too — and a push-only lane "
+                    f"({', '.join(sorted(PUSH_ONLY_LANES))}) by exactly {sorted(push_only_gate(need))}."
                 )
     snapshot_if = " ".join(str(publish_job.get("if") or "").split())
     if publish_job and not gated_on(publish_job.get("if"), PUBLISHES):
@@ -1565,6 +1649,11 @@ if workflow_doc:
             != snapshot_script.LANE_JOB_NAME:
         fail(f"{rel_of(CHECKS)}'s lane job is named `{stack_name}`, scripts/snapshot.py reads "
              f"`{snapshot_script.LANE_JOB_NAME}` — the publish would find no lane leg in a green run")
+    upgrade_name = str(((checks_doc.get("jobs") or {}).get(snapshot_script.UPGRADE_JOB) or {}).get("name") or "")
+    if upgrade_name.replace("${{ matrix.arch }}", "{arch}").replace("${{ matrix.leg }}", "{leg}") \
+            != snapshot_script.UPGRADE_JOB_NAME:
+        fail(f"{rel_of(CHECKS)}'s lane L2 job `{snapshot_script.UPGRADE_JOB}` is named `{upgrade_name}`, "
+             f"scripts/snapshot.py reads `{snapshot_script.UPGRADE_JOB_NAME}` — the publish would find no L2 leg")
     build_images = [str(i) for i in (((build.get("strategy") or {}).get("matrix") or {}).get("image") or [])]
     if tuple(build_images) != snapshot_script.BUILD_IMAGES:
         fail(f"{rel_of(CHECKS)} stages {build_images}, scripts/snapshot.py expects {list(snapshot_script.BUILD_IMAGES)}")
@@ -1574,33 +1663,50 @@ if workflow_doc:
     # stage that installs the candidate as a Server Owner does (ADR 0090 decision 2), so its job is found by what it
     # runs — the orchestrator — never by its name, and must exist, follow the build, cover every architecture the
     # build publishes, and be waited on with `success`.
-    lane_jobs = sorted(
-        str(name) for name, job in jobs.items()
-        if isinstance(job, dict) and any(LANE_ORCHESTRATOR in str(s.get("run") or "") for s in job_steps(workflow_doc, name))
-    )
-    if not lane_jobs:
-        fail(
-            f"no job of {WORKFLOW.relative_to(ROOT)} runs `{LANE_ORCHESTRATOR}` — lane L1 is gone, and the `{PUBLISH_JOB}` "
-            f"job would publish images no stack ever booted from their own release (ADR 0090 decision 2)"
+    lane_jobs: dict[str, str] = {}  # job -> lane
+    for lane_id, (orchestrator, _) in LANE_ORCHESTRATORS.items():
+        found_jobs = sorted(
+            str(name) for name, job in jobs.items()
+            if isinstance(job, dict) and any(orchestrator in str(s.get("run") or "") for s in job_steps(workflow_doc, name))
         )
+        if not found_jobs:
+            fail(
+                f"no job of {WORKFLOW.relative_to(ROOT)} runs `{orchestrator}` — lane {lane_id} is gone, and the "
+                f"`{PUBLISH_JOB}` job would publish images no stack ever booted from a release (ADR 0090 decision 2, "
+                f"ADR 0091 decision 3)"
+            )
+        lane_jobs.update({name: lane_id for name in found_jobs})
     build_archs = {str(a) for a in (((jobs.get(BUILD_JOB) or {}).get("strategy") or {}).get("matrix") or {}).get("arch") or []}
-    for lane in lane_jobs:
+    for lane, lane_id in sorted(lane_jobs.items()):
         lane_job = jobs[lane]
         raw = lane_job.get("needs") or []
         lane_needs = [raw] if isinstance(raw, str) else [str(n) for n in raw]
         if BUILD_JOB not in lane_needs:
-            fail(f"lane L1's job `{lane}` does not need `{BUILD_JOB}` — on a publishing run it installs the images that "
-                 f"job pushed, so it must run after it (ADR 0090 decision 2)")
-        if lane not in publish_needs or f"needs.{lane}.result == 'success'" not in {
-                " ".join(t.split()) for t in publish_if.split("&&")}:
-            fail(f"the `{GATE_JOB}` job does not wait on lane L1 (`{lane}`) with `needs.{lane}.result == 'success'` "
-                 f"— the snapshot would be published on bytes the lane never installed (ADR 0090 decision 2)")
+            fail(f"lane {lane_id}'s job `{lane}` does not need `{BUILD_JOB}` — on a publishing run it installs the images "
+                 f"that job pushed, so it must run after it (ADR 0090 decision 2)")
+        gate_terms = {" ".join(t.split()) for t in publish_if.split("&&")}
+        waits = (f"needs.{lane}.result == 'success'" in gate_terms
+                 or (lane_id in PUSH_ONLY_LANES and push_only_gate(lane) <= gate_terms))
+        if lane not in publish_needs or not waits:
+            fail(f"the `{GATE_JOB}` job does not wait on lane {lane_id} (`{lane}`) with `needs.{lane}.result == "
+                 f"'success'` (a push-only lane: {sorted(push_only_gate(lane))}) — the snapshot would be published on "
+                 f"bytes the lane never installed (ADR 0090 decision 2)")
+        lane_if = {" ".join(t.split()) for t in " ".join(str(lane_job.get("if") or "").split()).split("&&")}
+        if (lane_id in PUSH_ONLY_LANES) != (PUSH_ONLY_IF in lane_if):
+            fail(f"lane {lane_id}'s job `{lane}` {'does not run' if lane_id in PUSH_ONLY_LANES else 'runs'} on a push "
+                 f"alone (`{PUSH_ONLY_IF}` as an `&&` term of its `if:`) — lane L3 runs on a push and the gate accepts "
+                 f"it skipped on a pull request; every other lane runs on both (ADR 0091 decision 6, point 5)")
         lane_archs = {str(a) for a in (((lane_job.get("strategy") or {}).get("matrix") or {}).get("arch") or [])}
         if not build_archs:
-            fail(f"the `{BUILD_JOB}` job's matrix names no `arch` — lane L1's architectures cannot be held to it")
-        elif not build_archs <= lane_archs:
-            fail(f"lane L1's job `{lane}` runs on {sorted(lane_archs)}, the `{BUILD_JOB}` publishes {sorted(build_archs)} "
-                 f"— what is published for an architecture must have passed on it (ADR 0091 decision 4)")
+            fail(f"the `{BUILD_JOB}` job's matrix names no `arch` — lane {lane_id}'s architectures cannot be held to it")
+        elif lane_id in EVERY_ARCH_LANES and not build_archs <= lane_archs:
+            fail(f"lane {lane_id}'s job `{lane}` runs on {sorted(lane_archs)}, the `{BUILD_JOB}` publishes "
+                 f"{sorted(build_archs)} — what is published for an architecture must have passed on it (ADR 0091 "
+                 f"decision 4)")
+        elif lane_id not in EVERY_ARCH_LANES and (not lane_archs or not lane_archs <= build_archs):
+            fail(f"lane {lane_id}'s job `{lane}` runs on {sorted(lane_archs)}, the `{BUILD_JOB}` publishes "
+                 f"{sorted(build_archs)} — a data-path lane runs on at least one published architecture and on none "
+                 f"the build does not publish (ADR 0091 decision 6, amended 2026-11-27)")
 
     # ---- 13. each lane's result is attested, per architecture, by the publish and never by the lane --------------
     # ADR 0091 decision 5: every snapshot is published with each lane's result as a signed attestation
@@ -1623,24 +1729,36 @@ if workflow_doc:
                         fail(f"job `{job_name}`: cannot parse `{line.strip()[:80]}`: {e}")
         return found
 
-    for lane in lane_jobs:
+    for lane, lane_id in sorted(lane_jobs.items()):
         matrix = ((jobs[lane].get("strategy") or {}).get("matrix") or {})
         lane_archs = sorted(str(a) for a in matrix.get("arch") or [])
-        lane_shards = sorted(str(d) for d in matrix.get("domain") or [])
+        lane_shards = sorted(str(d) for d in matrix.get(LANE_ORCHESTRATORS[lane_id][1]) or [])
         if "id-token" in (jobs[lane].get("permissions") or {}):
-            fail(f"lane L1's job `{lane}` holds `id-token` — a leg runs the commit's test code and signs nothing; the "
-                 f"`{PUBLISH_JOB}` job attests its result")
-        records = [(i, s) for i, s, argv in argv_lines(lane, f"{SNAPSHOT_SCRIPT} lane-result")]
+            fail(f"lane {lane_id}'s job `{lane}` holds `id-token` — a leg runs the commit's test code and signs nothing; "
+                 f"the `{PUBLISH_JOB}` job attests its result")
+        records = [(i, s, argv) for i, s, argv in argv_lines(lane, f"{SNAPSHOT_SCRIPT} lane-result")]
         if not records:
-            fail(f"lane L1's job `{lane}` records no result (`{SNAPSHOT_SCRIPT} lane-result`) — the snapshot would carry "
-                 f"no attestation of what the lane ran (ADR 0091 decision 5)")
-        for _, step in records:
+            fail(f"lane {lane_id}'s job `{lane}` records no result (`{SNAPSHOT_SCRIPT} lane-result`) — the snapshot would "
+                 f"carry no attestation of what the lane ran (ADR 0091 decision 5)")
+        for _, step, argv in records:
             if not gated_on(step.get("if"), STAGES):
-                fail(f"lane L1's job `{lane}` records its result when `{STAGES}` is not true — a pull request pulled "
-                     f"no digest to record")
-        assembled = argv_lines(PUBLISH_JOB, f"{SNAPSHOT_SCRIPT} predicates")
+                fail(f"lane {lane_id}'s job `{lane}` records its result when `{STAGES}` is not true — a pull request "
+                     f"pulled no digest to record")
+            if flag_values(argv, "--lane") != [lane_id]:
+                fail(f"lane {lane_id}'s job `{lane}` records its result as lane {flag_values(argv, '--lane')}")
+            if (lane_id in snapshot_script.PREDECESSOR_LANES) != bool(flag_values(argv, "--predecessor")):
+                fail(f"lane {lane_id}'s job `{lane}` records {'no' if lane_id in snapshot_script.PREDECESSOR_LANES else 'a'} "
+                     f"`--predecessor` — lane L2's record names the release it started from, and only L2's (ADR 0091 "
+                     f"decision 5)")
+            if (lane_id in snapshot_script.BACKUP_LANES) != bool(flag_values(argv, "--backups")):
+                fail(f"lane {lane_id}'s job `{lane}` records {'no' if lane_id in snapshot_script.BACKUP_LANES else ''} "
+                     f"`--backups` — lane L3's record names the archived backups it restored, and only L3's (ADR 0091 "
+                     f"decision 5)")
+        assembled = [(i, step, argv) for i, step, argv in argv_lines(PUBLISH_JOB, f"{SNAPSHOT_SCRIPT} predicates")
+                     if flag_values(argv, "--lane") == [lane_id]]
         if len(assembled) != 1:
-            fail(f"the `{PUBLISH_JOB}` job runs `{SNAPSHOT_SCRIPT} predicates` {len(assembled)} time(s), not once")
+            fail(f"the `{PUBLISH_JOB}` job runs `{SNAPSHOT_SCRIPT} predicates --lane {lane_id}` {len(assembled)} "
+                 f"time(s), not once")
             continue
         assembled_at, assembled_step, argv = assembled[0]
         if str((assembled_step.get("env") or {}).get("RUN_URL") or "").replace(" ", "") \
@@ -1672,9 +1790,11 @@ if workflow_doc:
 
     # The cosign that signs is the line operators verify with (inbox #474): one installer, before every `cosign`, at an
     # exact version no older than the floor `veyqctl` refuses below — the installer's default lags (v4.1.2: v3.0.6).
+    # A stack lane's own installer is the cosign that VERIFIES a published release (lane L2, through the starting
+    # release's veyqctl), not one that signs: held to this one's version below, with release.yml's.
     installers = [
         (job_name, index, step)
-        for job_name in sorted(jobs)
+        for job_name in sorted(jobs) if job_name not in lane_jobs
         for index, step in enumerate(job_steps(workflow_doc, job_name))
         if str(step.get("uses") or "").split("@", 1)[0] == COSIGN_INSTALLER
     ]
@@ -2271,6 +2391,8 @@ RELEASE_JOBS = {
     "publish": {"contents": "write"},
     "channels": {"contents": "read", "packages": "write"},
     "refused": {"contents": "write"},
+    # A called workflow's job: what it grants is the most `archive.yml` may use (assertion 18 holds that file).
+    "archive": {"contents": "read", "packages": "write", "id-token": "write"},
 }
 BUILD_RUN = re.compile(r"\b(?:docker\s+build|buildx\s+build|gradlew|pnpm\s|npm\s|quarkusBuild)\b")
 PUBLISH_DRAFT = re.compile(r"-F\s+draft=false\b")
@@ -2322,15 +2444,31 @@ else:
 
     for job, needed in (("apps", {"check"}), ("msix-sign", {"check", "apps"}), ("promote", {"check", "apps", "msix-sign"}),
                         ("publish", {"check", "promote"}), ("channels", {"check", "publish"}),
-                        ("refused", {"check", "apps", "msix-sign", "promote", "publish"})):
+                        ("refused", {"check", "apps", "msix-sign", "promote", "publish"}),
+                        ("archive", {"check", "publish"})):
         if not needed <= rneeds(job):
             fail(f"{RELEASE_WORKFLOW}: job `{job}` does not need {sorted(needed - rneeds(job))} — the order is check, "
-                 f"the app packages pulled and the MSIX signed, promote, publish, then the channels; `refused` reads "
-                 f"every job before publication")
+                 f"the app packages pulled and the MSIX signed, promote, publish, then the channels and the archive; "
+                 f"`refused` reads every job before publication")
     channels_if = " ".join(str((rjobs.get("channels") or {}).get("if") or "").split())
     if "needs.publish.outputs.published == 'true'" not in channels_if or "||" in channels_if:
         fail(f"{RELEASE_WORKFLOW}: `channels` runs on `{channels_if}` — `<major>` and `latest` move only once the release "
              f"is published, or they point at a release that does not exist")
+    # The archive (ADR 0091 decision 6): the called `archive.yml`, for exactly the release just published, and only
+    # once it is — a failure there never reaches the release, which is immutable by then.
+    archive_job = rjobs.get("archive") or {}
+    archive_if = " ".join(str(archive_job.get("if") or "").split())
+    if str(archive_job.get("uses") or "") != f"./{ARCHIVE_WORKFLOW_FILE}" or set(archive_job) - {
+            "name", "needs", "if", "permissions", "uses", "with"}:
+        fail(f"{RELEASE_WORKFLOW}: `archive` is no call of `./{ARCHIVE_WORKFLOW_FILE}` alone (uses "
+             f"`{archive_job.get('uses')}`, keys {sorted(archive_job)}) — every release is archived by that workflow, "
+             f"under its identity (assertion 18)")
+    if "needs.publish.outputs.published == 'true'" not in archive_if or "||" in archive_if:
+        fail(f"{RELEASE_WORKFLOW}: `archive` runs on `{archive_if}` — a release is archived once it is published, "
+             f"never before (its files are read from the published release)")
+    if (archive_job.get("with") or {}) != {"tag": "v${{ needs.check.outputs.version }}"}:
+        fail(f"{RELEASE_WORKFLOW}: `archive` is handed {archive_job.get('with')} — exactly the release this run "
+             f"published, `tag: v${{{{ needs.check.outputs.version }}}}`")
     refused_if = " ".join(str((rjobs.get("refused") or {}).get("if") or "").split())
     if "needs.publish.outputs.published != 'true'" not in refused_if:
         fail(f"{RELEASE_WORKFLOW}: `refused` runs on `{refused_if}` — it puts a draft back, so never after publication")
@@ -2425,8 +2563,7 @@ else:
 
     # The pins it shares with the pipeline's runs: one cosign (publish.yml's `snapshot`), one Helm (checks.yml's
     # `chart` and publish.yml's chart packaging carry it each, a caller's env not reaching a called workflow).
-    ci_installer = [s for job in (workflow_doc.get("jobs") or {}) for s in job_steps(workflow_doc, job)
-                    if str(s.get("uses") or "").startswith(COSIGN_INSTALLER)]
+    ci_installer = [s for s in job_steps(workflow_doc, PUBLISH_JOB) if str(s.get("uses") or "").startswith(COSIGN_INSTALLER)]
     ci_cosign = str(((ci_installer[0].get("with") or {}) if ci_installer else {}).get("cosign-release") or "")
     for job in rjobs:
         steps = rsteps(job)
@@ -2439,6 +2576,15 @@ else:
             if str((steps[i].get("with") or {}).get("cosign-release")) != ci_cosign:
                 fail(f"{RELEASE_WORKFLOW}: job `{job}` installs cosign {(steps[i].get('with') or {}).get('cosign-release')}, "
                      f"`{rel_of(WORKFLOW)}` signs with {ci_cosign} — one cosign signs veyq (inbox #474)")
+    # And the one lane L2 verifies the starting release with (checks.yml's `stack-upgrade`, through that release's
+    # veyqctl): the same cosign, so a bundle the publish wrote is read by the version that wrote it.
+    checks_full = yaml.safe_load(CHECKS.read_text()) or {}
+    for job in (checks_full.get("jobs") or {}):
+        for step in job_steps(checks_full, job):
+            if str(step.get("uses") or "").startswith(COSIGN_INSTALLER) \
+                    and str((step.get("with") or {}).get("cosign-release")) != ci_cosign:
+                fail(f"{rel_of(CHECKS)}: job `{job}` installs cosign {(step.get('with') or {}).get('cosign-release')}, "
+                     f"`{rel_of(WORKFLOW)}` signs with {ci_cosign} — one cosign signs and verifies veyq (inbox #474)")
     helm_pins = {}
     for path in (CHECKS, WORKFLOW, ROOT / RELEASE_WORKFLOW):
         env = (yaml.safe_load(path.read_text()) or {}).get("env") or {} if path.is_file() else {}
@@ -2446,6 +2592,16 @@ else:
     if len(set(helm_pins.values())) != 1 or None in next(iter(helm_pins.values())):
         fail(f"the Helm pin differs between {helm_pins} — the chart a release packages is the snapshot's Helm's, and the "
              f"chart check's (a caller's workflow-level env does not reach the pipeline, so each file states it)")
+    # And oras, the archive's OCI client: archive.yml writes the archive with it, checks.yml's lane L3 reads it — one pin,
+    # the one the desktop apps' packages are staged, named and released with too (assertion 19, which reads each job's).
+    oras_pins = {}
+    for path in (ROOT / (ARCHIVE_WORKFLOW_FILE or ".github/workflows/archive.yml"), CHECKS, WORKFLOW,
+                 ROOT / RELEASE_WORKFLOW):
+        env = (yaml.safe_load(path.read_text()) or {}).get("env") or {} if path.is_file() else {}
+        oras_pins[rel_of(path)] = (env.get("ORAS_VERSION"), env.get("ORAS_SHA256"))
+    if len(set(oras_pins.values())) != 1 or None in next(iter(oras_pins.values())):
+        fail(f"the oras pin differs between {oras_pins} — lane L3 reads the archive with the oras archive.yml wrote it "
+             f"with, each file stating it (pin_follow.py oras rewrites them all)")
     release_summary = (f"; {RELEASE_WORKFLOW} is started by hand only, in group `veyq-release`, its {len(RELEASE_JOBS)} "
                        f"jobs each holding only what they write, builds nothing, moves the channels after publishing "
                        f"and publishes last")
@@ -2460,6 +2616,173 @@ for other in sorted(WORKFLOW.parent.glob("*.y*ml")):
         if RELEASE_WRITE.search(line) or GH_RELEASE_CREATE.search(line):
             fail(f"{other.relative_to(ROOT)}:{number} writes a GitHub Release — only {RELEASE_WORKFLOW}, the release "
                  f"identity, does")
+
+# ---- 18. every signature names an identity this guard knows, and the archive's names nothing else ----------------
+# Keyless signing names the workflow file that holds the signing job, so each file that signs IS an identity: publish.yml
+# the snapshot's, release.yml the release's (assertion 7), archive.yml the archive's (ADR 0091 decision 6). A fourth file
+# that signs is an identity nothing verifies against and nobody decided on; and a listed one that no longer signs is a
+# stale entry. A job that calls another workflow (`uses:`) signs under the CALLED file's name (`job_workflow_ref`), so it
+# may hold `id-token: write` only to hand it to a listed one.
+SIGNING_WORKFLOWS = {
+    rel_of(WORKFLOW): "the snapshot identity (scripts/promote.py's, assertion 13)",
+    RELEASE_WORKFLOW: "the release identity (veyqctl's and the Run page's, assertion 7)",
+    ARCHIVE_WORKFLOW_FILE or ".github/workflows/archive.yml": "the archive identity (scripts/archive_backup.py's)",
+}
+SIGNS = re.compile(r"\bcosign\s+(?:sign|sign-blob|attest|attest-blob)\b")
+archive_summary = ""
+
+
+def id_token_writes(permissions: object) -> bool:
+    return permissions == "write-all" or (isinstance(permissions, dict) and str(permissions.get("id-token")) == "write")
+
+
+signers: dict[str, list[str]] = {}
+for wf in sorted(WORKFLOW.parent.glob("*.y*ml")):
+    rel = rel_of(wf)
+    try:
+        wdoc = yaml.safe_load(wf.read_text()) or {}
+    except yaml.YAMLError:
+        continue  # validate_pipeline_shape.py names a file that does not parse
+    default = wdoc.get("permissions")
+    for job_name, job in (wdoc.get("jobs") or {}).items():
+        if not isinstance(job, dict):
+            continue
+        steps = [st for st in job.get("steps") or [] if isinstance(st, dict)]
+        signing = [st.get("name") or "?" for st in steps if SIGNS.search(str(st.get("run") or "").replace("\\\n", " "))]
+        called = str(job.get("uses") or "")
+        if id_token_writes(job.get("permissions", default)) and called:
+            target = called.removeprefix("./")
+            if target not in SIGNING_WORKFLOWS:
+                fail(f"{rel}: job `{job_name}` hands `id-token: write` to `{called}`, which is no workflow this guard "
+                     f"knows as a signing identity ({', '.join(sorted(SIGNING_WORKFLOWS))}) — a called workflow signs "
+                     f"under its own name")
+        elif signing:
+            # `id-token: write` alone is no signature: site.yml's Pages deploy holds it for GitHub's own OIDC.
+            signers.setdefault(rel, []).append(job_name)
+            if rel not in SIGNING_WORKFLOWS:
+                fail(f"{rel}: job `{job_name}` signs (step(s) {', '.join(signing)}) — keyless "
+                     f"signing names this file, an identity no verification here pins and nobody decided on. A file "
+                     f"that signs is listed in SIGNING_WORKFLOWS with the identity it is, and held like the others")
+for rel, what in SIGNING_WORKFLOWS.items():
+    if rel not in signers:
+        fail(f"{rel} is listed as {what}, and no job of it signs (or the file is gone) — a stale identity is one a "
+             f"verification would pin for nothing")
+
+# The archive's identity: archive.yml on the branches a release is promoted from, and nothing else — above all never
+# the release's (an archive would verify as a release) and never the snapshot's.
+ARCHIVE_FILE = ROOT / (ARCHIVE_WORKFLOW_FILE or ".github/workflows/archive.yml")
+archive_identity = ARCHIVE_CONSTANTS.get("IDENTITY_REGEXP")
+if not ARCHIVE_SCRIPT.is_file() or not ARCHIVE_WORKFLOW_FILE or archive_identity is None:
+    fail(f"{rel_of(ARCHIVE_SCRIPT)} assigns no `ARCHIVE_WORKFLOW` / `IDENTITY_REGEXP` string constant — where the archive "
+         f"identity is stated, so assertion 18 checked NOTHING of it")
+elif ARCHIVE_CONSTANTS.get("OIDC_ISSUER") != OIDC_ISSUER:
+    fail(f"{rel_of(ARCHIVE_SCRIPT)}'s OIDC_ISSUER is {ARCHIVE_CONSTANTS.get('OIDC_ISSUER')!r}, not GitHub's {OIDC_ISSUER}")
+elif upstream is not None:
+    owner, repo = upstream.group(1), upstream.group(2)
+
+    def asan(ref: str, workflow: str = ARCHIVE_WORKFLOW_FILE, slug: str = f"{owner}/{repo}") -> str:
+        return f"https://github.com/{slug}/{workflow}@{ref}"
+
+    a_accepted = {f"an archive written on `{b}`": asan(f"refs/heads/{b}") for b in publishing_branches}
+    a_rejected = {
+        **{f"`{rel_of(w)}` on `{b}`": asan(f"refs/heads/{b}", workflow=rel_of(w))
+           for w in sorted(WORKFLOW.parent.glob("*.y*ml")) if rel_of(w) != ARCHIVE_WORKFLOW_FILE
+           for b in publishing_branches},
+        **{f"the release identity (`{RELEASE_WORKFLOW}`) on `{b}`": asan(f"refs/heads/{b}", workflow=RELEASE_WORKFLOW)
+           for b in publishing_branches},
+        **{f"a run on `{b}`, not a release branch": asan(f"refs/heads/{b}") for b in
+           non_release_branches(version_match.group(1) if version_match else "1")},
+        "a pull request ref": asan("refs/pull/1/merge"),
+        "a tag ref": asan(f"refs/tags/v{version_value}.0"),
+        "another owner's repository": asan("refs/heads/main", slug=f"not-{owner}/{repo}"),
+        "an owner whose name only starts with ours": asan("refs/heads/main", slug=f"{owner}x/{repo}"),
+        f"a repository whose name only starts with `{repo}`": asan("refs/heads/main", slug=f"{owner}/{repo}-fork"),
+        "the right identity quoted inside another URL": "https://evil.example/" + asan("refs/heads/main"),
+    }
+    try:
+        archive_rx = re.compile(archive_identity)
+    except re.error as e:
+        archive_rx = None
+        fail(f"{rel_of(ARCHIVE_SCRIPT)}: the archive identity `{archive_identity}` does not compile: {e}")
+    if archive_rx is not None:
+        if not a_accepted:
+            fail("assertion 2's scenarios found no publishing branch, so the archive identity was checked against NOTHING")
+        for what, subject in a_accepted.items():
+            if archive_rx.search(subject) is None:
+                fail(f"the archive identity `{archive_identity}` rejects {what} ({subject}) — a genuine archive "
+                     f"would not verify")
+        for what, subject in a_rejected.items():
+            if archive_rx.search(subject) is not None:
+                fail(f"the archive identity `{archive_identity}` accepts {what} ({subject}) — an archive is "
+                     f"`{ARCHIVE_WORKFLOW_FILE}`'s signature and nothing else's")
+    # And the release identity refuses the archive's, named apart whether or not assertion 7's glob still finds it.
+    tool_identity = veyqctl_identity()[1]
+    if tool_identity:
+        for b in publishing_branches:
+            if re.search(tool_identity, asan(f"refs/heads/{b}")):
+                fail(f"veyqctl's release identity accepts the archive identity on `{b}` — an archive would verify as "
+                     f"a release")
+
+    # The archive workflow: what it may be started by, hold and do, and the order of its writes.
+    if not ARCHIVE_FILE.is_file():
+        fail(f"{ARCHIVE_WORKFLOW_FILE} is missing — the archive identity names a workflow that does not exist")
+    else:
+        adoc = yaml.safe_load(ARCHIVE_FILE.read_text()) or {}
+        atext = ARCHIVE_FILE.read_text()
+        atriggers = adoc.get("on", adoc.get(True)) or {}
+        if set(atriggers) != {"workflow_call", "workflow_dispatch"}:
+            fail(f"{ARCHIVE_WORKFLOW_FILE} triggers on {sorted(map(str, atriggers))} — exactly `workflow_call` (a "
+                 f"release, from {RELEASE_WORKFLOW}) and `workflow_dispatch` (a release already out)")
+        for trigger in ("workflow_call", "workflow_dispatch"):
+            inputs = ((atriggers.get(trigger) or {}) if isinstance(atriggers.get(trigger), dict) else {}).get("inputs") or {}
+            tag_input = inputs.get("tag") or {}
+            if set(inputs) != {"tag"} or tag_input.get("type") != "string" or tag_input.get("required") is not True:
+                fail(f"{ARCHIVE_WORKFLOW_FILE}'s `{trigger}` takes {sorted(inputs)} — exactly a required string `tag`")
+        if adoc.get("permissions") != {}:
+            fail(f"{ARCHIVE_WORKFLOW_FILE} grants {adoc.get('permissions')} to every job — `permissions: {{}}`")
+        ajobs = adoc.get("jobs") or {}
+        want = {"contents": "read", "packages": "write", "id-token": "write"}
+        if list(ajobs) != ["archive"] or (ajobs.get("archive") or {}).get("permissions") != want:
+            fail(f"{ARCHIVE_WORKFLOW_FILE} has the jobs {sorted(ajobs)} — one, `archive`, holding exactly {want}")
+        aconcurrency = (ajobs.get("archive") or {}).get("concurrency") or {}
+        if aconcurrency.get("cancel-in-progress") is not False or "inputs.tag" not in str(aconcurrency.get("group")):
+            fail(f"{ARCHIVE_WORKFLOW_FILE}: `archive`'s concurrency is {aconcurrency} — one group per tag, never "
+                 f"cancelled: two runs of one release push one after the other, and the second finds the first's tag")
+        if "@refs/" in atext:
+            fail(f"{ARCHIVE_WORKFLOW_FILE} states a certificate identity of its own — the archive's is "
+                 f"{rel_of(ARCHIVE_SCRIPT)}'s and the release's veyqctl's, each read from where it is written")
+        asteps = job_steps(adoc, "archive")
+
+        def at(pattern: str) -> list[int]:
+            return [i for i, st in enumerate(asteps) if re.search(pattern, str(st.get("run") or "").replace("\\\n", " "))]
+
+        checked, archived = at(r"archive_backup\.py\s+check\b"), at(r"archive_backup\.py\s+archive\b")
+        signed, named = at(r"\bcosign\s+sign\b"), at(r"archive_backup\.py\s+publish\b")
+        verified = [i for i in at(r"\bcosign\s+verify\b") if re.search(
+            r"archive_backup\.py\s+identity", str(asteps[i].get("run") or ""))
+            and re.search(r"promote\.py\s+release-identity", str(asteps[i].get("run") or ""))]
+        installs = [i for i, st in enumerate(asteps) if str(st.get("uses") or "").startswith(COSIGN_INSTALLER)]
+        order = [("checks whether the release is archived", checked), ("archives", archived), ("signs", signed),
+                 ("verifies under the archive identity and against the release's", verified), ("names it", named)]
+        if any(len(found) != 1 for _, found in order):
+            fail(f"{ARCHIVE_WORKFLOW_FILE}: `archive` must run each of these in one step — "
+                 + ", ".join(f"{what} ({len(found)})" for what, found in order))
+        elif [found[0] for _, found in order] != sorted(found[0] for _, found in order):
+            fail(f"{ARCHIVE_WORKFLOW_FILE}: `archive`'s writes are out of order — check, archive (pushed untagged), "
+                 f"sign, verify, and the tag LAST (`archive_backup.py publish`): a tag set before the signature names an "
+                 f"archive nobody can verify, and it is written once")
+        elif not installs or min(installs) > signed[0] or any(
+                str((asteps[i].get("with") or {}).get("cosign-release")) != signing_cosign for i in installs):
+            fail(f"{ARCHIVE_WORKFLOW_FILE}: `archive` signs with a cosign that is not installed before it as "
+                 f"`cosign-release: {signing_cosign}`, publish.yml's — one cosign signs veyq (inbox #474)")
+        for i in archived + checked:
+            if '--ref "$GITHUB_REF"' not in str(asteps[i].get("run") or ""):
+                fail(f"{ARCHIVE_WORKFLOW_FILE}: step `{asteps[i].get('name')}` does not hand the run's ref "
+                     f"(`--ref \"$GITHUB_REF\"`) — a dispatch from another branch would write an archive whose "
+                     f"signature never verifies, under a tag that is written once")
+        archive_summary = (f"; the {len(SIGNING_WORKFLOWS)} signing workflows are the {len(SIGNING_WORKFLOWS)} known "
+                           f"identities, and the archive's accepts {len(a_accepted)} and rejects {len(a_rejected)} "
+                           f"others, the release's among them")
 
 # ---- 15. a job that can write installs no Python package it has not pinned by hash ---------------------------------
 # Code PyPI serves at install time runs with the job's token: in `release.yml`'s `promote` the release identity's OIDC
@@ -2481,9 +2804,11 @@ def can_write(permissions: object) -> bool:
 held_installs = 0
 requirement_files: set[str] = set()
 RELEASE_PATH = ROOT / RELEASE_WORKFLOW
+ARCHIVE_PATH = ROOT / (ARCHIVE_WORKFLOW_FILE or ".github/workflows/archive.yml")
 for wf_path, wf_doc, every_job in (
         (WORKFLOW, publish_doc, False), (CHECKS, checks_doc, False),
-        (RELEASE_PATH, yaml.safe_load(RELEASE_PATH.read_text()) or {} if RELEASE_PATH.is_file() else {}, True)):
+        (RELEASE_PATH, yaml.safe_load(RELEASE_PATH.read_text()) or {} if RELEASE_PATH.is_file() else {}, True),
+        (ARCHIVE_PATH, yaml.safe_load(ARCHIVE_PATH.read_text()) or {} if ARCHIVE_PATH.is_file() else {}, True)):
     if not wf_doc:
         continue
     default_permissions = wf_doc.get("permissions")
@@ -2539,7 +2864,8 @@ pip_summary = (f"; every one of the {held_installs} `pip install`(s) of a job th
 STATUS_FUNCTION = re.compile(r"\b(?:always|cancelled|failure|success)\s*\(\s*\)")
 gates_checked = 0
 for wf_path, wf_doc in ((WORKFLOW, publish_doc), (CHECKS, checks_doc),
-                       (RELEASE_PATH, yaml.safe_load(RELEASE_PATH.read_text()) or {} if RELEASE_PATH.is_file() else {})):
+                       (RELEASE_PATH, yaml.safe_load(RELEASE_PATH.read_text()) or {} if RELEASE_PATH.is_file() else {}),
+                       (ARCHIVE_PATH, yaml.safe_load(ARCHIVE_PATH.read_text()) or {} if ARCHIVE_PATH.is_file() else {})):
     wf_jobs = wf_doc.get("jobs") or {}
 
     def direct_needs(name: str) -> list[str]:
@@ -2811,7 +3137,7 @@ for path, doc in ((CHECKS, checks_doc), (WORKFLOW, publish_doc), (ROOT / RELEASE
             '"${RUNNER_TEMP}/oras/oras"', "oras"))]
         if not runs_oras:
             continue
-        envs = [job.get("env") or {}] + [s.get("env") or {} for s in steps]
+        envs = [job.get("env") or {}] + [s.get("env") or {} for s in steps] + [doc.get("env") or {}]
         pin = next(((e.get(ORAS_PIN[0]), e.get(ORAS_PIN[1])) for e in envs if ORAS_PIN[0] in e), (None, None))
         pins[f"{rel_of(path)}:{job_name}"] = pin
         installs = [i for i, s in enumerate(steps) if "${ORAS_SHA256}" in str(s.get("run") or "")
@@ -2900,5 +3226,5 @@ print(
     f"the {len(recipe_assets)} recipe file(s) the derivation names ({', '.join(recipe_assets)}), {written_tags} written-down image "
     f"tag(s) name a shape the pipeline emits, and the production stack names its own project "
     f"(`name: {prod_project}`) with nothing in durable state instructing the flag it replaced{verify_summary}"
-    f"{release_summary}{pip_summary}{publish_summary}{apps_summary}"
+    f"{release_summary}{archive_summary}{pip_summary}{publish_summary}{apps_summary}"
 )

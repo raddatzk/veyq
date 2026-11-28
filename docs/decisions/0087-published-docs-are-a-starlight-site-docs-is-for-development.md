@@ -1,7 +1,9 @@
 # ADR 0087 — Published documentation is a Starlight site; `docs/` is for development only
 
 - Status: Accepted
-- Built: yes (decision 1's publish: the first deploy to GitHub Pages ran on 2026-11-05, `site.yml` run 42055478631, at https://veyq.app/)
+- Built: yes (decision 1's publish: the first deploy to GitHub Pages ran on 2026-11-05, `site.yml` run 42055478631,
+  at https://veyq.app/; decision 6's versions on 2026-11-26, rehearsed in a scratch clone with a local `v1.999` tag
+  as major 2's predecessor — no real version exists before a major 2 is released, inbox #868)
 - Date: 2026-10-15
 
 ## Context
@@ -75,9 +77,46 @@ copy (the drift the wiki's source guard was built after), and it lives only on G
 5. **`docs/` holds only what development needs.** A use-case's bilingual section becomes `## User impact`: one
    English line saying why the feature exists for the user. The numbered flows with their error paths stay the
    use-case's substance. User-facing prose lives only on the site.
-6. **No versioned docs before V1.** The site shows `main`. From V1, versions are built **from release tags**, one
-   build per version, never as copied folders; the version granularity is decided then, against
-   [ADR 0085](0085-one-major-moved-on-a-yearly-train.md).
+6. **One version per major, the first when major 2 is released.** Until then the site shows `main` and nothing
+   else. Not one per minor: inside a major every release upgrades in place, what it adds is additive, and a change an
+   operator must act on is major-level ([ADR 0085](0085-one-major-moved-on-a-yearly-train.md) decision 2 and
+   § Consequences), so `main`'s docs hold for every release of the current major, and where a page describes a
+   release an operator does not run yet, the answer is the in-place upgrade. Major 1 had 17 releases in its first 16
+   days (`git tag -l 'v1.*'`, 2026-11-26), each differing from the last by additions only. A major differs by
+   removals, and an instance may stay on the previous major for a year (ADR 0085 decision 10) — its operator needs
+   that major's runbook, which `main`'s then no longer is.
+   - **A version** is the Use, Run and Security areas built from the commit of its major's **newest release** — by
+     the same tag order as ADR 0085 decision 10's major entry, so a fix release on `release/<old>.x` moves it — and
+     served under `/v<major>/` (`/v1/`, `/v2/`, …), spelled as the release tags are, so no page path can be
+     mistaken for one. The project website (decision 7) is `main`'s alone.
+   - **Built once per tag, never copied:** `site.yml` builds a version from its release tag the first time it sees
+     that tag, keeps the build on the branch `site-versions` (`v<major>/` beside `versions.json`, the tag each was
+     built from) and reuses it on every later deploy; the deploy puts `main`'s build at the root and every kept
+     version beside it ([`scripts/site_versions.py`](../../scripts/site_versions.py)). Built soon after its tag, a
+     version meets the Node and the registry of its own time, never those of a year later. Its install is the tag's
+     own frozen lockfile, not the deprecated-package gate: that lockfile passed the gate when it was `main`'s, as the
+     upgrade proof installs a predecessor's. A version that fails to build keeps the build it had, and the run is red.
+   - **Checked by what it is.** `starlight-links-validator` runs on the root build only: a `base` blinds
+     `errorOnInconsistentLocale` (`site/astro.config.mjs`), and a version is the commit the root build already
+     checked. What a base adds is held on the build itself by
+     [`scripts/site_version_check.py`](../../scripts/site_version_check.py): every root-relative link and asset inside
+     `/v<major>/` but the website's pages, every page `noindex`, every docs page naming its version. Astro prefixes the
+     base to what it generates but not to a link a page writes, so a Markdown plugin
+     (`site/plugins/base-links.mjs`) prefixes those; the check is red on the build without it (514 links, measured
+     2026-11-26). Every commit is also built as the version it will become, so the release a version is later built
+     from is known to build as one; a release cut before this was built is not (`v1.318` builds with no base).
+   - **Every older major with a release is kept**, not only those in the client window (ADR 0085 decision 5): an
+     operator on a major that left the window still runs it, and a static build costs one directory a year.
+   - **The clients keep linking the root.** A major-1 instance's links were compiled before a major 2 existed and
+     cannot change, so the site catches a reader of an older major rather than the link: every root page names the
+     older versions in its header, and every page of a version says which major it documents, links the current docs
+     and is kept out of search engines. A version has no website: its `/v<major>/` leads into its own start page.
+   - **Rejected: the build as a signed release asset**, decided first. A release promotes and builds nothing
+     ([ADR 0091](0091-one-pipeline-per-commit-a-release-promotes-a-tested-snapshot.md)), so the build would have to
+     come from Checks, which skips site-only commits and keeps artifacts 30 days, and ride the snapshot to the
+     release; as a listed asset it would change the asset set every lane hashes and `veyqctl` would download it on
+     every install; as an unlisted one it would be a third signature bundle the release identity forbids. All that for
+     a signature over docs `main`'s deploy publishes unsigned.
 7. **The site's root is the project website.** `/` and one page per further language (`/de/`) are plain Astro
    pages, not Starlight ones; the Use area starts at `/start/`. The website says what veyq is — a platform, not one
    application —, which applications are built, why it is needed, and links into the three areas.
@@ -89,7 +128,8 @@ copy (the drift the wiki's source guard was built after), and it lives only on G
 
 ## Consequences
 
-- **The site deploys on every push to `main`** (`site.yml`); the first ran on 2026-11-05. Its domain, `veyq.app`, is a
+- **The site deploys on every push to `main` that touches it, and weekly** (`site.yml`; the weekly run picks up a fix
+  release of an older major, whose tag starts no workflow); the first ran on 2026-11-05. Its domain, `veyq.app`, is a
   Pages setting, not a file: a workflow-published site reads no `CNAME`.
 - The GitHub Wiki is gone, and in-app help links point at the site.
 - The guards follow the content: they read the site's pages where they read the wiki and `infra/README.md`'s

@@ -1,7 +1,7 @@
 # ADR 0090 — End-to-end tests boot the release candidate and drive it in a real browser
 
 - Status: Accepted
-- Built: partly (not built: decision 2's push gate on the published snapshot's digests, decision 7's boot of L2's predecessor and L3's restores)
+- Built: partly (not built: decision 2's push gate on the published snapshot's digests; L2's predecessor is booted by the same primitives, `scripts/stack_lane.py`, since cr-stack-lane-l2-upgrade-in-place, and decision 7's L3 restores — each into a fresh install of the candidate — since cr-stack-lane-l3-backup-archive, `scripts/run_stack_restore.py`)
 - Date: 2026-10-16
 - Model: [How veyq is tested](../../site/src/content/docs/security/how-veyq-is-tested.md)
 
@@ -97,7 +97,8 @@ What a green run proves today stops short of what a Server Owner runs:
 7. **One suite, run whole, as the lanes of ADR 0091 decision 3.** This ADR's harness is lane L1 (the candidate,
    fresh): first run in admin-web, a tenant, a Memory written on one device and read on another, a READ link opened
    anonymously, the feature scenarios, the sweeps.
-   Every scenario is tagged with the acceptance criterion it covers. The same harness boots L2's predecessor and L3's
+   Every scenario is tagged with the acceptance criterion it covers. The same harness boots L2's predecessor
+   (`scripts/run_stack_upgrade.py` on `scripts/stack_lane.py`, the primitives L1's orchestrator runs on) and L3's
    restores. Retries are 0.
 
    **First run is driven through the UI, once per instance, by the setup project** — it is the scenario, not a
