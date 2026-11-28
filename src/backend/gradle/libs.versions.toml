@@ -8,7 +8,7 @@
 # the runtime refuses the class files.
 java = "25"
 kotlin = "2.4.21"
-quarkus = "3.40.1.2"
+quarkus = "4.0.1"
 # The next three are above the Quarkus BOM's own versions on purpose, each for a published advisory: the root build lifts
 # the BOM's constraint to them (build.gradle.kts `liftedAboveBom` says why and when each goes).
 opentelemetry = "1.68.0"
