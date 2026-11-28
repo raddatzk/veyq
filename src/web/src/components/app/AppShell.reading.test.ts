@@ -24,6 +24,7 @@ async function mountAt(path: string) {
     routes: [
       { path: '/login', name: 'login', component: Page },
       { path: '/privacy', name: 'privacy-notice', component: Page, meta: { reading: true } },
+      { path: '/moderation', name: 'moderation', component: Page, meta: { wide: true } },
     ],
   })
   await r.replace(path)
@@ -49,6 +50,18 @@ describe('AppShell — the public shell reads legal text at a reading width', ()
     const w = await mountAt('/login')
     expect(w.find('.public-shell .page').exists()).toBe(true)
     expect(w.find('.veyq-shell-inner').classes()).not.toContain('veyq-shell-inner--reading')
+  })
+
+  it("the moderation surface takes the page's width", async () => {
+    const w = await mountAt('/moderation')
+    expect(w.find('.public-shell .page').exists()).toBe(true)
+    expect(w.find('.veyq-shell-inner').classes()).toContain('veyq-shell-inner--wide')
+    const login = await mountAt('/login')
+    expect(login.find('.veyq-shell-inner').classes()).not.toContain('veyq-shell-inner--wide')
+  })
+
+  it('the real router flags the moderation surface wide, and nothing else', () => {
+    expect(router.getRoutes().filter((r) => r.meta.wide === true).map((r) => r.name)).toEqual(['moderation'])
   })
 
   it('the real router flags exactly the three legal-text routes', () => {

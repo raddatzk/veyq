@@ -89,7 +89,8 @@ const router = createRouter({
     // The moderation surface (ADR 0099 § 6, uc.moderation.serve-as-moderator), on every tenant host. Not unlock-gated
     // and not in the shell: it signs in and unlocks inside the view, with the password and the Secret Key every time,
     // only to open the moderation grants — never through LoginView, which would open or enrol a device wrap.
-    { path: MODERATION_PATH, name: 'moderation', component: ModerationView },
+    // `meta.wide`: the public shell gives it the page's width, not the sign-in card's column (AppShell).
+    { path: MODERATION_PATH, name: 'moderation', component: ModerationView, meta: { wide: true } },
     { path: '/:pathMatch(.*)*', redirect: { name: 'login' } },
   ],
 })

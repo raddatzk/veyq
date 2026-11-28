@@ -42,6 +42,9 @@ const plainLayout = computed(() => route.meta.layout === 'plain')
 // A page of running text in the public shell — the terms and the privacy notice (`meta.reading`) — reads at a text
 // measure, not in the sign-in card's 460 px column, which wrapped it every six words.
 const readingLayout = computed(() => route.meta.reading === true)
+// The moderation surface (`meta.wide`): its queue, a case's review and its decisions are the page's width — the gate's
+// `wide` card asked for it, but inside the 460 px column a case's proposals wrapped one word per line (found 2026-11-28).
+const wideLayout = computed(() => route.meta.wide === true)
 // The audio bar lives as long as the signed-in, unlocked session: never on a page a locked or signed-out browser shows.
 const audioBarOn = computed(() => session.accessToken !== null && vaultState.unlocked)
 // The other notices wait for the banner's answer and show only on a confirmed (or unreadable) address.
@@ -74,7 +77,7 @@ watch(needsScope, (needs) => { if (needs) void enterScope(TENANT_SCOPE) }, { imm
     <RouterView />
   </main>
   <main v-else class="public-shell">
-    <div class="veyq-shell-inner" :class="{ 'veyq-shell-inner--reading': readingLayout }">
+    <div class="veyq-shell-inner" :class="{ 'veyq-shell-inner--reading': readingLayout, 'veyq-shell-inner--wide': wideLayout }">
       <!-- A request that failed at start is retried by starting again (ADR 0136 decision 5): the banner offers it. -->
       <div v-if="serverState.unreachable" class="veyq-banner veyq-banner--with-action" role="alert" data-testid="unreachable-banner">
         <span>{{ t('common.unreachable') }}</span>
@@ -100,5 +103,8 @@ watch(needsScope, (needs) => { if (needs) void enterScope(TENANT_SCOPE) }, { imm
 }
 .veyq-shell-inner--reading {
   width: min(46rem, 100%);
+}
+.veyq-shell-inner--wide {
+  width: min(1200px, 100%);
 }
 </style>
