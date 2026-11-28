@@ -1279,9 +1279,9 @@ jobs:
       # its floor: the version publish.yml signs with (scripts/validate_release_identity.py holds the three equal).
       - name: Install cosign
         if: steps.predecessor.outputs.ref != ''
-        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        uses: sigstore/cosign-installer@881c63bd87e38389154debd8331404ce7ca8a3ab # v4.1.4
         with:
-          cosign-release: v3.1.4
+          cosign-release: v3.1.5
 
       - name: Set up Docker Buildx
         if: steps.predecessor.outputs.ref != '' && needs.version.outputs.kind != 'stage'
