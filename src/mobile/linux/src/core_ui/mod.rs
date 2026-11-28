@@ -18,6 +18,7 @@
 pub mod account_flows;
 pub mod account_settings;
 pub mod avatars;
+pub mod donation;
 pub mod bookmark_create;
 pub mod bookmark_page;
 pub mod cover;

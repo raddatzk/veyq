@@ -26,6 +26,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.FavoriteBorder
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.AlternateEmail
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Gavel
@@ -315,9 +317,39 @@ fun SettingsScreen(
                 me.raddatz.veyq.mobile.search.SettingsSection.TERMS -> terms(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.GROUPS -> groups(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.GROUP_INVITATIONS -> groupInvitations(state, actions)
+                me.raddatz.veyq.mobile.search.SettingsSection.ABOUT -> about(context)
                 me.raddatz.veyq.mobile.search.SettingsSection.SIGN_OUT -> signOut(state, actions)
             }
         }
+    }
+}
+
+/**
+ * *About veyq* (core's `SettingsSection.ABOUT`, ADR 0124 decisions 5 and 7): the project's two links, each opening the
+ * project's website in the system's browser, outside the app — the one place this app asks for a donation (no banner).
+ */
+private fun LazyListScope.about(context: android.content.Context) {
+    header(me.raddatz.veyq.mobile.search.SettingsSection.ABOUT.id, { stringResource(R.string.about_title) }, { stringResource(R.string.about_sub) })
+    fun open(url: String) = runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) }
+    item(key = "about-security") {
+        val url = stringResource(R.string.project_security_url)
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.project_security)) },
+            leadingContent = { Icon(Icons.Outlined.Shield, null) },
+            trailingContent = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
+            colors = listColors(),
+            modifier = Modifier.clickable { open(url) }.testTag("settings-about-security"),
+        )
+    }
+    item(key = "about-donate") {
+        val url = stringResource(R.string.project_donate_url)
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.project_donate)) },
+            leadingContent = { Icon(Icons.Outlined.FavoriteBorder, null) },
+            trailingContent = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null) },
+            colors = listColors(),
+            modifier = Modifier.clickable { open(url) }.testTag("settings-about-donate"),
+        )
     }
 }
 

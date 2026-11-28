@@ -43,6 +43,11 @@ nag and without standing between anyone and their content.
 
 ## Consequences
 
+- **Decision 7 is built** (2026-11-28): the core's `navigation/Donation` holds the rule for every app, Linux and Windows
+  draw the banner (the shell and a received link's page), and every app's Settings has *About veyq* with the footer's two
+  links — the desktops' too, as the web's footer is on every page; only the banner is the desktops' alone.
+  [uc.platform.support-the-project](../features/platform/use-cases/uc.platform.support-the-project.md) § The apps.
+
 - The server learns one more fact per account — that its holder dismissed the banner — which is low-sensitivity
   operational metadata, served only to the holder, and stored as a boolean on the account.
 - A Server Owner who would rather not show the ask cannot turn it off. This is deliberate: the project asks, not the

@@ -41,3 +41,7 @@ The first time you open veyq — signed in, or through a share link — a line a
 support it, with a **Donate** link (if your email address still needs confirming, it waits until you have). Close it with **×** and it does not come back: in this browser, and once you are
 signed in, on your account on every device. Signing in is never interrupted by it. The footer of every page keeps a
 **Donate** link, beside **Why is veyq secure?**
+
+In the apps: the Linux and Windows apps show the same line, closed for good the same way. The Android, iPhone, iPad and
+Mac apps show none; their **Settings → About veyq** has a **Donate** link (and **Why is veyq secure?**), which opens this
+page in your browser — every app has that section.

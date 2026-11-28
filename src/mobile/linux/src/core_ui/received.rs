@@ -169,7 +169,7 @@ pub fn open_link(parent: &impl IsA<gtk::Widget>) {
 }
 
 /// Hands [uri] to the system browser (the same thing a click on the link in a chat would have done), never logged.
-fn launch(from: &impl IsA<gtk::Widget>, uri: &str) {
+pub(crate) fn launch(from: &impl IsA<gtk::Widget>, uri: &str) {
     let window = from.root().and_downcast::<gtk::Window>();
     gtk::UriLauncher::new(uri).launch(window.as_ref(), gio::Cancellable::NONE, |r| {
         if let Err(e) = r {
@@ -282,6 +282,8 @@ struct Inner {
     menu: gtk::MenuButton,
     actions: gio::SimpleActionGroup,
     notice: gtk::Box,
+    /// veyq's donation banner on the guest's page (`ReceivedShown.donationBanner`, ADR 0124 decision 7).
+    donation: gtk::Revealer,
     notice_text: gtk::Label,
     notice_more: gtk::LinkButton,
     guest_line: gtk::Box,
@@ -353,7 +355,9 @@ impl ReceivedView {
         guest_line.append(&not_you);
         let content = adw::Bin::builder().vexpand(true).build();
         let view = adw::ToolbarView::new();
+        let donation = crate::core_ui::donation::bar(Call::ReceivedDonationDismiss);
         view.add_top_bar(&header);
+        view.add_top_bar(&donation);
         view.add_top_bar(&notice);
         view.add_top_bar(&guest_line);
         view.set_content(Some(&content));
@@ -382,6 +386,7 @@ impl ReceivedView {
             menu,
             actions,
             notice,
+            donation,
             notice_text,
             notice_more,
             guest_line,
@@ -552,6 +557,7 @@ impl Inner {
         let o = offers(&s, self.mode);
         self.back.set_visible(o.back);
         self.draw_menu(&o);
+        self.donation.set_reveal_child(s.donation_banner);
         match record_notice(s.record_days) {
             Some(text) => {
                 self.notice_text.set_label(&text);
@@ -1165,7 +1171,7 @@ mod tests {
             "host": "photos.example.org", "gate": gate, "refusal": null, "askedAgain": false, "busy": false,
             "terms": "", "operatorSection": "", "record": "", "note": "", "rootName": "Summer", "role": "READ_WRITE",
             "page": null, "atRoot": true, "guestName": null, "leaving": false, "left": false, "keepOffered": true,
-            "reportAsked": false, "recordDays": null, "privacy": null, "naming": false
+            "reportAsked": false, "recordDays": null, "privacy": null, "naming": false, "donationBanner": false
         }))
         .expect("a ReceivedShown reads")
     }

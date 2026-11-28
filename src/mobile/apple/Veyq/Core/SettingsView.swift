@@ -74,9 +74,7 @@ struct SettingsView: View {
     /// `scrolled`.
     var scrollTo: String? = nil
     var scrolled: () -> Void = {}
-    #if os(iOS)
     @Environment(\.openURL) private var openURL
-    #endif
     @State private var confirm: Confirm?
     @State private var renaming = false
     /// The rename's target: nil this device (`renameDevice`), else the family whose device is renamed (`renameFamily`).
@@ -422,6 +420,23 @@ struct SettingsView: View {
                 } footer: {
                     Text(say(.invitationsSub))
                 }
+            }
+        case .about:
+            // the project's two links (ADR 0124 decisions 5 and 7), each opening the website in the browser, outside the app:
+            // the one place this app asks for a donation (no banner while it goes through the App Store)
+            Section {
+                Button { if let url = URL(string: say(.projectSecurityUrl)) { openURL(url) } } label: {
+                    Label(say(.projectSecurity), systemImage: "lock.shield")
+                }
+                .accessibilityIdentifier("settings-about-security")
+                Button { if let url = URL(string: say(.projectDonateUrl)) { openURL(url) } } label: {
+                    Label(say(.projectDonate), systemImage: "heart")
+                }
+                .accessibilityIdentifier("settings-about-donate")
+            } header: {
+                Text(say(.aboutTitle))
+            } footer: {
+                Text(say(.aboutSub))
             }
         case .signOut:
             Section {

@@ -455,6 +455,38 @@ class ShellModel(
         profileDismissed.value = true
     }
 
+    /**
+     * veyq's donation banner above the shell (ADR 0124 decision 7: drawn by the apps outside the stores, Linux and Windows):
+     * true while neither this device nor the account holds a dismissal ([Donation.memberShows], the account read once per
+     * tenant opened) and the address is confirmed (the web's notices wait), never on the way in (the shell is past it). [dismissDonation] keeps it on both.
+     */
+    val donationBanner: kotlinx.coroutines.flow.Flow<Boolean>
+        get() = kotlinx.coroutines.flow.combine(donationAsked, donation.dismissedHere) { asked, here -> asked == true && !here }
+            .onStart { checkDonation() }
+
+    private val donation = Donation(tenant.account.deviceStore)
+    private val donationAsked = MutableStateFlow<Boolean?>(null)
+    private val donationChecking = kotlinx.coroutines.sync.Mutex()
+
+    private fun profileApi() = me.raddatz.veyq.mobile.api.apis.AccountProfileApi(tenant.base, tenant.account.http)
+
+    private suspend fun checkDonation() = donationChecking.withLock {
+        if (donationAsked.value != null || donation.dismissedHere.value) return@withLock
+        // the web's notices wait while the address is unconfirmed (`otherNoticesOn`): one notice at a time, as the profile's
+        val account = tenant.account
+        val confirmed = runCatching {
+            account.call { me.raddatz.veyq.mobile.api.apis.AccountEmailApi(account.server, account.http).getAccountEmail() }.confirmed
+        }.getOrDefault(false)
+        if (!confirmed) return@withLock
+        donationAsked.value = donation.memberShows { tenant.account.call { profileApi().getMyProfile() }.donationBannerDismissed }
+    }
+
+    /** The banner's *Close and don't show again*: never again on this device, and on the account where it can be written. */
+    suspend fun dismissDonation() = donation.dismissMember {
+        tenant.account.call { profileApi().updateMyProfile(me.raddatz.veyq.mobile.api.models.ProfileUpdateRequest(donationBannerDismissed = true)) }
+        Unit
+    }
+
     /** After each reconnect that sent writes made offline: how many went and how many need the person (one notice each). */
     val queuedSent: kotlinx.coroutines.flow.Flow<List<Notice>>
         get() = tenant.account.queuedReports.map { QueuedShown.report(it) }

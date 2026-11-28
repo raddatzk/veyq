@@ -55,6 +55,13 @@ learn once that they can support it, are never asked twice, and are never held u
   the operator learns that the account holder dismissed the banner, nothing else; it is served only to the account
   holder ([security model § What is encrypted vs. server-visible](../../../crosscutting/security-model.md#what-is-encrypted-vs-server-visible)).
   A guest's dismissal never leaves the browser.
+- **The apps** (ADR 0124 decision 7, built 2026-11-28): the Linux and Windows apps draw the banner above the signed-in
+  shell and a received link's page, the rule the core's (`navigation/Donation`: shown while neither the device nor the
+  account holds a dismissal and the address is confirmed, a profile read that fails showing it, the device's dismissal
+  one for the member and the guest; `ShellModel.donationBanner`/`dismissDonation`, the bridge's `Shell.DonationDismiss`
+  and `Received.DonationDismiss`). Android, iOS/iPadOS and macOS draw none. Every app's Settings has *About veyq*
+  (`SettingsSection.ABOUT`): *Why is veyq secure?* and *Donate*, each opening the project's website in the system's browser.
+  Tests: `DonationTest` (bitten).
 - **Nothing is loaded from a third party.** The banner and the footer are plain links; the donation page itself
   links the ways to donate and embeds nothing.
 

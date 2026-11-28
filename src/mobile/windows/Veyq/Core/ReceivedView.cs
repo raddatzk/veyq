@@ -256,6 +256,8 @@ internal sealed class ReceivedView : IDisposable
     private readonly TextBlock _subtitle;
     private readonly CommandBar _commands;
     private readonly InfoBar _notice;
+    /// <summary>veyq's donation banner on the guest's page (ReceivedShown.donationBanner, ADR 0124 decision 7).</summary>
+    private readonly InfoBar _donation = DonationBanner.Make(new Call.ReceivedDonationDismiss());
     private readonly InfoBar _said;
     private readonly NoticeBar _notices;
     private readonly StackPanel _guestLine;
@@ -336,10 +338,10 @@ internal sealed class ReceivedView : IDisposable
         _guestLine = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(16, 0, 16, 4), Visibility = Visibility.Collapsed };
         _guestLine.Children.Add(_guestText);
         _guestLine.Children.Add(notYou);
-        foreach (var _ in Enumerable.Range(0, 4)) _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        foreach (var _ in Enumerable.Range(0, 5)) _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         _root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         var row = 0;
-        foreach (var e in new FrameworkElement[] { head, _notice, _guestLine, _said, _content })
+        foreach (var e in new FrameworkElement[] { head, _donation, _notice, _guestLine, _said, _content })
         {
             Grid.SetRow(e, row++);
             _root.Children.Add(e);
@@ -421,6 +423,7 @@ internal sealed class ReceivedView : IDisposable
         _subtitle.Visibility = ready ? Visibility.Visible : Visibility.Collapsed;
         var offers = ReceivedText.Offers(s, _mode);
         _back.Visibility = offers.Back ? Visibility.Visible : Visibility.Collapsed;
+        _donation.IsOpen = s.donationBanner;
         if (ReceivedText.RecordNotice(s.recordDays) is { } notice)
         {
             _notice.Message = notice;

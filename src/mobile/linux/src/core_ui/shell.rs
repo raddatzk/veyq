@@ -131,6 +131,8 @@ pub struct Shell {
     kit_notice_text: gtk::Label,
     /// *Finish your profile* (`ShellShown.finishProfile`, ADR 0084 decision 7): its bar, before the kit's as the web's.
     finish_profile: gtk::Revealer,
+    /// veyq's donation banner (`ShellShown.donationBanner`, ADR 0124 decision 7), above *Finish your profile* as the web's.
+    donation: gtk::Revealer,
     /// The reconnect's notices said last (`ShellShown.queuedSaid`), so an update that repeats them says nothing again.
     queued_said: RefCell<Vec<bridge::wire::Notice>>,
     /// A held rename's *Open* (`QueuedOpen.Rename`): the node whose header asks the person's name once it shows.
@@ -250,6 +252,8 @@ impl Shell {
         finish_bar.append(&finish_open);
         let finish_profile = gtk::Revealer::builder().child(&finish_bar).reveal_child(false).build();
         finish_profile.set_widget_name("finish-profile");
+        let donation = crate::core_ui::donation::bar(Call::ShellDonationDismiss);
+        content_view.add_top_bar(&donation);
         content_view.add_top_bar(&finish_profile);
         finish_dismiss.connect_clicked(|_| bridge::send(Call::ShellFinishProfileDismiss));
         let opens = window.downgrade();
@@ -369,6 +373,7 @@ impl Shell {
             kit_notice,
             kit_notice_text,
             finish_profile,
+            donation,
             queued_said: RefCell::new(Vec::new()),
             pending_rename: RefCell::new(None),
             gone_said: RefCell::new(Vec::new()),
@@ -658,6 +663,7 @@ impl Shell {
         }
         self.kit_notice.set_reveal_child(shown.kit_notice.is_some());
         self.finish_profile.set_reveal_child(shown.finish_profile);
+        self.donation.set_reveal_child(shown.donation_banner);
         // after a reconnect: how many writes made offline were sent, how many need the person — said once, then told seen
         if *self.queued_said.borrow() != shown.queued_said {
             *self.queued_said.borrow_mut() = shown.queued_said.clone();

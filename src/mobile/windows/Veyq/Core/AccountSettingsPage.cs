@@ -539,6 +539,7 @@ internal sealed class AccountSettingsPage : IDisposable
                 SettingsSection.Terms => DrawTerms,
                 SettingsSection.Groups => DrawGroups,
                 SettingsSection.GroupInvitations => DrawGroupInvitations,
+                SettingsSection.About => DrawAbout,
                 SettingsSection.SignOut => DrawSignOut,
             };
             draw();
@@ -663,6 +664,25 @@ internal sealed class AccountSettingsPage : IDisposable
     }
 
     /// <summary>Sign out of this account here; writes made offline waiting are asked about first.</summary>
+    /// <summary>*About veyq* (core's SettingsSection.About, ADR 0124 decisions 5 and 7): the project's two links, each
+    /// opening the project's website in the browser.</summary>
+    private void DrawAbout()
+    {
+        _sections.Children.Add(Heading(Words.AboutTitle()));
+        _sections.Children.Add(new TextBlock { Text = Words.AboutSub(), TextWrapping = TextWrapping.Wrap });
+        foreach (var (text, url, id) in new[]
+        {
+            (Words.ProjectSecurity(), Words.ProjectSecurityUrl(), "settings-about-security"),
+            (Words.ProjectDonate(), Words.ProjectDonateUrl(), "settings-about-donate"),
+        })
+        {
+            var link = new HyperlinkButton { Content = text };
+            AutomationProperties.SetAutomationId(link, id);
+            link.Click += (_, _) => ReceivedView.Launch(url);
+            _sections.Children.Add(link);
+        }
+    }
+
     private void DrawSignOut()
     {
         _sections.Children.Add(Heading(Words.DrawerSignOut()));

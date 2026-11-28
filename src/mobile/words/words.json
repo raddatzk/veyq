@@ -371,6 +371,61 @@
     "en": "log out, sign off, leave this device",
     "de": "ausloggen, abmelden, dieses Gerät verlassen"
   },
+  "project_banner_label": {
+    "note": "the web's project.banner.label: the donation banner's name for a screen reader (ADR 0124 decision 1)",
+    "en": "Support veyq",
+    "de": "veyq unterstützen"
+  },
+  "project_banner_text": {
+    "note": "the web's project.banner.text",
+    "en": "veyq is free and open source. If it is useful to you, you can support its development.",
+    "de": "veyq ist frei und quelloffen. Wenn es dir nützt, kannst du die Entwicklung unterstützen."
+  },
+  "project_banner_donate": {
+    "note": "the web's project.banner.donate: the banner's link to the donation page",
+    "en": "Donate",
+    "de": "Spenden"
+  },
+  "project_banner_dismiss": {
+    "note": "the web's project.banner.dismiss: the banner's close, for good",
+    "en": "Close and don’t show again",
+    "de": "Schließen und nicht mehr anzeigen"
+  },
+  "project_security": {
+    "note": "the web's project.security: the footer's link to the project's security page (ADR 0124 decision 5)",
+    "en": "Why is veyq secure?",
+    "de": "Wieso ist veyq sicher?"
+  },
+  "project_donate": {
+    "note": "the web's project.donate: the footer's link to the donation page; in the apps Settings' About veyq (ADR 0124 decision 7)",
+    "en": "Donate",
+    "de": "Spenden"
+  },
+  "project_donate_url": {
+    "note": "the web's projectPageUrl('donate'): the donation page on the project's website in this language (ADR 0124 decision 6)",
+    "en": "https://veyq.app/donate/",
+    "de": "https://veyq.app/de/donate/"
+  },
+  "project_security_url": {
+    "note": "the web's projectPageUrl('security'): the project's security page in this language",
+    "en": "https://veyq.app/privacy/is-my-data-safe/",
+    "de": "https://veyq.app/de/privacy/is-my-data-safe/"
+  },
+  "about_title": {
+    "note": "Settings' About veyq: the project's two links (the web's footer, ADR 0124 decisions 5 and 7)",
+    "en": "About veyq",
+    "de": "Über veyq"
+  },
+  "about_sub": {
+    "note": "under About veyq's heading: the links open the project's website in the browser",
+    "en": "veyq is free and open source. These open the project's website in your browser.",
+    "de": "veyq ist frei und quelloffen. Diese Links öffnen die Website des Projekts in deinem Browser."
+  },
+  "search_words_about": {
+    "note": "what Settings' About veyq is also found by (comma-separated, never shown)",
+    "en": "about, donate, donation, support, project, website, security, open source",
+    "de": "über, spenden, spende, unterstützen, projekt, website, sicherheit, open source"
+  },
   "back": {
     "en": "Back",
     "de": "Zurück"

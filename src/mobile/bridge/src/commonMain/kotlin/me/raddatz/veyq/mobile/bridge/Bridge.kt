@@ -184,6 +184,8 @@ internal class Composition<A : Connection, T : Any>(
         /** The player a guest's Memory plays its music with (#1034): the open tenant's, where one plays. */
         music: me.raddatz.veyq.mobile.audio.PageMusic?,
     ) -> me.raddatz.veyq.mobile.sharing.GuestView? = { _, _, _, _ -> null },
+    /** veyq's donation ask on this device (ADR 0124 decision 7): a received link's guest dismisses it here; a test's in memory. */
+    val donation: me.raddatz.veyq.mobile.navigation.Donation = me.raddatz.veyq.mobile.navigation.Donation(me.raddatz.veyq.mobile.session.MemoryDeviceStore()),
     /** The join of a received invite link (`TenantJoin.of`): the real one in the library; a test has none (`Received.Open` then refuses an invite). */
     val join: (invite: me.raddatz.veyq.mobile.sharing.ReceivedLink.InviteLink) -> me.raddatz.veyq.mobile.session.TenantJoin? = { null },
     /** The finish of a received recovery link (`RecoveryFinish.of`): the real one in the library; a test plays one, or has none (refused). */
@@ -557,6 +559,8 @@ internal class QueuedBeside(
     val kitNotice: Notice? = null,
     /** And *Finish your profile* ([ShellShown.finishProfile]). */
     val finishProfile: Boolean = false,
+    /** And veyq's donation banner ([ShellShown.donationBanner]). */
+    val donationBanner: Boolean = false,
 )
 
 /** An entry editor the host opened on Pot [pot] ([Call.EditorOpen]), typed in with [separator]. */
@@ -1021,6 +1025,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             }
             Call.ShellKitNoticeDismiss -> shell?.dismissKitNotice().done()
             Call.ShellFinishProfileDismiss -> shell?.dismissFinishProfile().done()
+            Call.ShellDonationDismiss -> shell?.dismissDonation().done()
             Call.HomeGroups -> shell?.current?.let { Answer.Groups(it.lists.groups(it.shell)) } ?: noTenant
             Call.SearchOpen -> tenant.value?.models?.search?.let { make ->
                 val id = ids.incrementAndFetch()
@@ -1369,7 +1374,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.LinkClose -> links.remove(call.link)?.let { closeLink(it); Answer.Done } ?: noLink
             is Call.ReceivedMove, is Call.ReceivedSelectStart, is Call.ReceivedSelectCancel, is Call.ReceivedSelectToggle, is Call.ReceivedSelectAll,
             is Call.ReceivedSelectNone, is Call.ReceivedSelectMove -> receivedMove(call)
-            is Call.ReceivedOpen, is Call.ReceivedPassword, is Call.ReceivedAcceptTerms, is Call.ReceivedAcceptNote, is Call.ReceivedOpenNode, is Call.ReceivedBack, is Call.ReceivedStay, is Call.ReceivedLeave, is Call.ReceivedClose, is Call.ReceivedForgetGuest, is Call.ReceivedKeep, is Call.ReceivedUpload, is Call.ReceivedUploadFolder, is Call.ReceivedReplace, is Call.ReceivedNewFolder, is Call.ReceivedNamingSave, is Call.ReceivedNamingDecline, is Call.ReceivedReportNode, is Call.ReceivedReport, is Call.ReceivedKeepPlaces, is Call.ReceivedReportShown -> receivedCall(parts, call)
+            is Call.ReceivedOpen, is Call.ReceivedPassword, is Call.ReceivedAcceptTerms, is Call.ReceivedAcceptNote, is Call.ReceivedOpenNode, is Call.ReceivedBack, is Call.ReceivedStay, is Call.ReceivedLeave, is Call.ReceivedClose, is Call.ReceivedForgetGuest, is Call.ReceivedKeep, is Call.ReceivedUpload, is Call.ReceivedUploadFolder, is Call.ReceivedReplace, is Call.ReceivedNewFolder, is Call.ReceivedNamingSave, is Call.ReceivedNamingDecline, is Call.ReceivedReportNode, is Call.ReceivedReport, is Call.ReceivedKeepPlaces, is Call.ReceivedReportShown, Call.ReceivedDonationDismiss -> receivedCall(parts, call)
             is Call.BookmarkOpen -> openBookmark(parts, call.node)
             is Call.BookmarkOwnPage -> bookmarks[call.bookmark]?.let { b ->
                 heldReceived(b.page.openOwnPage(tenant.value?.models?.session))
@@ -2546,6 +2551,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             Answer.KeepPlaces(h.screen.keepPlaces().map { ShellShown.ShownSpace(it, ShellWords.space(it)) })
         } ?: noReceived
         is Call.ReceivedReportShown -> received[call.received]?.let { h -> h.screen.reportShown(); Answer.Done } ?: noReceived
+        Call.ReceivedDonationDismiss -> Answer.Done.also { parts.donation.dismissHere() }
         else -> Answer.Refused(Answer.Why.NOT_A_CALL)
     }
 
@@ -2730,7 +2736,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     }
 
     /** What the host is shown of a received link: never the link, its key or anything sealed. */
-    private fun shownReceived(h: HeldReceived, gate: me.raddatz.veyq.mobile.sharing.ShareGates.State, busy: Boolean, guest: me.raddatz.veyq.mobile.sharing.GuestSession?, s: me.raddatz.veyq.mobile.sharing.GuestScreen.State, page: ReceivedPage?, naming: Boolean = false): ReceivedShown {
+    private fun shownReceived(h: HeldReceived, gate: me.raddatz.veyq.mobile.sharing.ShareGates.State, busy: Boolean, guest: me.raddatz.veyq.mobile.sharing.GuestSession?, s: me.raddatz.veyq.mobile.sharing.GuestScreen.State, page: ReceivedPage?, naming: Boolean = false, donationAsked: Boolean = false): ReceivedShown {
         val ready = gate as? me.raddatz.veyq.mobile.sharing.ShareGates.State.Ready
         val terms = gate as? me.raddatz.veyq.mobile.sharing.ShareGates.State.Terms
         return ReceivedShown(
@@ -2763,6 +2769,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             recordDays = h.screen.view.access?.guestWriteRecordDays,
             privacy = h.screen.view.access?.let { "${it.origin}/privacy#guest-write-record" },
             naming = naming,
+            donationBanner = donationAsked,
         )
     }
 
@@ -3235,6 +3242,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                         m.queued?.banner ?: flowOf(null), m.queued?.here ?: flowOf(emptyList()), queuedSaid, m.shell?.kitNotice ?: flowOf(null),
                         m.shell?.finishProfile ?: flowOf(false),
                     ) { b, h, said, kit, profile -> QueuedBeside(b, h, said, kit, profile) }
+                        .combine(m.shell?.donationBanner ?: flowOf(false)) { q, ask -> QueuedBeside(q.banner, q.here, q.said, q.kitNotice, q.finishProfile, ask) }
                     val faces = m.session?.faces?.held ?: flowOf(NO_FACES)
                     combine(state, m.pictures, m.picturesRound, hiddenTurned, viewTurned) { s, pictures, round, _, _ -> Triple(s, pictures, round) }
                         .combine(queued) { t, q -> t to q }
@@ -3397,14 +3405,15 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 .flatMapLatest { it?.naming?.asking ?: flowOf(false) }
             combine(gates.state, gates.busy, gates.guest, h.screen.state, h.page) { gate, busy, guest, s, page -> gate to listOf(busy, guest, s, page) }
                 .combine(h.open) { rest, open -> rest to open }
-                .combine(naming) { (pair, open), asking ->
+                .combine(naming) { (pair, open), asking -> Triple(pair, open, asking) }
+                .combine(parts.await().donation.dismissedHere) { (pair, open, asking), dismissed ->
                     val (gate, rest) = pair
                     @Suppress("UNCHECKED_CAST")
                     Update.Received(
                         w.received,
                         if (open) shownReceived(
                             h, gate, rest[0] as Boolean, rest[1] as me.raddatz.veyq.mobile.sharing.GuestSession?,
-                            rest[2] as me.raddatz.veyq.mobile.sharing.GuestScreen.State, rest[3] as ReceivedPage?, asking,
+                            rest[2] as me.raddatz.veyq.mobile.sharing.GuestScreen.State, rest[3] as ReceivedPage?, asking, !dismissed,
                         ) else null,
                     )
                 }
@@ -3485,6 +3494,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             queuedSaid = queued.said,
             kitNotice = queued.kitNotice,
             finishProfile = queued.finishProfile,
+            donationBanner = queued.donationBanner,
             view = open.models.shell?.levelView?.let { ViewModeShown.valueOf(it.name) } ?: ViewModeShown.valueOf(me.raddatz.veyq.mobile.navigation.ViewMode.FIRST.name),
             dropsHere = open.models.shell?.dropLevel(shell) != null,
             level = open.models.shell?.levelPlan(shell)?.let { p ->
@@ -4193,6 +4203,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 },
                 squarePicture = squarePicture,
                 queuedAsk = { account, loss -> me.raddatz.veyq.mobile.offline.QueuedTray(account).ask(loss) },
+                donation = me.raddatz.veyq.mobile.navigation.Donation(store),
                 join = { invite -> me.raddatz.veyq.mobile.session.TenantJoin.of(primitives, device, client, invite) },
                 recovery = { link -> me.raddatz.veyq.mobile.session.RecoveryFinish.of(primitives, client, link) },
                 received = { link, queue, password, music ->

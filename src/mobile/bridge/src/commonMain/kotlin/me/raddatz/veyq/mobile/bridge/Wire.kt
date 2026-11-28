@@ -455,6 +455,9 @@ internal sealed class Call {
     /** *Finish your profile* ([ShellShown.finishProfile]) dismissed — "Not now", or "Open profile settings" before the profile opens. */
     @Serializable @SerialName("Shell.FinishProfileDismiss") data object ShellFinishProfileDismiss : Call()
 
+    /** The donation banner's *Close and don't show again* (`ShellModel.dismissDonation`): on this device and on the account. */
+    @Serializable @SerialName("Shell.DonationDismiss") data object ShellDonationDismiss : Call()
+
     /** The one-time kit notice ([ShellShown.kitNotice]) dismissed — "Not now", or "Go to your kit" before Settings → Security opens. */
     @Serializable @SerialName("Shell.KitNoticeDismiss") data object ShellKitNoticeDismiss : Call()
 
@@ -1281,6 +1284,9 @@ internal sealed class Call {
 
     /** *Back*: a step inside the link, or at its root the question ([ReceivedShown.leaving]). */
     @Serializable @SerialName("Received.Back") data class ReceivedBack(val received: Long) : Call()
+
+    /** A received link's donation banner closed, for good on this device (`Donation.dismissHere`; a guest has no account). */
+    @Serializable @SerialName("Received.DonationDismiss") data object ReceivedDonationDismiss : Call()
     @Serializable @SerialName("Received.Stay") data class ReceivedStay(val received: Long) : Call()
 
     /** The question confirmed: the link let go (its key zeroed) — the host returns where the person was. */
@@ -4660,6 +4666,11 @@ internal class ShellShown(
      */
     val finishProfile: Boolean = false,
     /**
+     * veyq's donation banner (`ShellModel.donationBanner`, ADR 0124 decision 7: the desktops draw it, the stores' apps do
+     * not): true while it shows above the shell, its *Donate* link `project_donate_url`, its close [Call.ShellDonationDismiss].
+     */
+    val donationBanner: Boolean = false,
+    /**
      * What the level the shell shows holds that is not sent yet (`ShellModel.queuedAt`, ADR 0153 decision 5): the folders, Memories,
      * chapters and files made offline there, each drawn in place among its rows with its state and line.
      */
@@ -5001,6 +5012,8 @@ internal class ReceivedShown(
      * answered by [Call.ReceivedNamingSave] or [Call.ReceivedNamingDecline].
      */
     val naming: Boolean = false,
+    /** veyq's donation banner on the guest's page (`Donation.guestShows`): its close is [Call.ReceivedDonationDismiss]. */
+    val donationBanner: Boolean = false,
 )
 
 /** What a drop landed on ([Call.Drop]; core's `DropTarget`): the core judges it. */

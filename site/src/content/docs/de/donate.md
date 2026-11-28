@@ -42,3 +42,7 @@ Wenn du veyq zum ersten Mal öffnest — angemeldet oder über einen geteilten L
 unterstützen möchtest, mit einem Link **Spenden** (muss deine E-Mail-Adresse noch bestätigt werden, wartet sie, bis du das getan hast). Schließt du sie mit **×**, kommt sie nicht wieder: in diesem Browser
 und, sobald du angemeldet bist, für dein Konto auf jedem Gerät. Beim Anmelden stört sie nie. Die Fußzeile jeder Seite
 behält einen Link **Spenden**, neben **Wieso ist veyq sicher?**
+
+In den Apps: Die Apps für Linux und Windows zeigen dieselbe Zeile, und sie schließt sich genauso für immer. Die Apps für
+Android, iPhone, iPad und Mac zeigen keine; ihre **Einstellungen → Über veyq** haben einen Link **Spenden** (und **Wieso
+ist veyq sicher?**), der diese Seite in deinem Browser öffnet — jede App hat diesen Abschnitt.

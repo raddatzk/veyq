@@ -64,6 +64,8 @@ internal sealed class ShellView
     private readonly InfoBar _kitNotice;
     /// <summary>*Finish your profile* (ShellShown.finishProfile, ADR 0084 decision 7), before the kit notice as the web's.</summary>
     private readonly InfoBar _finishProfile;
+    /// <summary>veyq's donation banner (ShellShown.donationBanner, ADR 0124 decision 7), above Finish your profile as the web's.</summary>
+    private readonly InfoBar _donation = DonationBanner.Make(new Call.ShellDonationDismiss());
     private string _queuedSaid = "";
     /// <summary>The items no longer available offline, said once; and what it said last.</summary>
     private readonly InfoBar _gone;
@@ -240,6 +242,7 @@ internal sealed class ShellView
         content.Children.Add(head);
         var banners = new StackPanel();
         banners.Children.Add(_offline);
+        banners.Children.Add(_donation);
         banners.Children.Add(_finishProfile);
         banners.Children.Add(_kitNotice);
         Grid.SetRow(banners, 2);
@@ -460,6 +463,7 @@ internal sealed class ShellView
         if (shown.kitNotice is { } news) _kitNotice.Message = $"{Said.Notice(news)} {Words.KitStatusKeepsWorking()}";
         _kitNotice.IsOpen = shown.kitNotice is not null;
         _finishProfile.IsOpen = shown.finishProfile;
+        _donation.IsOpen = shown.donationBanner;
         // what the reconnect sent and what now needs the person, said once, then told seen (Shell.QueuedSaidSeen)
         var sent = string.Join("\n", shown.queuedSaid.Select(Said.Notice));
         if (sent != _queuedSaid)

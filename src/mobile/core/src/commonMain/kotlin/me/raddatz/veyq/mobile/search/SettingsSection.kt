@@ -72,6 +72,12 @@ enum class SettingsSection(val id: String, val word: Msg, val keywords: Msg) {
      * shell has no place of the web's sidebar badge.
      */
     GROUP_INVITATIONS("group-invitations", Msg.INVITATIONS_TITLE, Msg.SEARCH_WORDS_GROUP_INVITATIONS),
+    /**
+     * *About veyq* (ADR 0124 decisions 5 and 7): the project's two links the web's footer carries — *Why is veyq secure?*
+     * and *Donate* — each opening the project's website in the system's browser, outside the app (`project_*_url`). On every
+     * app; the stores' apps ask for a donation here only (no banner).
+     */
+    ABOUT("about", Msg.ABOUT_TITLE, Msg.SEARCH_WORDS_ABOUT),
     /** Signing out on this device (the apps' page ends with it; the web's is its account menu's). */
     SIGN_OUT("sign-out", Msg.DRAWER_SIGN_OUT, Msg.SEARCH_WORDS_SIGN_OUT),
     ;
@@ -93,7 +99,7 @@ enum class SettingsSection(val id: String, val word: Msg, val keywords: Msg) {
                 MAPS -> gates.maps
                 APPEARANCE -> gates.appearance
                 TRUST_RESET -> gates.trustReset
-                SESSIONS, DEVICE, SAVED_KEYS, ACCOUNT, EMAIL, PASSWORD, SECURITY, PROFILE, ERASE, MEMBERS, WHOS_WHO, TERMS, GROUPS, GROUP_INVITATIONS, SIGN_OUT -> true
+                SESSIONS, DEVICE, SAVED_KEYS, ACCOUNT, EMAIL, PASSWORD, SECURITY, PROFILE, ERASE, MEMBERS, WHOS_WHO, TERMS, GROUPS, GROUP_INVITATIONS, ABOUT, SIGN_OUT -> true
             }
         }
 

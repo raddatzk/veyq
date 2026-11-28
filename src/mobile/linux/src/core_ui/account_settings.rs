@@ -432,6 +432,7 @@ impl Page {
                 SettingsSection::Terms => ("terms", vec![self.terms()]),
                 SettingsSection::Groups => ("groups", vec![self.groups()]),
                 SettingsSection::GroupInvitations => ("group-invitations", vec![self.group_invitations()]),
+                SettingsSection::About => ("about", vec![Some(self.about())]),
                 SettingsSection::SignOut => ("sign-out", vec![self.sign_out()]),
             };
             for (i, g) in drawn.into_iter().flatten().enumerate() {
@@ -1068,6 +1069,24 @@ impl Page {
         });
         ask.present(Some(&self.dialog));
         *self.remove_all_ask.borrow_mut() = Some(ask);
+    }
+
+    /// *About veyq* (core's `SettingsSection::About`, ADR 0124 decisions 5 and 7): the project's two links, each opening the
+    /// project's website in the browser.
+    fn about(self: &Rc<Self>) -> adw::PreferencesGroup {
+        let group = adw::PreferencesGroup::builder().title(words::about_title()).description(words::about_sub()).build();
+        for (title, url, icon, name) in [
+            (words::project_security(), words::project_security_url(), "security-high-symbolic", "settings-about-security"),
+            (words::project_donate(), words::project_donate_url(), "emblem-favorite-symbolic", "settings-about-donate"),
+        ] {
+            let row = adw::ActionRow::builder().title(title).activatable(true).build();
+            row.add_prefix(&gtk::Image::from_icon_name(icon));
+            row.add_suffix(&gtk::Image::from_icon_name("external-link-symbolic"));
+            row.set_widget_name(name);
+            row.connect_activated(move |r| crate::core_ui::received::launch(r, &url));
+            group.add(&row);
+        }
+        group
     }
 
     fn sign_out(self: &Rc<Self>) -> Option<adw::PreferencesGroup> {

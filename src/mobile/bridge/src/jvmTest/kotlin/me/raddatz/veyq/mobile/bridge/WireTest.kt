@@ -122,7 +122,7 @@ class WireTest {
             Call.SessionAddServer, Call.SessionCancelAdd, Call.ManageOpen, Call.ManageClose, Call.ManageHideTenant("veyq.localhost#user-1", "t2", hidden = true),
             Call.ManageHideSpace("scope-1", hidden = false), Call.SessionSwitchTo("veyq.localhost#user-1", "t"),
             Call.SessionSignOut("veyq.localhost#user-1"), Call.ShellChoose(null), Call.ShellSwitchSpace("scope-1"), Call.ShellEnter(folder),
-            Call.ShellFilter(ApplicationId.DEPOT), Call.ShellBack, Call.ShellSelect(BarTab("expenses.overview")), Call.ShellOpen(ref), Call.ShellOpenAtTop(ref), Call.ShellOpenAt("scope-1", "n-1"), Call.ShellOpenAt("scope-1", null), Call.ShellSearch(true), Call.ShellRefresh, Call.ShellOfflineGoneSeen, Call.ShellQueuedSaidSeen, Call.ShellKitNoticeDismiss, Call.ShellFinishProfileDismiss,
+            Call.ShellFilter(ApplicationId.DEPOT), Call.ShellBack, Call.ShellSelect(BarTab("expenses.overview")), Call.ShellOpen(ref), Call.ShellOpenAtTop(ref), Call.ShellOpenAt("scope-1", "n-1"), Call.ShellOpenAt("scope-1", null), Call.ShellSearch(true), Call.ShellRefresh, Call.ShellOfflineGoneSeen, Call.ShellQueuedSaidSeen, Call.ShellKitNoticeDismiss, Call.ShellFinishProfileDismiss, Call.ShellDonationDismiss, Call.ReceivedDonationDismiss,
             Call.HomeGroups, Call.PotOpen(ref), Call.PotRefresh(3), Call.PotClose(3),
             Call.PotDownload(3, "/home/p/Downloads/Trip to Lyon.zip", "deleted person"), Call.PotArchiveName(3), Call.AvatarPicture("user-1"), Call.PictureDecode,
             Call.PotRecord(3, listOf(PotView.SettleRow("Ben", "Anna", 2100, "p2", "p1"))), Call.PotRestore(3, "e2"), Call.PotHistory(3, "e2"),
