@@ -2,7 +2,7 @@
 """The backup archive of ADR 0091 decision 6 (amended 2026-11-26): for one release, a backup of an instance that
 release's own seeder filled, published once as one OCI artifact `<registry>/veyq-backups:<major>.<minor>` beside the
 release's images. `.github/workflows/archive.yml` runs it after a promotion (`release.yml`'s `archive` job) and on a
-dispatch for a release already out; lane L3 restores what it wrote (cr-stack-lane-l3-backup-archive phase 3).
+dispatch for a release already out; lane L3 restores what it wrote (`scripts/run_stack_restore.py`).
 
 **What `archive` does**, stage by stage. Stages 1 to 6 are lane L2's building block (`scripts/run_stack_upgrade.py`,
 by import — one install and one seed, never a second copy):
@@ -106,6 +106,8 @@ IDENTITY_REGEXP = r"^https://github\.com/raddatzk/veyq/\.github/workflows/archiv
 # that would never verify (the tag is written once).
 PUBLISHING_REF = re.compile(r"^refs/heads/(main|release/[0-9]+\.x)$")
 
+# Its tag list holds more than the archives: cosign stores each signature as a `sha256-<hex>` tag beside the
+# `<major>.<minor>` it signs (measured 2026-11-27 in GHCR). So an archive is named by its tag, never found by listing.
 REPOSITORY = "veyq-backups"
 TAG = re.compile(r"^v(\d+)\.(\d+)$")
 REGISTRY = re.compile(r"^[a-z0-9][a-z0-9.-]*(?::[0-9]+)?(?:/[a-z0-9][a-z0-9._-]*)*$")

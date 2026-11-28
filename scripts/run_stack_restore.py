@@ -2,7 +2,7 @@
 """Lane L3 of ADR 0091: archived backups restored into the candidate — one per schema state of its major and the major
 entry's, each pulled from the archive, verified under `archive.yml`'s identity, restored by the candidate's own
 `veyqctl restore` into a fresh install of the candidate, and read by the candidate's reader and browser spec (ADR 0091
-decision 6, amended 2026-11-26; cr-stack-lane-l3-backup-archive phase 3).
+decision 6, amended 2026-11-26, and its *L3 and the archive as built*).
 
 **Which backups.** The selection is `run_web_e2e.backup_selection_ref()` — next to `major_entry_ref()`, the same tags
 (`git tag --list`, a fix release on `release/<old>.x` included): the releases of the candidate's major grouped by the
@@ -102,10 +102,11 @@ import snapshot  # the shard count, read from checks.yml's `stack-restore` matri
 proof = l2.proof  # run_web_e2e: the selection, the record's shape, Flyway's refusal read out of a log
 
 DEFAULT_REGISTRY = "ghcr.io/raddatzk"
-# What one shard may carry and still fit the job's 15 minutes (ADR 0091 decision 1). An estimate from the local run
-# (cr-stack-lane-l3-backup-archive § Phase 3 — technical observations): a backup costs its pull, a fresh install, the
-# restore, the reader, the browser spec and the teardown; the shard's fixed part is the dependencies, the browser image
-# and the candidate's release. Re-measured from the first push's L3 run; a shard over it is red, naming the fix.
+# What one shard may carry and still fit the job's 15 minutes (ADR 0091 decision 1): a backup costs its pull, a fresh
+# install, the restore, the reader, the browser spec and the teardown; the shard's fixed part is the dependencies, the
+# browser image and the candidate's release. Measured on the first push's L3 run (46154117080, 2026-11-28): 4 min 9 s
+# and 4 min 1 s for two backups, 3 min 3 s for one — about 3 minutes fixed and one a backup, so four is about 7
+# minutes, with room. A shard over it is red, naming the fix.
 MAX_PER_SHARD = 4
 
 

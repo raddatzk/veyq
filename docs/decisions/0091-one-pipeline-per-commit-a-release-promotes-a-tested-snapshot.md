@@ -10,8 +10,8 @@
   decision 6's archive is built — `.github/workflows/archive.yml`, `scripts/archive_backup.py`, called by `release.yml`
   after every promotion and dispatched for a release already out, every one of the eighteen releases archived by
   dispatch on 2026-11-27 — and so is lane L3 — `scripts/run_stack_restore.py`, checks.yml's `stack-restore`, on a push,
-  attested per shard with the backups it restored and required by the promotion (§ decision 6, *L3 as built*), its
-  first GitHub run still to come;
+  attested per shard with the backups it restored and required by the promotion (§ decision 6, *L3 and the archive as
+  built*), first green on the push of `321c81366` (run 46154117080), its first attestation still to come (inbox #871);
   decision 5's snapshot —
   weekly and by dispatch since its amendment of 2026-11-07, per green push before — its attestations, its `snapshot-`
   tag, the staging retention (first run 2026-11-23) and the promotion `release.yml` are built, and since its amendment of 2026-11-22 the release draft Publish writes — v1.312
@@ -317,7 +317,15 @@ several, or one on another tag is refused (`scripts/promote.py` check 1). A save
        (inbox #869). Measured on GitHub: both legs green on pull request 111 and on the push of `d5ce223da`, and
        that commit's Publish (run 46018703012) attested L2 on amd64 with v1.318 and v0.2480, verified with
        `cosign verify-attestation` under `publish.yml`'s identity.
-     - **L3 as built (2026-11-28, cr-stack-lane-l3-backup-archive).** The selection is
+     - **L3 and the archive as built (2026-11-28).** The archive is one OCI artifact per release, pushed with oras
+       (cosign's own `attach` is deprecated upstream): `archive.json` and one deterministic tar, the manifest written
+       without a timestamp, so its digest is a function of the files. Its rules are `scripts/archive_backup.py`'s
+       docstring — "written once" is the tag, set as the last write after the digest is signed; a registry's `denied`
+       is read as unknown, never as absent; only `main` and `release/<major>.x` write; the domain is read from the
+       capture and the highest migration from the tag's pin file, cross-checked against the capture's schema version.
+       `veyq-backups` is public by inheritance from the repository, no owner step taken (measured: an anonymous token
+       lists its tags and fetches every manifest); beside each `<major>.<minor>` stands cosign's `sha256-<hex>`
+       signature tag, so a reader names an archive by its tag, never by listing. The selection is
        `run_web_e2e.backup_selection_ref()` beside `major_entry_ref()` (every `v*` tag, each one's own pin file; empty
        while the pin file says `release: none`), on 2026-11-27's tags v0.2480 (the entry), v1.0, v1.168, v1.248 and
        v1.260. It is dealt round-robin, in version order, over the `stack-restore` matrix's shards (three; the count is
@@ -334,12 +342,19 @@ several, or one on another tag is refused (`scripts/promote.py` check 1). A save
        their union, each tag one shard's; the promotion compares the TAGS with the selection the snapshot's own
        `run_stack_restore.py --resolve` derives now, the digests recorded, not compared (an archive's tag is written
        once). A snapshot whose commit has no L3 job is refused, as one without L2 was. L3 reads the archive with
-       `archive.yml`'s oras, its pin stated in both files and held equal.
+       `archive.yml`'s oras, its pin stated in both files and held equal. Measured on GitHub: `archive.yml` for v1.318
+       (run 46047675181) published `veyq-backups:1.318`, verified under its own identity and refused under
+       `release.yml`'s, and a second dispatch (run 46048381605) wrote nothing; all eighteen tags archived by dispatch
+       on 2026-11-27, each `archive.json` naming the schema state of its tag's pin file; L3 green on the push of
+       `321c81366` (run 46154117080), signed in with the job's `GITHUB_TOKEN`, restoring exactly the five backups
+       under the digests the archive holds, a shard taking 3–4 minutes of its 15 (4 min 9 s and 4 min 1 s for two
+       backups, 3 min 3 s for one). Not yet observed: a Publish attesting `inputs.backups` and a promotion comparing
+       it (inbox #871).
 
 7. **The jar-level upgrade proof retires when L2 and L3 gate.** They prove the same data path on the artifact that
    ships; ADR 0057 §7 then names them. The API end-to-end suites stay: fast, fresh per file, and where a wire defect is
    bisected.
-   - **As built (2026-11-28, cr-stack-lane-l3-backup-archive phase 4).** checks.yml's `upgrade-proof` job and its need
+   - **As built (2026-11-28).** checks.yml's `upgrade-proof` job and its need
      in `green` are gone; the derivations stay (`default_predecessor_ref`, `major_entry_ref`, `major_entry_proof_ref`,
      `backup_selection_ref`, `prepare_predecessor`, the record's check), read by lanes L2 and L3, the archive, the chart
      upgrade check and the tools image's stamp. Their self-test stays in CI under the name of what it now pins,

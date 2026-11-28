@@ -3,12 +3,12 @@ name: Archive
 # The backup archive (ADR 0091 decision 6, amended 2026-11-26): for one release, a backup of an instance that release's
 # own seeder filled — the published release installed and verified, seeded, `veyqctl backup` with its object pool and
 # the key apart — published once as the signed OCI artifact `ghcr.io/<owner>/veyq-backups:<major>.<minor>` beside the
-# release's images. Lane L3 restores what it holds (cr-stack-lane-l3-backup-archive). Two ways in:
+# release's images. Lane L3 restores what it holds (scripts/run_stack_restore.py). Two ways in:
 #
 #   - `release.yml`'s `archive` job calls it after a release is published (`workflow_call`): every release is archived.
 #   - Actions → Archive → Run workflow on `main` with a tag (`workflow_dispatch`): a release that is already out — the
-#     releases from before this workflow, written once each, oldest first (that CR's phase 2) — or a re-run after a
-#     failure. A failure here never touches the release, which is published and immutable by then.
+#     releases from before this workflow, written once each, oldest first (all eighteen on 2026-11-27) — or a re-run
+#     after a failure. A failure here never touches the release, which is published and immutable by then.
 #
 # This file is the ARCHIVE identity: keyless signing names the workflow that holds the signing job, the called one when
 # `release.yml` calls it (`job_workflow_ref`), so an archive is signed as `archive.yml` on `main` or `release/<major>.x`

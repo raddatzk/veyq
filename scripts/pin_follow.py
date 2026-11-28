@@ -33,8 +33,8 @@ on the repository's Python 3.9. No language model anywhere, and no release-note 
      newer distribution runs under an older JAR (`src/backend/` runs 9.9.2 under 9.9.0's), and
      `scripts/gradle_wrapper_jar.sha256` pins the JAR that is there.
   5. **oras** — the oras tarball pin of `archive.yml` and `checks.yml`: `ORAS_VERSION` and `ORAS_SHA256` in each
-     one's `env:` (the OCI client the backup archive is pushed with, and lane L3 reads it with,
-     cr-stack-lane-l3-backup-archive), one version in both. The SHA-256 of
+     one's `env:` (the OCI client the backup archive is pushed with, and lane L3 reads it with), one version in
+     both. The SHA-256 of
      `oras_<X.Y.Z>_linux_amd64.tar.gz` is obtained three ways and taken only when all three agree: the line naming that
      file in the release's own `oras_<X.Y.Z>_checksums.txt`, the hash of the tarball itself (streamed, never kept), and
      the `digest` GitHub's release API reports for that asset of `oras-project/oras` `<v>`, and written into both. The
