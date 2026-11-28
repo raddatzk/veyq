@@ -403,7 +403,6 @@ def write_gtk(out: Path, pal: dict[str, dict[str, tuple]]) -> None:
     missing = sorted({role for role in GTK_ROLES.values() if role not in REQUIRED})
     if missing:
         sys.exit(f"GTK_ROLES names roles the apps do not require from base.css: {', '.join(missing)}")
-    shutil.rmtree(out, ignore_errors=True)
 
     def block(mode: str, indent: str) -> list[str]:
         return [f"{indent}  --{var}: {css_colour(pal[mode][role])};" for var, role in GTK_ROLES.items()]
@@ -417,10 +416,28 @@ def write_gtk(out: Path, pal: dict[str, dict[str, tuple]]) -> None:
         f"icons/symbolic/apps/{APP_ID}-symbolic.svg": _icon_svg(BRAND / "logo-light.svg", None, mono="#241f31") + "\n",
         f"{APP_ID}.desktop": desktop_entry(),
     }
+    replace_in_place(out, files)
+
+
+def replace_in_place(out: Path, files: dict[str, str]) -> None:
+    """[out] made to hold exactly [files], never emptied on the way: each file written beside itself and renamed over
+    the old one (a reader sees the old bytes or the new), a file no longer generated removed after. The directory is
+    read while it is written — a `run.py run` mounts it into a container while another verb of the same tree
+    generates (Linux's build.rs stopped on `no style.css`, inbox #1428) — so it is never removed and made anew."""
     for rel, text in files.items():
         f = out / rel
         f.parent.mkdir(parents=True, exist_ok=True)
-        f.write_text(text)
+        if f.is_file() and f.read_text() == text:
+            continue
+        part = f.with_name(f".{f.name}.part")
+        part.write_text(text)
+        part.replace(f)
+    kept = {out / rel for rel in files}
+    for f in sorted(out.rglob("*"), reverse=True):
+        if f.is_file() and f not in kept:
+            f.unlink()
+        elif f.is_dir() and not any(f.iterdir()):
+            f.rmdir()
 
 
 # ---- Windows (WinUI 3) ----
