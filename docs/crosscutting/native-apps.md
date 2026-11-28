@@ -101,7 +101,10 @@ with each area's row; ADR 0123's Consequences, the Linux app and the Windows app
 
 **Account and session.** Sign-in with password and Secret Key behind the `/api/setup` major gate, each grant judged as
 the web judges it (measured, `LiveSignInTest`, `GrantTrustTest`); several servers and tenants with their switcher,
-hiding tenants and spaces. **The Emergency Kit at sign-in, on all four apps** (`en.account.key-model` § The
+hiding tenants and spaces. Several accounts of one server on one device each keep their own trusted record (keyed by
+server and account); the start's unlock names the most recent, and *Use another account* signs any other account this
+device trusts with the password in with its password alone, as the web's sign-in (`SessionModel.passwordTrusted`, inbox
+#1425; measured 2026-11-28 on Android, Linux and Windows). **The Emergency Kit at sign-in, on all four apps** (`en.account.key-model` § The
 Emergency Kit; [ADR 0161](../decisions/0161-an-apps-logic-is-the-kotlin-cores-each-platform-draws-only-its-own-ui.md)'s
 Consequences): "Open Emergency Kit" takes the kit's PDF (saved, printed, photographed) or a picture of its QR from the
 system's picker, "Scan Emergency Kit" its QR wherever the app has a camera (first on a phone or tablet, after Open on a
@@ -800,11 +803,14 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   an in-app choice of appearance and language (the apps follow the system's; the desktops
   have no per-app language of their own).
 - A recovery finished in the app, *Start a list over* and *Finish your profile* (ADR 0148 § The sign-in's two account
-  entries, ADR 0028 decision 7, ADR 0084 decision 7; built 2026-11-28): Apple and Linux live, the prompt and the trust
-  reset on Windows, and a refused list on any app (not makeable without a forged server answer) (#1427).
-- Reopening where the person left and a place reached from outside (ADR 0150 § O5–O6, built 2026-11-27; passed on Android
-  and Linux as throwaways and by the core's tests): Apple, Windows, a real browser's `veyq://open` and the Mac's `open` (#1424);
-  the drawer's Recent per account (inbox #1423, built 2026-11-27): Apple and the desktops live (#1424).
+  entries, ADR 0028 decision 7, ADR 0084 decision 7; built 2026-11-28; the recovery passed on Android, Windows and Linux,
+  the prompt on Android, Linux and Windows): Apple live, and the trust reset's dialog on any app — reachable only by a
+  refused list, not makeable without a forged server answer (#1427).
+- Reopening where the person left and a place reached from outside (ADR 0150 § O5–O6, built 2026-11-27; passed on Android,
+  Linux and Windows as throwaways — a pasted member URL on all three — and by the core's tests; the drawer's Recent per
+  account and the old per-install entry gone at the first start passed on Android, Linux and Windows): Apple, a real
+  browser's `veyq://open`, Linux's `gio open` (the dev route installs no desktop entry, so nothing claims the scheme: the
+  Flatpak's pass), Windows' protocol launch (the MSIX's, signing) and the Mac's `open` (#1424).
 - A selection's capture-time shift and the kit's layout 2 (built 2026-11-27, inbox #1417; passed on Linux, Android and
   Windows and by the core's live tests): the passes on the Mac, iPhone and iPad.
 - *Who's who* (ADR 0148 § Who's who, built 2026-11-27): the macOS pass (the sheet over the Settings window, the window

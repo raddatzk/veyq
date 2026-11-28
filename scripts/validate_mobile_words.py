@@ -306,6 +306,7 @@ PLATFORM_FORMAT_EXCEPTIONS: dict[tuple[str, str, str], str] = {
     ("windows", "windows/Veyq/Apps/Memories/MemoryFacts.cs", '.ToString("yyyy-MM-dd"'): "the picked day as the ISO day the core reads (a Memory's date), never shown",
     ("windows", "windows/Veyq/Core/PdfWeb.cs", '.ToString("N"'): "a Guid's hex digits naming a folder, no shown value",
     ("windows", "windows/Veyq/Core/PdfWeb.cs", 'Task.Delay(1'): "a held folder's delete retried, no notice's",
+    ("windows", "windows/Veyq/Core/SvgCapture.cs", 'Task.Delay(1'): "an SVG cover's capture retried until it is painted, no notice's",
     ("windows", "windows/Veyq/Core/AccountSettingsPage.cs", 'TimeSpan.FromMilliseconds(1'): "a section's scroll retried while it lays out, no notice's",
     ("windows", "windows/Veyq/Core/DeviceLinkDialog.cs", 'TimeSpan.FromMilliseconds(1'): "the confirm slider's spring-back frames, no notice's",
     ("windows", "windows/Veyq/Core/RasterMap.cs", 'TimeSpan.FromMilliseconds(1'): "the map's viewport told to the core at most every 100 ms, no notice's",
@@ -318,6 +319,7 @@ PLATFORM_FORMAT_EXCEPTIONS: dict[tuple[str, str, str], str] = {
     ("windows", "windows/Veyq.Tests/PdfWebTest.cs", 'Task.Delay(1'): "a test's wait for WebView2, no notice's",
     ("windows", "windows/Veyq.Tests/SvgWebTest.cs", 'Task.Delay(2'): "a test's wait for WebView2, no notice's",
     ("windows", "windows/Veyq.Tests/SvgWebTest.cs", 'Task.Delay(3'): "a test's wait for WebView2, no notice's",
+    ("windows", "windows/Veyq.Tests/SvgCaptureTest.cs", 'TimeSpan.FromSeconds(3'): "a test's wait for WebView2's exit, no notice's",
     ("linux", "linux/src/core_ui/said.rs", "adw::Toast::new"):
         "the one toast every notice is made by, its timeout the core's kind and lifetimes (`said::toast`)",
     ("linux", "linux/src/core_ui/said.rs", "localeconv"):
