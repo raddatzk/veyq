@@ -135,7 +135,9 @@ struct TermsPageView: View {
                 Text(t.name).font(.headline)
                 TextEditor(text: Binding(get: { t.text }, set: { self.draft = self.draft?.withText(lang: t.lang, text: $0) }))
                     .font(.body.monospaced())
-                    .frame(minHeight: 160)
+                    // capped, so a long text scrolls in its field and *Save terms* stays near (the macOS pass, #1431:
+                    // a field growing with the template put the button far below)
+                    .frame(minHeight: 160, maxHeight: 320)
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Role.muted.opacity(0.4)))
                     .disabled(saving)
                     .accessibilityLabel(t.name)
