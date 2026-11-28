@@ -2414,7 +2414,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         } ?: return null
         if (!me.raddatz.veyq.mobile.blob.Sniff.svg(bytes)) return null
         val plan = me.raddatz.veyq.mobile.media.SvgCover.plan(bytes) ?: return null
-        return SvgCoverRaster.draw(window, me.raddatz.veyq.mobile.media.SvgCover.document(bytes, plan), plan)
+        return SvgCoverRaster.draw(window, bytes, plan)
     }
 
     /** Sets [drawing] (a picked SVG drawn here) as [ref]'s cover with [crop]: the core encodes its WebP; false when it did not land. */

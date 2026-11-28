@@ -27,11 +27,17 @@ internal object SvgCoverRaster {
     /** How long a drawing may take before the pick is said unreadable. */
     private const val WAIT_MS = 8_000L
 
-    /** [page] drawn at most [plan]'s size inside [host] (a window's root); null where the web view did not draw it. */
-    suspend fun draw(host: ViewGroup, page: String, plan: SvgCover.Plan): Bitmap? = withContext(Dispatchers.Main) {
+    /**
+     * The SVG's [bytes] drawn at most [plan]'s size inside [host] (a window's root); null where the web view did not draw
+     * it. The page is laid out in CSS pixels of the view's size over the screen's density, so the engine rasterizes the
+     * vectors at the view's own pixels — never a smaller drawing enlarged.
+     */
+    suspend fun draw(host: ViewGroup, bytes: ByteArray, plan: SvgCover.Plan): Bitmap? = withContext(Dispatchers.Main) {
         val room = minOf(1.0, host.width.coerceAtLeast(1).toDouble() / plan.width, host.height.coerceAtLeast(1).toDouble() / plan.height)
         val w = maxOf(1, (plan.width * room).toInt())
         val h = maxOf(1, (plan.height * room).toInt())
+        val density = host.resources.displayMetrics.density.toDouble().takeIf { it > 0 } ?: 1.0
+        val page = SvgCover.document(bytes, SvgCover.Plan(maxOf(1, kotlin.math.round(w / density).toInt()), maxOf(1, kotlin.math.round(h / density).toInt())))
         val web = WebView(host.context)
         try {
             web.settings.apply {
@@ -40,7 +46,6 @@ internal object SvgCoverRaster {
                 allowFileAccess = false
                 allowContentAccess = false
                 useWideViewPort = true
-                loadWithOverviewMode = true
                 setSupportZoom(false)
             }
             web.setBackgroundColor(Color.TRANSPARENT)
