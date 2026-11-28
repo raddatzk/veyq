@@ -138,8 +138,8 @@ struct MemoryScreen: View {
             guard showsMusic, let gallery = model.memories.galleryModel(node) else { return }
             music = model.memories.musicModel(gallery)
         }
-        // the Contributions view's model while it shows; read anew as the gallery's rows change (an upload, a move)
-        .task(id: ContributionsKey(node: node, shown: showsContributions, rows: state?.rows?.count ?? -1)) {
+        // the Contributions view's model while it shows, read when it is made; the core follows the gallery's rows after
+        .task(id: ContributionsKey(node: node, shown: showsContributions)) {
             // another page's view goes with its page
             if contributions?.gallery !== model.memories.galleryModel(node) { contributions?.stop(); contributions = nil }
             guard showsContributions, let gallery = model.memories.galleryModel(node) else {
@@ -147,8 +147,10 @@ struct MemoryScreen: View {
                 contributions = nil
                 return
             }
-            if contributions == nil, let made = model.memories.contributions(gallery) { contributions = ContributionsHeld(made, gallery: gallery) }
-            await contributions?.read()
+            if contributions == nil, let made = model.memories.contributions(gallery) {
+                contributions = ContributionsHeld(made, gallery: gallery)
+                await contributions?.read()
+            }
         }
         // the page left: the view's watch stops (its task makes it anew when the page shows again)
         .onDisappear { contributions?.stop(); contributions = nil }

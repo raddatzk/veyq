@@ -14,7 +14,11 @@ final class ContributionsHeld {
         self.gallery = gallery
         // core calls the watch on its threads: @Sendable (src/mobile/CLAUDE.md § Traps)
         state = CoreState({ model.current }) { changed in ApplePlatform.shared.watch(flow: model.state) { @Sendable _ in changed() } }
+        // the counts and the chosen bucket's media follow the gallery's rows (core's `Contributions.follow`, #96/#99)
+        following = model.watch()
     }
+
+    private let following: Contributions.Watch
 
     /// The buckets read (anew).
     func read() async {
@@ -22,14 +26,16 @@ final class ContributionsHeld {
         state.refresh()
     }
 
-    func stop() { state.stop() }
+    func stop() {
+        following.stop()
+        state.stop()
+    }
 }
 
-/// What restarts the Contributions view's read: another page, the view shown or not, the gallery's rows changed.
+/// What restarts the Contributions view: another page, the view shown or not (the gallery's rows the core follows).
 struct ContributionsKey: Equatable {
     let node: NodeAt
     let shown: Bool
-    let rows: Int
 }
 
 /// A Memory's Contributions view (the web's `MemoryBuckets.vue`, ADR 0149 decision 6): the uploader picker — every

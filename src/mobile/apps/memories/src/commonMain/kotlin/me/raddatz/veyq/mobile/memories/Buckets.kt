@@ -97,9 +97,14 @@ object Buckets {
      * (else "Member"), a sub-bucket by its own name; where the caller's own primary ([self]'s, `user:<self>`) is not
      * materialized yet, a virtual "You" first holding their unbucketed media ([unbucketed]) — another member's primary is
      * never taken for it (inbox #991). [label] sorts by the words a platform would show (the label's first argument, else
-     * its key: the platform's collation is not the core's).
+     * its key: the platform's collation is not the core's). With [counts] (the gallery's live ones, [liveCounts]) each
+     * row counts those, never the server's `mediaCount` as the list was read, and a primary [leftTheList] by [held] is left
+     * out; without, the server's counts stand (a list read alone).
      */
-    fun rows(listed: Listed, names: Map<String, String?>, people: (String) -> String?, unbucketed: Int, self: String): List<Row> {
+    fun rows(
+        listed: Listed, names: Map<String, String?>, people: (String) -> String?, unbucketed: Int, self: String,
+        counts: Map<String, Int>? = null, held: Set<String> = emptySet(),
+    ): List<Row> {
         fun said(n: Notice) = Piece.Said(n)
         fun label(b: Bucket): Piece {
             val opened = names[b.bucketId]
@@ -112,7 +117,10 @@ object Buckets {
         }
         val mine = ownKey(self)
         class Vm(val id: String, val parent: String?, val label: Piece, val count: Int, val primary: Boolean, val root: String, val virtual: Boolean)
-        val all = listed.buckets.map { Vm(it.bucketId, it.parentBucketId, label(it), it.mediaCount, it.isPrimary, it.ownerKey, false) }
+        val parents = listed.buckets.mapTo(HashSet()) { it.parentBucketId }
+        val all = listed.buckets
+            .filter { counts == null || !leftTheList(it, counts[it.bucketId] ?: 0, self, parents, held) }
+            .map { Vm(it.bucketId, it.parentBucketId, label(it), counts?.let { c -> c[it.bucketId] ?: 0 } ?: it.mediaCount, it.isPrimary, it.ownerKey, false) }
         val withSelf = if (listed.buckets.any { it.isPrimary && it.ownerKey == mine }) all
         else listOf(Vm(SELF, null, said(Notice(Msg.MEMORY_BUCKETS_YOU)), unbucketed, true, mine, true)) + all
         fun key(p: Piece) = when (p) {
@@ -129,6 +137,21 @@ object Buckets {
         kids[null].orEmpty().forEach { visit(it, 0) }
         return out
     }
+
+    /**
+     * Each bucket's count among the gallery's live [items] (the web's `liveCounts`, #96): what the grid shows, every page —
+     * an upload, a move or a delete elsewhere moves it as the gallery reads anew.
+     */
+    fun liveCounts(items: List<MemoryMedia.Item>): Map<String, Int> = items.mapNotNull { it.bucketId }.groupingBy { it }.eachCount()
+
+    /**
+     * Another uploader whose every medium was deleted is no contributor any more and leaves the picker, as the server leaves
+     * them out of the list (`MediaStore.listBuckets`; the web's `leftTheList`, #99): a primary not the caller's own, with
+     * [count] 0, no sub-bucket under it ([parents]), that [held] a live medium while the view was open — a 0 before the
+     * gallery's rows arrived means nothing yet. A restore brings the medium back and the uploader with it.
+     */
+    fun leftTheList(b: Bucket, count: Int, self: String, parents: Set<String?>, held: Set<String>): Boolean =
+        b.isPrimary && count == 0 && b.ownerKey != ownKey(self) && b.bucketId !in parents && b.bucketId in held
 
     /**
      * Where a medium of bucket [from] may move (`MemoryBuckets.vue`'s `moveTargets`): every other materialized bucket of its

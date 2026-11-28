@@ -1,6 +1,7 @@
 package me.raddatz.veyq.mobile.memories
 
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
@@ -50,9 +51,12 @@ class ContributionsTest {
         )
         val moves = mutableListOf<Pair<List<String>, String?>>()
         val creates = mutableListOf<String?>()
+        /** How often the bucket list was read, and buckets the server lists beyond the fixed ones (another uploader's primary). */
+        var lists = 0
+        var extra = listOf<Buckets.Bucket>()
 
         fun buckets() = Buckets.Listed(
-            listOf(
+            extra + listOf(
                 Buckets.Bucket(ownerPrimary, "user:u-owner", null, true, items.count { it.bucketId == ownerPrimary }, null, null, null),
                 Buckets.Bucket(ownerSub, "user:u-owner", ownerPrimary, false, items.count { it.bucketId == ownerSub }, null, null, null),
             ) + if (!ownRoot) emptyList() else listOf(
@@ -88,7 +92,7 @@ class ContributionsTest {
         }
 
         val door = object : Contributions.Door {
-            override suspend fun list() = buckets() to mapOf(ownerSub to "Sunsets")
+            override suspend fun list() = buckets().also { lists++ } to mapOf(ownerSub to "Sunsets")
             override val self = me
             override fun person(userId: String) = if (userId == "u-owner") "Olga" else null
             override suspend fun create(name: String, parent: String?) = Buckets.Outcome.DONE.also { creates += parent }
@@ -103,9 +107,82 @@ class ContributionsTest {
         }
     }
 
-    private suspend fun TestScope.open(server: Server): Contributions {
+    private suspend fun TestScope.open(server: Server): Contributions = opened(server).second
+
+    private suspend fun TestScope.opened(server: Server): Pair<GalleryModel, Contributions> {
         val g = GalleryModel(memory, server.gallery, backgroundScope, backgroundScope).also { runCurrent() }
-        return Contributions(g, server.door).also { it.read() }
+        return g to Contributions(g, server.door).also { it.read() }
+    }
+
+    // #96 (the web's MemoryBuckets.test.ts): a bucket counts what the gallery shows, live — an upload elsewhere moves it
+    // with no bucket-list request; the server's `mediaCount` as the list was read is never shown
+    @Test
+    fun aBucketCountsWhatTheGalleryShowsLiveWithNoRequest() = runTest {
+        val s = Server()
+        val (g, c) = opened(s)
+        backgroundScope.launch { c.follow() }
+        runCurrent()
+        val listsAtOpen = s.lists
+        assertEquals(2, c.current.rows.single { it.bucketId == ownerPrimary }.mediaCount)
+        s.items = s.items + item("o4", "user:u-owner", ownerPrimary, 5)
+        g.readAnew()
+        runCurrent()
+        assertEquals(3, c.current.rows.single { it.bucketId == ownerPrimary }.mediaCount, "the count follows the gallery")
+        assertEquals(listsAtOpen, s.lists, "no bucket list read for a count")
+        c.pick(ownerPrimary)
+        assertEquals(listOf("o4", "o1", "o2"), c.current.media.map { it.mediaId }, "the chosen bucket's media follow too")
+    }
+
+    // #96: a medium in a bucket the list lacks reads the list again — once per such bucket
+    @Test
+    fun aMediumInABucketTheListLacksReadsTheListOnce() = runTest {
+        val s = Server()
+        val (g, c) = opened(s)
+        backgroundScope.launch { c.follow() }
+        runCurrent()
+        val listsAtOpen = s.lists
+        s.extra = listOf(Buckets.Bucket("p-guest", "share:i1", null, true, 0, "sh1", null, null))
+        s.items = s.items + item("g1", "share:i1", "p-guest", 6)
+        g.readAnew()
+        runCurrent()
+        assertEquals(listsAtOpen + 1, s.lists, "the list read once for the bucket it lacked")
+        assertEquals(1, c.current.rows.single { it.bucketId == "p-guest" }.mediaCount)
+        s.items = s.items + item("g2", "share:i2", "p-unlisted", 7)
+        g.readAnew()
+        runCurrent()
+        g.readAnew()
+        runCurrent()
+        assertEquals(listsAtOpen + 2, s.lists, "a bucket the server still lacks is asked for once, not on every read")
+    }
+
+    // #99 (the web's MemoryBuckets.test.ts): another uploader whose every medium was deleted leaves the picker; a restore
+    // brings them back; an uploader listed with nothing before the gallery showed one stays, and so does the caller's own
+    @Test
+    fun anUploaderWhoseMediaAreAllDeletedLeavesThePicker() = runTest {
+        val s = Server()
+        s.extra = listOf(
+            Buckets.Bucket("p-guest", "share:i1", null, true, 1, "sh1", null, null),
+            Buckets.Bucket("p-quiet", "share:i2", null, true, 0, "sh2", null, null),
+        )
+        s.items = s.items + item("g1", "share:i1", "p-guest", 6)
+        val (g, c) = opened(s)
+        backgroundScope.launch { c.follow() }
+        runCurrent()
+        assertEquals(true, c.current.rows.any { it.bucketId == "p-guest" })
+        val restore = s.items
+        s.items = s.items.filter { it.mediaId != "g1" }
+        g.readAnew()
+        runCurrent()
+        assertEquals(false, c.current.rows.any { it.bucketId == "p-guest" }, "the emptied uploader has left")
+        assertEquals(true, c.current.rows.any { it.bucketId == "p-quiet" }, "a 0 never held on screen means nothing yet")
+        s.items = s.items.filter { it.bucketId != ownerPrimary && it.bucketId != ownerSub }
+        g.readAnew()
+        runCurrent()
+        assertEquals(true, c.current.rows.any { it.bucketId == ownerPrimary }, "a primary with a sub-bucket under it stays")
+        s.items = restore
+        g.readAnew()
+        runCurrent()
+        assertEquals(1, c.current.rows.single { it.bucketId == "p-guest" }.mediaCount, "a restore brings the uploader back")
     }
 
     // #991: another member's primary is theirs, not the caller's — "You" stays, and the picker opens on it

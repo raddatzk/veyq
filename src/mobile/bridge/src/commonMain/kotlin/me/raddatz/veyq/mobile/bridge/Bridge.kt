@@ -493,7 +493,12 @@ internal class HeldTracks(val gallery: Long, val model: me.raddatz.veyq.mobile.m
 internal class HeldMusic(val gallery: Long, val model: me.raddatz.veyq.mobile.memories.music.MusicModel)
 
 /** A page's Contributions view ([Call.BucketsOpen]), held with its gallery: it closes with that gallery and its tenant. */
-internal class HeldBuckets(val gallery: Long, val model: me.raddatz.veyq.mobile.memories.Contributions)
+internal class HeldBuckets(val gallery: Long, val model: me.raddatz.veyq.mobile.memories.Contributions) {
+    /** The view follows its gallery's rows while it is held (`Contributions.follow`, #96/#99); stopped at its close. */
+    private val following = model.watch()
+
+    fun close() = following.stop()
+}
 
 /** A lightbox the host opened ([Call.LightboxOpen]) over gallery [gallery], its [page]. */
 internal class HeldLightbox(val gallery: Long, val page: me.raddatz.veyq.mobile.memories.GalleryModel, val model: me.raddatz.veyq.mobile.memories.Lightbox)
@@ -1409,7 +1414,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 closeFactsOf(call.gallery)
                 closeCurationOf(call.gallery)
                 musics.removeIf { it.gallery == call.gallery }.forEach { it.model.close() }
-                buckets.removeIf { it.gallery == call.gallery }
+                buckets.removeIf { it.gallery == call.gallery }.forEach { it.close() }
                 g.close()
                 Answer.Done
             } ?: noGallery
@@ -1547,6 +1552,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.LightboxOpened(id)
             } ?: noBuckets
             is Call.BucketsClose -> buckets.remove(call.buckets)?.let {
+                it.close()
                 captureShifts.removeIf { it.buckets == call.buckets }.forEach { it.open.value = false }
                 Answer.Done
             } ?: noBuckets
@@ -3127,7 +3133,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         // the music is the tenant's: its views close, and the player stops — every track it opened released, its decks
         // cleared, the system's controls cleared (ADR 0142 decision 1, as the web's shell unmount stops it)
         musics.removeAll().forEach { it.model.close() }
-        buckets.removeAll()
+        buckets.removeAll().forEach { it.close() }
         player.value?.stop()
         player.value = null
         decks.removeAll()

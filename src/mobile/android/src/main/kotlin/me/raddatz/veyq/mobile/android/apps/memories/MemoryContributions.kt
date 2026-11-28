@@ -88,10 +88,9 @@ internal fun ContributionsView(
     val palette = LocalPalette.current
     val context = LocalContext.current
     val online = galleryState.offline == null
-    // read anew whenever the gallery's rows are read anew (an upload landed, a medium moved on another device): the counts and
-    // the chosen bucket's media follow. A curation here needs none of it: core reads the buckets after the gallery (#990).
-    val listed = galleryState.rows
-    LaunchedEffect(listed) { if (listed != null) withContext(Dispatchers.Default) { contributions.read() } }
+    // the counts and the chosen bucket's media follow the gallery's rows while the view shows (core's `Contributions.follow`,
+    // #96/#99: counted from the rows, the list read again only for a bucket it lacks)
+    LaunchedEffect(contributions) { withContext(Dispatchers.Default) { contributions.follow() } }
     var moved by remember { mutableStateOf(false) }
     val refused = state.refused
     LaunchedEffect(refused) {

@@ -116,6 +116,15 @@ the branch the refine read (each claim's command is in the refine's record of it
    member's own sub-buckets curated (**owner 2026-11-19:** the fourth segment, exactly as the web offers it — to a
    member only). **A guest is named** in the lightbox's details from its primary bucket's sealed name with
    "(guest)", as the web's; the buckets' listing is a kept read, so the names stay offline; nothing is curated offline.
+   **The counts are the gallery's, live** (built 2026-11-28, the web's #96/#99): `Contributions.follow` follows the
+   gallery's rows while the view shows — every host through it (Android's `LaunchedEffect`, Apple's `watch()`, the
+   bridge from `Buckets.Open` to its close), no host re-reading on a trigger of its own — and re-counts each bucket from
+   them (`Buckets.liveCounts`, never the server's `mediaCount` as the list was read), re-deriving the chosen bucket's
+   media with no request; a medium in a bucket the list lacks reads the list once more, once per such bucket. Another
+   uploader whose every medium was deleted while on screen leaves the picker (`Buckets.leftTheList`: a primary not the
+   caller's own, emptied, no sub-bucket under it, one that held a medium while the view was open); a restore brings
+   them back. **Load-bearing:** the live count, the held gate, the sub-bucket gate and the once-per-bucket re-read
+   (`ContributionsTest`, bitten).
    **A medium's report:** the lightbox offers *Report* for a photo or a video where the rights allow, through core's
    `ReportSheet` with `MediumReport.keys`, the path a track already takes.
 7. **The download's cross-surface proof is a fixture.** A core test writes a fixed Memory (two media, a chapter, a date,

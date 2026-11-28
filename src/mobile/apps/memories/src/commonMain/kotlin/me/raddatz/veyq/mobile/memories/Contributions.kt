@@ -1,7 +1,12 @@
 package me.raddatz.veyq.mobile.memories
 
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -87,6 +92,13 @@ class Contributions(private val gallery: GalleryModel, private val door: Door) :
     val current: State get() = _state.value
 
     private var listed: Buckets.Listed? = null
+    private var names: Map<String, String?> = emptyMap()
+
+    /** The buckets that held a live medium while the view was open: only such a bucket's 0 means its media were deleted. */
+    private val held = MutableStateFlow<Set<String>>(emptySet())
+
+    /** The buckets a medium named while the list lacked them, each read for once ([regard]). */
+    private val requested = MutableStateFlow<Set<String>>(emptySet())
 
     /** The buckets read (anew): the picker keeps its choice where it still stands, else opens on the caller's own. */
     suspend fun read() {
@@ -98,13 +110,49 @@ class Contributions(private val gallery: GalleryModel, private val door: Door) :
             null
         }
         if (read == null) return _state.update { it.copy(loading = false, failed = true) }
-        val (l, names) = read
-        listed = l
-        val items = gallery.current.rows.orEmpty()
-        val rows = Buckets.rows(l, names, door::person, Buckets.mediaOf(Buckets.SELF, items.map { it.item }, door.self).size, door.self)
+        listed = read.first
+        names = read.second
+        rebuild(gallery.current.rows)
+    }
+
+    /**
+     * The view follows the gallery's rows while it shows (the web's `liveCounts` and its watch, #96/#99): each read of the
+     * gallery — an upload landed, a medium moved or deleted here or elsewhere — re-counts the rows and re-derives the chosen
+     * bucket's media with no request; a medium in a bucket the list lacks (the first upload made the caller's primary,
+     * someone made a sub-bucket) reads the list once more, once per such bucket. Runs until cancelled.
+     */
+    suspend fun follow() {
+        gallery.state.map { it.rows }.distinctUntilChanged().collect { regard(it) }
+    }
+
+    /** [follow] for a platform without coroutines: stopped with [Watch.stop]. */
+    class Watch internal constructor(private val job: kotlinx.coroutines.Job) {
+        fun stop() = job.cancel()
+    }
+
+    /** Starts [follow] in the background. */
+    fun watch(): Watch = Watch(CoroutineScope(Dispatchers.Default).launch { follow() })
+
+    /** The gallery's [rows] read anew: counted here, or the list read again where a row names a bucket it lacks. */
+    internal suspend fun regard(rows: List<GalleryModel.Row>?) {
+        val l = listed ?: return
+        val known = l.buckets.mapTo(HashSet()) { it.bucketId }
+        val unknown = rows.orEmpty().mapNotNullTo(HashSet()) { it.item.bucketId }.filter { it !in known && it !in requested.value }
+        if (unknown.isEmpty()) return rebuild(rows)
+        requested.update { it + unknown }
+        read()
+    }
+
+    /** The rows from the list as last read, counted from the gallery's [galleryRows] (the live counts, the left primaries). */
+    private fun rebuild(galleryRows: List<GalleryModel.Row>?) {
+        val l = listed ?: return
+        val items = galleryRows.orEmpty().map { it.item }
+        val counts = Buckets.liveCounts(items)
+        held.update { h -> h + counts.filterValues { it > 0 }.keys }
+        val rows = Buckets.rows(l, names, door::person, Buckets.mediaOf(Buckets.SELF, items, door.self).size, door.self, counts, held.value)
         _state.update { s ->
             val keep = s.selected?.takeIf { id -> rows.any { it.bucketId == id } } ?: Buckets.preferred(rows)
-            val media = mediaOf(keep, gallery.current.rows)
+            val media = mediaOf(keep, galleryRows)
             val picked = if (keep == s.selected) s.picked.filter { id -> media.any { it.mediaId == id } } else emptyList()
             s.copy(rows = rows, selected = keep, media = media, loading = false, failed = false, picked = picked, shifts = shifts(picked))
         }
