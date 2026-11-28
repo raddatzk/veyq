@@ -48,6 +48,7 @@
     <Compile Include="../Veyq/Core/ReaderStream.cs" Link="App/ReaderStream.cs" />
     <Compile Include="../Veyq/Core/ImportText.cs" Link="App/ImportText.cs" />
     <Compile Include="../Veyq/Core/Recent.cs" Link="App/Recent.cs" />
+    <Compile Include="../Veyq/Core/AppearanceKept.cs" Link="App/AppearanceKept.cs" />
     <Compile Include="../Veyq/Core/MediaTiers.cs" Link="App/MediaTiers.cs" />
     <Compile Include="../Veyq/Core/MusicRamp.cs" Link="App/MusicRamp.cs" />
     <Compile Include="../Veyq/Apps/Memories/CurationText.cs" Link="App/CurationText.cs" />

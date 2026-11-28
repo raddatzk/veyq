@@ -46,7 +46,7 @@ internal sealed class PotCreateDialog
         try
         {
             // the words' language (a pass's VEYQ_LANGUAGE, else the person's): the core starts the Pot in its currency
-            var language = DebugEnv.Language ?? CultureInfo.CurrentUICulture.Name;
+            var language = Appearance.Language ?? CultureInfo.CurrentUICulture.Name;
             var (answer, _) = await Core.CallAsync(new Call.PotCreateOpen { language = language });
             if (answer is not Answer.PotCreateOpened { create: var create })
             {

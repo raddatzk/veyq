@@ -229,12 +229,12 @@ class AccountSettings<A : Connection, T : Any>(
          * The page's sections, in their order (`SettingsSection.offered`, ADR 0154 decision 2): every platform draws the
          * page from this list, whole — add a device while [addDevice], storage where it keeps a store or says why none
          * ([storage], [storageUnavailable]), the maps' consent where the tenant's map services were built ([maps], the
-         * shell's), appearance where the platform's page offers it ([appearance]: the phones).
+         * shell's); appearance and language on every platform (`ThemeChoice`, `LanguageChoice`).
          */
-        fun sections(maps: Boolean, appearance: Boolean): List<me.raddatz.veyq.mobile.search.SettingsSection> =
+        fun sections(maps: Boolean): List<me.raddatz.veyq.mobile.search.SettingsSection> =
             me.raddatz.veyq.mobile.search.SettingsSection.offered(
                 me.raddatz.veyq.mobile.search.SettingsSection.Gates(
-                    addDevice = addDevice, storage = storage != null || storageUnavailable != null, maps = maps, appearance = appearance,
+                    addDevice = addDevice, storage = storage != null || storageUnavailable != null, maps = maps,
                     trustReset = trustRefused,
                 ),
             )

@@ -70,7 +70,7 @@ class SearchModelTest {
         override fun openMeta(node: OpenNode): JsonObject? = metas[node.id]
         override fun online() = true
         override fun people(): Collection<Person> = people
-        override suspend fun settings() = SettingsSection.offered(SettingsSection.Gates(addDevice = false, storage = true, maps = true, appearance = false))
+        override suspend fun settings() = SettingsSection.offered(SettingsSection.Gates(addDevice = false, storage = true, maps = true))
         override fun where() = where
         override fun applicationsOff() = emptySet<String>()
         override suspend fun scopeDocuments(

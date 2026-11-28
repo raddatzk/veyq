@@ -3935,6 +3935,14 @@ internal class SettingsShown(
      */
     val sections: List<me.raddatz.veyq.mobile.search.SettingsSection> = emptyList(),
     /**
+     * *Appearance and language*'s two choices (`SettingsSection.APPEARANCE`, ADR 0162): every appearance and every language
+     * the host offers, in the core's order, each with its id (what the host keeps for this install) and its word. Which one
+     * is chosen is the host's own: it keeps it before the core starts (a language's words are read at the start), never the
+     * core.
+     */
+    val themes: List<SettingsChoice> = emptyList(),
+    val languages: List<SettingsChoice> = emptyList(),
+    /**
      * Which Emergency Kit the account has, drawn in Security (`AccountSettings.State.kit`, ADR 0157 decision 5): current,
      * older — [kitNews] says what the clearer kit does better, *Make a new kit* opens [Call.KitRenewalOpen] — or unreadable;
      * null until read.
@@ -3942,6 +3950,11 @@ internal class SettingsShown(
     val kit: me.raddatz.veyq.mobile.account.KitStatus.Standing? = null,
     val kitNews: Notice? = null,
 )
+
+/** One entry of an appearance-and-language choice (`ThemeChoice`, `LanguageChoice`): what the host keeps, and its word. */
+@Serializable
+@SerialName("SettingsChoice")
+internal class SettingsChoice(val id: String, @Serializable(with = MsgKey::class) val word: Msg)
 
 /** A unit of the storage limit's field and its word. */
 @Serializable

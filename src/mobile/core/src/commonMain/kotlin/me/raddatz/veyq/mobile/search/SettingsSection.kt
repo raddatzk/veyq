@@ -85,10 +85,9 @@ enum class SettingsSection(val id: String, val word: Msg, val keywords: Msg) {
     /**
      * The gates the page itself reads (`AccountSettings`): [addDevice] while the instance links devices
      * (`core.device-linking`), [storage] where the account keeps an offline store on this device or says why it keeps
-     * none, [maps] where the tenant's map services were built, [appearance] on a platform whose page offers it (the phones),
-     * [trustReset] while one of the account's lists is refused on this device.
+     * none, [maps] where the tenant's map services were built, [trustReset] while one of the account's lists is refused on this device.
      */
-    data class Gates(val addDevice: Boolean, val storage: Boolean, val maps: Boolean, val appearance: Boolean, val trustReset: Boolean = false)
+    data class Gates(val addDevice: Boolean, val storage: Boolean, val maps: Boolean, val trustReset: Boolean = false)
 
     companion object {
         /** The sections the page offers under [gates], in its order. */
@@ -97,9 +96,8 @@ enum class SettingsSection(val id: String, val word: Msg, val keywords: Msg) {
                 ADD_DEVICE -> gates.addDevice
                 STORAGE -> gates.storage
                 MAPS -> gates.maps
-                APPEARANCE -> gates.appearance
                 TRUST_RESET -> gates.trustReset
-                SESSIONS, DEVICE, SAVED_KEYS, ACCOUNT, EMAIL, PASSWORD, SECURITY, PROFILE, ERASE, MEMBERS, WHOS_WHO, TERMS, GROUPS, GROUP_INVITATIONS, ABOUT, SIGN_OUT -> true
+                APPEARANCE, SESSIONS, DEVICE, SAVED_KEYS, ACCOUNT, EMAIL, PASSWORD, SECURITY, PROFILE, ERASE, MEMBERS, WHOS_WHO, TERMS, GROUPS, GROUP_INVITATIONS, ABOUT, SIGN_OUT -> true
             }
         }
 

@@ -11,5 +11,7 @@ class VeyqApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         AppComposition.install()
+        // this install's appearance handed to the system again, so its kept copy and the system's never part (ADR 0162)
+        me.raddatz.veyq.mobile.android.core.Appearance.restore(this)
     }
 }

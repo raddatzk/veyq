@@ -376,7 +376,7 @@ internal class Tenant(
      * settings page offers no appearance section (the phones' alone does).
      */
     val search: ((words: me.raddatz.veyq.mobile.search.SearchWords) -> me.raddatz.veyq.mobile.search.SearchModel)? =
-        shell?.let { s -> { words -> s.searchModel(words, appearance = false) } },
+        shell?.let { s -> { words -> s.searchModel(words) } },
     /** A person's frame (`ShellModel.profile`): named by the tenant's directory as read, with the sections of the applications on. */
     val profile: ((userId: String) -> me.raddatz.veyq.mobile.navigation.PersonProfile)? = shell?.let { s -> { userId -> s.profile(userId) } },
     /** Memories' section of a person's page (`ShellModel.personMemories`) over the tenant's participants index. */
@@ -3579,8 +3579,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         storageUnavailable = s.storageUnavailable,
         askingRemoveAll = s.askingRemoveAll,
         limitUnits = me.raddatz.veyq.mobile.offline.LimitUnit.entries.map { SettingsLimitUnit(it, it.word) },
-        // a desktop's page offers no appearance of its own (the system's); the maps' consent where the tenant built them
-        sections = s.sections(maps = tenant.value?.models?.shell?.mapsOffered == true, appearance = false),
+        // the maps' consent where the tenant built them
+        sections = s.sections(maps = tenant.value?.models?.shell?.mapsOffered == true),
+        themes = me.raddatz.veyq.mobile.session.ThemeChoice.entries.map { SettingsChoice(it.id, it.word) },
+        languages = me.raddatz.veyq.mobile.session.LanguageChoice.entries.map { SettingsChoice(it.id, it.word) },
         kit = s.kit,
         kitNews = if (s.kit == me.raddatz.veyq.mobile.account.KitStatus.Standing.OLDER) Notice(me.raddatz.veyq.mobile.account.KitStatus.NEWS) else null,
     )

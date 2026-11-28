@@ -48,7 +48,7 @@ internal sealed class ManageDialog
             DefaultButton = ContentDialogButton.Close,
             Content = new ScrollViewer { Content = _servers, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Padding = new Thickness(0, 0, 16, 0) },
             XamlRoot = _window.Content.XamlRoot,
-            RequestedTheme = DebugEnv.Theme,
+            RequestedTheme = Appearance.Theme,
         };
         AutomationProperties.SetAutomationId(dialog, "manage");
         _dialog = dialog;

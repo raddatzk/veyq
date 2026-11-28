@@ -15,9 +15,11 @@ use veyq::core_ui::sign_in::{Offer, SignIn, Unlock};
 use veyq::core_ui::sign_in_entries::{Locked, Recover};
 use veyq::core_ui::terms::TermsGateView;
 use veyq::core_ui::theme::APP_ID;
-use veyq::core_ui::{dev_login, dev_scan, dev_settings, words};
+use veyq::core_ui::{appearance, dev_login, dev_scan, dev_settings, words};
 
 fn main() -> glib::ExitCode {
+    // this install's language put first before any word is read, its appearance once libadwaita starts (ADR 0162)
+    let kept = appearance::start();
     words::init();
     // every application registered into the core UI's registry before any screen reads it
     veyq::applications::register();
@@ -25,6 +27,7 @@ fn main() -> glib::ExitCode {
     // HANDLES_OPEN: a `veyq:` link (the desktop entry's `x-scheme-handler/veyq`, `Exec=veyq %u`) arrives at [open] — in
     // the running instance, where GApplication hands a second launch's URI over D-Bus and that launch exits
     let app = adw::Application::builder().application_id(APP_ID).flags(gio::ApplicationFlags::HANDLES_OPEN).build();
+    app.connect_startup(move |_| appearance::apply_theme(&kept.theme));
     app.connect_activate(activate);
     app.connect_open(open);
     app.connect_shutdown(|_| bridge::shutdown());

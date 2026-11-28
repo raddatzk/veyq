@@ -18,12 +18,7 @@ extension AppModel {
     var searcher: SearchModel? {
         if let m = searchModel { return m }
         guard let shell = shellModel else { return nil }
-        #if os(iOS)
-        let appearance = true // the iOS page's appearance section (the system's page for the app's language)
-        #else
-        let appearance = false
-        #endif
-        let m = shell.searchModel(words: SearchCatalog(), appearance: appearance)
+        let m = shell.searchModel(words: SearchCatalog())
         let id = ObjectIdentifier(m)
         searchModel = m
         searchWatch = m.watch { @Sendable state in

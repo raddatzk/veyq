@@ -1,9 +1,6 @@
 package me.raddatz.veyq.mobile.android.core
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
-import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -40,7 +37,6 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Key
-import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Map
@@ -103,6 +99,8 @@ import kotlinx.coroutines.launch
 import me.raddatz.veyq.mobile.android.R
 import me.raddatz.veyq.mobile.android.words
 import me.raddatz.veyq.mobile.session.AccountSettings
+import me.raddatz.veyq.mobile.session.LanguageChoice
+import me.raddatz.veyq.mobile.session.ThemeChoice
 import me.raddatz.veyq.mobile.session.StaySignedIn
 import me.raddatz.veyq.mobile.session.TrustChange
 
@@ -289,7 +287,7 @@ fun SettingsScreen(
             }
             // the page's sections, every one core offers and in its order (`AccountSettings.State.sections`, ADR 0154
             // decision 2: the web's order, the app-only ones beside their kin, Sign out last); only their look is Android's
-            for (section in state.sections(maps = maps != null, appearance = true)) when (section) {
+            for (section in state.sections(maps = maps != null)) when (section) {
                 me.raddatz.veyq.mobile.search.SettingsSection.APPEARANCE -> appearance(context)
                 me.raddatz.veyq.mobile.search.SettingsSection.MAPS -> maps?.let { mapServices(it) }
                 me.raddatz.veyq.mobile.search.SettingsSection.STORAGE -> storage(state, context, onLimit = { limiting = true }, actions)
@@ -1082,25 +1080,42 @@ private fun MapsSwitch(checked: Boolean, enabled: Boolean, onChange: (Boolean) -
     )
 }
 
-/** "Appearance and language" (D3): the app follows the system's theme; its language is the system's per-app setting. */
+/**
+ * "Appearance and language" (ADR 0162; the web's Persönlich → Darstellung und Sprache): the appearance and, from Android 13,
+ * the language, each every entry of the core's choice in its order as Material's segmented buttons, set through Android's
+ * own per-app settings (`Appearance`). A choice applies at once: the system recreates the activity in it.
+ */
 private fun LazyListScope.appearance(context: Context) {
-    item(key = "appearance") {
-        ListItem(
-            headlineContent = { Text(stringResource(R.string.account_settings_appearance)) },
-            supportingContent = { Text(stringResource(R.string.account_settings_appearance_sub)) },
-            leadingContent = { Icon(Icons.Outlined.Language, null) },
-            colors = listColors(),
-            modifier = Modifier.clickable { openAppearanceAndLanguage(context) }.testTag("settings-appearance"),
-        )
+    header("appearance", { stringResource(R.string.account_settings_appearance) }, { stringResource(R.string.account_settings_appearance_sub) })
+    item(key = "appearance-theme") {
+        Choices(
+            stringResource(R.string.appearance_theme), ThemeChoice.entries, Appearance.theme(context), "settings-theme",
+            word = { say(it.word) }, id = { it.id },
+        ) { Appearance.setTheme(context, it) }
+    }
+    if (Appearance.languageOffered) item(key = "appearance-language") {
+        Choices(
+            stringResource(R.string.appearance_language), LanguageChoice.entries, Appearance.language(context), "settings-language",
+            word = { say(it.word) }, id = { it.id },
+        ) { Appearance.setLanguage(context, it) }
     }
 }
 
-/** The system's page for this app's language (Android 13+, with the app's `locales_config`), else its app info. */
-internal fun openAppearanceAndLanguage(context: Context) {
-    val uri = Uri.fromParts("package", context.packageName, null)
-    val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Intent(android.provider.Settings.ACTION_APP_LOCALE_SETTINGS, uri)
-    else Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, uri)
-    context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+/** One choice's row: its title over every entry as a segmented button, the chosen one selected. */
+@Composable
+private fun <T> Choices(title: String, entries: List<T>, chosen: T, tag: String, word: @Composable (T) -> String, id: (T) -> String, onChoose: (T) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(title, style = MaterialTheme.typography.bodyLarge)
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().testTag(tag)) {
+            entries.forEachIndexed { i, e ->
+                SegmentedButton(
+                    selected = e == chosen, onClick = { if (e != chosen) onChoose(e) },
+                    shape = SegmentedButtonDefaults.itemShape(i, entries.size),
+                    modifier = Modifier.testTag("$tag-${id(e)}"),
+                ) { Text(word(e)) }
+            }
+        }
+    }
 }
 
 /** "Rename this device": its own entry in the register only (the single-writer rule); a blank name changes nothing. */

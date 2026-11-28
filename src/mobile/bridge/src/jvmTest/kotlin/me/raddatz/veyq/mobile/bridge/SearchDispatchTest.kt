@@ -79,7 +79,7 @@ class SearchDispatchTest {
         override fun openMeta(node: OpenNode): JsonObject? = null
         override fun online() = true
         override fun people() = listOf(Person("u-anna", "anna", "Anna Schmidt"))
-        override suspend fun settings() = SettingsSection.offered(SettingsSection.Gates(addDevice = false, storage = false, maps = true, appearance = false))
+        override suspend fun settings() = SettingsSection.offered(SettingsSection.Gates(addDevice = false, storage = false, maps = true))
         override fun where() = Results.SearchContext("s1", null)
         override fun applicationsOff() = emptySet<String>()
         override suspend fun scopeDocuments(

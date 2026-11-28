@@ -30,7 +30,7 @@ internal static class Dialogs
             return ContentDialogResult.None;
         }
         dialog.XamlRoot = window.Content.XamlRoot;
-        dialog.RequestedTheme = DebugEnv.Theme;
+        dialog.RequestedTheme = Appearance.Theme;
         _open = dialog;
         try
         {

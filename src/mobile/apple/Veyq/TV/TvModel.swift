@@ -329,7 +329,7 @@ final class TvModel {
         guard let m = shellModel else { return }
         if shell?.searching != true { m.search(on: true); applyShell() }
         if searchModel == nil {
-            let made = m.searchModel(words: TvSearchWords(), appearance: false, trace: nil)
+            let made = m.searchModel(words: TvSearchWords(), trace: nil)
             searchModel = made
             found = made.current
             searchWatch = made.watch { @Sendable [weak self] shown in

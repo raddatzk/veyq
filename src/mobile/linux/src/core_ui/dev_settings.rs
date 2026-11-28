@@ -16,7 +16,11 @@ pub fn requested() -> bool {
 }
 
 /// What `SettingsShown.sections` carries on the wire for [fake]'s state.
-const FAKE_SECTIONS: &str = r#"["SESSIONS","DEVICE","SAVED_KEYS","ACCOUNT","EMAIL","PASSWORD","ADD_DEVICE","SECURITY","PROFILE","ERASE","SIGN_OUT"]"#;
+const FAKE_SECTIONS: &str = r#"["APPEARANCE","SESSIONS","DEVICE","SAVED_KEYS","ACCOUNT","EMAIL","PASSWORD","ADD_DEVICE","SECURITY","PROFILE","ERASE","SIGN_OUT"]"#;
+
+/// The appearance's and the language's choices as the core sends them (`ThemeChoice`, `LanguageChoice`).
+const FAKE_THEMES: &str = r#"[{"id":"system","word":"appearance_theme_system"},{"id":"light","word":"appearance_theme_light"},{"id":"dark","word":"appearance_theme_dark"}]"#;
+const FAKE_LANGUAGES: &str = r#"[{"id":"system","word":"appearance_language_system"},{"id":"en","word":"appearance_language_en"},{"id":"de","word":"appearance_language_de"}]"#;
 
 /// The state the harness draws: a staying-signed-in device and three sessions, an unconfirmed address.
 pub fn fake() -> SettingsShown {
@@ -50,5 +54,7 @@ pub fn fake() -> SettingsShown {
         sections: serde_json::from_str(FAKE_SECTIONS).expect("the wire's sections"),
         kit: None,
         kit_news: None,
+        themes: serde_json::from_str(FAKE_THEMES).expect("the wire's themes"),
+        languages: serde_json::from_str(FAKE_LANGUAGES).expect("the wire's languages"),
     }
 }

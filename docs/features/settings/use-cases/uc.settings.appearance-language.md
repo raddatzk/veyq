@@ -24,6 +24,11 @@
   English. Switching the OS dark/light or language updates the app while it runs.
 - A2 — **first run:** with no stored preference, **both default to *system*** — the app adopts the OS
   appearance + language until the user picks a concrete value.
+- A3 — **in a native app** ([ADR 0162](../../../decisions/0162-the-apps-choose-their-appearance-and-language-per-install-through-each-platforms-own-per-app-setting.md)):
+  the same two choices in Settings' *Appearance and language*, kept per install through each platform's own per-app
+  setting. Android applies both at once (the language from Android 13); Apple sets the appearance in the app and opens
+  the system's per-app language setting; Linux applies the appearance at once and the language at the next start;
+  Windows applies both at the next start. A TV follows its system.
 
 ## Quality notes
 

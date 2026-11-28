@@ -2,6 +2,7 @@
 title: "Appearance and language"
 sources:
   - docs/features/settings/use-cases/uc.settings.appearance-language.md
+  - docs/decisions/0162-the-apps-choose-their-appearance-and-language-per-install-through-each-platforms-own-per-app-setting.md
 ---
 
 import Screenshot from '../../../components/Screenshot.astro';
@@ -15,9 +16,20 @@ import Screenshot from '../../../components/Screenshot.astro';
 The same choices are in the menu at the bottom of the sidebar, under **Appearance** and **Language**. **System**
 follows what your device is set to.
 
-**In the app** there is no such choice: the app follows your device's appearance and language. On a phone or tablet,
-**Settings** → **Appearance and language** opens the system's own page for veyq, where its language can differ from
-the rest of the device.
+## In the app
 
-The choice applies to this browser on this device only. It is not sent to the server and does not follow you to
-your other devices: [Is my data safe?](/privacy/is-my-data-safe/)
+Open **Settings** and go to **Appearance and language**. It offers the same choices, and each app keeps them for
+itself:
+
+- **Android:** choose under **Appearance** and **Language**; veyq changes at once. The language can also be set in
+  your phone's settings for veyq — both are the same setting. On Android 12 there is no language choice: veyq speaks
+  your phone's language.
+- **iPhone, iPad and Mac:** choose under **Appearance**; veyq changes at once. The language is chosen in your device's
+  own settings for veyq: **Choose in Settings** (on a Mac **Choose in System Settings**) takes you there.
+- **Linux:** the appearance changes at once, the language once veyq starts again.
+- **Windows:** both change once veyq starts again.
+
+A TV follows the TV's own appearance and language.
+
+The choice applies to this browser, or this app, on this device only. It is not sent to the server and does not
+follow you to your other devices: [Is my data safe?](/privacy/is-my-data-safe/)

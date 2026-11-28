@@ -7,6 +7,7 @@
 namespace Veyq.Core;
 
 using System;
+using System.Linq;
 using Veyq.Bridge.Wire;
 
 internal static class DevSettings
@@ -25,6 +26,10 @@ internal static class DevSettings
     }
 
     /// <summary>The state the harness draws: a staying-signed-in device and three sessions, an unconfirmed address.</summary>
+    /// <summary>The sections the core offers for this state (the page's own sections, no flow behind them).</summary>
+    private static readonly string[] FakeSections =
+        ["APPEARANCE", "SESSIONS", "DEVICE", "SAVED_KEYS", "ACCOUNT", "SIGN_OUT"];
+
     public static SettingsShown Fake()
     {
         const long day = 86_400_000;
@@ -54,7 +59,22 @@ internal static class DevSettings
             storageUnavailable = null,
             askingRemoveAll = false,
             limitUnits = [],
-            sections = [],
+            // the sections as the core sends them for this state, in the wire's own form (Linux's harness alike), as the
+            // harness fakes no core
+            sections = FakeSections.Select(s => System.Text.Json.JsonSerializer.Deserialize($"\"{s}\"", WireContext.Default.SettingsSection)).ToList(),
+            // the appearance's and the language's choices as the core sends them (ThemeChoice, LanguageChoice)
+            themes =
+            [
+                new SettingsChoice { id = "system", word = "appearance_theme_system" },
+                new SettingsChoice { id = "light", word = "appearance_theme_light" },
+                new SettingsChoice { id = "dark", word = "appearance_theme_dark" },
+            ],
+            languages =
+            [
+                new SettingsChoice { id = "system", word = "appearance_language_system" },
+                new SettingsChoice { id = "en", word = "appearance_language_en" },
+                new SettingsChoice { id = "de", word = "appearance_language_de" },
+            ],
             kit = null,
             kitNews = null,
         };

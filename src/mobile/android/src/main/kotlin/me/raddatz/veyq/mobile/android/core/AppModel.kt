@@ -1710,7 +1710,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         _levelView.value = model.levelView
         closeSearch()
         val app = getApplication<Application>()
-        val search = model.searchModel({ msg -> app.words(msg) }, appearance = true) { android.util.Log.i("veyq-search", it) }
+        val search = model.searchModel({ msg -> app.words(msg) }) { android.util.Log.i("veyq-search", it) }
         _searchModel.value = search
         // a result opened is followed here, not by the Search screen: a node's page replaces the screen at once, and Search
         // drawn again on back must not take that opening for a new one; a settings section first, in the same state

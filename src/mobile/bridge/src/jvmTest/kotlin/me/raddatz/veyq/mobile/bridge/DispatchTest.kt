@@ -713,6 +713,11 @@ class DispatchTest {
         assertEquals(1_793_527_200_000, read.families!!.first().createdAt)
         assertTrue(read.hasOthers && read.otherSavedKeys && read.addDevice)
         assertNull(read.refusal)
+        // appearance and language on a desktop too (ADR 0162): the section first, every choice in the core's order with
+        // the id the host keeps and its word
+        assertEquals(me.raddatz.veyq.mobile.search.SettingsSection.APPEARANCE, read.sections.first())
+        assertEquals(listOf("system" to Msg.APPEARANCE_THEME_SYSTEM, "light" to Msg.APPEARANCE_THEME_LIGHT, "dark" to Msg.APPEARANCE_THEME_DARK), read.themes.map { it.id to it.word })
+        assertEquals(listOf("system" to Msg.APPEARANCE_LANGUAGE_SYSTEM, "en" to Msg.APPEARANCE_LANGUAGE_EN, "de" to Msg.APPEARANCE_LANGUAGE_DE), read.languages.map { it.id to it.word })
 
         // an action is one call onto the model, answered once it ended
         assertEquals(Answer.Done, b.ask(Call.SettingsSignOut(id, "f-other")))

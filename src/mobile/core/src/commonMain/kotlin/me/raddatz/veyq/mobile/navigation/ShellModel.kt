@@ -1301,11 +1301,11 @@ class ShellModel(
      * opens through this shell. [trace] hears how long each walk of the index took (counts and milliseconds, no name).
      */
     fun searchModel(
-        words: me.raddatz.veyq.mobile.search.SearchWords, appearance: Boolean, trace: ((String) -> Unit)? = null,
+        words: me.raddatz.veyq.mobile.search.SearchWords, trace: ((String) -> Unit)? = null,
     ): me.raddatz.veyq.mobile.search.SearchModel =
-        me.raddatz.veyq.mobile.search.SearchModel(searchDoor(appearance), AppKinds.search, words, openRequests, searchContributions, now, trace = trace)
+        me.raddatz.veyq.mobile.search.SearchModel(searchDoor(), AppKinds.search, words, openRequests, searchContributions, now, trace = trace)
 
-    private fun searchDoor(appearance: Boolean) = object : me.raddatz.veyq.mobile.search.SearchModel.Door {
+    private fun searchDoor() = object : me.raddatz.veyq.mobile.search.SearchModel.Door {
         override suspend fun spaces() = current?.lists?.spaces ?: hidden.visibleSpaces(tenant.spaces())
         override suspend fun <V : Any> fromTree(key: String, derive: suspend (Map<String, List<OpenNode>>) -> V): V = tenant.fromTree(key, derive)
         override suspend fun treeMoved(scopeId: String) = tenant.treeMoved(scopeId).also { if (it) refresh() }
@@ -1326,7 +1326,7 @@ class ShellModel(
             val storage = account.offline != null || (account.thisDevice.offlineRoot != null && account.trusted == null)
             return me.raddatz.veyq.mobile.search.SettingsSection.offered(
                 me.raddatz.veyq.mobile.search.SettingsSection.Gates(
-                    addDevice = linking, storage = storage, maps = builtMaps != null, appearance = appearance, trustReset = account.trustRefused.value,
+                    addDevice = linking, storage = storage, maps = builtMaps != null, trustReset = account.trustRefused.value,
                 ),
             )
         }

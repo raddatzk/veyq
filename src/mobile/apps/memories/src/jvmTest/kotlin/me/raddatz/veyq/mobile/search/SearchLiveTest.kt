@@ -120,7 +120,7 @@ class SearchLiveTest {
         val n = System.currentTimeMillis() % 100_000
         val name = "Searchlive $n"
         var memory: String? = null
-        val model = shell.searchModel(words, appearance = false)
+        val model = shell.searchModel(words)
         try {
             memory = assertNotNull(shell.createMemory(tenantSpace, null, name, wasThere = true).node).nodeId
             assertEquals(MemoryFacts.Outcome.Written, MemoryFacts.setDate(tenant, tenantSpace, memory, MemoryDate(MemoryDate.Mode.SINGLE, "2019-08-15", "2019-08-15")))

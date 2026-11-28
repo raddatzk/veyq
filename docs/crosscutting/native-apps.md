@@ -120,8 +120,10 @@ or a frame on any app's disk ([ADR 0047](../decisions/0047-inline-video-playback
 **The account's Settings page** from the drawer, on all four apps (`uc.account.sessions`): the address, this device (its
 name, the trust level as Manage servers' — one core state —, Stop trusting), devices and sessions named from the
 device register (sign one out, "Sign out and remove saved key", every other), the devices with a saved key, Sign out;
-"Appearance and language" on the phones opens the system's per-app page (the apps follow the system's theme and
-language; the desktops have no row); "Add a device" where the instance has `core.device-linking`. Measured
+"Appearance and language" on every app ([ADR 0162](../decisions/0162-the-apps-choose-their-appearance-and-language-per-install-through-each-platforms-own-per-app-setting.md),
+built 2026-11-28: the web's System, Light, Dark and System, English, Deutsch per install — Android through its own
+per-app night mode and locales, Apple's appearance in the app and its language the system's per-app setting, the
+desktops' kept by the app, Linux's language and both of Windows' at the next start; the TVs follow the system); "Add a device" where the instance has `core.device-linking`. Measured
 2026-11-13 against the dev backend on Android, iOS, macOS, Linux (the Fedora VM, inside the Flatpak's sandbox) and
 Windows (the VM), the desktops in English/light and German/dark: this device renamed, a second session of the account signed out from
 the list, "Sign out" taken — on macOS a session's own menu not driven (§ Open).
@@ -799,9 +801,12 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   on screen. The owner's: iPhone and
   iPad (a flow's kit scanned with the real camera, the breach notice too), Touch ID and Windows Hello for real, a real
   mailbox, a safety code scanned with real cameras (#912).
-- Not in the apps yet (the owner 2026-11-26: every app is to do what the web does — these are gaps, closed one by one):
-  an in-app choice of appearance and language (the apps follow the system's; the desktops
-  have no per-app language of their own).
+- The appearance and language choice (ADR 0162, built 2026-11-28; passed 2026-11-28 over each app's Settings harness, no
+  server: Android 16 — Dark and Deutsch taking at once, both kept through a force-stop, System following the system's
+  night mode —, Linux under Broadway — Dark at once, Deutsch and Dark after a restart — and Windows on the VM — Dark and
+  English, the VM German, after a restart): Apple live (the picker on iOS and the Mac, the system's language page opened
+  from it), Android 12's missing language row, the Flatpak's data directory, and the page over a signed-in account on any
+  app (#1430). Windows' title bar stays the system's under a chosen appearance (AppWindow draws it; seen on the VM).
 - A recovery finished in the app, *Start a list over* and *Finish your profile* (ADR 0148 § The sign-in's two account
   entries, ADR 0028 decision 7, ADR 0084 decision 7; built 2026-11-28; the recovery passed on Android, Windows and Linux,
   the prompt on Android, Linux and Windows): Apple live, and the trust reset's dialog on any app — reachable only by a

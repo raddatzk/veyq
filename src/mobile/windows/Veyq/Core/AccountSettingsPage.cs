@@ -515,8 +515,7 @@ internal sealed class AccountSettingsPage : IDisposable
         {
             Action draw = section switch
             {
-                // a desktop's theme and language follow the system (D3): the core offers no Appearance here
-                SettingsSection.Appearance => () => Log.Write("settings: no appearance section on a desktop"),
+                SettingsSection.Appearance => () => DrawAppearance(s),
                 SettingsSection.Maps => DrawMaps,
                 SettingsSection.Storage => () => DrawStorage(s),
                 SettingsSection.Sessions => () => DrawSessions(s),
@@ -578,6 +577,34 @@ internal sealed class AccountSettingsPage : IDisposable
         }
         _sections.Children.Add(Card("", Words.AccountSettingsRename(), new[] { Words.AccountSettingsRenameHint() }, "settings-device-name", out _nameHolder, _name, _rename));
         _sections.Children.Add(Trust(s));
+    }
+
+    /// <summary>*Appearance and language* (ADR 0162, Appearance): every appearance and every language the core offers, in
+    /// its order, each a card with a ComboBox over what this install keeps, as Windows' Settings draws a choice; both apply
+    /// at the next start, as each card says.</summary>
+    private void DrawAppearance(SettingsShown s)
+    {
+        _sections.Children.Add(Anchor("appearance", Heading(Words.AccountSettingsAppearance())));
+        _sections.Children.Add(Caption(Words.AccountSettingsAppearanceSub()));
+        var kept = Appearance.Kept;
+        ComboBox Choice(IReadOnlyList<SettingsChoice> choices, string chosen, string id, System.Action<string> keep)
+        {
+            var box = new ComboBox { MinWidth = 160 };
+            AutomationProperties.SetAutomationId(box, id);
+            foreach (var c in choices) box.Items.Add(Said.Key(c.word));
+            box.SelectedIndex = System.Math.Max(0, choices.ToList().FindIndex(c => c.id == chosen));
+            box.SelectionChanged += (_, _) =>
+            {
+                if (box.SelectedIndex >= 0 && box.SelectedIndex < choices.Count) keep(choices[box.SelectedIndex].id);
+            };
+            return box;
+        }
+        var theme = Choice(s.themes, kept.Theme, "settings-theme", id => Appearance.Keep(Appearance.Kept with { Theme = id }));
+        AutomationProperties.SetName(theme, Words.AppearanceTheme());
+        _sections.Children.Add(Card("\uE790", Words.AppearanceTheme(), new[] { Words.AppearanceNextStart() }, "settings-theme-card", theme));
+        var language = Choice(s.languages, kept.Language, "settings-language", id => Appearance.Keep(Appearance.Kept with { Language = id }));
+        AutomationProperties.SetName(language, Words.AppearanceLanguage());
+        _sections.Children.Add(Card("\uF2B7", Words.AppearanceLanguage(), new[] { Words.AppearanceNextStart() }, "settings-language-card", language));
     }
 
     /// <summary>Add a device (offered while the instance links devices): show a code, and scan one where there is a camera.</summary>

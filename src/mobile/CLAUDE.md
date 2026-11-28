@@ -295,7 +295,8 @@ A Gradle build of its own, run through its own wrapper.
   The generated layer copies a payload once (Rust `Option<Vec<u8>>`, C# `byte[]?`); no screen touches a pointer.
 - `linux/` — the Linux app (ADR 0161 decision 4): a Cargo package in Rust (gtk4-rs, libadwaita-rs), with `Cargo.lock`
   committed and every cargo run `--locked`. `src/lib.rs` is the library: `bridge` (the safe wrapper over the six
-  functions, the host function), `words`, `said` (money, days and sizes the desktop's way), `theme`, `create_action`
+  functions, the host function), `words`, `said` (money, days and sizes the desktop's way), `theme`, `appearance` (this
+  install's appearance and language, ADR 0162), `create_action`
   and one module per screen (`sign_in` with the unlock, `shell` with Search, `home` (every row with its cover, `Shell.RowCover`, a folder's level with its head), `pot` with its download,
   `pot_settings` (a Pot's Settings place, editable in place) and `pot_create` (New pot),
   `entry_editor` (an entry's editor; `typed`: when a text field is set from the state), `receipt_viewer` (a receipt
@@ -393,7 +394,8 @@ A Gradle build of its own, run through its own wrapper.
   `ReceiptViewerDialog` (a receipt's PDF in `PdfWebView` as a file's, inbox #964, a protected one only offered for saving;
   without WebView2's runtime through `PdfPages`' `Windows.Data.Pdf`, from memory; `PdfPagesTest`), `TypedText`
   (when a text box is set from the state; `TypedTextTest`), `Words`/`MrtWords` and `SaidNotice` (the words), `Said` (money, days and sizes the system's
-  way), `CreateAction`, `Log` (`log.txt` in the data folder), and in a debug build `DevLogin` and `DebugEnv`
+  way), `CreateAction`, `Appearance` over `AppearanceKept` (this install's appearance and language, read at the start, ADR
+  0162; `AppearanceKeptTest`), `Log` (`log.txt` in the data folder), and in a debug build `DevLogin` and `DebugEnv`
   (`VEYQ_THEME`, `VEYQ_LANGUAGE`). `Veyq.Tests` holds the words and formats against the app's `.pri`. `Veyq.Drive` is the
   pass's driver on the Windows host (UI Automation; its steps in `Program.cs`). Packages are central and exact
   (`Directory.Packages.props`), each project's `packages.lock.json` committed and every restore `--locked-mode`,
@@ -1037,6 +1039,12 @@ plaintext only in the file the person chose for *Save a copy* (`QueuedTray.saveC
 **A TV keeps one plaintext beside its records: each account's name on its picker** ([ADR 0159](../../docs/decisions/0159-the-veyq-app-runs-on-apple-tv-and-android-tv-as-a-viewing-form-of-the-one-app.md)
 decision 4): `TrustedDevice.label`, by default null (the picker shows the address), set by the TV's settings
 (`VeyqAccount.renameOnPicker`) — no avatar, no content. A TV keeps no offline store (its host names no `offlineRoot`).
+
+**Each install keeps its appearance and language choice** ([ADR 0162](../../docs/decisions/0162-the-apps-choose-their-appearance-and-language-per-install-through-each-platforms-own-per-app-setting.md)):
+two of core's ids (`ThemeChoice`, `LanguageChoice`: `system`, `light`, `dark`, `en`, `de`), no content — Android's
+`shared_prefs/veyq.appearance.xml` (the theme; its night mode and locales the system's own), Apple's `veyq.appearance`
+in the shared defaults (its language the system's per-app setting), Linux's `$XDG_DATA_HOME/veyq/appearance.ini`,
+Windows' `appearance.json` in the data folder.
 
 **The one plaintext secret the app writes is the Emergency Kit** ([ADR 0148](../../docs/decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) decision 5), and only into the file the person
 chose in the system's save dialog: the core writes it straight there (Android `CreateDocument`'s stream, macOS

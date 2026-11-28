@@ -22,12 +22,12 @@ public partial class App : Application
         InitializeComponent();
         // the whole app's, not only the window's: a brush a screen looks up in code (a caption's secondary text) is the
         // application theme's, and under the window's theme alone it stayed light's on a dark window (measured)
-        if (DebugEnv.Theme != ElementTheme.Default) RequestedTheme = DebugEnv.Theme == ElementTheme.Dark ? ApplicationTheme.Dark : ApplicationTheme.Light;
+        if (Appearance.Theme != ElementTheme.Default) RequestedTheme = Appearance.Theme == ElementTheme.Dark ? ApplicationTheme.Dark : ApplicationTheme.Light;
     }
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        Words.Lookup = MrtWords.Open(null, DebugEnv.Language);
+        Words.Lookup = MrtWords.Open(null, Appearance.Language);
         // every application registered into the core UI before anything is drawn (the composition root)
         Applications.Register();
         _window = new MainWindow();

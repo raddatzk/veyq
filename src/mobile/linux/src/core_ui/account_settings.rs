@@ -412,8 +412,7 @@ impl Page {
         let mut groups = Vec::new();
         for section in &s.sections {
             let (id, drawn) = match section {
-                // a desktop's theme and language follow the system (D3): the core offers no appearance here
-                SettingsSection::Appearance => ("appearance", vec![]),
+                SettingsSection::Appearance => ("appearance", vec![Some(self.appearance(s))]),
                 SettingsSection::Maps => ("maps", vec![Some(self.maps.group().clone())]),
                 SettingsSection::Storage => ("device-storage", vec![self.storage(s), self.offline_items(s)]),
                 SettingsSection::Sessions => ("sessions", vec![self.sessions(s)]),
@@ -660,6 +659,46 @@ impl Page {
     }
 
     /// *Erase your account*.
+    /// *Appearance and language* (ADR 0162, `appearance`): every appearance and every language the core offers, in its
+    /// order, as `AdwComboRow`s over what this install keeps; the appearance applies at once, the language at the next
+    /// start, as its row says.
+    fn appearance(self: &Rc<Self>, s: &SettingsShown) -> adw::PreferencesGroup {
+        let group = adw::PreferencesGroup::builder()
+            .title(words::account_settings_appearance())
+            .description(words::account_settings_appearance_sub())
+            .build();
+        let kept = crate::core_ui::appearance::read();
+        let row = |title: String, name: &str, choices: &[crate::bridge::wire::SettingsChoice], chosen: &str| {
+            let labels: Vec<String> = choices.iter().map(|c| said::key(&c.word)).collect();
+            let model = gtk::StringList::new(&labels.iter().map(String::as_str).collect::<Vec<_>>());
+            let row = adw::ComboRow::builder().title(title).model(&model).build();
+            row.set_widget_name(name);
+            row.set_selected(choices.iter().position(|c| c.id == chosen).unwrap_or(0) as u32);
+            row
+        };
+        let theme = row(words::appearance_theme(), "settings-theme", &s.themes, &kept.theme);
+        let themes: Vec<String> = s.themes.iter().map(|c| c.id.clone()).collect();
+        theme.connect_selected_notify(move |r| {
+            let Some(id) = themes.get(r.selected() as usize) else { return };
+            let mut kept = crate::core_ui::appearance::read();
+            kept.theme = id.clone();
+            crate::core_ui::appearance::write(&kept);
+            crate::core_ui::appearance::apply_theme(id);
+        });
+        group.add(&theme);
+        let language = row(words::appearance_language(), "settings-language", &s.languages, &kept.language);
+        language.set_subtitle(&words::appearance_next_start());
+        let languages: Vec<String> = s.languages.iter().map(|c| c.id.clone()).collect();
+        language.connect_selected_notify(move |r| {
+            let Some(id) = languages.get(r.selected() as usize) else { return };
+            let mut kept = crate::core_ui::appearance::read();
+            kept.language = id.clone();
+            crate::core_ui::appearance::write(&kept);
+        });
+        group.add(&language);
+        group
+    }
+
     fn erase(self: &Rc<Self>) -> Option<adw::PreferencesGroup> {
         let group = adw::PreferencesGroup::builder().title(words::erasure_title()).build();
         let row = self.opens("settings-erasure", &words::erasure_action(), crate::core_ui::account_flows::erasure);

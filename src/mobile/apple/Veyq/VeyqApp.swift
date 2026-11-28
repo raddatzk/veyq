@@ -5,6 +5,8 @@ import VeyqCore
 struct VeyqApp: App {
     @State private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
+    /// This install's appearance (ADR 0162, `Appearance`): the scene's on iOS, the app's on the Mac.
+    @AppStorage(Appearance.key, store: Shared.defaults) private var theme = ThemeChoice.system.id
     #if os(macOS)
     /// A quit while files upload asks first (ADR 0145 decision 2).
     @NSApplicationDelegateAdaptor(QuitGuard.self) private var quitGuard
@@ -29,17 +31,20 @@ struct VeyqApp: App {
 
     var body: some Scene {
         WindowGroup {
-            #if DEBUG
-            if DevScan.requested {
-                DevScanView() // the QR camera's test harness, no sign-in
-            } else if let variant = DevSettings.requested {
-                DevSettingsView(variant: variant) // the Settings page over a played account, no sign-in
-            } else {
+            Group {
+                #if DEBUG
+                if DevScan.requested {
+                    DevScanView() // the QR camera's test harness, no sign-in
+                } else if let variant = DevSettings.requested {
+                    DevSettingsView(variant: variant) // the Settings page over a played account, no sign-in
+                } else {
+                    root
+                }
+                #else
                 root
+                #endif
             }
-            #else
-            root
-            #endif
+            .keptAppearance(theme)
         }
         // a pin's fetch or an upload under way when the app is left asks the system for the time to go on (ADR 0140
         // decision 9, ADR 0145 decision 1)
@@ -58,6 +63,7 @@ struct VeyqApp: App {
         // the account's Settings as a Mac app keeps them: its Settings window, on ⌘, and from the sidebar's Settings
         Settings {
             SettingsPage(model: model)
+                .keptAppearance(theme)
         }
         // the windows an application opens beside the main one (a Memory's lightbox in a window of its own)
         Applications.windows(model)

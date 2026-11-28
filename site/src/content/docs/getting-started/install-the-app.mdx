@@ -64,8 +64,9 @@ every Flatpak desktop already knows. If yours does not, the install offers to ad
 happens once; later installs and updates reuse it. A computer that cannot reach Flathub can take the runtime as a
 file from one that has it installed (`flatpak build-bundle --runtime`) and install that first.
 
-**Words in another language.** The app follows your desktop's language. If you want it in a language your desktop is
-not set to, Flatpak first has to fetch that language. For German:
+**Words in another language.** The app follows your desktop's language unless you choose another one in
+[Appearance and language](/account/appearance-and-language/). For a language your desktop is not set to, Flatpak
+first has to fetch that language. For German:
 
 ```sh
 flatpak config --user --set extra-languages de
@@ -149,7 +150,8 @@ says what that means.
 
 3. Open **veyq** from the Start menu, and [sign in](/getting-started/sign-in/).
 
-The app follows Windows' display language.
+The app follows Windows' display language unless you choose another one in
+[Appearance and language](/account/appearance-and-language/).
 
 ### Update
 

@@ -5319,14 +5319,74 @@
     "de": "Dieses Gerät hat kein Passwort bekommen: Bleibt es nicht angemeldet, braucht es beim nächsten Mal dein Passwort und deinen Secret Key oder dein Notfall-Kit."
   },
   "account_settings_appearance": {
-    "note": "phones only: opens the system's own page for the app, where its language is chosen; the appearance follows the system",
+    "note": "the Settings section of this install's appearance and language (the web's Persönlich → Darstellung und Sprache)",
     "en": "Appearance and language",
     "de": "Darstellung und Sprache",
     "apple_en": "Appearance and Language"
   },
   "account_settings_appearance_sub": {
-    "en": "veyq follows your device’s appearance. Its language is set in your device’s settings for veyq.",
-    "de": "veyq folgt der Darstellung deines Geräts. Seine Sprache stellst du in den Einstellungen deines Geräts für veyq ein."
+    "en": "How this app looks and speaks on this device.",
+    "de": "Wie diese App auf diesem Gerät aussieht und spricht."
+  },
+  "appearance_theme": {
+    "note": "the row or picker of this install's appearance: System, Light or Dark (the web's shell.theme)",
+    "en": "Appearance",
+    "de": "Darstellung"
+  },
+  "appearance_theme_system": {
+    "note": "the appearance that follows the system's light or dark",
+    "en": "System",
+    "de": "System"
+  },
+  "appearance_theme_light": {
+    "en": "Light",
+    "de": "Hell"
+  },
+  "appearance_theme_dark": {
+    "en": "Dark",
+    "de": "Dunkel"
+  },
+  "appearance_language": {
+    "note": "the row or picker of the language veyq's words are shown in on this install",
+    "en": "Language",
+    "de": "Sprache"
+  },
+  "appearance_language_system": {
+    "note": "the language that follows the system's (the web's shell.systemDefault)",
+    "en": "System",
+    "de": "System"
+  },
+  "appearance_language_en": {
+    "note": "English named in its own tongue whatever the words' language (an endonym, as the web's LOCALE_LABELS)",
+    "en": "English",
+    "de": "English"
+  },
+  "appearance_language_de": {
+    "note": "German named in its own tongue whatever the words' language (an endonym, as the web's LOCALE_LABELS)",
+    "en": "Deutsch",
+    "de": "Deutsch"
+  },
+  "appearance_next_start": {
+    "note": "the desktops: under a choice the app takes only when it starts again (Linux's language, Windows' language and appearance)",
+    "en": "veyq uses it once it starts again.",
+    "de": "veyq übernimmt das beim nächsten Start."
+  },
+  "appearance_language_elsewhere": {
+    "note": "Apple: the language is the system's per-app setting, which the button beside opens",
+    "en": "veyq’s language is chosen in your device’s settings for veyq.",
+    "de": "Die Sprache von veyq wählst du in den Einstellungen deines Geräts für veyq."
+  },
+  "appearance_language_open": {
+    "note": "iPhone and iPad: opens the Settings app's page for veyq, where its language is chosen",
+    "en": "Choose in Settings",
+    "de": "In Einstellungen wählen",
+    "apple_en": "Choose in Settings"
+  },
+  "appearance_language_open_mac": {
+    "note": "the Mac: opens System Settings' Language & Region, whose Applications list sets veyq's language",
+    "en": "Choose in System Settings",
+    "de": "In Systemeinstellungen wählen",
+    "apple_en": "Choose in System Settings"
   },
   "account_settings_sign_out_hint": {
     "note": "under the account's Sign out: what it ends",

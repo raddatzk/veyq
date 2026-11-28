@@ -273,31 +273,16 @@ struct SettingsView: View {
         }
     }
 
-    /// The page's sections (core's): the maps' consent where this tenant's map services were built, appearance on iOS.
+    /// The page's sections (core's): the maps' consent where this tenant's map services were built.
     private var sections: [SettingsSection] {
-        #if os(iOS)
-        let appearance = true
-        #else
-        let appearance = false
-        #endif
-        return state.sections(maps: maps?.mapsOffered ?? false, appearance: appearance)
+        state.sections(maps: maps?.mapsOffered ?? false)
     }
 
     /// Section `s` of the page. The account's flows (its address, password, security, profile, erase) open over the app's
     /// model; the page played without one (`DevSettings`) has none to open.
     @ViewBuilder private func section(_ s: SettingsSection) -> some View {
         switch s.entry {
-        case .appearance:
-            #if os(iOS)
-            // D3: the app follows the system's appearance; its language is the system's per-app setting
-            Section {
-                Button { if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) } } label: {
-                    Label(say(.accountSettingsAppearance), systemImage: "globe")
-                }
-            } footer: {
-                Text(say(.accountSettingsAppearanceSub))
-            }
-            #endif
+        case .appearance: AppearanceSection()
         case .maps:
             if let maps { MapServicesSection(model: maps) }
         case .storage:
