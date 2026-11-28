@@ -116,30 +116,28 @@ acceptanceCriteria:
       start. The restore says that this is an upgrade, and that a rollback installs the backup's own release
       instead (A7).
   - id: a-predecessors-backup-upgrades-with-its-content-intact
-    # No coverage on a surface: the observable is an orchestrator run that boots two builds - the predecessor's jar
-    # and suites, then the candidate's - which no single surface's test can be. `scripts/run_web_e2e.py --upgrade`
-    # (ADR 0057 Decision 7, site/src/content/docs/run/upgrade.mdx) runs the predecessor's
-    # `upgrade.a-seed.e2e.test.ts` from a worktree of its ref on its own jar, restores the capture onto an instance
-    # installed by the candidate's jar, and the candidate's `upgrade.b-read.e2e.test.ts` asserts configSecretState
-    # OK first and then every item of the record the seeder wrote, byte for byte; its summary names the predecessor,
-    # both highest migrations and the outcome with its cause. checks.yml's `upgrade-proof` runs it on every commit
-    # since the first release (v0.2480); until its first green CI run the claim is the recorded run. Recorded run:
-    # 2026-10-14, `--upgrade-from 0d57c3b2` (the seeder's own commit) onto candidate 0e5450ca: GREEN - both builds at
-    # V202610041201 (no migration between them, so no migration ran), configSecretState OK, all 18 recorded items
-    # opened, every wire sweep green; `--upgrade` (HEAD^1) the same. Bitten the same day: an edited record (a media
-    # item the instance lacks, a file hash, the place, a guest) fails the reader; a restore without the key fails it
-    # on configSecretState MISMATCH; a changed core baseline fails the run, named as Flyway's checksum mismatch.
-    # Lane L3 (ADR 0091 decision 6, amended 2026-11-26; `scripts/run_stack_restore.py`, checks.yml's `stack-restore` on
-    # every push) restores the archived backup each release's own seeder wrote — one per schema state of the major and
-    # the major entry's — into a fresh `veyqctl install` of the candidate with `veyqctl restore --objects-from`, and runs
-    # the same reader and the browser spec tagged with this criterion. Green locally 2026-11-28 for all five of the
-    # selection (v0.2480, v1.0, v1.168, v1.248, v1.260); a stack ref once a CI log shows it ran.
+    # No coverage on a surface: the observable is an orchestrator run that boots two builds' content - a released
+    # predecessor's and the candidate's - which no single surface's test can be. Lane L3 (ADR 0091 decision 6, amended
+    # 2026-11-26; `scripts/run_stack_restore.py`, checks.yml's `stack-restore` on every push) restores the archived
+    # backup each release's own seeder (`upgrade.a-seed.e2e.test.ts` of its tree) wrote — one per schema state of the
+    # major and the major entry's — into a fresh `veyqctl install` of the candidate with `veyqctl restore
+    # --objects-from --key-from`; the candidate's `upgrade.b-read.e2e.test.ts` asserts configSecretState OK first and
+    # then every item of the record, byte for byte, and the browser spec tagged with this criterion opens the content.
+    # Green locally 2026-11-28 for all five of the selection (v0.2480, v1.0, v1.168, v1.248, v1.260); bitten the same
+    # day by a reader expecting one more item (red per backup), a backup missing from the registry and one signed
+    # under another identity (each red, named); a stack ref once a CI log shows it ran. Until then, and from the first
+    # release (v0.2480) until 2026-11-28, checks.yml's jar-level `upgrade-proof` (`scripts/run_web_e2e.py --upgrade`,
+    # ADR 0057 Decision 7, retired by ADR 0091 decision 7, now a local tool) proved it from the predecessor's own jar
+    # and suites: recorded run 2026-10-14, `--upgrade-from 0d57c3b2` onto 0e5450ca GREEN, all 18 recorded items opened;
+    # bitten then by an edited record, a restore without the key (configSecretState MISMATCH) and a changed core
+    # baseline (Flyway's checksum mismatch).
     text: >-
-      A backup written by the predecessor's own build - its jar and its own e2e suites sealing real content - and
-      restored onto the candidate is migrated up at the candidate's start, reports configSecretState OK, and the
-      candidate's suites open the predecessor's content and assert it (names, media, files), not merely that
-      nothing failed. The predecessor is a configured git ref: the commit before the one under test until the first
-      release, the release on the pin file's release line from then on.
+      A backup written by a released predecessor's own build - its own e2e seeder sealing real content, its own
+      backup taken with the object pool and the key - and restored onto a fresh install of the candidate is migrated
+      up at the candidate's start, reports configSecretState OK, and the candidate's reader and browser open the
+      predecessor's content and assert it (names, media, files), not merely that nothing failed. The predecessors are
+      derived from the releases: the oldest release of every schema state of the candidate's major, and the newest
+      release of the previous major.
   - id: a-newer-backup-is-refused-naming-its-release
     # No coverage on a surface, for the same reason, in the same hook: `assert_newer_backup_is_refused` restores a
     # copy of the capture whose manifest claims a schema above the target's — chosen so that string order would

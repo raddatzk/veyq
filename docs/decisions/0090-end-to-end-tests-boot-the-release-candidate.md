@@ -123,7 +123,8 @@ What a green run proves today stops short of what a Server Owner runs:
    keeps its logs, report and dumps.
 
 8. **It is not a replacement for `run_web_e2e.py`.** That layer stays: per-file fresh instances, API-level, fast to
-   bisect, and the home of the upgrade proof. This one is few scenarios, one instance per run, and the shipped artifact.
+   bisect, and the home of the jar-level upgrade proof (a local tool since its CI job retired for lanes L2 and L3,
+   ADR 0091 decision 7). This one is few scenarios, one instance per run, and the shipped artifact.
 
 9. **One rule for languages and test levels.** L1 proves
    what only the release candidate in a browser can show, once:

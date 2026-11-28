@@ -112,8 +112,9 @@ from stack_lane import Red, run
 
 import repo_layout
 
-# The jar-level upgrade proof's predecessor resolution, worktree build and record check: ONE derivation of which
-# release a leg starts from, so this lane and that proof never start from different releases (it imports no stack).
+# The upgrade derivations (the predecessor resolution, the worktree build and the record check, the jar-level proof's
+# before it retired from CI): ONE derivation of which release a leg starts from, shared with the chart check and the
+# tools image's stamp (it imports no stack).
 import run_web_e2e as proof
 
 LEGS = ("newest", "major-entry")

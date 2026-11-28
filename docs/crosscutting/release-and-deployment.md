@@ -71,8 +71,8 @@ sees the earlier one's tag.
    ([ADR 0090](../decisions/0090-end-to-end-tests-boot-the-release-candidate.md) decision 2), and each green leg records
    what it ran (`scripts/snapshot.py lane-result`): its digests and the hash of the asset set it installed
    (`release_assets.py --asset-set`, the manifest's asset map: what a promotion produces again from the same commit),
-   kept as an artifact of the run too. The gate `green` needs every stage (the disabled `upgrade-proof`'s and the
-   other event's build's *skipped* tolerated); `validate_release_identity.py` holds its `needs` to every job of the file.
+   kept as an artifact of the run too. The gate `green` needs every stage (the other event's build's *skipped*
+   tolerated, and lane L3's on a pull request alone); `validate_release_identity.py` holds its `needs` to every job of the file.
 3. Publish's `checks-run` finds the publishable commit and its run (`scripts/snapshot.py checks-run`: the first-parent
    history and each commit's changed paths, then the API's runs and jobs of the commit), and `snapshot` checks that
    commit out and downloads its digests and lane records by its run id and refuses unless every lane record names exactly
@@ -301,17 +301,20 @@ one tool takes it on both targets, `instance_backup.py`, in one format.
   ([Backup and restore](../../site/src/content/docs/run/backup-and-restore.md),
   [Kubernetes](../../site/src/content/docs/run/kubernetes.md)).
 
-**The upgrade is proven before a release** (ADR 0057 § 7): `scripts/run_web_e2e.py --upgrade` lets the predecessor's
-own build write sealed content, captures it, restores it onto the candidate, which migrates it, and has the
-candidate's suites open it. The default predecessor is the commit's first parent until `release:` is set, then the
-newest release tag that first parent reaches. **A release is proved a second time from its major entry**
-([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md) decision 10), `--upgrade-major-entry`, when that is
-a release other than the default predecessor. The entry is derived once, `run_web_e2e.major_entry_ref()`; the same
-release is what `release_assets.py --major-entry` bakes into the tools image for the gate and names as the signed
-manifest's `majorEntry`, by which `veyqctl` routes, so neither target enters a major from a release the pipeline did
-not prove. The CI job, `upgrade-proof`, runs one leg per predecessor, each on its own budget; a leg asks `--resolve`
-first and builds nothing when it has nothing to prove. The job is written and switched off (`if: false`) until the first
-release, which switches it on in the same change that sets `release:`.
+**The upgrade is proven before a release** (ADR 0091 decisions 6 and 7, which replace ADR 0057 § 7), on the images
+that ship and from the releases operators run. Lane L2 (`stack-upgrade`) installs the newest release and, in a leg of
+its own, the major entry ([ADR 0085](../decisions/0085-one-major-moved-on-a-yearly-train.md) decision 10) from their
+signed files, fills each with its own seeder, upgrades it in place to the candidate with its own `veyqctl upgrade`,
+reads it with the candidate's reader and browser spec, rolls back and reads again. Lane L3 (`stack-restore`, on a push)
+restores the archived backup of the oldest release of every schema state of the major and the major entry's into a
+fresh install of the candidate and reads it the same way. The default predecessor is
+`run_web_e2e.default_predecessor_ref()`, the entry `run_web_e2e.major_entry_ref()` and L3's selection
+`run_web_e2e.backup_selection_ref()` beside it — derived once; the entry is what `release_assets.py --major-entry`
+bakes into the tools image for the gate and names as the signed manifest's `majorEntry`, by which `veyqctl` routes,
+so neither target enters a major from a release the pipeline did not prove. Until cr-stack-lane-l3-backup-archive the
+jar-level upgrade proof (`scripts/run_web_e2e.py --upgrade`, `--upgrade-major-entry`: the predecessor's own jar and
+suites, its capture restored onto the candidate's jar) was the CI job `upgrade-proof`, written switched off until the
+first release and gating every commit from it; it retired when the lanes took its place and stays a local tool.
 
 ## The release check
 

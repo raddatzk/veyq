@@ -312,10 +312,10 @@ of that package in GHCR before running again.
 
 **V1 is `1.0`** (owner 2026-11-10). It was entered the way any first major is: a `0.<n>` release first (v0.2480, the
 last of major 0), then one commit setting `VERSION` to `1` **and** the `release:` line of
-`scripts/applied_migrations.sha256` to the highest migration that release ships, which also deleted `upgrade-proof`'s
-`if: false` and the `"skipped"` that `green` tolerated for it, then the promotion of that commit's snapshot. Since then
-the upgrade proof and the chart upgrade check prove from the newest `v` tag the commit's parent reaches, and a released
-migration is never edited ([src/backend/CLAUDE.md](../src/backend/CLAUDE.md) § Migrations).
+`scripts/applied_migrations.sha256` to the highest migration that release ships, which also deleted the jar-level
+`upgrade-proof`'s `if: false` and the `"skipped"` that `green` tolerated for it (a job retired since, when lanes L2 and
+L3 took its place), then the promotion of that commit's snapshot. Since then every commit is upgraded from the newest
+`v` tag the commit's parent reaches (lane L2, and the chart upgrade check), and a released migration is never edited ([src/backend/CLAUDE.md](../src/backend/CLAUDE.md) § Migrations).
 
 **The 1 May train** ([ADR 0085](../docs/decisions/0085-one-major-moved-on-a-yearly-train.md) decisions 2, 3 and 10)
 leaves only when a removal is pending. A year without one has no major, and an unscheduled major (decision 4) follows
@@ -353,10 +353,10 @@ gh workflow run publish.yml --ref release/<old>.x                               
 ```
 
 The current major's next release then moves the major entry by itself: every release of major N is proved — the
-upgrade proof and the chart upgrade check — from the newest release of major N−1 among every tag, the branch's
+lane L2's major-entry leg, lane L3 and the chart upgrade check — from the newest release of major N−1 among every tag, the branch's
 included, beside its default predecessor, its tools image bakes that release as the one its gate admits a new
 major from, and its manifest names it as `majorEntry`, the one `veyqctl` enters the new major from
-(`run_web_e2e.py --upgrade-major-entry`, `chart_upgrade_check.py --upgrade-major-entry`,
+(`run_stack_upgrade.py --leg major-entry`, `chart_upgrade_check.py --upgrade-major-entry`,
 `release_assets.py --major-entry`, `release_assets.produce`: one derivation, ADR 0085 § Consequences). A snapshot
 bakes the entry when it is built, so a release of major N promotes a snapshot built **after** that fix release. Until
 that release exists, an instance on the fix release cannot enter the new major. Once it is released, `archive.yml`

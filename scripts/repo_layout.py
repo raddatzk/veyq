@@ -33,7 +33,8 @@ CRYPTO = SRC / "packages/crypto"
 WEBP_ENCODER = WEB / "webp-encoder"
 # Every surface, for the guards that iterate them.
 SURFACES = (BACKEND, WEB, ADMIN_WEB, CRYPTO)
-# Where a tree from before stage 2 carries each surface (repository-relative): the upgrade proof builds a predecessor
+# Where a tree from before stage 2 carries each surface (repository-relative): a predecessor's tree (lane L2's and the
+# archive's start tree, the local upgrade proof's build, `run_web_e2e.prepare_predecessor`)
 # that may be of either layout (ADR 0106 decision 7). Never read for this checkout - only for another tree.
 LEGACY_SURFACES = {BACKEND: "backend", WEB: "web", ADMIN_WEB: "admin-web", CRYPTO: "packages/crypto"}
 # The two operator tools a release ships as assets, with their selftests (ADR 0106 decision 8). Not a surface: no

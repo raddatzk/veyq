@@ -721,7 +721,7 @@ during cr-e2e-orchestrator:
   above stay because they are what bites *after* the remote exists.
 - **With no remote, a check only one CI job runs is a check nobody runs — so a done-when names that job.** The
   surface checks and the glob do not cover the pipeline's `web-e2e`, and that job carries more than the API suites: the
-  tool self-tests of the backup, `veyqctl` and the upgrade proof, which read the backend's migrations and
+  tool self-tests of the backup, `veyqctl` and the upgrade proof (its derivations' since 2026-11-28), which read the backend's migrations and
   `scripts/`. On 2026-10-16 two migrations that seed rows each landed green past `./gradlew check` and the glob, and
   each made every restore onto a fresh install refuse; the first `run_pipeline.py --job web-e2e` was red in its
   backup self-test within 1.5 minutes (cr-one-pipeline-per-commit's close). A CR whose change reaches what such a

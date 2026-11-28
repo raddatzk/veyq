@@ -456,3 +456,77 @@ deleted, and #436's mention of the disabled major-entry proof is updated.
 - The CR's phase 3 lists no docs, and phase 4 lists them all; with phase 4 possibly split off, the docs that say a
   stage exists had to move into phase 3 (ADR 0091 decision 8). A CR whose last phase may ship apart should say which
   of its docs belong to which phase.
+
+### Phase 3 — observed (pull request 2's merge push, 2026-11-28)
+
+- **L3 gated a push green.** The Checks run of `321c81366` ([run 46154117080](https://github.com/raddatzk/veyq/actions/runs/46154117080)):
+  `Stack lane L3 (amd64, 1|2|3)` green (4 min 9 s, 4 min 1 s, 3 min 3 s), beside both L2 legs and `Pipeline green`.
+- **It restored exactly the selection:** shard 1 v0.2480 and v1.248, shard 2 v1.0 and v1.260, shard 3 v1.168; each
+  `cosign verify` named the digest phase 2's table holds and archive.yml's identity; each backup installed fresh as the
+  candidate (1.329), restored, and its browser spec passed. Measured: `gh run view --repo raddatzk/veyq --job <id> --log`
+  for jobs 141012513739, 141012513761, 141012513765.
+- So the fourth invariant's condition holds, and phase 4 lands as pull request 3. A shard takes about 4 minutes, well
+  inside the 15-minute budget, so `MAX_PER_SHARD` = 4 holds with room. What is still unseen: the next Publish attesting
+  L3 with `inputs.backups`, and a promotion comparing it.
+
+### Phase 4 — decision log (implementer, 2026-11-28)
+
+- **Committed apart from phase 3**, on top of it and touching nothing phase 3 needs, so it can move to a branch of its own
+  if the owner wants L3 to gate a push first (the fourth invariant; phase 3's decision log).
+- **The `upgrade-proof` job and its need and term in `green` are gone** (decision 8); `green` keeps its two push-only
+  terms for L3. No job has `if: false` any more; assertion 9's by-design acceptance of one stays, unused.
+- **The self-test's CI step is kept, renamed**: `upgrade_proof_selftest.py` → `upgrade_derivations_selftest.py`, still in
+  `web-e2e` (its checkout holds the whole history case 7 reads). Decision 8 retires "its CI step", but the file pins the
+  derivations decision 8 keeps — the default predecessor, the major entry and the second predecessor, the pin file
+  reads, Flyway's refusal, the seeder's discovery, the record's check — which lanes L2 and L3, the archive, the chart
+  check and the tools image's stamp read. Dropping the step would have left them unpinned in CI; the step that went is
+  the jar-level proof's, the one that stays is the derivations'. A deviation from the decision's letter, recorded here
+  and in ADR 0091 decision 7's *As built*.
+- **`run_web_e2e.py --upgrade` and `--upgrade-major-entry` stay, as a local tool** (decision 8 left it to what still
+  calls them): its machinery is lane L2's start tree (`prepare_predecessor`, `remove_predecessor`, the seeder and reader
+  discovery, `flyway_cause`, the record's check), so removing the flags would save a few dozen lines of argument
+  handling and lose the fast jar-level bisect between two commits. Its docstring says it is no CI stage any more.
+- **The retirement locator's remaining hits are each justified** (`git grep -n -I -E 'upgrade-proof|upgrade
+  proof|--upgrade-major-entry|run_web_e2e\.py --upgrade|upgrade_proof_selftest' -- ':!docs/inbox.md'`): the local tool's
+  own name and flags (`run_web_e2e.py`, the renamed self-test, the seeder's and reader's describe titles — a released
+  seeder carries the same title, and the pair's name stays), `chart_upgrade_check.py --upgrade-major-entry` (the chart
+  check's own flag, run by `chart`), a statement of the retirement itself (ADR 0091's Built line and decision 7,
+  ADR 0057's replacement line, `release-and-deployment.md`, the site pages, the coverage comment, the backend's
+  `CLAUDE.md`), and history (ADR 0091's Context and decision 3's wording, ADR 0106 decision 7, ADR 0119, the incident
+  narration of `validate_release_identity.py` assertion 16, a local pipeline run of 2026-11 on the site page,
+  `changes/README.md`'s two lessons, `docs/ai/README.md`'s, and this CR). Every hit that said the job runs or gates was
+  rewritten.
+- **The docs moved as phase 4's done-when lists** — ADR 0091's `Built:` (decision 7 built) and *As built*, ADR 0057's
+  replacement line, ADR 0085's, 0064's, 0087's, 0090's, 0106's and 0119's sentences, the site's *How veyq is tested*
+  (the jar-level row and budget retired, the publish's "the upgrade proof included"), the Run area's *Upgrade* page
+  (*What proves an upgrade before a release*: L2 and L3, the jar-level proof as history and tool) and its index row,
+  the use-case's A9 and the criterion `a-predecessors-backup-upgrades-with-its-content-intact` (comment and text: the
+  predecessors are derived from the releases now), inbox #461 deleted and #436's sentence on the proof rewritten to
+  name L2's major-entry leg and L3. The criterion's text change is one of wording to what proves it; its id and its
+  tagged spec are unchanged. Phase 3 had already moved what says L3 and the archive are built (its decision log).
+- **The reader's duty grew with L3, and `upgradeRecord.ts` says so**: it reads every record version any archived backup
+  it restores carries (the oldest release of each state of the major, and the entry's), not only the newest release's.
+
+### Phase 4 — technical observations
+
+- **Proof on the tree** (2026-11-28): the 71 guards of the CI glob green (`validate_wiki_sources.py` was red once — the
+  Upgrade page now names ADR 0091 as a source, which did not link back; ADR 0091 decision 7 now does);
+  `validate_guard_gaps.py --force` (validator docstrings changed): 104 pinned cases hold; the `upgrade_derivations`,
+  `stack_restore`, `snapshot`, `promote`, `archive_backup`, `chart_upgrade_check` and `pin_follow` self-tests and
+  `src/tools/`'s `veyqctl` and `instance_backup` self-tests green; `tests/e2e` `shards.test.mjs` green; `src/web`'s
+  eslint on the four touched files and `vitest run src/test/upgradeRecord.test.ts` (20 tests) green; `actionlint` on
+  checks.yml only the SC2129 `main` has; the site's `pnpm run check` green (0 errors, 217 pages).
+- **Bites**: `green` without its `stack-restore` need — assertion 9's `the green job does not need stack-restore`; the
+  major entry taken as the OLDEST release of the previous major — `FAIL major entry: the newest release of the previous
+  major` in the renamed self-test, which still pins what the lanes read. Restored, `git status` identical.
+- **What only the merge push can show** (phase 3's and 4's observed half): L3 green on amd64 restoring exactly the five
+  backups, its shards' timings against `MAX_PER_SHARD`, the signed-in read of `veyq-backups` with the job's token, the
+  next Publish attesting L3 with `inputs.backups`, and a promotion comparing it.
+
+### Phase 4 — process observations
+
+- My miss: phase 3's second commit (the Run area pages) was made with `git add <three paths>` and a plain `git commit`
+  while phase 4's `git mv` of the self-test was already staged — the index commits, not the paths named, so the rename
+  rode along into phase 3 and its `checks.yml` named a file that commit no longer had. Seen in `git show --stat`,
+  rewritten with `git reset --soft` to the explicit hash and the rename unstaged; the phase 3 tip was then checked out
+  apart and its 71 guards and self-tests run green there. A staged `git mv` belongs to its own commit at once.

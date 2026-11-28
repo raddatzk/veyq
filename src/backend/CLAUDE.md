@@ -234,10 +234,12 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   v0.2480 shipped) the rule is absolute: a released migration is only followed by a new one. The guard cannot tell an edit
   from a re-pin, so an edit plus its pin line is still green — the `release:` line documents the freeze, review
   holds it. Before it a baseline could still change together with its pin line, every database then
-  recreated; that is how the history was folded into the three. The upgrade proof
-  (`python3 scripts/run_web_e2e.py --upgrade`, `site/src/content/docs/run/upgrade.mdx`) runs against the newest
-  release (`v<major>.<minor>`) and gates every commit: the commit that set `release:` enabled its CI job
-  (`checks.yml`'s `upgrade-proof`).
+  recreated; that is how the history was folded into the three. Every commit is upgraded from the published releases
+  (`site/src/content/docs/run/upgrade.mdx`): lane L2 in place from the newest release and the major entry, lane L3 from
+  the archived backup of every schema state of the major (`checks.yml`'s `stack-upgrade` and `stack-restore`); a
+  released migration edited stops them, Flyway's refusal named. The jar-level upgrade proof
+  (`python3 scripts/run_web_e2e.py --upgrade`) gated every commit from the first release until those lanes took over,
+  and stays a local tool.
   Column types: `TEXT` for opaque base64 (65 535 bytes on MariaDB, so a base64 cap must be ≤ 65 532 —
   guarded by `scripts/validate_maxlength_storage.py`), `MEDIUMTEXT` where a cap needs more (16 MiB), `VARCHAR`
   for short, and **`UUID` (MariaDB's native type) for every id and id reference that is exactly a UUID** (inbox #387): the entities

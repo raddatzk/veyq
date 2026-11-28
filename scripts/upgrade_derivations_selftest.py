@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
-"""Pin the upgrade proof's pure parts, without Docker, a jar or a second worktree (ADR 0057 Decision 7, cr-upgrade-proof).
+"""Pin the upgrade derivations, without Docker, a jar or a second worktree: the plain functions of `scripts/run_web_e2e.py`
+that decide WHICH release an upgrade starts from and WHAT a red run means — the ones lane L2
+(`scripts/run_stack_upgrade.py`), lane L3's selection beside them (`backup_selection`, pinned by
+`scripts/stack_restore_selftest.py`), the archive (`scripts/archive_backup.py`), the chart upgrade check and the tools
+image's stamp read, and the flags of `run_web_e2e.py --upgrade`, the jar-level tool that boots two builds locally.
 
-`scripts/run_web_e2e.py --upgrade` boots two builds - the predecessor's and the candidate's - and the parts of it that
-decide WHICH predecessor and WHAT a red run means are plain functions. This asserts each of them:
+Until cr-stack-lane-l3-backup-archive it was `upgrade_proof_selftest.py`, the pure parts of the jar-level upgrade proof
+(ADR 0057 Decision 7, cr-upgrade-proof), whose CI job retired then (ADR 0091 decision 7: lanes L2 and L3 prove the same
+data path on the shipped images); the derivations stayed, and so does this file's run. It asserts:
   1. the request: `--upgrade` asks for the default predecessor, `--upgrade-from <ref>` / `=<ref>` for that one, and
      anything else is a test path as before; `--upgrade-from` with no ref, or both flags, is refused;
   2. the default predecessor: the first parent of `HEAD` while the pin file says `release: none`, and once a release
@@ -28,12 +33,12 @@ decide WHICH predecessor and WHAT a red run means are plain functions. This asse
      (`--upgrade-major-entry` asks for it), while the default stays the newest tag `HEAD^1` reaches; and the tools
      image's stamp (`release_assets.py --major-entry`) is that same derivation, never a second one.
 
-What it cannot show: that the proof runs - the worktree, the two builds, the restore and the two suites need Docker
-and a jar, and the run itself is the proof (its summary is recorded in the criterion's comment). Not a
-`validate_*.py`: it asserts nothing about the repository, only about the orchestrator, and it runs beside
-`instance_backup_selftest.py` in `checks.yml`'s `web-e2e` job. Runnable locally:
+What it cannot show: that an upgrade runs - the lanes' runs are that proof (and the local tool's, which needs Docker
+and a jar). Not a `validate_*.py`: it asserts nothing about the repository, only about the orchestrator, and it runs
+beside `instance_backup_selftest.py` in `checks.yml`'s `web-e2e` job, whose checkout holds the whole history case 7
+reads. Runnable locally:
 
-    python3 scripts/upgrade_proof_selftest.py
+    python3 scripts/upgrade_derivations_selftest.py
 """
 from __future__ import annotations  # the repo's scripts run on Python 3.9
 
@@ -365,7 +370,7 @@ def main() -> int:
     if failures:
         print(f"[selftest] {len(failures)} failure(s)", file=sys.stderr)
         return 1
-    print("[selftest] the upgrade proof picks its predecessor and its major entry, reads both builds' migrations, "
+    print("[selftest] the upgrade derivations pick the predecessor and the major entry, read both builds' migrations, "
           "names Flyway's refusal and checks the shared record the way the TypeScript reader does")
     return 0
 
