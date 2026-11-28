@@ -102,7 +102,7 @@ below that only GitHub can show (a dispatch, a registry listing, a push's L3 run
 | Docs naming L3 or the archive as not built | `git grep -n -E "L3\|backup archive\|archived backup" -- docs/decisions docs/crosscutting infra/README.md site/src/content/docs` |
 | Guards over the workflow set and identities | `git grep -n -E "release.yml\|publish.yml" -- scripts/validate_release_identity.py` |
 
-## Delivery — two pull requests, the owner's dispatches between them (owner 2026-11-27)
+## Delivery — three pull requests, the owner's dispatches after the first (owner 2026-11-27, 2026-11-28)
 
 `workflow_dispatch` resolves against the default branch, so `archive.yml` cannot be dispatched before it is on `main`;
 and L3 gating on an empty archive would be red on every push. So:
@@ -113,7 +113,10 @@ and L3 gating on an empty archive would be red on every push. So:
   observed half) and for every other `v` tag (phase 2). The implementer dispatches nothing and writes to no registry
   but a local one. If GHCR creates `veyq-backups` private, making it public is the owner's too (the implementer
   measures what a first push from a workflow does, or says it could not).
-- **Pull request 2 = phases 3 and 4**, started only once phase 2 is observed.
+- **Pull request 2 = phase 3**, started only once phase 2 is observed.
+- **Pull request 3 = phase 4** (owner 2026-11-28): the jar-level proof is retired only after pull request 2's merge
+  push has shown L2 and L3 gating green on `main` (the fourth invariant; L3 runs on a push only, so no pull request
+  can show it). Its commit waits on `claude/stack-lane-l3-retire-jar-proof` and is rebased onto `main` then.
 
 Each done-when below is written in two halves (`changes/README.md` § the done-when in two halves): **locally**, what
 the implementer proves before handing over; **observed**, what only GitHub shows after the owner's step.
@@ -382,7 +385,8 @@ deleted, and #436's mention of the disabled major-entry proof is updated.
 - **The invariant conflict, recorded, not resolved here:** the CR's fourth invariant removes the jar-level proof only
   after L2 and L3 have gated a push green, and L3 runs on a push only, so it cannot gate before pull request 2 merges.
   Phase 3 and phase 4 are separate commits, phase 4 on top and independent of nothing in it, so phase 4 can move to a
-  branch of its own; whether it does is the owner's (asked through the coordinator).
+  branch of its own; whether it does is the owner's (asked through the coordinator). **Answered (owner 2026-11-28):
+  phase 4 is pull request 3** (§ Delivery).
 
 ### Phase 3 — technical observations
 
@@ -437,7 +441,8 @@ deleted, and #436's mention of the disabled major-entry proof is updated.
 ### Phase 3 — handed back
 
 - **Phase 4's timing** (the invariant conflict in the decision log): whether the jar-level proof's retirement ships in
-  pull request 2 or in a third pull request after L3 has gated a push green is the owner's call.
+  pull request 2 or in a third pull request after L3 has gated a push green is the owner's call. Answered: a third
+  (owner 2026-11-28).
 - Nothing else: no product, legal or owner-only question came up.
 
 ### Phase 3 — process observations
