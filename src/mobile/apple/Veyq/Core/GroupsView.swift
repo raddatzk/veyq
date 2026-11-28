@@ -19,6 +19,16 @@ struct GroupsView: View {
 
     var body: some View {
         List {
+            #if os(macOS)
+            // a Mac draws no `.primaryAction` in a sheet's bar (only its confirmation and cancellation), so *New group*
+            // stands above the list there, as Members' *Invite member* does (found by the macOS pass, 2026-11-28)
+            if read?.canCreate == true {
+                Section {
+                    Button { creating = true } label: { Label(say(.groupsCreateTitle), systemImage: "plus") }
+                        .accessibilityIdentifier("groups-create")
+                }
+            }
+            #endif
             Section {
                 if !loaded {
                     ProgressView().frame(maxWidth: .infinity)
@@ -27,7 +37,7 @@ struct GroupsView: View {
                     Button(say(.peopleRetry)) { Task { await load() } }.accessibilityIdentifier("groups-retry")
                 } else if let read {
                     ForEach(read.rows, id: \.scopeId) { row in
-                        NavigationLink { GroupPageView(model: model, scopeId: row.scopeId) } label: { GroupRowView(row: row) }
+                        NavigationLink { GroupPageView(model: model, scopeId: row.scopeId).onDisappear(perform: reload) } label: { GroupRowView(row: row) }
                             .accessibilityIdentifier("group-\(row.scopeId)")
                     }
                 }
@@ -46,8 +56,12 @@ struct GroupsView: View {
                 Task { await load() }
             }
         }
-        .navigationDestination(item: $opened) { g in GroupPageView(model: model, scopeId: g.scopeId) }
+        .navigationDestination(item: $opened) { g in GroupPageView(model: model, scopeId: g.scopeId).onDisappear(perform: reload) }
     }
+
+    /// A page popped back to the list: on a Mac the list's `.task` does not run again when a pushed page is popped in a
+    /// sheet's stack, so the list read a deleted group as live until it was opened anew (the macOS pass, 2026-11-28).
+    private func reload() { Task { await load() } }
 
     private func load() async {
         read = try? await model.groups?.list()
@@ -127,6 +141,7 @@ private struct CreateGroupSheet: View {
             let outcome = try? await model.groups?.create(name: text)
             working = false
             if let outcome, outcome.done, let scopeId = outcome.scopeId {
+                model.groupsChanged()
                 created(scopeId)
             } else {
                 problem = outcome?.notice.map { say(notice: $0) } ?? say(.groupsCreateFailed)
@@ -358,6 +373,7 @@ struct GroupPageView: View {
             if let outcome {
                 said = outcome.notice.map { say(notice: $0) }
                 if outcome.done {
+                    model.groupsChanged()
                     went()
                     await load()
                 }

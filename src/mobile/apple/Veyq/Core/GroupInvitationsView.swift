@@ -55,7 +55,10 @@ struct GroupInvitationsView: View {
             let outcome = try? await (accept ? model.groups?.accept(scopeId: scopeId) : model.groups?.decline(scopeId: scopeId))
             if let outcome {
                 said = outcome.notice.map { say(notice: $0) }
-                if outcome.done { await load() }
+                if outcome.done {
+                    model.groupsChanged()
+                    await load()
+                }
             } else {
                 said = say(.membersActionFailed)
             }

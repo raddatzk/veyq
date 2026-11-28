@@ -588,6 +588,13 @@ final class AppModel {
     /// Settings' Groups and Group invitations: the open tenant's groups, every act on them core's; nil without a tenant.
     var groups: TenantGroups? { tenantSession?.groups }
 
+    /// A group's act went through: the shell's lists are read anew, so the switcher and Home show a new, renamed, deleted,
+    /// restored or joined group at once (the bridge does the same for the desktops; found by the macOS pass, 2026-11-28).
+    func groupsChanged() {
+        guard let t = tenantSession else { return }
+        Task { await refreshLists(t) }
+    }
+
     // MARK: Invites (core's `TenantInvites`, uc.spaces.add-member, uc.spaces.manage-member-invites)
 
     /// *Invite member* by link, with the owners' optional label: the link shown once (`outcome.address`).
