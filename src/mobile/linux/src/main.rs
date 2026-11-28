@@ -6,9 +6,9 @@ use std::rc::Rc;
 
 use adw::prelude::*;
 use gtk::{gio, glib};
-use veyq::bridge::wire::{Answer, Call, Config, DeepScreen, Gate, Method, Update, Watched};
+use veyq::bridge::wire::{Answer, Call, Config, Gate, Method, Update, Watched};
 use veyq::bridge::{self, DeviceStore, Start};
-use veyq::core_ui::shell::Shell;
+use veyq::core_ui::shell::{Arrival, Shell};
 use veyq::core_ui::manage::Manage;
 use veyq::core_ui::received::{Mode, ReceivedView};
 use veyq::core_ui::sign_in::{Offer, SignIn, Unlock};
@@ -338,27 +338,34 @@ fn open(app: &adw::Application, files: &[gio::File], _hint: &str) {
     glib::spawn_future_local(async move {
         let mut link = false;
         let mut settings = None;
+        let mut place = false;
         for uri in uris {
             match bridge::call(&Call::DeepLink { uri }).await.map(|(answer, _)| answer) {
-                Ok(Answer::DeepLinked { screen, section }) => {
-                    link |= matches!(screen, DeepScreen::Link);
-                    if matches!(screen, DeepScreen::Settings) {
-                        settings = Some(section);
-                    }
-                }
+                Ok(Answer::DeepLinked { screen, section }) => match Arrival::of(screen, section) {
+                    Arrival::OpenLink => link = true,
+                    Arrival::Settings(section) => settings = Some(section),
+                    Arrival::Place => place = true,
+                    Arrival::Here => {}
+                },
                 _ => eprintln!("veyq: a veyq: link was not answered"),
             }
         }
         if let Some(section) = settings {
             eprintln!("veyq: a veyq: link opened Settings");
             veyq::core_ui::shell::open_settings_at(&window, section);
+        } else if place {
+            // the shell moved there: Settings, where it stood over the window, gives way (inbox #1424)
+            eprintln!("veyq: a veyq: link opened its place");
+            veyq::core_ui::shell::show_place();
         }
         let shown = window
             .downcast_ref::<adw::ApplicationWindow>()
             .and_then(|w| w.visible_dialog())
             .is_some_and(|d| d.widget_name() == veyq::core_ui::received::OPEN_LINK_DIALOG);
         // the screen alone, for a pass's log: nothing of the link
-        eprintln!("veyq: a veyq: link opened {}", if link { "Open a link" } else { "the app where it is" });
+        if link || !place {
+            eprintln!("veyq: a veyq: link opened {}", if link { "Open a link" } else { "the app where it is" });
+        }
         if link && !shown {
             veyq::core_ui::received::open_link(&window);
         }

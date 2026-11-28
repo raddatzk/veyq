@@ -1892,6 +1892,11 @@ order is held to the web's `sections.ts` by `PlansAreTheWebsTest`: it changes on
   keysyms and frames (`pipewiresrc path=<node> keepalive-time=100`), with no portal dialog; the session stays unlocked
   (`lock-enabled false`). Sound is read from the default sink's monitor (`parec -d <sink>.monitor`), unmuted for it. A drag
   across libadwaita's sidebar activates the row under the pointer (a Pot opened mid-drag, 2026-11-12): cross it on a heading.
+  The installed Flatpak (a release build: no `--devlogin`) is read and driven over AT-SPI from the session (python `gi`'s
+  `Atspi`, measured 2026-11-28): the tree names every dialog, label and table cell, an entry takes `EditableText`'s
+  `set_text_contents` (the sign-in's fields, a throwaway's values read from its file, never printed) and a button
+  `do_action(0)`; an `AdwActionRow`/`GtkListBoxRow` has no action and `Atspi.generate_keyboard_event` reaches nothing
+  under Wayland — keys go through Mutter RemoteDesktop's `NotifyKeyboardKeysym`, which needs no ScreenCast stream.
 - A browser pass into the VM's apps (ADR 0150 § O's, 2026-11-19): the VM's sshd refused a remote forward
   on port 8095 (`remote port forwarding failed`; on 38095 it took — remembered as SELinux's port labels, not measured), and
   Fedora resolves `*.localhost` to `::1` first, so the tunnel lands on a high port and a forwarder in the session listens

@@ -42,7 +42,7 @@ use gtk::{gio, glib};
 
 use crate::bridge::{
     self, Watch,
-    wire::{Answer, Call, Create, DeepScreen, HeaderAction, LevelTool, Msg, NodeAt, ReceivedGate, ReceivedPage, ReceivedPageKind, ReceivedRefusal, ReceivedShown, Update, Watched, Why},
+    wire::{Answer, Call, Create, HeaderAction, LevelTool, Msg, NodeAt, ReceivedGate, ReceivedPage, ReceivedPageKind, ReceivedRefusal, ReceivedShown, Update, Watched, Why},
 };
 use crate::core_ui::home::{glib_escape, kind_icon};
 use crate::core_ui::registry::{registry, GuestFrame, Page};
@@ -147,8 +147,11 @@ pub fn open_link(parent: &impl IsA<gtk::Widget>) {
                 // a member's own link (inbox #1415): the shell moved there in the core, a Settings section opens here
                 Ok(Answer::DeepLinked { screen, section }) => {
                     d.close();
-                    if matches!(screen, DeepScreen::Settings) {
-                        crate::core_ui::shell::open_settings_at(&over, section);
+                    match crate::core_ui::shell::Arrival::of(screen, section) {
+                        crate::core_ui::shell::Arrival::Settings(section) => crate::core_ui::shell::open_settings_at(&over, section),
+                        // the shell moved there: Settings, where it stood over the window, gives way (inbox #1424)
+                        crate::core_ui::shell::Arrival::Place => crate::core_ui::shell::show_place(),
+                        _ => {}
                     }
                 }
                 Ok(Answer::ReceivedProblem { problem, browser }) => {

@@ -125,9 +125,28 @@ pub fn show(window: &adw::ApplicationWindow, shown: &SettingsShown) {
     present(page, window);
 }
 
+thread_local! {
+    /// The Settings dialogs presented, for a place link to close ([close_open]); a closed one's reference is empty.
+    static OPEN: RefCell<Vec<glib::WeakRef<adw::PreferencesDialog>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Closes every Settings dialog that stands (inbox #1424): a link moved the shell beneath it, and the place shows.
+pub fn close_open() {
+    let open: Vec<_> = OPEN.with(|open| open.borrow_mut().drain(..).filter_map(|w| w.upgrade()).collect());
+    // one still presented has a parent: the window's dialog host
+    for dialog in open.into_iter().filter(|d| d.parent().is_some()) {
+        dialog.force_close();
+    }
+}
+
 /// Presents [page]'s dialog and holds the page until it closes: a dialog's state only weak handlers reach would be
 /// dropped at once (the traps, `cover.rs`).
 fn present(page: Rc<Page>, window: &adw::ApplicationWindow) {
+    OPEN.with(|open| {
+        let mut open = open.borrow_mut();
+        open.retain(|w| w.upgrade().is_some());
+        open.push(page.dialog.downgrade());
+    });
     let held = RefCell::new(Some(page.clone()));
     page.dialog.connect_closed(move |_| {
         if let Some(p) = held.borrow_mut().take() {

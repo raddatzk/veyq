@@ -31,7 +31,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gdk, gio, glib};
 
-use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::DrawerSection, wire::Facts, wire::LevelTool, wire::ObjectRef, wire::QueuedOpen, wire::ShellModelState, wire::ShellShown, wire::ShownCreate, wire::ViewModeShown};
+use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::DeepScreen, wire::DrawerSection,wire::Facts, wire::LevelTool, wire::ObjectRef, wire::QueuedOpen, wire::ShellModelState, wire::ShellShown, wire::ShownCreate, wire::ViewModeShown};
 use crate::core_ui::bookmark_page::BookmarkPage;
 use crate::core_ui::person_page::PersonPage;
 use crate::core_ui::music_bar::MusicBar;
@@ -62,6 +62,37 @@ pub const SETTINGS_AT: &str = "settings-at";
 /// The Settings page at [section] (inbox #1415's Settings link), over the shell's open connection.
 pub fn open_settings_at(widget: &impl IsA<gtk::Widget>, section: Option<String>) {
     let _ = widget.activate_action(&format!("win.{SETTINGS_AT}"), Some(&section.unwrap_or_default().to_variant()));
+}
+
+/// What a link's answer (`Answer::DeepLinked`: a `veyq:` link, or a member's own link pasted into *Open a link*) asks of
+/// the window (inbox #1415, #1424).
+#[derive(Debug, PartialEq, Eq)]
+pub enum Arrival {
+    /// *Open a link* over whatever shows.
+    OpenLink,
+    /// The Settings page at its section (None: its top).
+    Settings(Option<String>),
+    /// The shell moved to the place the link named: Settings, a dialog over the shell, gives way, or the place stays
+    /// hidden under it (measured 2026-11-28 on the Fedora VM, the installed Flatpak).
+    Place,
+    /// The app where it is: nothing moved, or a place held until a shell opens.
+    Here,
+}
+
+impl Arrival {
+    pub fn of(screen: DeepScreen, section: Option<String>) -> Self {
+        match screen {
+            DeepScreen::Link => Arrival::OpenLink,
+            DeepScreen::Settings => Arrival::Settings(section),
+            DeepScreen::Place => Arrival::Place,
+            DeepScreen::Open => Arrival::Here,
+        }
+    }
+}
+
+/// The place a link moved the shell to, shown: the account's Settings, where it stands over the window, closes.
+pub fn show_place() {
+    crate::core_ui::account_settings::close_open();
 }
 
 pub struct Shell {
@@ -1298,6 +1329,18 @@ fn put_back(target: f64, upper: f64, page: f64, settled: bool) -> Option<f64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A place link while Settings shows (inbox #1424): the bridge answers a moved shell PLACE, and the window lets Settings
+    /// go for it — before, Linux read only LINK and SETTINGS, and the moved folder stayed hidden under Settings (measured
+    /// 2026-11-28 on the Fedora VM, the installed Flatpak). Bitten by reading PLACE as the app where it is (red).
+    #[test]
+    fn a_moved_shell_is_the_place_shown_and_nothing_else_is() {
+        assert_eq!(Arrival::of(DeepScreen::Place, None), Arrival::Place);
+        assert_eq!(Arrival::of(DeepScreen::Open, None), Arrival::Here);
+        assert_eq!(Arrival::of(DeepScreen::Link, None), Arrival::OpenLink);
+        assert_eq!(Arrival::of(DeepScreen::Settings, Some("tenant-members".into())), Arrival::Settings(Some("tenant-members".into())));
+        assert_eq!(Arrival::of(DeepScreen::Settings, None), Arrival::Settings(None));
+    }
 
     #[test]
     fn a_lists_place_names_its_application_or_its_space_folder_and_filter() {
