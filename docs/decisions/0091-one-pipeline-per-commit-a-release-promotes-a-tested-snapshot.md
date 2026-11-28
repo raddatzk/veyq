@@ -1,13 +1,16 @@
 # ADR 0091 — One pipeline per commit, every stage on a budget; a release promotes a tested snapshot
 
 - Status: Accepted
-- Built: partly (not built: decision 3's lane L3, decision 5's rerun of moved lanes — a promotion refuses an input it
-  cannot compare, and lane L2's predecessor when it moved, instead — and the snapshot retention job, decision 6's
-  lane L3 and the archive's backfill, decision 7 (the archive's workflow is built — `.github/workflows/archive.yml`,
-  `scripts/archive_backup.py`, called by `release.yml` after every promotion and dispatched for a release already
-  out — and no release is archived yet); lane L2 is built as decision 6's amendment of 2026-11-26 decides it —
+- Built: partly (not built: decision 5's rerun of moved lanes — a promotion refuses an input it cannot compare, and
+  lane L2's predecessor or lane L3's backup list when it moved, instead — and the snapshot retention job, decision 7);
+  lane L2 is built as decision 6's amendment of 2026-11-26 decides it —
   `scripts/run_stack_upgrade.py`, checks.yml's `stack-upgrade`, attested per leg with the release it upgraded from and
   required by the promotion, first attested by the Publish of `d5ce223da` (run 46018703012: v1.318 and v0.2480);
+  decision 6's archive is built — `.github/workflows/archive.yml`, `scripts/archive_backup.py`, called by `release.yml`
+  after every promotion and dispatched for a release already out, every one of the eighteen releases archived by
+  dispatch on 2026-11-27 — and so is lane L3 — `scripts/run_stack_restore.py`, checks.yml's `stack-restore`, on a push,
+  attested per shard with the backups it restored and required by the promotion (§ decision 6, *L3 as built*), its
+  first GitHub run still to come;
   decision 5's snapshot —
   weekly and by dispatch since its amendment of 2026-11-07, per green push before — its attestations, its `snapshot-`
   tag, the staging retention (first run 2026-11-23) and the promotion `release.yml` are built, and since its amendment of 2026-11-22 the release draft Publish writes — v1.312
@@ -313,6 +316,24 @@ several, or one on another tag is refused (`scripts/promote.py` check 1). A save
        (inbox #869). Measured on GitHub: both legs green on pull request 111 and on the push of `d5ce223da`, and
        that commit's Publish (run 46018703012) attested L2 on amd64 with v1.318 and v0.2480, verified with
        `cosign verify-attestation` under `publish.yml`'s identity.
+     - **L3 as built (2026-11-28, cr-stack-lane-l3-backup-archive).** The selection is
+       `run_web_e2e.backup_selection_ref()` beside `major_entry_ref()` (every `v*` tag, each one's own pin file; empty
+       while the pin file says `release: none`), on 2026-11-27's tags v0.2480 (the entry), v1.0, v1.168, v1.248 and
+       v1.260. It is dealt round-robin, in version order, over the `stack-restore` matrix's shards (three; the count is
+       the matrix, which the orchestrator and `snapshot.py` read), at most `MAX_PER_SHARD` (four) a shard — more is red,
+       naming the matrix to widen, before a timeout could hide it. Per backup: the tag read (absent or unanswered is red,
+       naming the release), `cosign verify` of the digest it names under `archive_backup.py`'s identity, then the pull
+       BY THAT DIGEST; `archive.json` must name the release, the schema state the selection read from the release's own
+       pin file, a record version the candidate's reader reads, and the one domain the lane's stack serves (read from it,
+       and red when it is another: Pebble, the Traefik alias and the browser are set up for `veyq.test`). A red backup is
+       its own: the next one still runs. The job runs on a push (`github.event_name == 'push'` an `&&` term of its
+       `if:`), and the gate accepts it skipped on a pull request alone — two `&&` terms, held by
+       `validate_release_identity.py` — so on a push it must pass; a snapshot is made from a push run, and `checks-run`
+       requires every shard. Each shard records `backups: [{tag, digest}]` (`[]` for an empty one); the predicate names
+       their union, each tag one shard's; the promotion compares the TAGS with the selection the snapshot's own
+       `run_stack_restore.py --resolve` derives now, the digests recorded, not compared (an archive's tag is written
+       once). A snapshot whose commit has no L3 job is refused, as one without L2 was. L3 reads the archive with
+       `archive.yml`'s oras, its pin stated in both files and held equal.
 
 7. **The jar-level upgrade proof retires when L2 and L3 gate.** They prove the same data path on the artifact that
    ships; ADR 0057 §7 then names them. The API end-to-end suites stay: fast, fresh per file, and where a wire defect is

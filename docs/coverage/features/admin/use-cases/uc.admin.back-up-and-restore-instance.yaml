@@ -129,6 +129,11 @@ acceptanceCriteria:
     # opened, every wire sweep green; `--upgrade` (HEAD^1) the same. Bitten the same day: an edited record (a media
     # item the instance lacks, a file hash, the place, a guest) fails the reader; a restore without the key fails it
     # on configSecretState MISMATCH; a changed core baseline fails the run, named as Flyway's checksum mismatch.
+    # Lane L3 (ADR 0091 decision 6, amended 2026-11-26; `scripts/run_stack_restore.py`, checks.yml's `stack-restore` on
+    # every push) restores the archived backup each release's own seeder wrote — one per schema state of the major and
+    # the major entry's — into a fresh `veyqctl install` of the candidate with `veyqctl restore --objects-from`, and runs
+    # the same reader and the browser spec tagged with this criterion. Green locally 2026-11-28 for all five of the
+    # selection (v0.2480, v1.0, v1.168, v1.248, v1.260); a stack ref once a CI log shows it ran.
     text: >-
       A backup written by the predecessor's own build - its jar and its own e2e suites sealing real content - and
       restored onto the candidate is migrated up at the candidate's start, reports configSecretState OK, and the
@@ -338,3 +343,10 @@ gaps:
     repairs) and keeps a failed READ from reading as a wrong key; `src/cli/cli.test.ts` pins that the command
     reaches `getInstanceConfigSecret()` and prints its JSON. On the first run whose log shows admin-web's suites
     executed, both go under `the-server-owner-reads-the-config-secret-state`.
+  stack: >-
+    Lane L3's browser half (`tests/e2e/tests/upgrade/upgrade-in-place.spec.ts`, run by `scripts/run_stack_restore.py`
+    after the candidate's `veyqctl restore` put a release's archived backup into a fresh install of the candidate) signs
+    in as the owner that release's own seeder wrote and opens the seeded Memory and Depot files, tagged
+    `a-predecessors-backup-upgrades-with-its-content-intact`. ADR 0040 admits `stack` refs only once a CI run's log shows
+    the suite executed; lane L3 runs on a push only, so on the first push whose log shows it the file becomes a ref on
+    that criterion, and this gap goes.

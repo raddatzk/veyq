@@ -11,10 +11,12 @@ sources:
 import { Tabs, TabItem } from '@astrojs/starlight/components';
 
 :::note[How far this is proven]
-On Compose, no published release has been installed through `veyqctl` yet; every run of the stack lane
-(`scripts/run_stack_e2e.py`) installs its candidate exactly as below, from a release produced from the tree with images
-built on the host, with `--unsigned-local` in place of the signature check — a pipeline stage on GitHub since
-2026-11-05. The recipe's hardening is checked by `scripts/validate_compose_posture.py`, and the rendered
+On Compose, published releases are installed through their own `veyqctl` exactly as below, the manifest and both
+images verified under the release identity first, on every run of stack lane L2 (`scripts/run_stack_upgrade.py`, on
+GitHub since 2026-11-27) and of the backup archive (`archive.yml`, every release, 2026-11-27); every run of stack lanes
+L1 and L3 (`scripts/run_stack_e2e.py`, `scripts/run_stack_restore.py`) installs its candidate the same way, from a
+release produced from the tree with images built on the host, with `--unsigned-local` in place of the signature check —
+lane L1 a pipeline stage on GitHub since 2026-11-05. The recipe's hardening is checked by `scripts/validate_compose_posture.py`, and the rendered
 chart by `scripts/chart_meta_check.py`. On Kubernetes, the owner installed the signed pre-release snapshot
 `0.2265-SNAPSHOT` once from the published chart by digest (2026-11-05: single-node k3s, Traefik, cert-manager, Argo
 CD): the `Gateway` was programmed, both hosts got certificates, the app migrated and set up the bundled store. That run

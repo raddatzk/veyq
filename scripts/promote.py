@@ -32,17 +32,22 @@ signatures, the chart, the git tag, the GitHub Release — stay in the workflow'
      cr-workflows-split-pipeline-callers, is not one, owner 2026-11-07).
   6. **No release name is taken by anything else**: `<version>` on an image is absent or already that index (a
      promotion that failed half-way and runs again); the chart's `<version>` exists only where the images' do.
-  7. **Every lane attested a pass**: for every lane that exists (L1, L2) and every architecture of its matrix at the
+  7. **Every lane attested a pass**: for every lane (L1, L2, L3) and every architecture of its matrix at the
      snapshot's commit (each lane's job found by the orchestrator it runs), an attestation of `snapshot.PREDICATE_TYPE`
      verifies under the snapshot identity on the app and the admin index — this commit, `passed`, every shard of the
-     lane's matrix (L1's domains, L2's legs) — and the digests it names are exactly what the index holds.
+     lane's matrix (L1's domains, L2's legs, L3's shards) — and the digests it names are exactly what the index holds.
+     A snapshot whose commit has no lane L3 job (made before lane L3 was built) is refused like one without L2.
   8. **Its inputs still hold**: one asset set across every lane, equal to the set produced again now from the
      snapshot's commit (`release_assets.py`, with `--unscheduled` when asked, so that refusal comes here too); lane
      L2's predecessor per leg equal to the release that leg resolves to NOW (the snapshot's own
      `run_stack_upgrade.py --leg <leg> --resolve` in a worktree of its commit, against every tag): a release published
      since — a fix of the previous major moving the major entry — is refused, naming both, since decision 5's rerun of a
-     moved lane is not built; no input this promotion cannot compare (a backup list — lane L3, whose rerun is #461's to
-     build); and the tools image is stamped `<major>.<minor>` with the major entry the tree derives now.
+     moved lane is not built; lane L3's backup list (the release tags its shards restored; the artifact digests beside
+     them are recorded, not compared — an archive's tag is written once) equal to the selection the snapshot's own
+     `run_stack_restore.py --resolve` derives NOW in a worktree of its commit, against every tag: a release that opened a
+     new schema state since, or a fix release that moved the major entry, is refused, naming what is missing and what
+     was not selected; no input this promotion cannot compare; and the tools image is stamped `<major>.<minor>` with the
+     major entry the tree derives now.
 
 It then writes `plan.json`: the draft, the commit, the version, the three index digests, the chart's state, the asset
 set, the major entry, whether the release becomes `latest` (from `main` only — with check 4, the newest release of the
@@ -79,7 +84,7 @@ import snapshot  # noqa: E402 — the predicate type, the registry's read verdic
 IMAGES = ("veyq", "veyq-admin", "veyq-tools")
 LANE_IMAGES = ("veyq", "veyq-admin")  # the two images the stack lanes install, and so the two they attest on
 CHART = "charts/veyq"
-LANES = ("L1", "L2")  # the lanes that exist; L3 joins with #461
+LANES = ("L1", "L2", "L3")
 OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 SNAPSHOT_TAG = re.compile(r"^snapshot-(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 # release_notes.py's heading for a pull request whose note is missing (`NEEDS_A_NOTE`; promote_selftest.py ties the
@@ -89,10 +94,14 @@ RELEASE_TAG = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 RELEASE_BRANCH = re.compile(r"^release/(0|[1-9][0-9]*)\.x$")
 # Each lane's job is found by what it runs, and its shards are its matrix's values under this key: lane L1's domains,
 # lane L2's legs (the release each starts from). validate_release_identity.py finds them the same way.
-LANE_ORCHESTRATORS = {"L1": ("scripts/run_stack_e2e.py", "domain"), "L2": ("scripts/run_stack_upgrade.py", "leg")}
+LANE_ORCHESTRATORS = {"L1": ("scripts/run_stack_e2e.py", "domain"), "L2": ("scripts/run_stack_upgrade.py", "leg"),
+                      "L3": ("scripts/run_stack_restore.py", "shard")}
 # The lane whose attestation names its starting releases, per leg, and how the promotion resolves them now.
 UPGRADE_LANE = "L2"
 UPGRADE_ORCHESTRATOR = LANE_ORCHESTRATORS[UPGRADE_LANE][0]
+# The lane whose attestation names the archived backups it restored, and how the promotion derives the selection now.
+RESTORE_LANE = "L3"
+RESTORE_ORCHESTRATOR = LANE_ORCHESTRATORS[RESTORE_LANE][0]
 # The pipeline whose lane jobs are read at the snapshot's commit for their matrices.
 PIPELINE_WORKFLOW = ".github/workflows/checks.yml"
 
@@ -230,14 +239,34 @@ def moved_predecessors(attested: object, now: dict[str, str | None]) -> str | No
     return None
 
 
+def moved_backups(attested: object, now: list[str]) -> str | None:
+    """Why lane L3's attested backups are not the selection the promotion derives now, or None when they are: the
+    release tags, as sets (the digests beside them are recorded, not compared — an archive's tag is written once).
+    Decision 5's rerun of a moved lane is not built, so a difference refuses, naming it."""
+    if not isinstance(attested, list) or not all(isinstance(b, dict) and isinstance(b.get("tag"), str) for b in attested):
+        return f"it records no list of backups ({attested!r})"
+    then = {b["tag"] for b in attested}
+    if then != set(now):
+        missing, extra = sorted(set(now) - then), sorted(then - set(now))
+        return ("its backups are not the selection this promotion derives now — "
+                + "; ".join(part for part in (f"selected now and not restored: {', '.join(missing)}" if missing else "",
+                                              f"restored and not selected now: {', '.join(extra)}" if extra else "")
+                            if part)
+                + " — a release published since moved what the lane must restore; the rerun of a moved lane is not "
+                  "built, so promote a snapshot built after it")
+    return None
+
+
 def lane_verdicts(statements: list[dict], *, image: str, index_digest: str, commit: str,
                   lanes: dict[str, tuple[list[str], list[str]]],
-                  predecessors: dict[str, str | None]) -> dict[tuple[str, str], tuple[str, str]]:
+                  predecessors: dict[str, str | None],
+                  backups: list[str] | None = None) -> dict[tuple[str, str], tuple[str, str]]:
     """{(lane, arch): (asset set, the per-arch digest it installed)} for every lane × each of ITS architectures, from
     the statements about `image`'s index; refused on a missing or wrong one, naming each. `lanes` is each lane's
-    (architectures, shards) — lane L1 on every architecture the index holds, lane L2 on amd64 alone (ADR 0091
+    (architectures, shards) — lane L1 on every architecture the index holds, lanes L2 and L3 on amd64 alone (ADR 0091
     decision 6, amended 2026-11-27); `predecessors` the release each lane L2 leg starts from as resolved now, which
-    its attestation must name."""
+    its attestation must name; `backups` the release tags lane L3's selection names now, which its attestation must
+    name."""
     found: dict[tuple[str, str], tuple[str, str]] = {}
     problems: list[str] = []
     for lane in LANES:
@@ -254,9 +283,11 @@ def lane_verdicts(statements: list[dict], *, image: str, index_digest: str, comm
                 p = s["predicate"]
                 subjects = {f"sha256:{(sub.get('digest') or {}).get('sha256')}" for sub in s.get("subject") or []}
                 inputs = p.get("inputs") or {}
-                compared = ("assetSet", "predecessor") if lane == UPGRADE_LANE else ("assetSet",)
+                compared = {UPGRADE_LANE: ("assetSet", "predecessor"),
+                            RESTORE_LANE: ("assetSet", "backups")}.get(lane, ("assetSet",))
                 extra = sorted(k for k, v in inputs.items() if k not in compared and v is not None)
-                moved = moved_predecessors(inputs.get("predecessor"), predecessors) if lane == UPGRADE_LANE else None
+                moved = (moved_predecessors(inputs.get("predecessor"), predecessors) if lane == UPGRADE_LANE
+                         else moved_backups(inputs.get("backups"), backups or []) if lane == RESTORE_LANE else None)
                 if index_digest not in subjects:
                     why.append("its subject is another digest")
                 elif p.get("outcome") != "passed":
@@ -268,8 +299,7 @@ def lane_verdicts(statements: list[dict], *, image: str, index_digest: str, comm
                 elif not isinstance((p.get("images") or {}).get(image), str):
                     why.append(f"it names no {image} digest")
                 elif extra:
-                    why.append(f"it records inputs this promotion cannot compare yet ({', '.join(extra)}) — the rerun "
-                               f"of a lane whose inputs moved is not built (#461)")
+                    why.append(f"it records inputs this promotion cannot compare ({', '.join(extra)})")
                 elif moved:
                     why.append(moved)
                 elif not isinstance(inputs.get("assetSet"), str):
@@ -379,12 +409,13 @@ def _check(host, draft: Draft, *, ref: str, repository: str, registry: str, unsc
                           f"{lane} ran was never booted with its features")
     lanes = {lane: (matrices[lane][0], matrices[lane][1]) for lane in LANES}
     predecessors = host.predecessors(commit, lanes[UPGRADE_LANE][1] if UPGRADE_LANE in lanes else [])
+    backups = host.backups(commit)
     asset_sets: set[str] = set()
     for image in LANE_IMAGES:
         statements = parse_attestations(host.attestations(f"{registry}/{image}@{digests[image]}", identity))
         expand = lambda d, image=image: snapshot.children(host.inspect(f"{registry}/{image}@{d}") or "{}")  # noqa: E731
         verdicts = lane_verdicts(statements, image=image, index_digest=digests[image], commit=commit,
-                                 lanes=lanes, predecessors=predecessors)
+                                 lanes=lanes, predecessors=predecessors, backups=backups)
         check_index_covered(image, children[image], verdicts, expand)
         asset_sets |= {asset_set for asset_set, _ in verdicts.values()}
     if len(asset_sets) != 1:
@@ -533,6 +564,17 @@ class Host:
                 raise Refused(f"{UPGRADE_ORCHESTRATOR} --leg {leg} --resolve at {commit} printed no `predecessor=`")
             found[leg] = lines[0].split("=", 1)[1].strip() or None
         return found
+
+    def backups(self, commit: str) -> list[str]:
+        """The release tags lane L3's selection names now, derived by the snapshot's own orchestrator (`--resolve`,
+        the whole selection) against every tag this checkout holds: a release that opened a new schema state, or a
+        fix release of the previous major, moves it."""
+        tree = self.worktree(commit)
+        proc = self._run(sys.executable, str(tree / RESTORE_ORCHESTRATOR), "--resolve", cwd=tree)
+        lines = [line for line in proc.stdout.splitlines() if line.startswith("backups=")]
+        if len(lines) != 1:
+            raise Refused(f"{RESTORE_ORCHESTRATOR} --resolve at {commit} printed no `backups=`")
+        return [tag for tag in lines[0].split("=", 1)[1].strip().split(",") if tag]
 
     def produce_asset_set(self, commit: str, unscheduled: bool) -> str:
         import release_assets

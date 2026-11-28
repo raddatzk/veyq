@@ -49,8 +49,8 @@
     },
     {
       customType: "regex",
-      description: "oras, the backup archive's OCI client: `ORAS_VERSION` in archive.yml's `env:`. Its SHA-256 follows (pin_follow.py oras).",
-      managerFilePatterns: ["/^\\.github/workflows/archive\\.yml$/"],
+      description: "oras, the backup archive's OCI client: `ORAS_VERSION` in the `env:` of archive.yml (which writes the archive) and checks.yml (whose lane L3 reads it). Its SHA-256 follows (pin_follow.py oras).",
+      managerFilePatterns: ["/^\\.github/workflows/(archive|checks)\\.yml$/"],
       matchStrings: ["ORAS_VERSION: (?<currentValue>v\\d+\\.\\d+\\.\\d+)"],
       depNameTemplate: "oras",
       packageNameTemplate: "oras-project/oras",
@@ -256,13 +256,13 @@
       },
     },
     {
-      description: "oras's one workflow pin, with its tarball's SHA-256.",
+      description: "oras's two workflow pins, one version, with its tarball's SHA-256.",
       matchDepNames: ["oras"],
       groupName: "oras",
       // The tarball's SHA-256, read three ways and required equal: its checksums file, its bytes, GitHub's asset digest.
       postUpgradeTasks: {
         commands: ["python3 scripts/pin_follow.py oras"],
-        fileFilters: [".github/workflows/archive.yml"],
+        fileFilters: [".github/workflows/archive.yml", ".github/workflows/checks.yml"],
         executionMode: "branch",
       },
     },

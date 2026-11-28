@@ -102,7 +102,7 @@ below that only GitHub can show (a dispatch, a registry listing, a push's L3 run
 | Docs naming L3 or the archive as not built | `git grep -n -E "L3\|backup archive\|archived backup" -- docs/decisions docs/crosscutting infra/README.md site/src/content/docs` |
 | Guards over the workflow set and identities | `git grep -n -E "release.yml\|publish.yml" -- scripts/validate_release_identity.py` |
 
-## Delivery — two pull requests, the owner's dispatches between them (owner 2026-11-27)
+## Delivery — three pull requests, the owner's dispatches after the first (owner 2026-11-27, 2026-11-28)
 
 `workflow_dispatch` resolves against the default branch, so `archive.yml` cannot be dispatched before it is on `main`;
 and L3 gating on an empty archive would be red on every push. So:
@@ -113,7 +113,10 @@ and L3 gating on an empty archive would be red on every push. So:
   observed half) and for every other `v` tag (phase 2). The implementer dispatches nothing and writes to no registry
   but a local one. If GHCR creates `veyq-backups` private, making it public is the owner's too (the implementer
   measures what a first push from a workflow does, or says it could not).
-- **Pull request 2 = phases 3 and 4**, started only once phase 2 is observed.
+- **Pull request 2 = phase 3**, started only once phase 2 is observed.
+- **Pull request 3 = phase 4** (owner 2026-11-28): the jar-level proof is retired only after pull request 2's merge
+  push has shown L2 and L3 gating green on `main` (the fourth invariant; L3 runs on a push only, so no pull request
+  can show it). Its commit waits on `claude/stack-lane-l3-retire-jar-proof` and is rebased onto `main` then.
 
 Each done-when below is written in two halves (`changes/README.md` § the done-when in two halves): **locally**, what
 the implementer proves before handing over; **observed**, what only GitHub shows after the owner's step.
@@ -232,7 +235,47 @@ deleted, and #436's mention of the disabled major-entry proof is updated.
   a package that is scoped to your personal account, the default visibility is private", and a linked package inherits
   "the access permissions (but not the visibility)" of its repository. Decision 2 says the archive is public, so making
   it public after the first dispatch is the owner's step (below). The first push from a workflow could not be measured
-  here (no registry writes).
+  here (no registry writes). **Superseded by what the first dispatch showed:** GHCR created `veyq-backups` public, no
+  owner step taken (§ Phases 1 and 2 — observed).
+
+### Phases 1 and 2 — observed (the owner's dispatches, 2026-11-27)
+
+- **Phase 1's observed half holds.** The dispatch for `v1.318` ([run 46047675181](https://github.com/raddatzk/veyq/actions/runs/46047675181))
+  published `veyq-backups:1.318`; its verify step passed under the archive identity and was refused under release.yml's.
+  The second dispatch ([run 46048381605](https://github.com/raddatzk/veyq/actions/runs/46048381605)) wrote nothing and said so.
+- **The package is public, by inheritance, without an owner step.** Measured: an anonymous token
+  (`curl 'https://ghcr.io/token?scope=repository:raddatzk/veyq-backups:pull'`) lists the tags and fetches every
+  manifest (HTTP 200). So L3 pulls without a login — but it may log in with `GITHUB_TOKEN` (`packages: read`) all the
+  same; the implementer's call.
+- **Phase 2 holds: every `v` tag is archived.** One dispatch per tag, oldest first; every run green, v1.0 on its second
+  attempt (the first failed at a transient `docker pull` of the Playwright image, before anything was written). Every
+  `archive.json` (fetched anonymously) names 14 files, domain `veyq.test`, record version 1, and the highest migration
+  the substrate table names for that tag — the four schema states exactly.
+
+  | Tag | Run | Manifest digest |
+  |---|---|---|
+  | v0.2480 | [46048626398](https://github.com/raddatzk/veyq/actions/runs/46048626398) | `sha256:0af17dbf60eebb3984bc5a0d5efa06aefbfd6c78b8e4bf150b72dbfdc17fcfff` |
+  | v1.0 | [46048630362](https://github.com/raddatzk/veyq/actions/runs/46048630362) (attempt 2) | `sha256:5aab38485b277dc2e8ad9a61633f0d1800643ffaaf8f0a62d3f1f789edebb576` |
+  | v1.61 | [46048633927](https://github.com/raddatzk/veyq/actions/runs/46048633927) | `sha256:77aa3a56753679512ee5db1d6f01e13e89e2590459faec6c6412f383bfbd900a` |
+  | v1.66 | [46048637388](https://github.com/raddatzk/veyq/actions/runs/46048637388) | `sha256:99fb85f2c5d4e6b135ddc937bb464f1e235ab04c83c2138ac833aa83e5b8490e` |
+  | v1.82 | [46048640861](https://github.com/raddatzk/veyq/actions/runs/46048640861) | `sha256:690c3808536d49854629b594401750a4643f1985c22aba512ca1a7cf56927add` |
+  | v1.84 | [46048644589](https://github.com/raddatzk/veyq/actions/runs/46048644589) | `sha256:40393e597e2762d7e0e190ddcebdecf9d4e18184842a3925ebfe4577f5bf4cd5` |
+  | v1.133 | [46048648107](https://github.com/raddatzk/veyq/actions/runs/46048648107) | `sha256:82a0ffba54164b746d2d68e7fe28dde824677aa1aeee0d5f9e134048a98beaa4` |
+  | v1.152 | [46048651853](https://github.com/raddatzk/veyq/actions/runs/46048651853) | `sha256:cc0b020389c32699cab39f42bb5f9c4cdf8a846e1e4bad22b04093fd4b77e6fc` |
+  | v1.168 | [46048655057](https://github.com/raddatzk/veyq/actions/runs/46048655057) | `sha256:09a207fff9cc3fb0591069a7c21a5a637aa8d94fa5ded31206d057c84e1c2020` |
+  | v1.215 | [46048658475](https://github.com/raddatzk/veyq/actions/runs/46048658475) | `sha256:18be801232e1f3181ca1f1c592b3e09e01efe16d1b34ee1e42009f812781ea09` |
+  | v1.223 | [46048662199](https://github.com/raddatzk/veyq/actions/runs/46048662199) | `sha256:6451b1aed143bacc6e7c0be7709a3649f25e3c80cc4cce2d297171d89d250359` |
+  | v1.243 | [46048666366](https://github.com/raddatzk/veyq/actions/runs/46048666366) | `sha256:fb24d91ae82ae58fbd26438e1a45cd1c096b2d623b17eac623c53827ca22b159` |
+  | v1.247 | [46048670631](https://github.com/raddatzk/veyq/actions/runs/46048670631) | `sha256:8a0bca6e686ea26b70d20d80ed0fad9abde0b4761b753569a9e3f64e9f942101` |
+  | v1.248 | [46048674597](https://github.com/raddatzk/veyq/actions/runs/46048674597) | `sha256:da5e97106947073b78ac274acbbcb124b37706add57a52c0addc5366f1abeecb` |
+  | v1.249 | [46048678699](https://github.com/raddatzk/veyq/actions/runs/46048678699) | `sha256:8bc3a6948c2bc24fa04c25246ab2ff2807f7300b98381d82e7247593f4d403ca` |
+  | v1.260 | [46048683166](https://github.com/raddatzk/veyq/actions/runs/46048683166) | `sha256:f6a9c476825ac40662a45a4184b1a0ff6ffae512bf09dde4408d53ff198d8d97` |
+  | v1.312 | [46048687016](https://github.com/raddatzk/veyq/actions/runs/46048687016) | `sha256:4090c3c6ff364a0d49b6cdc283622599d6210e1a58e64582c8f31e9236d24181` |
+  | v1.318 | [46047675181](https://github.com/raddatzk/veyq/actions/runs/46047675181) | `sha256:270a4345647d353642a67514dc0830d67edf0baf3de0445c55248821cc58a008` |
+
+  Digests measured with an anonymous `HEAD /v2/raddatzk/veyq-backups/manifests/<major>.<minor>` (`Docker-Content-Digest`).
+- **The repository's tag list holds more than the archives:** beside each `<major>.<minor>` stands a `sha256-<hex>` tag —
+  cosign's signature, stored by the tag scheme. A reader names an archive by `<major>.<minor>`, never by listing tags.
 
 ### Phase 1 — technical observations
 
@@ -271,3 +314,145 @@ deleted, and #436's mention of the disabled major-entry proof is updated.
   stayed green — `info.mtime = 0` restates `TarInfo`'s default, so its removal was no lever (re-bitten with a real mtime),
   and a `denied` case that raised instead of naming itself (rewritten to report the state it read); assertion 18's
   first draft counted `id-token: write` as signing and was red on site.yml's Pages deploy.
+
+### Phase 3 — decision log (implementer, 2026-11-28)
+
+- **The selection is `run_web_e2e.backup_selection` / `backup_selection_ref`**, beside `major_entry` / `major_entry_ref`
+  (decision 4): the pure function takes the major, every tag and `highest_of(tag)`; the impure one feeds it `git tag
+  --list 'v*'` and `git show refs/tags/<tag>:scripts/applied_migrations.sha256` per tag, and is empty while the pin file
+  says `release: none` (the switch `major_entry_ref` makes). A tag without a pin file, or whose pin file names no
+  migration, is refused naming it — never grouped as "empty". On today's tags it yields exactly v0.2480, v1.0, v1.168,
+  v1.248, v1.260 (measured: `backup_selection_ref()`, and `run_stack_restore.py --resolve`).
+- **Its self-test is a new file, `scripts/stack_restore_selftest.py`** (in the `guards` job beside the archive's), not
+  `upgrade_proof_selftest.py`: phase 4 retires that file's CI step, and lane L3's pure parts (the shards, the facts it
+  checks of an archive, the fetch order, a backup's red being its own) belong with the lane. It holds the 2026-11-26
+  grouping as a fixture (the eighteen tags with their states, from the substrate table), a fix release `v0.2481` moving
+  the entry, version order, and a fabricated git history (each tag's own pin file; a fix on `release/1.x` main never
+  reaches is major 2's entry; a tag without a pin file refused; `release: none` empty).
+- **The runner is `scripts/run_stack_restore.py`**, L2's sibling, importing L2's building block (`override`, `read`,
+  `browser`, `candidate_release`, `candidate_tree`, the summary's `STEPS`/`READINGS`) and `archive_backup`'s reference,
+  `lookup`, `pull` and identity; nothing of L2 or the archive was edited. One project and one run sub-directory per
+  backup (`<tag>/`), torn down before the next installs on ports 80/443; the host check after each.
+- **Shards are static, three, round-robin in version order**, the count read from the `stack-restore` matrix
+  (`snapshot.restore_shards`, one statement of it) by the runner, the publish's predicates and the guard. Rejected: a
+  dynamic matrix from a plan job — `checks-run`, `predicates` and assertion 13 read the shards from the file, and a
+  computed matrix would have to be derived again at Publish time from tags that may have moved since. A shard
+  carrying more than `MAX_PER_SHARD` (4) is red before anything runs, naming the matrix to widen: an estimate (local
+  41–50 s per backup, CI unmeasured) with a factor of about two in hand; the first push's timings replace it.
+- **Per backup, the order is lookup → `cosign verify` of the digest the tag names → `pull` by that digest**, so the
+  bytes read are the verified ones; `absent` is red naming the release and the dispatch, `unknown` (the registry will
+  not say) is red too — never a skip (decision 5). The identity is `archive_backup.OIDC_ISSUER`/`IDENTITY_REGEXP`,
+  imported, never restated.
+- **The domain is read from `archive.json` and checked**, not followed blindly: the lane's Pebble, the overlay's
+  Traefik alias and the browser's `stack.json` are set up for `stack_lane.DOMAIN` (`veyq.test`), so another domain is
+  red naming it. Every archive names `veyq.test` (phase 2's observation), so this costs nothing today; making the stack
+  domain-variable is not worth doing until a seeder births elsewhere.
+- **`archive.json` is checked against the selection**: its tag, its highest migration against the one the selection
+  read from the tag's own pin file (the selection's state is then the archive's state), and its record version
+  against the candidate's reader (`run_web_e2e.UPGRADE_RECORD_VERSIONS`).
+- **The override is L2's** (the overlay without its release-check double), not the overlay as L1 uses it: L3 installs
+  the candidate fresh, but the double's stamp and stub mirror are L1's release-check scenario, not L3's subject.
+- **A red backup is its own** (`Stages` with a blocking rule by tag prefix): the next backup still runs, so one red run
+  names every red backup, as the bite of the reader showed (both red, each named).
+- **The job runs on a push alone; `green` accepts it skipped on a pull request alone**, by two `&&` terms —
+  `(needs.stack-restore.result == 'success' || github.event_name == 'pull_request')` and `contains(fromJSON('["success",
+  "skipped"]'), …)` — never one with an inner `&&`, which assertion 9's and 16's term split would cut. Rejected: running
+  the job on a pull request as a no-op (a green "Stack lane L3" on every pull request that restored nothing reads as a
+  pass). `validate_release_identity.py` learnt `PUSH_ONLY_LANES`: the lane's `if:` must hold `github.event_name ==
+  'push'` and no other lane's may, and the gate's pair is accepted for that lane alone (assertions 9, 10, 16).
+- **Attestation:** `lane-result --backups FILE` (required of L3, refused of every other lane, `snapshot.BACKUP_LANES`),
+  each record `backups: [{tag, digest}]`, `[]` for an empty shard; the predicate's `inputs.backups` is the union in
+  version order, a tag restored by two shards refused. `checks_verdict` requires every L3 shard. The promotion compares
+  the TAGS with `run_stack_restore.py --resolve` at the snapshot's commit (digests recorded, not compared — as L2's), and
+  refuses naming "selected now and not restored" / "restored and not selected now". A snapshot whose commit has no L3
+  job is refused (lane L3's matrix names nothing), as L2's arrival did; the next weekly snapshot after the merge is the
+  first promotable one.
+- **oras in checks.yml is the archive's pin** (`ORAS_VERSION`/`ORAS_SHA256` in checks.yml's `env:` too): Renovate's
+  oras manager now matches `(archive|checks)\.yml`, `pin_follow.py oras` rewrites both (refusing two versions), and
+  `validate_release_identity.py` holds the two copies equal. Rejected: reading the registry over HTTP in Python — a second
+  transport beside `archive_backup.pull`, which is the one place what an archive must be is checked.
+- **The archive is read signed in** (the job's `GITHUB_TOKEN`, `packages: read`, the login the staged images need
+  anyway); that this token reads `veyq-backups` rests on the package being the repository's (published by its own
+  workflow, `org.opencontainers.image.source` naming it) — inferred, not measured; the first push shows it.
+- **The browser spec is now L2's and L3's**: its title says "after an upgrade" (no longer "in place"), and it carries a
+  second tag, `@uc.admin.back-up-and-restore-instance:a-predecessors-backup-upgrades-with-its-content-intact`, with a
+  `gaps.stack` on that use-case until a CI log admits the ref (ADR 0040), as L2's criterion has.
+- **The docs that say what is built move with phase 3, the retirement's with phase 4** (the delivery constraint: phase 4
+  may become its own pull request, and ADR 0091 decision 8 says a CR that adds a stage updates *How veyq is tested* in
+  the same change): ADR 0091's `Built:` (L3 and the archive built, decision 7 not), its *L3 as built*, ADR 0090's,
+  0085's and 0096's notes, `release-and-deployment.md`, `infra/README.md`'s major-entry sentence, and the site page's L3
+  rows. Phase 4 keeps the rest of its done-when list.
+- **The invariant conflict, recorded, not resolved here:** the CR's fourth invariant removes the jar-level proof only
+  after L2 and L3 have gated a push green, and L3 runs on a push only, so it cannot gate before pull request 2 merges.
+  Phase 3 and phase 4 are separate commits, phase 4 on top and independent of nothing in it, so phase 4 can move to a
+  branch of its own; whether it does is the owner's (asked through the coordinator). **Answered (owner 2026-11-28):
+  phase 4 is pull request 3** (§ Delivery).
+
+### Phase 3 — technical observations
+
+- **Local run of the whole selection, green** (2026-11-28, arm64 Mac, load ≈ 5; candidate images `veyq:e2e-l2` /
+  `veyq-admin:e2e-l2`, the candidate's release produced as `v1.329` from this tree; the archive read anonymously from
+  GHCR, `DOCKER_CONFIG` an empty scratch config naming the CLI plugins): `run_stack_restore.py --shard 1|2|3 --app …
+  --admin … --asset-set-out … --backups-out …` — shard 1 (v0.2480, v1.248) 98 s, shard 2 (v1.0, v1.260) 101 s, shard
+  3 (v1.168) 43 s. Per backup: archive (lookup, `cosign verify`, pull of 14 files checked against `archive.json`) 4.6–6.7
+  s, install 16.7–17.1 s, restore 10.0–10.2 s, reader 3.3–11.8 s, browser 4.6–5.8 s; every reading `configSecretState
+  OK`, the restore logging the forward migration from each backup's state to `V202611221402` (v0.2480's across the
+  major). The digests the shards recorded are the ones phase 2's table names.
+- **`veyqctl restore --objects-from <directory>` does not hit inbox #870 on Docker Desktop**: the restore copies the
+  pool into an EMPTY store, once, so no second `copy --immutable` meets a truncated mtime. No shim was used.
+- **Bites, each red and restored** (bytes compared; `git status --porcelain` identical before and after; the scripted
+  ones by `bites.py` in the scratchpad):
+  - a selected backup missing from the registry — shard 2 against a local `registry:3.0.0` holding v1.0 (copied with its
+    keyless signature, which verifies there too) and no `1.260`: `v1.260 archive: v1.260 is selected and not archived:
+    …veyq-backups:1.260 is not found … — dispatch .github/workflows/archive.yml with tag v1.260; a selected backup is
+    never skipped`, while v1.0 restored green in the same run;
+  - an archive signed under another identity — (a) the real v1.260 artifact copied untagged-signature-less to the local
+    registry and signed there with a throwaway key (`cosign sign --key … --tlog-upload=false
+    --use-signing-config=false`, nothing written anywhere but the local registry): `does not verify as an archive …
+    no matching attestations`; (b) the real GHCR archive with `IDENTITY_REGEXP` pointed at `release.yml`: `… no
+    matching CertificateIdentity found`; in both nothing was pulled;
+  - a candidate whose reader expects one more item (the Memory's media rows plus one) — shard 2: `v1.0 read: …
+    AssertionError: the Memory: the media rows: expected [ …(2) ] to deeply equal [ …(3) ]` and the same for v1.260,
+    each backup red on its own;
+  - the selection with its grouping step removed (every release kept): `FAIL selection: 2026-11-26's eighteen releases
+    select v0.2480, v1.0, v1.168, v1.248, v1.260`; with the entry dropped: the same label;
+  - the fetch without `cosign verify`: `FAIL archive: a signature that does not verify under archive.yml's identity is
+    refused before the pull`; the shards contiguous: `FAIL shards: dealt round-robin in version order`; the domain
+    unchecked: `FAIL facts: a domain the lane's stack does not serve is refused, naming it`;
+  - `promote.py` with the backup list not compared: `a release that opened a schema state since the lane ran: PROMOTED`;
+    `snapshot.py` accepting one backup in two shards: `one backup restored by two shards is attested`;
+  - `validate_release_identity.py`: the gate's push term removed (L3 skipped accepted on a push) — assertion 9's
+    `does not require needs.stack-restore.result == 'success'`; the job's `github.event_name == 'push'` removed — `lane
+    L3's job stack-restore does not run on a push alone`; the record without `--backups` — `records no --backups`; the
+    two oras pins apart — `the oras pin differs between …`; publish.yml's L3 predicates for two shards — `assembles the
+    attestations for … shards ['1', '2'], while lane stack-restore runs ['1', '2', '3']`.
+- **Proof on the tree**: the 71 guards of the CI glob green; `stack_restore`, `snapshot`, `promote`, `archive_backup`,
+  `pin_follow` (71 checks), `pin_inventory`, `upgrade_proof`, `release_notes` and `staging_retention` self-tests green;
+  `tests/e2e` `node --test shards.test.mjs` green (3 tests); `actionlint` green on checks.yml, publish.yml,
+  archive.yml and renovate.yml but for checks.yml's SC2129 at its `version` step, which `main` has too; the site's
+  `pnpm run check` green (0 errors, 217 pages); `validate_guard_gaps.py --force` (validators changed): 104 pinned cases hold.
+- **The `pins` job** (Renovate 44.262.1's extract-only run on a clone of `968a9aa0e` — this commit before this note —, then `pin_inventory.py`): 348
+  pins in 42 files, every one reached. Bitten with the oras manager matching archive.yml alone: `checks.yml:56:
+  env-version ORAS_VERSION: v1.4.0: no Renovate manager extracts it` (and its SHA-256 as derived from an unreached pin).
+- Not reproduced locally: the job on GitHub's runner (its checkout of every tag, the oras install from the pinned
+  tarball, the signed-in read of `veyq-backups`, the staged candidate pulled by digest), and its timings; the
+  publish's L3 predicate and the promotion against a real attestation.
+
+### Phase 3 — handed back
+
+- **Phase 4's timing** (the invariant conflict in the decision log): whether the jar-level proof's retirement ships in
+  pull request 2 or in a third pull request after L3 has gated a push green is the owner's call. Answered: a third
+  (owner 2026-11-28).
+- Nothing else: no product, legal or owner-only question came up.
+
+### Phase 3 — process observations
+
+- My misses: the first local run was red at every Pebble stage — an empty `DOCKER_CONFIG` (set against the hanging
+  credential helper) also hides `~/.docker/cli-plugins`, so `docker compose` did not exist; a config naming
+  `cliPluginsExtraDirs` fixed it (worth a line in the machine notes). The first identity bite did not bite: its `sed`
+  matched nothing and the restore `cp` was the interactive alias (the known trap), so the run was green on an unchanged
+  file — seen from the unchanged regexp it printed, redone with a scripted edit and `/bin/cp -f`. A bite whose
+  mutation is not shown applied is no bite; the scripted bites assert the old text occurs once before they replace it.
+- The CR's phase 3 lists no docs, and phase 4 lists them all; with phase 4 possibly split off, the docs that say a
+  stage exists had to move into phase 3 (ADR 0091 decision 8). A CR whose last phase may ship apart should say which
+  of its docs belong to which phase.

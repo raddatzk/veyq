@@ -468,6 +468,15 @@ def oras_workflow(version: str = NEW_ORAS) -> str:
             "      - run: echo \"${ORAS_VERSION}\"\n")
 
 
+def oras_checks(version: str = NEW_ORAS) -> str:
+    """checks.yml's copy of the pin: lane L3 reads the archive with the same oras, no sentence of its own."""
+    return (f"name: Checks\nenv:\n  HELM_VERSION: v4.3.2\n  ORAS_VERSION: {version}\n  ORAS_SHA256: {sha(1)}\n\n"
+            "jobs:\n  stack-restore:\n    steps:\n      - run: echo \"${ORAS_VERSION}\"\n")
+
+
+ORAS_CHECKS = pf.ORAS_WORKFLOWS[1]
+
+
 def oras_upstream(listed: str = ORAS_SHA, tarball: bytes = ORAS_TAR, recorded: str = ORAS_SHA,
                   prerelease: bool = False, sums: bytes | None = None) -> Upstream:
     checksums = sums if sums is not None else (f"{sha(7)}  oras_1.5.0_darwin_arm64.tar.gz\n{listed}  {ORAS_FILE}\n"
@@ -481,11 +490,13 @@ def oras_upstream(listed: str = ORAS_SHA, tarball: bytes = ORAS_TAR, recorded: s
 print("oras")
 with tempfile.TemporaryDirectory() as scratch:
     root = pathlib.Path(scratch)
-    write_tree(root, {pf.ORAS_WORKFLOW: oras_workflow()})
+    write_tree(root, {pf.ORAS_WORKFLOW: oras_workflow(), ORAS_CHECKS: oras_checks()})
     pf.fetch = upstream = oras_upstream()
     refusal = quiet(pf.follow_oras, root)
     after = snapshot(root)[pf.ORAS_WORKFLOW]
     check("oras: the agreed sum is written", refusal is None and f"ORAS_SHA256: {ORAS_SHA}\n" in after, str(refusal))
+    check("oras: ... into checks.yml's copy too, and nothing else of it changes",
+          snapshot(root)[ORAS_CHECKS] == oras_checks().replace(sha(1), ORAS_SHA), snapshot(root)[ORAS_CHECKS])
     check("oras: the Measured sentence names the new version and today",
           f"Measured {TODAY}: oras_1.5.0_checksums.txt" in after and "oras-project/oras v1.5.0 all agree." in after
           and "1.4.0" not in after, after)
@@ -500,7 +511,7 @@ with tempfile.TemporaryDirectory() as scratch:
     for label, forged in (("the checksums file", oras_upstream(listed=sha(9))),
                           ("the tarball's own hash", oras_upstream(tarball=b"other bytes")),
                           ("GitHub's asset digest", oras_upstream(recorded=sha(9)))):
-        write_tree(root, {pf.ORAS_WORKFLOW: oras_workflow()})
+        write_tree(root, {pf.ORAS_WORKFLOW: oras_workflow(), ORAS_CHECKS: oras_checks()})
         refuses(f"oras FORGERY: {label} disagrees with the other two", root, forged, pf.follow_oras, root,
                 says="disagree")
     refuses("oras: a checksums file naming the tarball twice is refused", root,
@@ -508,9 +519,13 @@ with tempfile.TemporaryDirectory() as scratch:
             says="2 line(s)")
     refuses("oras: a prerelease is refused", root, oras_upstream(prerelease=True), pf.follow_oras, root,
             says="prerelease")
-    write_tree(root, {pf.ORAS_WORKFLOW: oras_workflow("latest")})
+    write_tree(root, {pf.ORAS_WORKFLOW: oras_workflow("latest"), ORAS_CHECKS: oras_checks("latest")})
     refuses("oras: a version that is no vX.Y.Z is refused before any fetch", root, Upstream({}), pf.follow_oras, root,
             says="no `vX.Y.Z`")
+    check("oras: ... and nothing was fetched", pf.fetch.calls == [])
+    write_tree(root, {pf.ORAS_WORKFLOW: oras_workflow(), ORAS_CHECKS: oras_checks(OLD_ORAS)})
+    refuses("oras: the two workflows naming different versions is refused before any fetch", root, Upstream({}),
+            pf.follow_oras, root, says="different oras versions")
     check("oras: ... and nothing was fetched", pf.fetch.calls == [])
 
 
