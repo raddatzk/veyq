@@ -1,6 +1,7 @@
 package me.raddatz.veyq.mobile.android.core
 
 import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -417,6 +418,9 @@ internal fun CoverSheet(node: NodeAt, model: AppModel, onClose: () -> Unit) {
     val hasCover = model.covers.collectAsStateWithLifecycle().value.containsKey(node.nodeId)
     var image by remember { mutableStateOf<androidx.compose.ui.graphics.ImageBitmap?>(null) }
     var picked by remember { mutableStateOf<android.net.Uri?>(null) }
+    // a picked SVG's drawing (core's `SvgCover`): saved as its pixels, which the core encodes as the cover's WebP
+    var drawn by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    val window = androidx.compose.ui.platform.LocalView.current.rootView as? android.view.ViewGroup
     var storedCrop by remember { mutableStateOf<me.raddatz.veyq.mobile.session.NodeCover.Crop?>(null) }
     var pose by remember { mutableStateOf<me.raddatz.veyq.mobile.session.CoverFrame.Pose?>(null) }
     var size by remember { mutableStateOf(androidx.compose.ui.unit.IntSize.Zero) }
@@ -447,6 +451,26 @@ internal fun CoverSheet(node: NodeAt, model: AppModel, onClose: () -> Unit) {
             if (picture == null) problem = unreadable
             else {
                 picked = uri
+                drawn = null
+                storedCrop = null
+                pose = null
+                image = picture
+            }
+        }
+    }
+    // "Choose a file": any image file the system's document picker hands over, an SVG drawn here at the core's size
+    val pickFile = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        problem = null
+        scope.launch {
+            val svg = window?.let { model.coverSvg(uri, it) }
+            val picture = svg?.asImageBitmap() ?: model.coverPicture(uri)
+            if (picture == null) problem = unreadable
+            else {
+                picked = uri
+                drawn = svg
                 storedCrop = null
                 pose = null
                 image = picture
@@ -505,6 +529,7 @@ internal fun CoverSheet(node: NodeAt, model: AppModel, onClose: () -> Unit) {
                 OutlinedButton(enabled = !saving, onClick = {
                     pick.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
                 }) { Text(stringResource(R.string.cover_choose)) }
+                TextButton(enabled = !saving, onClick = { pickFile.launch(arrayOf("image/*")) }) { Text(stringResource(R.string.cover_choose_file)) }
                 if (hasCover) TextButton(enabled = !saving, onClick = {
                     saving = true
                     problem = null
@@ -521,7 +546,16 @@ internal fun CoverSheet(node: NodeAt, model: AppModel, onClose: () -> Unit) {
                     saving = true
                     problem = null
                     val uri = picked
-                    scope.launch { done(if (uri != null) model.setCover(node, uri, crop) else model.recropCover(node, crop)) }
+                    val svg = drawn
+                    scope.launch {
+                        done(
+                            when {
+                                svg != null -> model.setCoverDrawn(node, svg, crop)
+                                uri != null -> model.setCover(node, uri, crop)
+                                else -> model.recropCover(node, crop)
+                            },
+                        )
+                    }
                 }) { Text(stringResource(R.string.cover_save)) }
             }
         }

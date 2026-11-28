@@ -799,6 +799,15 @@ internal sealed class Call {
      */
     @Serializable @SerialName("Header.CoverSave") data class HeaderCoverSave(val header: Long, val path: String?, val crop: NodeCover.Crop) : Call()
 
+    /**
+     * Sets a cover drawn from an SVG (`SvgCover`, uc.platform.node-cover main flow 3): the host's drawing at [Answer.CoverSvg]'s
+     * [width] × [height] as raw RGBA (4 bytes a pixel, not premultiplied) in the file at [path], which the core reads and
+     * encodes as the cover's WebP (the host removes its file after), framed by [crop]. [Answer.Said] with why not, or none.
+     */
+    @Serializable @SerialName("Header.CoverSaveRaster") data class HeaderCoverSaveRaster(
+        val header: Long, val path: String, val width: Int, val height: Int, val crop: NodeCover.Crop,
+    ) : Call()
+
     /** Removes the cover (`removeCover`): [Answer.Said]. */
     @Serializable @SerialName("Header.CoverRemove") data class HeaderCoverRemove(val header: Long) : Call()
 
@@ -983,6 +992,12 @@ internal sealed class Call {
 
     /** The size and quality a picked picture of [width] × [height] is encoded at as a cover (`NodeCover.encodedSize`). */
     @Serializable @SerialName("Cover.Fit") data class CoverFit(val width: Int, val height: Int) : Call()
+
+    /**
+     * An SVG picked as a cover, at [path] (`SvgCover.plan`: the core reads it, refuses refused markup or one with no size of
+     * its own): [Answer.CoverSvg], the size the host draws it at, or `NOT_A_PICTURE` (the dialog's *could not be read*).
+     */
+    @Serializable @SerialName("Cover.Svg") data class CoverSvg(val path: String) : Call()
 
     /**
      * The part of a cover picture of [width] × [height] pixels that [crop] shows (`CoverFrame.pixels`, the web's
@@ -2362,6 +2377,9 @@ internal sealed class Answer {
 
     /** What a picked picture is encoded at as a cover: its size, and the JPEG quality (0–1, and 0–100 for a percentage). */
     @Serializable @SerialName("CoverFit") data class CoverFit(val width: Int, val height: Int, val quality: Double, val qualityPercent: Int) : Answer()
+
+    /** [Call.CoverSvg]: the size the host draws the SVG at, and the page a web view draws it from (`SvgCover.document`). */
+    @Serializable @SerialName("CoverSvg") data class CoverSvg(val width: Int, val height: Int, val page: String) : Answer()
 
     /** A download: whether the file was written, what it says (done or failed) and what it left out, or null. */
     @Serializable @SerialName("Downloaded") data class Downloaded(val written: Boolean, val notice: Notice, val leftOut: Notice?) : Answer()

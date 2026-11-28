@@ -2391,6 +2391,49 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         runCatching { picture(android.graphics.ImageDecoder.createSource(getApplication<Application>().contentResolver, uri)).asImageBitmap() }.getOrNull()
     }
 
+    /**
+     * The file at [uri] drawn as a cover where it is an SVG (core's `SvgCover`: its markup checked, its own size read, drawn
+     * by the system's web view inside [window]); null where it is no SVG or none the core takes.
+     */
+    suspend fun coverSvg(uri: android.net.Uri, window: android.view.ViewGroup): android.graphics.Bitmap? {
+        val bytes = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                getApplication<Application>().contentResolver.openInputStream(uri)?.use { s ->
+                    // read to the core's limit and one byte past it, never more (InputStream.readNBytes is API 33)
+                    val most = me.raddatz.veyq.mobile.media.SvgCover.MOST_BYTES
+                    val out = java.io.ByteArrayOutputStream()
+                    val buf = ByteArray(64 * 1024)
+                    while (out.size() <= most) {
+                        val n = s.read(buf, 0, minOf(buf.size.toLong(), most + 1 - out.size()).toInt())
+                        if (n < 0) break
+                        out.write(buf, 0, n)
+                    }
+                    out.toByteArray().takeIf { it.size <= most }
+                }
+            }.getOrNull()
+        } ?: return null
+        if (!me.raddatz.veyq.mobile.blob.Sniff.svg(bytes)) return null
+        val plan = me.raddatz.veyq.mobile.media.SvgCover.plan(bytes) ?: return null
+        return SvgCoverRaster.draw(window, me.raddatz.veyq.mobile.media.SvgCover.document(bytes, plan), plan)
+    }
+
+    /** Sets [drawing] (a picked SVG drawn here) as [ref]'s cover with [crop]: the core encodes its WebP; false when it did not land. */
+    suspend fun setCoverDrawn(
+        ref: me.raddatz.veyq.mobile.navigation.NodeAt, drawing: android.graphics.Bitmap, crop: me.raddatz.veyq.mobile.session.NodeCover.Crop,
+    ): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+        val t = tenantSession ?: return@withContext false
+        val rgba = SvgCoverRaster.rgba(drawing)
+        val webp = try {
+            me.raddatz.veyq.mobile.media.SvgCover.encode(AndroidWebpEncoder, rgba, drawing.width, drawing.height)
+        } finally {
+            rgba.fill(0)
+        } ?: return@withContext false
+        val done = runCatching { me.raddatz.veyq.mobile.session.NodeCover.set(t, ref.scopeId, ref.nodeId, webp, crop) }
+            .getOrNull() == me.raddatz.veyq.mobile.session.NodeCover.Outcome.DONE
+        refreshLists(t)
+        done
+    }
+
     /** [ref]'s cover as it is stored — the whole picture and its crop — for the cover sheet to frame anew; null: none. */
     suspend fun coverSource(ref: me.raddatz.veyq.mobile.navigation.NodeAt): Pair<androidx.compose.ui.graphics.ImageBitmap, me.raddatz.veyq.mobile.session.NodeCover.Crop>? =
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {

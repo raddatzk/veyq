@@ -200,14 +200,21 @@ object NodeCover {
         return runCatching { blobs.frames(node.scopeId, c.blobId, c.chunkCount, key) }.getOrNull()
     }
 
-    /** Sets [jpeg] as the cover of node [nodeId] with [crop]: uploaded, then attached and the meta written in one request. */
+    /**
+     * The blob meta's type of a cover's [picture], by its bytes: the JPEG a picked picture is encoded as, the WebP a cover
+     * drawn from an SVG is ([me.raddatz.veyq.mobile.media.SvgCover], the web's `VECTOR_DERIVED_META`) — and a cover copied or
+     * imported as it was stored keeps its own; `image/jpeg` where the bytes say nothing.
+     */
+    fun typeOf(picture: ByteArray): String = me.raddatz.veyq.mobile.blob.Sniff.image(picture)?.mime ?: "image/jpeg"
+
+    /** Sets [jpeg] (a cover's picture: a JPEG, or a WebP drawn from an SVG) as the cover of node [nodeId] with [crop]: uploaded, then attached and the meta written in one request. */
     @Throws(Exception::class)
     suspend fun set(tenant: TenantSession, scopeId: String, nodeId: String, jpeg: ByteArray, crop: Crop = Crop.FULL): Outcome {
         // uploaded once per node epoch: a stale revision rebuilds only the meta, a new epoch (a new key) the upload too
         var uploaded: Triple<Int, String, ApplicationBlobs.Plan>? = null
         return write(tenant, scopeId, nodeId) { node, current ->
             val up = uploaded?.takeIf { it.first == node.epoch }
-                ?: ApplicationBlobs(tenant).reserveAndPump(scopeId, node, ROLE, jpeg, "image/jpeg", null, null)
+                ?: ApplicationBlobs(tenant).reserveAndPump(scopeId, node, ROLE, jpeg, typeOf(jpeg), null, null)
                     .let { (id, plan) -> Triple(node.epoch, id, plan) }.also { uploaded = it }
             val uploadId = up.second
             val plan = up.third

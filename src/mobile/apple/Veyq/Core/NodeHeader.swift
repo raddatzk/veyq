@@ -1,4 +1,5 @@
 import PhotosUI
+import UniformTypeIdentifiers
 import SwiftUI
 import VeyqCore
 
@@ -445,6 +446,10 @@ struct CoverSheet: View {
     @State private var item: PhotosPickerItem?
     @State private var image: CGImage?
     @State private var picked: Data?
+    /// A picked SVG's drawing (core's `SvgCover`): saved as its pixels, which the core encodes as the cover's WebP.
+    @State private var drawn: SvgCoverDrawing.Drawn?
+    @State private var choosingFile = false
+    @State private var anchor = SvgCoverDrawing.Anchor()
     @State private var storedCrop: NodeCover.Crop?
     @State private var pose: CoverFrame.Pose?
     @State private var size: CGSize = .zero
@@ -489,6 +494,10 @@ struct CoverSheet: View {
                         Label(say(.coverChooseImage), systemImage: "photo.on.rectangle")
                     }
                     .disabled(saving)
+                    // any image file, an SVG among them: drawn here at the core's size (Photos holds no SVG)
+                    Button { choosingFile = true } label: { Label(say(.coverChooseFile), systemImage: "folder") }
+                        .disabled(saving)
+                        .accessibilityIdentifier("cover-choose-file")
                     if hasCover {
                         Button(say(.coverRemove), systemImage: "trash", role: .destructive) { Task { await finish { await model.removeCover(node) } } }
                             .disabled(saving)
@@ -529,11 +538,40 @@ struct CoverSheet: View {
                 }
                 problem = nil
                 picked = data
+                drawn = nil
                 storedCrop = nil
                 pose = nil
                 image = picture
             }
         }
+        #if os(iOS)
+        .background(SvgCoverDrawing.Probe(anchor: anchor))
+        #endif
+        .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.image, .svg]) { result in
+            guard case let .success(url) = result else { return }
+            Task { await take(url) }
+        }
+    }
+
+    /// A file picked: an SVG drawn at the core's size, any other picture decoded as the photo library's is.
+    private func take(_ url: URL) async {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+        guard let data = try? Data(contentsOf: url, options: .mappedIfSafe), data.count <= Int(SvgCover.shared.MOST_BYTES) else {
+            problem = say(.coverUnreadable)
+            return
+        }
+        let svg = await SvgCoverDrawing.draw(data, anchor: anchor)
+        guard let picture = svg?.image ?? CoverImages.image(data, maxPixels: Int(NodeCover.shared.LONG_EDGE)) else {
+            problem = say(.coverUnreadable)
+            return
+        }
+        problem = nil
+        picked = data
+        drawn = svg
+        storedCrop = nil
+        pose = nil
+        image = picture
     }
 
     /// The 16:9 viewport: the source at its pose, a drag pans it and a pinch zooms it.
@@ -586,7 +624,13 @@ struct CoverSheet: View {
     private func save() async {
         guard let frame, let pose else { return }
         let crop = frame.crop(pose: pose)
-        if let picked { await finish { await model.setCover(node, data: picked, crop: crop) } } else { await finish { await model.recropCover(node, crop: crop) } }
+        if let drawn {
+            await finish { await model.setCoverDrawn(node, drawn: drawn, crop: crop) }
+        } else if let picked {
+            await finish { await model.setCover(node, data: picked, crop: crop) }
+        } else {
+            await finish { await model.recropCover(node, crop: crop) }
+        }
     }
 
     private func finish(_ work: () async -> Bool) async {

@@ -33,7 +33,14 @@
    transparency stays, never the SVG itself — and sealed as the node's own
    blob: a fresh `K_blob` wrapped under the **node's content key**, bound to blob, node and role `COVER`
    ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), the blob meta `{type: image/jpeg}` (an SVG's: `image/webp`) under `K_blob`. The upload
-   runs as a job of the core upload queue (progress and failure show in the tray; a quota refusal says so).
+   runs as a job of the core upload queue (progress and failure show in the tray; a quota refusal says so). **The apps take an SVG too** (built 2026-11-28, cr-apps-svg-cover): the core refuses its markup by the Depot viewer's rule
+   (`media/SvgMarkup`, a `foreignObject` however spelled) and reads its own size from its root (`media/SvgCover.plan`: its
+   `width` and `height`, a missing side from the `viewBox`, with neither the `viewBox`'s size — our reading, the accepting
+   side), the device draws it at the long edge 2048 (Linux glycin's librsvg, a Mac `NSImage`, iOS a `WKWebView` snapshot,
+   Android an offscreen `WebView` within its window, Windows WebView2's DevTools screenshot — each a web view over the core's
+   one page, the SVG an `<img>` of a `data:` URL that loads nothing else), and the core encodes the one WebP
+   (`SvgCover.encode`); the blob meta's type is the stored bytes' (`NodeCover.typeOf`). Android and Apple offer *Choose a
+   file* beside the photo library (which holds no SVG).
 4. One request hands the open upload **and** the node's re-sealed `wrappedMeta` (the `cover` field `{ source, crop }`, revision-
    checked, [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)): `setNodeCover` attaches the upload,
    freeing in the same transaction the blob it replaces (`expectedBlobId`) and compare-and-setting the meta. Either both land or

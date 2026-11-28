@@ -45,6 +45,9 @@ internal sealed class CoverDialog
     private ContentDialog? _dialog;
     private SoftwareBitmap? _bitmap;
     private bool _picked;
+    /// <summary>A picked SVG's drawing as straight RGBA (core's SvgCover), saved as its raster for the core's WebP; null otherwise.</summary>
+    private (byte[] Rgba, int Width, int Height)? _drawn;
+    private Panel? _body;
     private float _quality;
     private Pose? _pose;
     private Crop? _crop;
@@ -63,6 +66,7 @@ internal sealed class CoverDialog
     {
         if (Dialogs.Open) return;
         var body = new StackPanel { Spacing = 12, MinWidth = 480 };
+        _body = body;
         body.Children.Add(new TextBlock { Text = Words.CoverHint(), TextWrapping = TextWrapping.Wrap, Foreground = (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"] });
         var frame = new Grid
         {
@@ -212,6 +216,7 @@ internal sealed class CoverDialog
     /// <summary>Holds <paramref name="bitmap"/> for the frame and frames it: as stored, or a picked one centred.</summary>
     private async Task Hold(SoftwareBitmap bitmap, bool picked, float quality)
     {
+        _drawn = null;
         _bitmap = bitmap;
         _picked = picked;
         _quality = quality;
@@ -235,11 +240,30 @@ internal sealed class CoverDialog
         try
         {
             var picker = new Windows.Storage.Pickers.FileOpenPicker { SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.PicturesLibrary, ViewMode = Windows.Storage.Pickers.PickerViewMode.Thumbnail };
-            foreach (var ext in new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".heic", ".heif" }) picker.FileTypeFilter.Add(ext);
+            foreach (var ext in new[] { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tif", ".tiff", ".webp", ".heic", ".heif", ".svg" }) picker.FileTypeFilter.Add(ext);
             WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(_window));
             var file = await picker.PickSingleFileAsync();
             if (file is null) return;
             _problem.Visibility = Visibility.Collapsed;
+            // an SVG is drawn here at the size the core names (its markup checked, its own size read), stored as a WebP
+            if (file.FileType.Equals(".svg", StringComparison.OrdinalIgnoreCase))
+            {
+                var (planned, _) = await Core.CallAsync(new Call.CoverSvg { path = file.Path });
+                if (planned is not Answer.CoverSvg plan || _body is not { } host)
+                {
+                    Log.Write($"Cover.Svg answered {planned.GetType().Name}");
+                    Say(Words.CoverUnreadable());
+                    return;
+                }
+                if (await SvgRaster.Draw(host, plan.page, plan.width, plan.height) is not { } drawing)
+                {
+                    Say(Words.CoverUnreadable());
+                    return;
+                }
+                await Hold(drawing.Shown, picked: true, 0);
+                _drawn = (drawing.Rgba, plan.width, plan.height);
+                return;
+            }
             using var stream = await file.OpenReadAsync();
             var decoder = await BitmapDecoder.CreateAsync(stream);
             var (ow, oh) = (decoder.OrientedPixelWidth, decoder.OrientedPixelHeight);
@@ -287,6 +311,21 @@ internal sealed class CoverDialog
         string? path = null;
         try
         {
+            if (_picked && _drawn is { } drawn)
+            {
+                path = Path.Combine(Path.GetTempPath(), $"veyq-cover-{Guid.NewGuid():N}.rgba");
+                await File.WriteAllBytesAsync(path, drawn.Rgba);
+                var (saved, _) = await Core.CallAsync(new Call.HeaderCoverSaveRaster { header = _header, path = path, width = drawn.Width, height = drawn.Height, crop = crop });
+                Log.Write($"Header.CoverSaveRaster ({drawn.Width}×{drawn.Height}) answered {(saved is Answer.Said { notice: { } sn } ? sn.msg : saved.GetType().Name)}");
+                Busy(false);
+                switch (saved)
+                {
+                    case Answer.Said { notice: null }: _dialog?.Hide(); break;
+                    case Answer.Said { notice: { } said }: Say(Said.Notice(said)); break;
+                    default: Say(Words.CoverFailed()); break;
+                }
+                return;
+            }
             if (_picked && _bitmap is { } bitmap)
             {
                 path = Path.Combine(Path.GetTempPath(), $"veyq-cover-{Guid.NewGuid():N}.jpg");

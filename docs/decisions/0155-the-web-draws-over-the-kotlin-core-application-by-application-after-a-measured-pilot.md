@@ -823,7 +823,7 @@ Measured before the decision (2026-11-20):
     holds the sharpness (a ×10 edge between two pixels, none partly covered) — written, not yet run: `run.py build` stopped
     at the Flatpak's poppler module, the Docker VM's disk full (inbox #1110). **The refusal** — the apps have no canvas taint:
     the core refuses an SVG holding a `foreignObject` by its markup, the whole file, before any renderer sees it
-    (`SvgView.refused` in `FileView.open`): any case or prefix; character references undone to a fixed point, since an
+    (`SvgView.refused` in `FileView.open`; the rule itself core's `media/SvgMarkup` since 2026-11-28, which a cover drawn from an SVG is held to too, uc.platform.node-cover): any case or prefix; character references undone to a fixed point, since an
     internal entity's value `&#60;foreign&#79;bject` becomes markup where it is used and `&#38;#…;` one round later; refused
     too what the scan cannot read (invalid UTF-8, a declared encoding other than UTF-8/ASCII — UTF-7 would hide the tag —,
     references nested past eight rounds). Internal entities alone are drawn (Illustrator declares them). Linux, whose

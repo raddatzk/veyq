@@ -1180,6 +1180,15 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 }
                 Answer.Said(h.model.saveCover(jpeg, call.crop))
             } ?: noHeader
+            is Call.HeaderCoverSaveRaster -> headers[call.header]?.let { h ->
+                val rgba = runCatching { parts.files.read(call.path, DeviceFiles.COVER_MOST) }.getOrNull() ?: return Answer.Said(Notice(Msg.COVER_FAILED))
+                val webp = try {
+                    me.raddatz.veyq.mobile.media.SvgCover.encode(me.raddatz.veyq.mobile.media.coreWebpEncoder, rgba, call.width, call.height)
+                } finally {
+                    rgba.fill(0)
+                } ?: return Answer.Said(Notice(Msg.COVER_FAILED))
+                Answer.Said(h.model.saveCover(webp, call.crop))
+            } ?: noHeader
             is Call.HeaderCoverRemove -> headers[call.header]?.let { Answer.Said(it.model.removeCover()) } ?: noHeader
             is Call.CoverPose -> {
                 val frame = CoverFrame(call.imageWidth, call.imageHeight, call.frameWidth, call.frameHeight)
@@ -1189,6 +1198,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.CoverPosed(pose, call.imageWidth * scale, call.imageHeight * scale, frame.crop(pose))
             }
             is Call.CoverCut -> CoverFrame.pixels(call.crop, call.width, call.height).let { Answer.CoverCut(it[0], it[1], it[2], it[3]) }
+            is Call.CoverSvg -> {
+                val bytes = runCatching { parts.files.read(call.path, me.raddatz.veyq.mobile.media.SvgCover.MOST_BYTES.toInt()) }.getOrNull()
+                val plan = bytes?.let(me.raddatz.veyq.mobile.media.SvgCover::plan) ?: return Answer.Refused(Answer.Why.NOT_A_PICTURE)
+                Answer.CoverSvg(plan.width, plan.height, me.raddatz.veyq.mobile.media.SvgCover.document(bytes, plan))
+            }
             is Call.CoverFit -> NodeCover.encodedSize(call.width, call.height).let { Answer.CoverFit(it[0], it[1], NodeCover.QUALITY, NodeCover.QUALITY_PERCENT) }
             is Call.ReportOpen -> tenant.value?.models?.report?.let { make ->
                 val id = ids.incrementAndFetch()

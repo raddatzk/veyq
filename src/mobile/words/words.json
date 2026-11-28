@@ -4459,6 +4459,13 @@
     "de": "Bild auswählen",
     "apple_en": "Choose an Image"
   },
+  "cover_choose_file": {
+    "note": "the cover dialog's second pick beside the photo library: any image file, an SVG among them (the web's file input takes image/* and .svg)",
+    "en": "Choose a file",
+    "de": "Datei auswählen",
+    "apple_en": "Choose a File…",
+    "apple_de": "Datei auswählen …"
+  },
   "pot_open_failed": {
     "en": "This Pot did not open",
     "de": "Dieser Pot ließ sich nicht öffnen"

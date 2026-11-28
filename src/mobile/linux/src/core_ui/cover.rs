@@ -25,6 +25,8 @@ struct Picture {
     picked: bool,
     /// The JPEG quality the core named for a picked picture, 0–100.
     quality: i32,
+    /// Drawn from a picked SVG (core's `SvgCover`): saved as its raw RGBA, which the core encodes as the cover's WebP.
+    svg: bool,
 }
 
 struct Inner {
@@ -274,11 +276,15 @@ impl Inner {
 
     /// Holds [texture] scaled to [width] × [height] for the frame, and frames it: as stored, or a picked one centred.
     fn hold(self: &Rc<Self>, texture: &gdk::Texture, width: i32, height: i32, picked: bool, quality: i32) {
+        self.hold_drawn(texture, width, height, picked, quality, false);
+    }
+
+    fn hold_drawn(self: &Rc<Self>, texture: &gdk::Texture, width: i32, height: i32, picked: bool, quality: i32, svg: bool) {
         let Some(surface) = scaled(texture, width, height) else {
             self.say(&words::cover_unreadable());
             return;
         };
-        *self.picture.borrow_mut() = Some(Picture { surface, width, height, picked, quality });
+        *self.picture.borrow_mut() = Some(Picture { surface, width, height, picked, quality, svg });
         *self.pose.borrow_mut() = None;
         *self.crop.borrow_mut() = None;
         let crop = if picked { None } else { self.stored.borrow().clone() };
@@ -325,6 +331,25 @@ impl Inner {
             };
             let Some(i) = w.upgrade() else { return };
             i.problem.set_visible(false);
+            // an SVG is drawn here at the size the core names (core's `SvgCover`: its markup checked, its own size read),
+            // never at its own size and never flattened: the core stores one WebP of the drawing
+            if let Some(path) = file.path().filter(|p| is_svg(p)) {
+                let Some(path_text) = path.to_str().map(str::to_owned) else { return i.say(&words::cover_unreadable()) };
+                match bridge::call(&Call::CoverSvg { path: path_text }).await.map(|(a, _)| a) {
+                    Ok(Answer::CoverSvg { width, height, .. }) => match std::fs::read(&path).ok().and_then(|b| svg_drawn(&b, width, height).ok()) {
+                        Some(texture) => {
+                            eprintln!("veyq: cover: an SVG picked, drawn at {width}×{height}");
+                            i.hold_drawn(&texture, width, height, true, 0, true);
+                        }
+                        None => i.say(&words::cover_unreadable()),
+                    },
+                    other => {
+                        eprintln!("veyq: Cover.Svg answered {other:?}");
+                        i.say(&words::cover_unreadable());
+                    }
+                }
+                return;
+            }
             let texture = match file.path().map(gdk::Texture::from_filename) {
                 Some(Ok(t)) => t,
                 other => {
@@ -356,6 +381,16 @@ impl Inner {
     /// one only framed anew. The dialog closes once the core said it landed, else says why.
     fn save(self: &Rc<Self>, toasts: &adw::ToastOverlay) {
         let Some(crop) = self.crop.borrow().clone() else { return };
+        if let Some((raster, width, height)) = self.picture.borrow().as_ref().filter(|p| p.picked && p.svg).map(|p| (write_rgba(&p.surface), p.width, p.height)) {
+            let path = match raster {
+                Ok(path) => path,
+                Err(e) => {
+                    eprintln!("veyq: cover: the drawing was not written: {e}");
+                    return self.say(&words::cover_failed());
+                }
+            };
+            return self.send(toasts, Call::HeaderCoverSaveRaster { header: self.header, path: path.clone(), width, height, crop }, Some(path));
+        }
         let picked = self.picture.borrow().as_ref().filter(|p| p.picked).map(|p| (encode(&p.surface, p.quality), p.width, p.height));
         let path = match picked {
             None => None,
@@ -369,14 +404,20 @@ impl Inner {
                 return;
             }
         };
+        let call = Call::HeaderCoverSave { header: self.header, path: path.clone(), crop };
+        self.send(toasts, call, path);
+    }
+
+    /// Sends a save [call], [path] its file (removed once answered); the dialog closes once the core said it landed.
+    fn send(self: &Rc<Self>, toasts: &adw::ToastOverlay, call: Call, path: Option<String>) {
         self.busy(true);
-        let (w, toasts, header) = (Rc::downgrade(self), toasts.clone(), self.header);
+        let (w, toasts) = (Rc::downgrade(self), toasts.clone());
         glib::spawn_future_local(async move {
-            let answered = bridge::call(&Call::HeaderCoverSave { header, path: path.clone(), crop: crop.clone() }).await.map(|(a, _)| a);
+            let answered = bridge::call(&call).await.map(|(a, _)| a);
             if let Some(p) = &path {
                 let _ = std::fs::remove_file(p);
             }
-            eprintln!("veyq: Header.CoverSave ({}, crop {:?}) answered {answered:?}", if path.is_some() { "picked" } else { "framed anew" }, crop);
+            eprintln!("veyq: a cover's save ({}) answered {answered:?}", if path.is_some() { "picked" } else { "framed anew" });
             let Some(i) = w.upgrade() else { return };
             i.busy(false);
             match answered {
@@ -429,6 +470,61 @@ pub(crate) fn scaled(texture: &gdk::Texture, width: i32, height: i32) -> Option<
     Some(out)
 }
 
+/// Whether [path] names an SVG: by its name, or by its first bytes (an XML or `svg` start, no raster's magic).
+fn is_svg(path: &std::path::Path) -> bool {
+    if path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("svg")) {
+        return true;
+    }
+    let Ok(mut f) = std::fs::File::open(path) else { return false };
+    let mut head = [0u8; 512];
+    let n = std::io::Read::read(&mut f, &mut head).unwrap_or(0);
+    let text = String::from_utf8_lossy(&head[..n]);
+    let t = text.trim_start_matches('\u{feff}').trim_start();
+    (t.starts_with("<?xml") || t.starts_with("<svg")) && t.contains("<svg")
+}
+
+/// [bytes] (an SVG the core planned) drawn by GTK's loaders — gdk-pixbuf over glycin's sandboxed librsvg — at [width] ×
+/// [height]: the loader is asked for that size before it draws, so the vectors are rendered at it, the alpha kept.
+fn svg_drawn(bytes: &[u8], width: i32, height: i32) -> Result<gdk::Texture, glib::Error> {
+    let loader = gtk::gdk_pixbuf::PixbufLoader::new();
+    loader.connect_size_prepared(move |l, _, _| l.set_size(width, height));
+    loader.write(bytes)?;
+    loader.close()?;
+    let pixbuf = loader.pixbuf().ok_or_else(|| glib::Error::new(glib::FileError::Failed, "no picture"))?;
+    let format = if pixbuf.has_alpha() { gdk::MemoryFormat::R8g8b8a8 } else { gdk::MemoryFormat::R8g8b8 };
+    Ok(gdk::MemoryTexture::new(pixbuf.width(), pixbuf.height(), format, &pixbuf.read_pixel_bytes(), pixbuf.rowstride() as usize).upcast())
+}
+
+/// [surface]'s pixels as raw RGBA (straight alpha) in a file of its own, its path returned: what the core encodes.
+fn write_rgba(surface: &cairo::ImageSurface) -> Result<String, String> {
+    let (w, h, stride) = (surface.width() as usize, surface.height() as usize, surface.stride() as usize);
+    let mut copy = cairo::ImageSurface::create(cairo::Format::ARgb32, w as i32, h as i32).map_err(|e| e.to_string())?;
+    {
+        let cr = cairo::Context::new(&copy).map_err(|e| e.to_string())?;
+        cr.set_source_surface(surface, 0.0, 0.0).map_err(|e| e.to_string())?;
+        cr.paint().map_err(|e| e.to_string())?;
+    }
+    copy.flush();
+    let data = copy.data().map_err(|e| e.to_string())?;
+    let rgba = premultiplied_bgra_to_rgba(&data, w, h, stride);
+    let path = glib::tmp_dir().join(format!("veyq-cover-{}-{}.rgba", std::process::id(), glib::monotonic_time()));
+    std::fs::write(&path, rgba).map_err(|e| e.to_string())?;
+    path.to_str().map(str::to_owned).ok_or_else(|| "no UTF-8 path".into())
+}
+
+/// Straight RGBA from little-endian premultiplied ARGB32 rows of [stride] bytes (cairo's), each colour divided by its alpha.
+pub fn premultiplied_bgra_to_rgba(data: &[u8], w: usize, h: usize, stride: usize) -> Vec<u8> {
+    let mut out = Vec::with_capacity(w * h * 4);
+    for row in 0..h {
+        for px in data[row * stride..row * stride + w * 4].as_chunks::<4>().0 {
+            let a = px[3] as u32;
+            let un = |c: u8| (c as u32 * 255 + a / 2).checked_div(a).map_or(0, |v| v.min(255) as u8);
+            out.extend_from_slice(&[un(px[2]), un(px[1]), un(px[0]), px[3]]);
+        }
+    }
+    out
+}
+
 /// [surface] as a JPEG at [quality] (0–100) in a file of its own, its path returned (gdk-pixbuf's saver).
 fn encode(surface: &cairo::ImageSurface, quality: i32) -> Result<String, String> {
     let (w, h) = (surface.width(), surface.height());
@@ -478,5 +574,29 @@ mod tests {
             0xff, 0x00, 0x00, 0xff, 0x01, 0x02, 0x03, 0xff, 9, 9, 9, 9,
         ];
         assert_eq!(bgra_to_rgb(&data, 2, 2, 12), vec![0xff, 0, 0, 0x30, 0x20, 0x10, 0, 0, 0xff, 3, 2, 1]);
+    }
+
+    #[test]
+    fn a_drawn_svgs_premultiplied_rows_become_straight_rgba_its_transparency_kept() {
+        // half-transparent red, a fully transparent pixel, then a stride's padding
+        let data = [0x00, 0x00, 0x80, 0x80, 0x00, 0x00, 0x00, 0x00, 9, 9, 9, 9];
+        assert_eq!(premultiplied_bgra_to_rgba(&data, 2, 1, 12), vec![0xff, 0, 0, 0x80, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    fn an_svg_is_known_by_its_name_or_its_start() {
+        let dir = std::env::temp_dir();
+        let named = dir.join("veyq-cover-test.SVG");
+        std::fs::write(&named, b"anything").unwrap();
+        assert!(is_svg(&named));
+        let unnamed = dir.join("veyq-cover-test-logo");
+        std::fs::write(&unnamed, b"\xef\xbb\xbf<?xml version=\"1.0\"?><svg xmlns=\"http://www.w3.org/2000/svg\"/>").unwrap();
+        assert!(is_svg(&unnamed));
+        let png = dir.join("veyq-cover-test-png");
+        std::fs::write(&png, b"\x89PNG\r\n").unwrap();
+        assert!(!is_svg(&png));
+        for p in [named, unnamed, png] {
+            let _ = std::fs::remove_file(p);
+        }
     }
 }

@@ -1961,6 +1961,18 @@ final class AppModel {
         return outcome == .done
     }
 
+    /// Sets a picked SVG's `drawn` picture as the cover of `ref`, framed by `crop`: the core encodes its WebP (libwebp's,
+    /// `SvgCover.encode`), uploads and attaches it; false when it did not land.
+    func setCoverDrawn(_ ref: NodeAt, drawn: SvgCoverDrawing.Drawn, crop: NodeCover.Crop) async -> Bool {
+        guard let t = tenantSession,
+              let webp = try? await SvgCover.shared.encode(encoder: LibwebpEncoderKt.coreWebpEncoder, rgba: AppleKit.shared.bytes(data: drawn.rgba),
+                                                           width: Int32(drawn.image.width), height: Int32(drawn.image.height))
+        else { return false }
+        let outcome = try? await AppleSessions.shared.setCover(tenant: t, scopeId: ref.scopeId, nodeId: ref.nodeId, jpeg: Data(kotlin: webp), crop: crop)
+        await refreshLists(t)
+        return outcome == .done
+    }
+
     /// `ref`'s cover as it is stored — the whole picture and its crop — for the cover sheet to frame anew; nil: none.
     func coverSource(_ ref: NodeAt) async -> (image: CGImage, crop: NodeCover.Crop)? {
         guard let t = tenantSession, let opened = (try? await AppleSessions.shared.openFramedCover(tenant: t, nodeId: ref.nodeId)) ?? nil,
