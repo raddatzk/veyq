@@ -140,7 +140,16 @@ struct SettingsView: View {
             }
             // core's sections, whole and in their order (`AccountSettings.State.sections`, ADR 0154 decision 2: the web's
             // order, the apps' own sections beside their kin, Sign out last), each anchored by its `SettingsSection.id`
-            ForEach(sections, id: \.self) { s in section(s).id(s.id) }
+            ForEach(sections, id: \.self) { s in
+                #if os(macOS)
+                // a Mac's grouped Form scrolls to no id set on a Section (nor on a section's several): each section gets
+                // an empty section's empty footer before it to land on (the macOS pass, 2026-11-28, #1431)
+                Section {} footer: { Color.clear.frame(height: 0).accessibilityHidden(true).id(s.id) }
+                section(s)
+                #else
+                section(s).id(s.id)
+                #endif
+            }
         }
         .formStyle(.grouped)
         // the presentations of the page go on the Form (src/mobile/CLAUDE.md: a section's are presented by none)
