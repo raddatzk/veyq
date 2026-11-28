@@ -74,8 +74,11 @@ class PlaceLink internal constructor(
          */
         fun ofDeepLink(uri: String): PlaceLink? {
             val text = uri.trim()
-            if (text.length > MAX || !text.startsWith("veyq://open?", ignoreCase = true)) return null
-            val query = text.substring("veyq://open?".length)
+            if (text.length > MAX) return null
+            // `veyq://open/?…` is the same link: Windows hands a protocol activation its URI canonicalized, the empty path
+            // as `/` (measured 2026-11-28 on the VM, the MSIX: every `veyq://open?…` arrived so and opened nothing)
+            val head = listOf("veyq://open?", "veyq://open/?").firstOrNull { text.startsWith(it, ignoreCase = true) } ?: return null
+            val query = text.substring(head.length)
             if ('#' in query) return null
             val params = HashMap<String, String>()
             for (p in query.split('&')) {

@@ -16,7 +16,8 @@ import kotlin.test.assertTrue
  * refused input differs from an accepted control in one part, so a refusal names the check that made it.
  * Bites (each made red once, then restored): `ofDeepLink` without its key-set check (the `k` and `x` cases), without its id
  * check (a name as `s`); `ofWeb` without its path check (`/s/…`, `/tenant/accept`, `/recover`), without its query check, and
- * the route without its slug check (`#k=…`).
+ * the route without its slug check (`#k=…`); `ofDeepLink` reading `veyq://open?` alone (the canonical `veyq://open/?` Windows
+ * hands an activation, 2026-11-28).
  */
 class PlaceLinkTest {
     private val scope = "0b9e2a52-6a3e-4f3c-9d55-0d1f7e6f2a10"
@@ -35,6 +36,10 @@ class PlaceLinkTest {
         assertEquals(scope, ids("veyq://open?$i&s=${scope.uppercase()}")?.scopeId, "an id is read in either case")
         assertEquals(PlaceLink.Target.Settings::class, PlaceLink.ofDeepLink("veyq://open?$i&settings=tenant-members")?.target?.let { it::class })
         assertEquals("http://veyq.localhost:8081", PlaceLink.ofDeepLink("veyq://open?i=http%3A%2F%2Fveyq.localhost%3A8081&s=$scope")?.origin)
+        // as Windows hands a protocol activation's URI: canonicalized, the empty path written `/`
+        assertEquals(scope to node, ids("veyq://open/?$i&s=$scope&n=$node")?.let { it.scopeId to it.nodeId }, "the canonical form is the same link")
+        assertEquals(PlaceLink.Target.Settings::class, PlaceLink.ofDeepLink("veyq://open/?i=http://tw-win.localhost:8080&settings=tenant-members")?.target?.let { it::class })
+        assertIs<DeepLink.At>(DeepLink.parse("veyq://open/?$i&s=$scope"))
     }
 
     @Test
@@ -56,6 +61,9 @@ class PlaceLinkTest {
             "veyq://open?$i&settings=nope",
             "veyq://open?$i&settings=tenant-members&s=$scope",
             "veyq://link?$i&s=$scope",                 // not open
+            "veyq://open/x?$i&s=$scope",               // a path beyond the canonical `/`
+            "veyq://open//?$i&s=$scope",
+            "veyq://open/?$i&s=$scope&k=S2V5",         // the canonical form holds the same allow-list
             "https://photos.example.org/?$i&s=$scope",
         )) assertNull(PlaceLink.ofDeepLink(uri), uri)
     }
