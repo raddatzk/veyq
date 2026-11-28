@@ -63,6 +63,8 @@ object DepotFiles {
         val modifiedAt: Long?,
         /** Who uploaded the content: `user:<id>` a member, `share:<identityId>` a link's guest (`uploaderKey`). */
         val uploaderKey: String?,
+        /** A guest uploader's own sealed name as the member's listing serves it (`uploaderName`; members only), or null. */
+        val uploaderName: Uploaders.SealedName? = null,
     ) {
         val hasContent: Boolean get() = blobId != null
     }
@@ -468,13 +470,13 @@ object DepotFiles {
 
     private fun file(tenant: TenantSession, node: OpenNode, item: me.raddatz.veyq.mobile.api.depot.models.FileListItem): File {
         val blob = item.fileBlob
-            ?: return File(node.scopeId, node.id, null, 0, 0, null, null, null, null, null, item.uploaderKey)
+            ?: return File(node.scopeId, node.id, null, 0, 0, null, null, null, null, null, item.uploaderKey, Uploaders.sealedOf(item.uploaderName))
         val key = ApplicationBlobs(tenant).openKey(node.scopeId, node, blob.blobId, ROLE, blob.wrappedBlobKey)
         val meta = if (key == null) null else blob.wrappedBlobMeta?.let { m -> runCatching { BlobMeta.open(tenant.account.suite, key, unb64(m)) }.getOrNull() }
         return File(
             node.scopeId, node.id, blob.blobId, blob.chunkCount, blob.byteSize, blob.wrappedBlobKey,
             blob.byteSize - V1.FRAME_OVERHEAD.toLong() * blob.chunkCount,
-            meta?.type, meta?.name, meta?.modifiedAt, item.uploaderKey,
+            meta?.type, meta?.name, meta?.modifiedAt, item.uploaderKey, Uploaders.sealedOf(item.uploaderName),
         )
     }
 }

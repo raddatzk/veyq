@@ -63,8 +63,7 @@ object Buckets {
                 val identity = b.ownerKey.removePrefix("share:")
                 val keys = b.wrappedIdentityKey?.let { w -> listOfNotNull(upKey(suite, scopeId, nodeId, nodeKey, listed.sealedDropPrivateKey, identity, w)) }
                     ?: (listOf(nodeKey) + ancestorKeys)
-                val ctx = Context("share-identity-name", "scopeId" to scopeId, "shareId" to b.shareId, "identityId" to identity)
-                keys.firstNotNullOfOrNull { k -> runCatching { suite.openField(ctx, k, unb64(sealed)).decodeToString() }.getOrNull() }
+                me.raddatz.veyq.mobile.sharing.IdentityNames.open(suite, scopeId, b.shareId, identity, sealed, keys.asSequence())
             } else {
                 suite.openField(nameContext(scopeId, nodeId, b.bucketId), nodeKey, unb64(sealed)).decodeToString()
             }
