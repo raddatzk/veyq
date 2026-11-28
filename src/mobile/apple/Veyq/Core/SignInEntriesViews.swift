@@ -121,7 +121,7 @@ struct RecoverView: View {
             if sent {
                 Section {
                     Text(say(.recoverySent)).foregroundStyle(Role.primary).accessibilityIdentifier("recover-sent")
-                    Text(say(.recoveryOnWeb)).foregroundStyle(Role.text)
+                    Text(say(.recoveryLinkNote)).foregroundStyle(Role.text)
                 }
             }
             if let error {

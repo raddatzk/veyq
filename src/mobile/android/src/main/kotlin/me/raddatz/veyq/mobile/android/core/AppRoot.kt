@@ -148,6 +148,9 @@ fun AppRoot(model: AppModel) {
         // a received invite's join (core's `TenantJoin`), above everything as a link's guest view is
         val join by model.join.collectAsStateWithLifecycle()
         join?.let { JoinScreen(it, model) }
+        // a received recovery link's finish (core's `RecoveryFinish`), above everything as a join is
+        val recovery by model.recovery.collectAsStateWithLifecycle()
+        recovery?.let { RecoveryScreen(it, model) }
     }
 }
 
@@ -420,7 +423,7 @@ fun RecoverScreen(state: Screen.Recover, onSend: (String, String) -> Unit, onBac
             modifier = Modifier.fillMaxWidth().testTag("recover-email"), enabled = !state.sent, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
         if (state.sent) {
             Text(stringResource(R.string.recovery_sent), color = role(palette.primary), modifier = Modifier.testTag("recover-sent"))
-            Text(stringResource(R.string.recovery_on_web), style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.recovery_link_note), style = MaterialTheme.typography.bodyMedium)
         }
         state.error?.let { Text(say(it), color = MaterialTheme.colorScheme.error, modifier = Modifier.testTag("recover-error")) }
         for (entry in me.raddatz.veyq.mobile.session.RecoverPlan.entries(state.sent)) when (entry) {

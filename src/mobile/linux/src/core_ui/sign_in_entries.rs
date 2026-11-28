@@ -169,7 +169,7 @@ impl Recover {
         sent_label.add_css_class("success");
         sent_label.set_widget_name("recover-sent");
         sent.append(&sent_label);
-        sent.append(&note(&words::recovery_on_web(), false));
+        sent.append(&note(&words::recovery_link_note(), false));
         sent.set_visible(false);
         let entries = gtk::Box::new(gtk::Orientation::Vertical, 12);
         entries.set_widget_name("recover-entries");

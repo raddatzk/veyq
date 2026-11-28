@@ -226,6 +226,17 @@ class SignInEntriesTest {
     }
 
     @Test
+    fun aRecoveryFinishedHereFillsTheSignInFromTheGatesBeforeAShell() = runTest {
+        val d = Door()
+        val m = signInGate(d)
+        m.forgotPassword("a.example", "p@a.example")
+        m.recovered("https://b.example", "q@b.example")
+        assertEquals(Gate.SignIn(server = "https://b.example", email = "q@b.example"), m.current)
+        m.recovered("https://c.example", "r@c.example") // from the sign-in itself too
+        assertEquals(Gate.SignIn(server = "https://c.example", email = "r@c.example"), m.current)
+    }
+
+    @Test
     fun aTenantWithoutMailAndAFailedAskSayWhy() = runTest {
         val d = Door().apply { recovery = RecoveryAsked.MAIL_UNAVAILABLE }
         val m = signInGate(d)

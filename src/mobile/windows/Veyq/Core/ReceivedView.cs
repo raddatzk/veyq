@@ -123,6 +123,7 @@ internal sealed class ReceivedView : IDisposable
             browser.Click += (_, _) => Launch(box.Text.Trim());
             long? opened = null;
             long? joined = null;
+            long? recovering = null;
             var placed = false;
             string? placedSection = null;
             dialog.PrimaryButtonClick += async (_, args) =>
@@ -142,6 +143,10 @@ internal sealed class ReceivedView : IDisposable
                     {
                         case Answer.ReceivedOpened o:
                             opened = o.received;
+                            break;
+                        case Answer.RecoveryOpened r:
+                            // a recovery's mailed link opens its finish (RecoveryFinish, RecoveryView)
+                            recovering = r.flow;
                             break;
                         case Answer.JoinOpened j:
                             // a member invite opens its join, not a guest view (TenantJoin, JoinView)
@@ -182,6 +187,12 @@ internal sealed class ReceivedView : IDisposable
                 if (placedSection is { } section && window is MainWindow main) main.OpenSettingsAt(section.Length == 0 ? null : section);
             }
             else if (opened is { } received) Present(received, box.Text.Trim());
+            else if (recovering is { } recovery)
+            {
+                // the box held the link's token: nothing of it stays
+                box.Text = "";
+                RecoveryView.Present(recovery);
+            }
             else if (joined is { } join)
             {
                 // the box held the invite's secret parts: nothing of it stays

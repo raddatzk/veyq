@@ -616,6 +616,15 @@ final class AppModel {
     /// The join of a received `invite`, not loaded yet.
     func join(_ invite: ReceivedLink.InviteLink) -> TenantJoin { door.join(invite: invite) }
 
+    /// The finish of a received recovery `link` (core's `RecoveryFinish`, uc.account.recover-access), not loaded yet.
+    func recovery(_ link: ReceivedLink.RecoveryLink) -> RecoveryFinish { door.recovery(link: link) }
+
+    /// The finish's *Sign in*: the sign-in filled with the recovered account's server and address.
+    func recovered(_ finish: RecoveryFinish) {
+        guard let pair = finish.signIn, let server = pair.first as String?, let email = pair.second as String? else { return }
+        session.recovered(server: server, email: email)
+    }
+
     /// *Open the space*: the app's own session signs in with what the join holds, its answer shown as a sign-in's is.
     /// False where it did not (the join's state says why).
     func openJoined(_ join: TenantJoin) async -> Bool {

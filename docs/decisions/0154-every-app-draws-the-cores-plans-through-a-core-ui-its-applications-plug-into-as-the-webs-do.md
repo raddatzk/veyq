@@ -687,16 +687,14 @@ held for the screens' models but not around them:
   `RecoverPlan`: send until sent, back). No endpoint and no field is added: the apps send what the web sends
   (`requestLoginChallenge`, `verifyLogin`, `revokeOtherSessionFamilies`, `logout`, `requestPasswordRecovery`). The
   decision log, kept by its implementer:
-  - **S1 — The recovery's link half stays the web's.** *Q:* the brief asked for the recovery with the kit in the core;
-    where does the mailed token reach an app? *Options:* a custom scheme or an app link carrying it; the mailed link pasted
-    into the app; the web's page finishing it. *Choice:* the app asks for the link (`SessionModel.requestRecovery`, the web's
-    `requestRecovery`, a 503 said as the web's `mail_unavailable`, every other failure as its `requestFailed`) and says that
-    the link opens in the browser, where the kit and a new password finish the reset (`recovery_on_web`); the web's page
-    then offers *Open in the veyq app* (ADR 0150 § O2). A scheme carrying a secret is ADR 0150 § O's rejection; pasting a
-    mailed link the owner rejected for the address change (ADR 0148 decision 6, 2026-11-18). So release, open and
-    complete are not ported — without a transport no ADR allows they would be dead code; whether the app finishes a reset
-    itself was the owner's: **the owner, 2026-11-23: it stays so** — the app asks for the link, the browser
-    finishes with the kit; no transport for the token is added. *Cost:* a reset begun in the app ends in a browser.
+  - **S1 — The recovery's link reaches the app pasted, never by a scheme.** *Q:* where does the mailed token reach an app?
+    *Options:* a custom scheme or an app link carrying it; the mailed link pasted into the app; the web's page alone
+    finishing it. *Choice:* the app asks for the link (`SessionModel.requestRecovery`, a 503 said as the web's
+    `mail_unavailable`, every other failure as its `requestFailed`) and says the link opens in the browser or, pasted into
+    *Open a link* (shared text on a phone), in the app (`recovery_link_note`); the app's finish is `session/RecoveryFinish`
+    (ADR 0148 § The sign-in's two account entries; owner 2026-11-26, every app does what the web does, replacing
+    2026-11-23's "the browser finishes"). A scheme carrying a secret stays ADR 0150 § O's rejection. *Cost:* the person
+    copies a link out of a mail to finish in the app.
   - **S2 — The locked sign-in is the login alone.** `VeyqAccount.signInLocked`: `connect` without the device (not even
     the instance salt is kept), the login, no `key-material`; a `SessionModel.LockedSession` holds the tokens in memory
     only and renews an expired access token once over its refresh token (the locked screen can stand longer than an access
@@ -716,7 +714,7 @@ held for the screens' models but not around them:
     join (`recordThisDevice`, the web's `noteThisDevice`) and the instance salt (`keepInstanceSalt`, public). *Evidence:*
     `.theWayBackSignsInKeepingNothing`, `.anOrdinarySignInStillTrustsAndOffers`. *Cost:* one more login than the web's.
   - **S6 — Words.** Eighteen twins of the web's `sessions.locked*` and `recovery.*` (`web.json`); `locked_scope_note` (the
-    web's names a browser's cookie and its toggle) and `locked_done_still_here` apart; `recovery_on_web` the app's own.
+    web's names a browser's cookie and its toggle) and `locked_done_still_here` apart; `recovery_link_note` the app's own.
   - **S7 — Each platform's look.** Android: text buttons under the form, the locked screen's action an error-coloured
     button asked first in an `AlertDialog`, the system Back as each screen's Back; Apple: a grouped form per screen, the
     action `.destructive` asked in an `.alert`; Linux: button rows in the boxed list, each screen a way-in page, the

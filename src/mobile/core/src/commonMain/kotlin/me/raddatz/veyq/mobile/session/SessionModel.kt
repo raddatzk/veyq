@@ -798,6 +798,21 @@ class SessionModel<A : Connection, T : Any>(
         show(Gate.SignIn(adding = state.adding, server = state.server, email = state.email))
     }
 
+    /**
+     * A recovery finished in this app ([RecoveryFinish.signIn]): the sign-in with its [server] and [email] filled, as the
+     * web's page routes to `/login` — from any gate before a shell (the sign-in, *Reset your password*, the unlock, the
+     * picker); an open shell is left as it is (its own account's sessions, if it was this one, end at their next refresh).
+     */
+    fun recovered(server: String, email: String) {
+        val adding = when (val state = current) {
+            is Gate.SignIn -> if (state.working) return else state.adding
+            is Gate.Recover -> state.adding
+            is Gate.Unlock, is Gate.Picker, is Gate.Locked -> false
+            else -> return
+        }
+        show(Gate.SignIn(adding = adding, server = server, email = email))
+    }
+
     /** From the unlock to the full sign-in, for another account. */
     fun otherAccount() {
         show(if (signInElsewhere) Gate.NeedsApp else Gate.SignIn())
@@ -1303,6 +1318,9 @@ class AccountDoor(
 
     /** The join of a received [invite] (`TenantJoin`), its cold sign-ins through this door's device and client. */
     fun join(invite: me.raddatz.veyq.mobile.sharing.ReceivedLink.InviteLink): TenantJoin = TenantJoin.of(primitives, device, client, invite)
+
+    /** The finish of a received recovery [link] (`RecoveryFinish`), over this door's client. */
+    fun recovery(link: me.raddatz.veyq.mobile.sharing.ReceivedLink.RecoveryLink): RecoveryFinish = RecoveryFinish.of(primitives, client, link)
 
     override suspend fun trust(account: VeyqAccount, password: String) {
         runCatching { account.trustThisDevice(password, level = null) }

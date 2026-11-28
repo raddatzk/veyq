@@ -30,9 +30,14 @@ import me.raddatz.veyq.mobile.words.MsgKey
  * decision 2) and a kit made at another server informs ([HeldKit.otherServer]); neither blocks nor clears the key — only
  * the wrap can judge a key. Nothing here leaves the core: [shown] carries the kit's address and server, never its key.
  */
-class KeyIntake(private val primitives: Primitives, private val account: Account? = null) {
+class KeyIntake(private val primitives: Primitives, private var account: Account? = null) {
     /** The account a flow's intake is for: what a kit's address and server are compared with. */
     class Account(val email: String, val server: String)
+
+    /** The account this intake is for, once a flow learnt it (a recovery's, from its released material). */
+    internal fun bind(account: Account) {
+        this.account = account
+    }
 
     /**
      * What a screen shows of the held kit: the Secret Key row reads "from your Emergency Kit" with *Use another*. [server]

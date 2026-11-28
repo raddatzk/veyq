@@ -31,6 +31,8 @@ class OpenLink(private val opener: (ReceivedLink.ShareLink, report: Boolean) -> 
          * shell ([place], then `ShellModel.arrive`), not a guest view.
          */
         val place: Boolean = false,
+        /** The text is a password recovery's mailed link: [canOpen] opens its finish ([recovery]), not a guest view. */
+        val recovery: Boolean = false,
     )
 
     private val _state = MutableStateFlow(State())
@@ -38,11 +40,20 @@ class OpenLink(private val opener: (ReceivedLink.ShareLink, report: Boolean) -> 
     private var parsed: ReceivedLink.Parsed.Ok? = null
     private var invited: ReceivedLink.InviteLink? = null
     private var placed: me.raddatz.veyq.mobile.navigation.PlaceLink? = null
+    private var recovering: ReceivedLink.RecoveryLink? = null
 
     fun text(value: String) {
         // an invite pasted with the owner's message around it (the invite dialog's *Copy* copies the whole message)
         invited = ReceivedLink.inviteOf(value) ?: (SharedText.linkIn(value) as? SharedText.Found.One)?.text?.let(ReceivedLink::inviteOf)
         placed = null
+        // a recovery's mailed link (uc.account.recover-access step 2), alone or inside the mail's text
+        recovering = ReceivedLink.recoveryOf(value) ?: (SharedText.linkIn(value) as? SharedText.Found.One)?.text?.let(ReceivedLink::recoveryOf)
+        if (recovering != null) {
+            parsed = null
+            invited = null
+            _state.value = State(text = value, canOpen = true, recovery = true)
+            return
+        }
         if (invited != null) {
             parsed = null
             _state.value = State(text = value, canOpen = true, invite = true)
@@ -86,6 +97,7 @@ class OpenLink(private val opener: (ReceivedLink.ShareLink, report: Boolean) -> 
         parsed = null
         invited = null
         placed = null
+        recovering = null
         _state.value = State(problem = problem)
     }
 
@@ -118,6 +130,17 @@ class OpenLink(private val opener: (ReceivedLink.ShareLink, report: Boolean) -> 
         invited = null
         _state.update { State() }
         return i
+    }
+
+    /**
+     * The recovery link the field holds, handed to its finish (`RecoveryFinish.of`) once: the field is emptied, since the
+     * text holds the link's token. Null while the text is no recovery link.
+     */
+    fun recovery(): ReceivedLink.RecoveryLink? {
+        val r = recovering ?: return null
+        recovering = null
+        _state.update { State() }
+        return r
     }
 
     /** The link opened as its guest: a fresh guest view, not loaded yet ([GuestScreen.load]). Null while the text is no link. */

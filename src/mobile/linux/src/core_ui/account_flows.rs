@@ -1232,6 +1232,115 @@ impl ErasureForm {
     }
 }
 
+// ---- finishing a password recovery (uc.account.recover-access; the web's `RecoverView` over core's `RecoveryFinish`) ----
+
+/// The recovery [id] (a `RecoveryOpened` id, from *Open a link*) drawn in a dialog over [parent]: the link checked or why
+/// not, the Secret Key ([KeyControl], the flows' own: typed, a pasted kit token, a kit file, a scan), a new password with
+/// its breached-password check ([NewPassword]), and done, whose *Sign in* closes the dialog and opens the sign-in filled
+/// with the account (`Recovery.SignIn`; the window follows the session's gate). Closing it lets the finish go
+/// (`Recovery.Close`, which zeroes every key it held). A typed secret is read out of its row when sent.
+pub fn recovery(id: i64, parent: &gtk::Widget) {
+    let flow = Flow::new(&words::recovery_title());
+    flow.dialog.set_widget_name("recovery");
+    let flow_id: Id = Rc::new(Cell::new(Some(id)));
+    let col = column();
+    let spinner = adw::Spinner::builder().width_request(32).height_request(32).halign(gtk::Align::Center).build();
+    let checking = dim(&words::recovery_checking());
+    let for_account = text("");
+    for_account.set_visible(false);
+    // the key step
+    let key_intro = dim(&words::recovery_step_key_intro());
+    let key = KeyControl::new(&flow, &flow_id, &words::signin_secret_key());
+    let key_hint = dim(&words::recovery_secret_key_hint());
+    let unlock = pill(&words::join_continue(), "suggested-action");
+    unlock.set_widget_name("recovery-continue");
+    // the password step
+    let next = Rc::new(NewPassword::new(&flow_id, BreachCalls {
+        check: |flow, new_password| Call::RecoveryCheck { flow, new_password },
+        edited: |flow| Call::RecoveryEdited { flow },
+        anyway: |flow, on| Call::RecoveryUseAnyway { flow, on },
+    }));
+    let confirm = secret(&words::recovery_confirm_password());
+    let password_rows = rows(&[next.row.upcast_ref(), confirm.upcast_ref()]);
+    let device_note = dim(&words::recovery_device_note());
+    let submit = pill(&words::recovery_submit(), "suggested-action");
+    submit.set_widget_name("recovery-submit");
+    // done
+    let done = adw::StatusPage::builder().icon_name("object-select-symbolic").title(words::recovery_done()).visible(false).build();
+    let sign_in = pill(&words::signin_submit(), "suggested-action");
+    sign_in.set_widget_name("recovery-sign-in");
+    let error = error_label();
+    for w in [spinner.upcast_ref::<gtk::Widget>(), checking.upcast_ref(), for_account.upcast_ref(), key_intro.upcast_ref(), key.list.upcast_ref(),
+        key.notes.upcast_ref(), key_hint.upcast_ref(), password_rows.upcast_ref(), next.notice.upcast_ref(), next.anyway.upcast_ref(),
+        device_note.upcast_ref(), done.upcast_ref(), error.upcast_ref(), unlock.upcast_ref(), submit.upcast_ref(), sign_in.upcast_ref()] {
+        col.append(w);
+    }
+    col.append(&dim(&words::recovery_no_escrow()));
+    let page = page(&words::recovery_title(), "recovery", &col);
+    flow.nav.add(&page);
+    let k = key.clone();
+    unlock.connect_clicked(move |_| {
+        let secret_key = k.take();
+        act(&Rc::new(Cell::new(Some(id))), "Recovery.Unlock", |flow| Call::RecoveryUnlock { flow, secret_key });
+    });
+    let (n, c) = (next.clone(), confirm.clone());
+    submit.connect_clicked(move |_| {
+        // the rows stay: a breached new password stops here until *Use it anyway*, the form as typed
+        let (new_password, confirm_password) = (n.row.text().to_string(), c.text().to_string());
+        act(&Rc::new(Cell::new(Some(id))), "Recovery.Finish", |flow| Call::RecoveryFinish { flow, new_password, confirm_password });
+    });
+    let d = flow.dialog.clone();
+    sign_in.connect_clicked(move |_| {
+        let d = d.clone();
+        glib::spawn_future_local(async move {
+            let answered = bridge::call(&Call::RecoverySignIn { flow: id }).await.map(|(a, _)| a);
+            eprintln!("veyq: Recovery.SignIn: {}", crate::core_ui::manage::answer_kind(&answered));
+            d.close();
+        });
+    });
+    let (f, closed) = (flow.clone(), Rc::new(Cell::new(false)));
+    flow.watch(&Watched::Recovery { flow: id }, move |u| {
+        let Update::Recovery { shown, kit, breach, .. } = u else { return true };
+        let Some(s) = shown else {
+            if !closed.replace(true) {
+                f.dialog.force_close();
+            }
+            return false;
+        };
+        eprintln!("veyq: recovery: {:?}, working {}, refusal {:?}, kit held {}, breach {:?}", s.phase, s.working, s.refusal,
+            kit.as_ref().is_some_and(|k| k.kit.is_some()), breach.as_ref().map(|b| b.kind));
+        use crate::bridge::wire::RecoveryPhase as P;
+        page.set_title(&said::key(&s.title));
+        let at = |p: P| s.phase == p;
+        spinner.set_visible(at(P::Loading));
+        checking.set_visible(at(P::Loading));
+        for_account.set_visible(s.for_account.is_some() && (at(P::Key) || at(P::Password)));
+        for_account.set_label(&s.for_account.as_ref().map(said::notice).unwrap_or_default());
+        for w in [key_intro.upcast_ref::<gtk::Widget>(), key.list.upcast_ref(), key.notes.upcast_ref(), key_hint.upcast_ref(), unlock.upcast_ref()] {
+            w.set_visible(at(P::Key));
+        }
+        for w in [password_rows.upcast_ref::<gtk::Widget>(), device_note.upcast_ref(), submit.upcast_ref()] {
+            w.set_visible(at(P::Password));
+        }
+        next.notice.set_visible(at(P::Password) && next.notice.is_visible());
+        done.set_visible(at(P::Done));
+        sign_in.set_visible(at(P::Done));
+        unlock.set_sensitive(!s.working);
+        submit.set_sensitive(!s.working);
+        said_refusal(&error, s.refusal.as_ref());
+        key.draw(kit.as_ref());
+        if at(P::Password) {
+            next.draw(breach.as_ref());
+        }
+        if at(P::Done) {
+            next.forget();
+            confirm.set_text("");
+        }
+        true
+    });
+    flow.present(parent, move || bridge::send(Call::RecoveryClose { flow: id }));
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

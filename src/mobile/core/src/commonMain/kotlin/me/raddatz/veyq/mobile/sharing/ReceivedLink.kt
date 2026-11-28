@@ -80,6 +80,30 @@ object ReceivedLink {
         return InviteLink(url.origin, url.fragment)
     }
 
+    /**
+     * A password recovery's mailed link as a person received it (`<origin>/recover#<token>`, uc.account.recover-access
+     * step 2): its server's [origin] and the [token] the finish releases the recovery material with. [token] is the link's
+     * secret half; this object lives in the finish's model only, and its [toString] names the origin alone. It reaches the
+     * app through *Open a link* and shared text only — never `veyq://` (ADR 0150 § O1, § O5 rule 2).
+     */
+    class RecoveryLink internal constructor(val origin: String, @PlatformApi @HiddenFromObjC val token: String) {
+        val host: String get() = hostOf(origin)
+        override fun toString(): String = "RecoveryLink($origin)"
+    }
+
+    /**
+     * [input] as a recovery link, or null: an `https` URL (`http` on a development host) without credentials whose path is
+     * `/recover` and whose fragment is not empty — the web's `RecoverView` reads the whole fragment as the token.
+     */
+    fun recoveryOf(input: String): RecoveryLink? {
+        val text = trim(input)
+        if (text.isEmpty() || text.length > MAX_LINK_LENGTH) return null
+        val url = Url.of(text) ?: return null
+        if (url.scheme != "https" && !(url.scheme == "http" && devHost(url.host))) return null
+        if (url.credentials || url.path != "/recover" || url.fragment.isEmpty()) return null
+        return RecoveryLink(url.origin, url.fragment)
+    }
+
     /** The web's `parseShareLink`: a moderator's review is [Problem.NO_KEY] here, as a bookmark's parse calls it. */
     fun parse(input: String): Parsed {
         val text = trim(input)

@@ -107,7 +107,7 @@ A Gradle build of its own, run through its own wrapper.
   `CredentialDoor` (`AccountCredentialDoor`; `VeyqAccount.passwordChange()`, `addressChange()`, `erasure()`):
   `session/ColdCredential` (the floor proof), `PasswordChange` (the saved key's record forgotten after, the store kept:
   `forgetSavedKeyKeepStore`), `AddressChange` (sent through the tenant's origin; a sign-in with a new address
-  re-addresses the record, `readdress`), `AccountErasure` (the device forgets an erased account, `forgetErased`). The
+  re-addresses the record, `readdress`), `AccountErasure` (the device forgets an erased account, `forgetErased`); a recovery's finish, `RecoveryFinish` (the mailed link pasted into *Open a link* or shared as text, `ReceivedLink.recoveryOf`; the bridge's `Recovery.*`, `Watched.Recovery`; Android `RecoveryScreen.kt`, Apple `RecoveryView.swift`, Linux `account_flows::recovery`, Windows `RecoveryView.cs`; `RecoveryFinishTest`, live `LiveRecoveryTest`). The
   Emergency Kit: `account/KitWriter` (one A4 page, the standard 14 fonts, no date in the Info dictionary, so the bytes
   are deterministic; its words `KitWords` over the generated `CoreText`, the keys words.json marks `"core_text": true`)
   and `account/KitStep` (written straight into the path the platform's save dialog gave, `KitFile`; "saved" only after a

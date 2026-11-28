@@ -20,6 +20,8 @@ final class GuestLinks {
     private(set) var screen: GuestHeld?
     /// An invite's join open above everything (`OpenLink.State.invite`, ADR 0129): a screen as the guest's is.
     private(set) var joining: JoinHeld?
+    /// A recovery's mailed link open as its finish (`OpenLink.State.recovery`): a screen as the join's is.
+    private(set) var recovering: RecoveryHeld?
     @ObservationIgnored private var made: GuestOpener?
     /// The share extension's end (inbox #1015): called once a received link's field was cancelled or its guest view left,
     /// so the extension closes rather than showing what lies beneath (its sign-in or its pick mode); nil in the app.
@@ -63,12 +65,23 @@ final class GuestLinks {
     func cancelAsk() {
         asking?.stop()
         asking = nil
-        if screen == nil, joining == nil { onDone?() }
+        if screen == nil, joining == nil, recovering == nil { onDone?() }
     }
 
     /// The field's link opened as its guest (the field closes; its text, which holds the key, is not kept).
     func openAsked(_ model: AppModel) {
         guard let field = asking else { return }
+        // a recovery's mailed link opens its finish; the field is emptied as it hands the link (its token) over
+        if field.state.value.recovery {
+            guard let link = field.link.field.recovery() else { return }
+            field.stop()
+            asking = nil
+            recovering?.close()
+            let held = RecoveryHeld(model.recovery(link))
+            recovering = held
+            held.load()
+            return
+        }
         // an invite opens its join, never a guest view; the field is emptied as it hands the invite over
         if field.state.value.invite {
             guard let invite = field.link.field.invite() else { return }
@@ -88,7 +101,7 @@ final class GuestLinks {
             field.stop()
             asking = nil
             model.arrived(answer)
-            if screen == nil, joining == nil { onDone?() }
+            if screen == nil, joining == nil, recovering == nil { onDone?() }
             return
         }
         guard let s = field.link.open(tenant: model.guestTenant) else { return }
@@ -108,14 +121,21 @@ final class GuestLinks {
     func closed(_ held: GuestHeld) {
         held.close()
         if screen === held { screen = nil }
-        if screen == nil, asking == nil, joining == nil { onDone?() }
+        if screen == nil, asking == nil, joining == nil, recovering == nil { onDone?() }
+    }
+
+    /// The finish closed (*Close*, or its *Sign in*): every key it held zeroed by the core, the screen goes.
+    func closeRecovery(_ held: RecoveryHeld) {
+        held.close()
+        if recovering === held { recovering = nil }
+        if screen == nil, asking == nil, joining == nil, recovering == nil { onDone?() }
     }
 
     /// The join closed (*Close*, or its space opened): every secret it held zeroed by the core, the screen goes.
     func closeJoin(_ held: JoinHeld) {
         held.close()
         if joining === held { joining = nil }
-        if screen == nil, asking == nil, joining == nil { onDone?() }
+        if screen == nil, asking == nil, joining == nil, recovering == nil { onDone?() }
     }
 }
 

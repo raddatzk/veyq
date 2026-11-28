@@ -799,7 +799,7 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
 - Not in the apps yet (the owner 2026-11-26: every app is to do what the web does — these are gaps, closed one by one):
   the Members panel's and a group page's status lines (the re-keying and resealing hints, a stuck compromise rotation's
   notice), a space's picture in the switcher and the drawer (the apps show it on the Members header and a group's page
-  only), finishing a recovery (the apps ask for the reset link; the web finishes it), the trust reset,
+  only), the trust reset,
   and an in-app choice of appearance and language (the apps follow the system's; the desktops
   have no per-app language of their own).
 - Reopening where the person left and a place reached from outside (ADR 0150 § O5–O6, built 2026-11-27; passed on Android

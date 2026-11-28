@@ -186,6 +186,8 @@ internal class Composition<A : Connection, T : Any>(
     ) -> me.raddatz.veyq.mobile.sharing.GuestView? = { _, _, _, _ -> null },
     /** The join of a received invite link (`TenantJoin.of`): the real one in the library; a test has none (`Received.Open` then refuses an invite). */
     val join: (invite: me.raddatz.veyq.mobile.sharing.ReceivedLink.InviteLink) -> me.raddatz.veyq.mobile.session.TenantJoin? = { null },
+    /** The finish of a received recovery link (`RecoveryFinish.of`): the real one in the library; a test plays one, or has none (refused). */
+    val recovery: (link: me.raddatz.veyq.mobile.sharing.ReceivedLink.RecoveryLink) -> me.raddatz.veyq.mobile.session.RecoveryFinish? = { null },
     /**
      * What is asked before [loss] deletes account [account]'s writes made offline ([Call.QueuedAskFor]): `QueuedTray.ask`
      * over that account in the library; a test plays one, or has none (nothing asked).
@@ -780,6 +782,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val erasures = Registry<HeldFlow<me.raddatz.veyq.mobile.session.AccountErasure>>()
     private val kits = Registry<HeldFlow<me.raddatz.veyq.mobile.account.KitStep>>()
     private val joins = Registry<HeldFlow<me.raddatz.veyq.mobile.session.TenantJoin>>()
+    private val recoveries = Registry<HeldFlow<me.raddatz.veyq.mobile.session.RecoveryFinish>>()
 
     /** The searches the host opened (ADR 0146 decision 13), the tenant's: each disposed when it closes. */
     private val searches = Registry<HeldSearch>()
@@ -902,6 +905,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.SettingsGroupNewLock, is Call.SettingsGroupRevokeLinks -> grouping(call)
             is Call.JoinCode, is Call.JoinChoose, is Call.JoinCheckPassword, is Call.JoinUseAnyway, is Call.JoinRegister, is Call.JoinFinish, is Call.JoinSignIn, is Call.JoinOpen, is Call.JoinClose,
             is Call.JoinPicture, is Call.JoinRemovePicture, is Call.JoinPictureBytes -> joining(call, payload)
+            is Call.RecoveryUnlock, is Call.RecoveryFinish, is Call.RecoveryCheck, is Call.RecoveryEdited, is Call.RecoveryUseAnyway,
+            is Call.RecoverySignIn, is Call.RecoveryClose -> recovering(call, session)
             is Call.SessionForgetDevice -> {
                 val account = session.accounts.firstOrNull { it.key == call.connection } ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
                 session.forgetDevice(account)
@@ -1867,7 +1872,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     /** The Secret Key control of flow [id] — a password change, an address change or a rotation (ids are unique across them). */
     private fun flowIntake(id: Long): me.raddatz.veyq.mobile.account.KeyIntake? =
         passwordChanges[id]?.model?.intake ?: addressChanges[id]?.model?.intake ?: keyRotations[id]?.model?.intake
-            ?: kitRenewals[id]?.model?.intake
+            ?: kitRenewals[id]?.model?.intake ?: recoveries[id]?.model?.intake
     private val noFlow = Answer.Refused(Answer.Why.NO_SUCH_FLOW)
 
     /**
@@ -2506,6 +2511,14 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      * holds the key, goes no further than the core's parse and the link's model.
      */
     private suspend fun openReceived(parts: Composition<A, T>, text: String): Answer {
+        // a recovery's mailed link opens its finish (uc.account.recover-access): its token stays in the finish's model
+        val linkText = (me.raddatz.veyq.mobile.sharing.SharedText.linkIn(text) as? me.raddatz.veyq.mobile.sharing.SharedText.Found.One)?.text
+        (me.raddatz.veyq.mobile.sharing.ReceivedLink.recoveryOf(text) ?: linkText?.let(me.raddatz.veyq.mobile.sharing.ReceivedLink::recoveryOf))?.let { link ->
+            val finish = parts.recovery(link) ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+            val id = ids.incrementAndFetch().also { recoveries.put(it, HeldFlow(finish, "") { f -> f.close() }) }
+            scope.launch { finish.load() }
+            return Answer.RecoveryOpened(id)
+        }
         // an invite opens its join, not a guest view (ADR 0111, ADR 0129): its fragment stays in the join's model
         // the invite dialog's Copy copies the whole message: the one link in it is read as a shared text's is
         val inviteText = (me.raddatz.veyq.mobile.sharing.SharedText.linkIn(text) as? me.raddatz.veyq.mobile.sharing.SharedText.Found.One)?.text
@@ -2846,6 +2859,31 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      * A join from an invite (`TenantJoin`, ADR 0111, ADR 0129): its acts, its kit step held as every flow's ([kits]), and
      * *Open the space* opened as any sign-in is ([opened]). Dispatched apart: the dispatch's one method is at the JVM's size limit.
      */
+    /**
+     * A recovery's finish (`RecoveryFinish`, uc.account.recover-access): each call one line onto the model, which zeroes
+     * what it was handed; its Secret Key's kit through `Kit.Read`/`Kit.Clear` and a `FLOW_KIT` scan by its id
+     * ([flowIntake]); *Sign in* closes it and opens the sign-in with its server and address.
+     */
+    private suspend fun recovering(call: Call, session: SessionModel<A, T>): Answer {
+        val none = Answer.Refused(Answer.Why.NO_SUCH_FLOW)
+        return when (call) {
+            is Call.RecoveryUnlock -> recoveries[call.flow]?.model?.let { it.unlock(call.secretKey); Answer.Done } ?: none
+            is Call.RecoveryFinish -> recoveries[call.flow]?.model?.let { it.finish(call.newPassword, call.confirmPassword); Answer.Done } ?: none
+            is Call.RecoveryCheck -> recoveries[call.flow]?.model?.check(call.newPassword).done(Answer.Why.NO_SUCH_FLOW)
+            is Call.RecoveryEdited -> recoveries[call.flow]?.model?.edited().done(Answer.Why.NO_SUCH_FLOW)
+            is Call.RecoveryUseAnyway -> recoveries[call.flow]?.model?.useAnyway(call.on).done(Answer.Why.NO_SUCH_FLOW)
+            is Call.RecoverySignIn -> {
+                val held = recoveries[call.flow] ?: return none
+                val (server, email) = held.model.signIn ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                recoveries.remove(call.flow)?.close()
+                session.recovered(server, email)
+                Answer.Done
+            }
+            is Call.RecoveryClose -> recoveries.remove(call.flow)?.close().done(Answer.Why.NO_SUCH_FLOW)
+            else -> error("not a recovery's call: $call")
+        }
+    }
+
     private suspend fun joining(call: Call, payload: (ByteArray) -> Unit): Answer {
         val noJoin = Answer.Refused(Answer.Why.NO_SUCH_FLOW)
         return when (call) {
@@ -3238,6 +3276,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         } ?: flowOf(Update.KitRenewal(w.flow, null))
         is Watched.Kit -> kits[w.kit]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.Kit(w.kit, s.takeIf { open }) } }
             ?: flowOf(Update.Kit(w.kit, null))
+        is Watched.Recovery -> recoveries[w.flow]?.let { h ->
+            combine(h.model.state, h.model.intake.state, h.model.breach.state, h.open) { s, k, b, open ->
+                Update.Recovery(w.flow, s.takeIf { open }, k.takeIf { open }, b.takeIf { open })
+            }
+        } ?: flowOf(Update.Recovery(w.flow, null))
         is Watched.Join -> joins[w.join]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.Join(w.join, s.takeIf { open }) } }
             ?: flowOf(Update.Join(w.join, null))
         is Watched.Person -> persons[w.person]?.let { held ->
@@ -4080,6 +4123,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 squarePicture = squarePicture,
                 queuedAsk = { account, loss -> me.raddatz.veyq.mobile.offline.QueuedTray(account).ask(loss) },
                 join = { invite -> me.raddatz.veyq.mobile.session.TenantJoin.of(primitives, device, client, invite) },
+                recovery = { link -> me.raddatz.veyq.mobile.session.RecoveryFinish.of(primitives, client, link) },
                 received = { link, queue, password, music ->
                     me.raddatz.veyq.mobile.sharing.GuestView.open(
                         primitives, link, client, store, guestSessions, { config.language }, handedPassword = password, queue = queue,

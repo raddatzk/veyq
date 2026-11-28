@@ -10,7 +10,10 @@ struct RootView: View {
             // a received link open as its guest (ADR 0150 decision 4): a screen in the place of the sign-in or the shell,
             // which stay as the app model holds them and show again once the link is left (no shell page beneath reads
             // the models the guest's pages hold in its place)
-            if let join = model.guests.joining {
+            if let recovery = model.guests.recovering {
+                // a recovery's finish (uc.account.recover-access): above everything, as a join is
+                RecoveryView(model: model, held: recovery).id(ObjectIdentifier(recovery))
+            } else if let join = model.guests.joining {
                 // an invite's join (ADR 0129): above everything, as a guest's screen is; what lies beneath stays as it was
                 JoinView(model: model, held: join).id(ObjectIdentifier(join))
             } else if let held = model.guests.screen {

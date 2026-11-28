@@ -134,6 +134,11 @@ pub fn open_link(parent: &impl IsA<gtk::Widget>) {
                     d.close();
                     present(received, Some(text.trim().to_string()));
                 }
+                // a recovery's mailed link opens its finish (uc.account.recover-access): its token stays in the core
+                Ok(Answer::RecoveryOpened { flow }) => {
+                    d.close();
+                    crate::core_ui::account_flows::recovery(flow, &over);
+                }
                 // an invite opens its join (ADR 0129): the link — or the whole message around it — stays in the core
                 Ok(Answer::JoinOpened { join }) => {
                     d.close();

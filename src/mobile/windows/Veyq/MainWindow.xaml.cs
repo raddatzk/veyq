@@ -34,6 +34,8 @@ public sealed partial class MainWindow : Window
     private ReceivedView? _received;
     /// <summary>A received invite's join while it stands above the faces (JoinView), as a received link does.</summary>
     private JoinView? _join;
+    /// <summary>A received recovery link's finish while it stands above the faces (RecoveryView), as a join does.</summary>
+    private RecoveryView? _recovery;
     private UIElement? _behind;
 
     public MainWindow()
@@ -53,11 +55,14 @@ public sealed partial class MainWindow : Window
         ReceivedView.Presenter = PresentReceived;
         // a received invite's join stands above whatever shows, as a link does
         JoinView.Presenter = PresentJoin;
+        // a received recovery link's finish stands above whatever shows, as a join does
+        RecoveryView.Presenter = PresentRecovery;
         // the window closed lets go of a link or a join still open
         Closed += (_, _) =>
         {
             _received?.Dispose();
             _join?.Dispose();
+            _recovery?.Dispose();
         };
     }
 
@@ -71,8 +76,14 @@ public sealed partial class MainWindow : Window
             _join = null;
             joined.Dispose();
         }
+        var recovered = _recovery;
+        if (recovered is not null)
+        {
+            _recovery = null;
+            recovered.Dispose();
+        }
         if (_received is { } old) old.Dispose();
-        else if (joined is null) _behind = Faces.Visibility == Visibility.Visible ? Faces.Content as UIElement : null;
+        else if (joined is null && recovered is null) _behind = Faces.Visibility == Visibility.Visible ? Faces.Content as UIElement : null;
         ReceivedView? view = null;
         view = new ReceivedView(this, received, ReceivedMode.OnItsOwn, browser, () =>
         {
@@ -96,7 +107,12 @@ public sealed partial class MainWindow : Window
     /// replaces it (the old one let go).</summary>
     private void PresentJoin(long join)
     {
-        var covering = _received is not null || _join is not null;
+        var covering = _received is not null || _join is not null || _recovery is not null;
+        if (_recovery is { } recovery)
+        {
+            _recovery = null;
+            recovery.Dispose();
+        }
         if (_received is { } received)
         {
             _received = null;
@@ -123,6 +139,45 @@ public sealed partial class MainWindow : Window
         });
         _join = view;
         Log.Write("join shown");
+        Show(view.Page);
+    }
+
+    /// <summary>Finish <paramref name="flow"/> as the window's face until it is let go; it replaces a link, a join or another
+    /// finish standing there (the old one let go).</summary>
+    private void PresentRecovery(long flow)
+    {
+        var covering = _received is not null || _join is not null || _recovery is not null;
+        if (_received is { } received)
+        {
+            _received = null;
+            received.Dispose();
+        }
+        if (_join is { } join)
+        {
+            _join = null;
+            join.Dispose();
+        }
+        if (_recovery is { } old)
+        {
+            _recovery = null;
+            old.Dispose();
+        }
+        if (!covering) _behind = Faces.Visibility == Visibility.Visible ? Faces.Content as UIElement : null;
+        RecoveryView? view = null;
+        view = new RecoveryView(this, flow, () =>
+        {
+            // on a later turn: not inside the view's own update
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!ReferenceEquals(_recovery, view)) return;
+                _recovery = null;
+                Log.Write("recovery left");
+                Show(_behind);
+                _behind = null;
+            });
+        });
+        _recovery = view;
+        Log.Write("recovery shown");
         Show(view.Page);
     }
 
@@ -233,7 +288,7 @@ public sealed partial class MainWindow : Window
     private void Face(UIElement? face)
     {
         // a received link or a join stands above: the face waits behind it
-        if (_received is not null || _join is not null)
+        if (_received is not null || _join is not null || _recovery is not null)
         {
             _behind = face;
             return;

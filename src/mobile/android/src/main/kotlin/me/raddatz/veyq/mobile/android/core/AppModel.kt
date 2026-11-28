@@ -617,6 +617,39 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         if (_join.value === j) _join.value = null
     }
 
+    // ---- finishing a password recovery (core's `RecoveryFinish`, uc.account.recover-access) ----
+
+    private val _recovery = MutableStateFlow<me.raddatz.veyq.mobile.session.RecoveryFinish?>(null)
+
+    /** The finish of a received recovery link, above everything (as a join is); null while none is open. */
+    val recovery: StateFlow<me.raddatz.veyq.mobile.session.RecoveryFinish?> = _recovery.asStateFlow()
+
+    /** A received recovery link ([OpenLink.recovery]) opened as its finish, which releases its material at once. */
+    fun openRecovery(link: me.raddatz.veyq.mobile.sharing.ReceivedLink.RecoveryLink) {
+        _recovery.value?.close()
+        val f = me.raddatz.veyq.mobile.session.RecoveryFinish.of(BouncyCastlePrimitives, { block -> Network.client(block) }, link)
+        _recovery.value = f
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) { f.load() }
+    }
+
+    /** One of the finish's steps, off the main thread (each derives a key with Argon2id). */
+    fun recoveryStep(f: me.raddatz.veyq.mobile.session.RecoveryFinish, step: suspend (me.raddatz.veyq.mobile.session.RecoveryFinish) -> Unit) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) { step(f) }
+    }
+
+    /** The done step's *Sign in*: the sign-in with the recovered account's server and address; the finish closes. */
+    fun recoveredSignIn(f: me.raddatz.veyq.mobile.session.RecoveryFinish) {
+        val (server, email) = f.signIn ?: return
+        closeRecovery(f)
+        session.recovered(server, email)
+    }
+
+    /** The finish left (its ✕, Back or the sign-in): every key it held zeroed. */
+    fun closeRecovery(f: me.raddatz.veyq.mobile.session.RecoveryFinish) {
+        f.close()
+        if (_recovery.value === f) _recovery.value = null
+    }
+
     private val _whosWho = MutableStateFlow<WhosWhoPage?>(null)
 
     /** Settings' Who's who while it is open (core's `PersonTrust.whosWho`, inbox #967); null when closed. */
@@ -2565,7 +2598,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     }
 
     val guests: GuestLinks by lazy {
-        GuestLinks(viewModelScope, PreferencesStore(getApplication()), AndroidGuestSessions(deviceKeys), uploads, guestDeriver, { shellModel?.tenant }, ::appLanguage, ::guestMusic, onInvite = ::openJoin, onPlace = ::arriveHere, onSettings = { arrived(me.raddatz.veyq.mobile.navigation.Arrived.Settings(it)) })
+        GuestLinks(viewModelScope, PreferencesStore(getApplication()), AndroidGuestSessions(deviceKeys), uploads, guestDeriver, { shellModel?.tenant }, ::appLanguage, ::guestMusic, onInvite = ::openJoin, onRecovery = ::openRecovery, onPlace = ::arriveHere, onSettings = { arrived(me.raddatz.veyq.mobile.navigation.Arrived.Settings(it)) })
     }
 
     /**

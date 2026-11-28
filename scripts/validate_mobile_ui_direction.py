@@ -265,7 +265,7 @@ WIRE_APPLICATIONS: dict[str, tuple[str, ...]] = {
 WIRE_PLATFORM = (
     "AddressChange", "Audio", "Avatar", "Bookmark", "Controls", "Cover", "Erasure", "Header", "Home", "Import", "Invited", "Join", "KeyRotation",
     "Kit", "Link", "Manage", "Map", "MapState", "Media", "Move", "Net", "Notice", "PasswordChange", "Pdf", "Person",
-    "Picture", "Player", "Profile", "Queued", "Reader", "Received", "Report", "Row", "Save", "Scan", "Search", "SecretKey",
+    "Picture", "Player", "Profile", "Queued", "Reader", "Received", "Recovery", "Report", "Row", "Save", "Scan", "Search", "SecretKey",
     "Select", "Selection", "Session", "Settings", "Share", "Shell", "SignIn", "Store", "Trash", "Trust", "Unlock", "Upload",
     "View", "Words",
 )

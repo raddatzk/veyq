@@ -38,7 +38,8 @@ class AndroidGuestSessions(private val keys: DeviceKeys) : GuestSessions {
  * link is kept here once it is left: the core's model holds the key and zeroes it ([GuestScreen.leave]) — once the
  * guest's uploads still under way are in, which go on with the link left as a member's do (`UploadWork.kt`'s worker
  * follows them, inbox #1016). An invite's link (`/tenant/accept#…`) the field holds is handed to its join instead
- * ([onInvite], core's `TenantJoin`).
+ * ([onInvite], core's `TenantJoin`), a recovery's mailed link (`/recover#…`) to its finish ([onRecovery], core's
+ * `RecoveryFinish`).
  */
 class GuestLinks(
     private val scope: CoroutineScope,
@@ -53,6 +54,8 @@ class GuestLinks(
     private val music: () -> me.raddatz.veyq.mobile.audio.PageMusic? = { null },
     /** An invite the field holds (`OpenLink.State.invite`): opened as its join, not a guest view. */
     private val onInvite: (ReceivedLink.InviteLink) -> Unit = {},
+    /** A recovery's mailed link the field holds (`OpenLink.State.recovery`): opened as its finish (core's `RecoveryFinish`). */
+    private val onRecovery: (ReceivedLink.RecoveryLink) -> Unit = {},
     /** A member's own link handed to the open shell (inbox #1415): its answer, null where no shell is on screen. */
     private val onPlace: (me.raddatz.veyq.mobile.navigation.PlaceLink) -> me.raddatz.veyq.mobile.navigation.Arrived? = { null },
     /** A Settings link's section (null: the page's top), opened by the app. */
@@ -104,6 +107,13 @@ class GuestLinks(
     /** The field's link opened as its guest (the field closes; the text, which holds the key, is not kept). */
     fun openAsked() {
         val field = _asking.value ?: return
+        if (field.state.value.recovery) {
+            // the field empties itself as it hands the link over: its text holds the link's token
+            val link = field.recovery() ?: return
+            _asking.value = null
+            onRecovery(link)
+            return
+        }
         if (field.state.value.invite) {
             // the field empties itself as it hands the invite over: its text holds the invite's secret parts
             val invite = field.invite() ?: return

@@ -471,4 +471,57 @@ class AccountFlowsDispatchTest {
         assertTrue(b.gateNow() !is Gate.Signed, "the erased account stayed signed in")
         b.shutdown()
     }
+
+    /** A recovery's door as the test plays it: the material sealed under [played]'s Secret Key, the completes recorded. */
+    private inner class PlayedRecovery(val played: Played) : me.raddatz.veyq.mobile.session.RecoveryFinish.Door {
+        val completes = mutableListOf<me.raddatz.veyq.mobile.api.models.RecoveryCompleteRequest>()
+        val mk = p.randomBytes(32)
+        override suspend fun release(token: String): me.raddatz.veyq.mobile.api.models.RecoveryMaterial? {
+            val salt = p.randomBytes(16)
+            return me.raddatz.veyq.mobile.api.models.RecoveryMaterial(
+                played.email, me.raddatz.veyq.mobile.api.models.RecoveryMaterial.SuiteId.v1,
+                b64(suite.seal(Context("master-key"), suite.kekRecovery(played.secretKey, salt), mk)),
+                b64(suite.encodeKdfParams(V1.ARGON, salt)), b64(p.randomBytes(48)),
+            )
+        }
+        override suspend fun instanceSalt(email: String) = b64(ByteArray(16))
+        override suspend fun complete(body: me.raddatz.veyq.mobile.api.models.RecoveryCompleteRequest) = 204.also { completes += body }
+    }
+
+    @Test
+    fun aRecoveryLinkOpensItsFinishAndItsSignInIsTheSignInsWithItsAccount() = runBlocking {
+        val played = Played()
+        val door = PlayedRecovery(played)
+        val hidden = Hidden({}, emptySet())
+        val b = Bridge {
+            Composition(
+                SessionModel(Door(), hidden), hidden, JvmFiles,
+                recovery = { link -> me.raddatz.veyq.mobile.session.RecoveryFinish.over(p, link, door) },
+            ) { _ -> error("no tenant opens") }
+        }
+        val gate = b.watching(Watched.Session)
+        assertEquals(Answer.Done, b.ask(Call.SessionStart))
+        gate.until { (it as Update.Session).gate as? Gate.SignIn }
+        val token = "tok3n_tok3n_tok3n_tok3n_tok3n_tok3n_tok3n00"
+        val opened = b.ask(Call.ReceivedOpen("Reset it here: https://a.example/recover#$token")) as Answer.RecoveryOpened
+        val w = b.watching(Watched.Recovery(opened.flow))
+        suspend fun at(phase: me.raddatz.veyq.mobile.session.RecoveryPhase) =
+            w.until { u -> (u as Update.Recovery).shown?.takeIf { it.phase == phase && !it.working } }
+        assertEquals(played.email, at(me.raddatz.veyq.mobile.session.RecoveryPhase.KEY).email)
+        // the key control is the flows' one: a kit's Kit.Read/Kit.Clear and a FLOW_KIT scan reach it by the finish's id
+        assertEquals(Answer.Done, b.ask(Call.KitClear(opened.flow)))
+        // a pasted kit token is the key control's, as every flow's
+        assertEquals(Answer.Done, b.ask(Call.RecoveryUnlock(opened.flow, played.kitToken())))
+        at(me.raddatz.veyq.mobile.session.RecoveryPhase.PASSWORD)
+        assertEquals(Answer.Done, b.ask(Call.RecoveryCheck(opened.flow, "a much better password")))
+        assertEquals(Answer.Done, b.ask(Call.RecoveryFinish(opened.flow, "a much better password", "a much better password")))
+        at(me.raddatz.veyq.mobile.session.RecoveryPhase.DONE)
+        assertEquals(1, door.completes.size)
+        assertEquals(Answer.Done, b.ask(Call.RecoverySignIn(opened.flow)))
+        val signIn = gate.until { u -> ((u as Update.Session).gate as? Gate.SignIn)?.takeIf { it.email != null } }
+        assertEquals(Gate.SignIn(server = "https://a.example", email = played.email), signIn)
+        w.until { u -> (u as Update.Recovery).takeIf { it.shown == null } }
+        assertEquals(Answer.Refused(Answer.Why.NO_SUCH_FLOW), b.ask(Call.RecoveryUnlock(opened.flow, played.typedKey())))
+        b.shutdown()
+    }
 }

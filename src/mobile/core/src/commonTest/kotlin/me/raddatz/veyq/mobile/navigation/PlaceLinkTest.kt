@@ -139,7 +139,11 @@ class PlaceLinkTest {
         // a share link is still a guest's, and a foreign link still refused as before
         field.text("https://photos.example.org/s/Sh4reIdSh4reIdSh4reIdSh4reIdSh4reIdSh4re-_2#k=S2V5S2V5S2V5S2V5S2V5S2V5S2V5S2V5S2V5S2V5S2U")
         assertFalse(field.state.value.place)
+        // a recovery's mailed link is its finish's, never a place (uc.account.recover-access; the token never a place's)
         field.text("https://photos.example.org/recover#token")
+        assertFalse(field.state.value.place)
+        assertTrue(field.state.value.recovery)
+        field.text("https://photos.example.org/nothing#token")
         assertEquals(Msg.LINK_PROBLEM_NOT_A_SHARE, field.state.value.problem)
     }
 }

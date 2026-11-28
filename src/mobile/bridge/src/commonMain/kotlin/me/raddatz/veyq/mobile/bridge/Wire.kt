@@ -304,6 +304,30 @@ internal sealed class Call {
     /** The join's screen closed: every secret it held zeroed. */
     @Serializable @SerialName("Join.Close") data class JoinClose(val join: Long) : Call()
 
+    /**
+     * A recovery's *Continue* (`RecoveryFinish.unlock`): the RECOVERY wrap opened with the Secret Key as the field holds it
+     * (typed, a pasted kit token, or empty while `Kit.Read`/a `FLOW_KIT` scan of this [flow] holds a kit). Inward once, never back.
+     */
+    @Serializable @SerialName("Recovery.Unlock") data class RecoveryUnlock(val flow: Long, val secretKey: String) : Call()
+
+    /** *Reset password* (`RecoveryFinish.finish`): the new password once repeated. Inward once, never back. */
+    @Serializable @SerialName("Recovery.Finish") data class RecoveryFinish(val flow: Long, val newPassword: String, val confirmPassword: String) : Call()
+
+    /** The new password left its field (`RecoveryFinish.check`): the breach check's state follows in [Update.Recovery]. */
+    @Serializable @SerialName("Recovery.Check") data class RecoveryCheck(val flow: Long, val newPassword: String) : Call()
+
+    /** The new password was edited (`RecoveryFinish.edited`). */
+    @Serializable @SerialName("Recovery.Edited") data class RecoveryEdited(val flow: Long) : Call()
+
+    /** *Use it anyway* on a breached new password (`RecoveryFinish.useAnyway`). */
+    @Serializable @SerialName("Recovery.UseAnyway") data class RecoveryUseAnyway(val flow: Long, val on: Boolean) : Call()
+
+    /** The done step's *Sign in*: the flow closes and the sign-in opens with its server and address (`SessionModel.recovered`). */
+    @Serializable @SerialName("Recovery.SignIn") data class RecoverySignIn(val flow: Long) : Call()
+
+    /** The recovery's screen closed: every key it held zeroed. */
+    @Serializable @SerialName("Recovery.Close") data class RecoveryClose(val flow: Long) : Call()
+
     /** The join's optional picture: the picture at [path] cropped square by the host at [pose] (`TenantJoin.choosePicture`): [Answer.Done] or `NOT_A_PICTURE`. */
     @Serializable @SerialName("Join.Picture") data class JoinPicture(val join: Long, val path: String, val pose: me.raddatz.veyq.mobile.session.CoverFrame.Pose) : Call()
 
@@ -2212,6 +2236,8 @@ internal sealed class Answer {
 
     /** [Call.ReceivedOpen] of an invite link: its join (`TenantJoin`, ADR 0111, ADR 0129), watched as [Watched.Join]. */
     @Serializable @SerialName("JoinOpened") data class JoinOpened(val join: Long) : Answer()
+    /** A recovery link opened as its finish (`RecoveryFinish`), loading: [Watched.Recovery] draws it. */
+    @Serializable @SerialName("RecoveryOpened") data class RecoveryOpened(val flow: Long) : Answer()
 
     /** [Call.SettingsGroups]: the caller's groups. */
     @Serializable @SerialName("GroupsListed") data class GroupsListed(val groups: me.raddatz.veyq.mobile.session.TenantGroups.Groups) : Answer()
@@ -2792,6 +2818,7 @@ internal sealed class Watched {
     @Serializable @SerialName("Erasure") data class Erasure(val flow: Long) : Watched()
     @Serializable @SerialName("Kit") data class Kit(val kit: Long) : Watched()
     @Serializable @SerialName("Join") data class Join(val join: Long) : Watched()
+    @Serializable @SerialName("Recovery") data class Recovery(val flow: Long) : Watched()
     @Serializable @SerialName("KitRenewal") data class KitRenewal(val flow: Long) : Watched()
 
     /** A search opened by [Call.SearchOpen]. */
@@ -2983,6 +3010,13 @@ internal sealed class Update {
     @Serializable @SerialName("Kit") data class Kit(val kit: Long, val shown: me.raddatz.veyq.mobile.account.KitStep.State?) : Update()
     /** A join's state (`TenantJoin.State`): words, phases and flags, never a key, the code or a password; null once closed. */
     @Serializable @SerialName("Join") data class Join(val join: Long, val shown: me.raddatz.veyq.mobile.session.TenantJoin.State?) : Update()
+    /** A recovery's state (`RecoveryFinish.State`), its key control's and its new password's check; never a key or a password; null once closed. */
+    @Serializable @SerialName("Recovery") data class Recovery(
+        val flow: Long,
+        val shown: me.raddatz.veyq.mobile.session.RecoveryFinish.State?,
+        val kit: me.raddatz.veyq.mobile.account.KeyIntake.IntakeState? = null,
+        val breach: me.raddatz.veyq.mobile.account.BreachCheck.BreachState? = null,
+    ) : Update()
     @Serializable @SerialName("KitRenewal") data class KitRenewal(
         val flow: Long,
         val shown: me.raddatz.veyq.mobile.session.KitRenewal.State?,

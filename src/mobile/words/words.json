@@ -7823,6 +7823,64 @@
     "en": "If your Emergency Kit is gone too, nothing can bring your memories back — there is no master key on our side.",
     "de": "Ist auch dein Notfall-Kit weg, kann nichts deine Erinnerungen zurückholen — bei uns liegt kein Hauptschlüssel."
   },
+  "recovery_step_key": {
+    "en": "Enter your Secret Key",
+    "de": "Secret Key eingeben"
+  },
+  "recovery_step_key_intro": {
+    "en": "The link proved you read your mail. Your Secret Key proves the account is yours — it is what actually opens it.",
+    "de": "Der Link hat gezeigt, dass du deine Mail liest. Dein Secret Key zeigt, dass das Konto dir gehört — er ist es, der es tatsächlich öffnet."
+  },
+  "recovery_secret_key_hint": {
+    "en": "From your Emergency Kit: paste it or upload the kit.",
+    "de": "Aus deinem Notfall-Kit: füge ihn ein oder lade das Kit hoch."
+  },
+  "recovery_for_account": {
+    "note": "the key step's line; {1} the address the link is for (the web's recovery.forAccount)",
+    "en": "This link is for {1}.",
+    "de": "Dieser Link gehört zu {1}."
+  },
+  "recovery_step_password": {
+    "en": "Choose a new password",
+    "de": "Neues Passwort wählen"
+  },
+  "recovery_confirm_password": {
+    "en": "Repeat the new password",
+    "de": "Neues Passwort wiederholen"
+  },
+  "recovery_mismatch": {
+    "en": "The two passwords do not match.",
+    "de": "Die beiden Passwörter stimmen nicht überein."
+  },
+  "recovery_submit": {
+    "en": "Reset password",
+    "de": "Passwort zurücksetzen"
+  },
+  "recovery_done": {
+    "en": "Done. Sign in with your new password.",
+    "de": "Fertig. Melde dich mit deinem neuen Passwort an."
+  },
+  "recovery_link_spent": {
+    "en": "This link no longer works — it has expired, or it was already used. If you have just reset your password, simply sign in. Otherwise ask for a new link.",
+    "de": "Dieser Link funktioniert nicht mehr — er ist abgelaufen oder wurde schon benutzt. Hast du dein Passwort gerade zurückgesetzt, melde dich einfach an. Sonst fordere einen neuen Link an."
+  },
+  "recovery_key_failed": {
+    "en": "That Secret Key did not open your account. Check it and try again — the link still works.",
+    "de": "Mit diesem Secret Key ließ sich dein Konto nicht öffnen. Prüfe ihn und versuch es nochmal — der Link gilt weiter."
+  },
+  "recovery_proof_failed": {
+    "en": "The reset was refused. Start again with a fresh link.",
+    "de": "Das Zurücksetzen wurde abgelehnt. Fang mit einem neuen Link noch einmal an."
+  },
+  "recovery_device_note": {
+    "en": "Every device signs in fresh after this, so you will enter your Secret Key once more on each of them.",
+    "de": "Danach meldet sich jedes Gerät neu an, du gibst deinen Secret Key dort also noch einmal ein."
+  },
+  "recovery_checking": {
+    "note": "the finish's first step while the link's token is checked (the web shows the title alone)",
+    "en": "Checking the link…",
+    "de": "Link wird geprüft…"
+  },
   "locked_scope_note": {
     "note": "the locked sign-in (uc.account.sessions E3): what this device keeps; the web's sessions.lockedScopeNote names a browser and its toggle",
     "en": "This device keeps nothing: no saved key, and no session once you leave this screen or close the app.",
@@ -7833,10 +7891,10 @@
     "en": "Every other device was signed out. This device could not be signed out — try again.",
     "de": "Alle anderen Geräte wurden abgemeldet. Dieses Gerät konnte nicht abgemeldet werden — versuch es nochmal."
   },
-  "recovery_on_web": {
-    "note": "the app asks for the recovery link; the mailed link opens the web's page, which finishes the reset (ADR 0148 decision 6, ADR 0150 § O)",
-    "en": "The link opens in your browser, on any device. There you enter the Secret Key from your Emergency Kit and choose a new password — then sign in here with it.",
-    "de": "Der Link öffnet sich in deinem Browser, auf jedem Gerät. Dort gibst du den Secret Key aus deinem Notfall-Kit ein und wählst ein neues Passwort — damit meldest du dich dann hier an."
+  "recovery_link_note": {
+    "note": "after the ask: where the mailed link finishes the reset — in the browser, or here through Open a link (uc.account.recover-access, ADR 0150 § O1: the token never rides veyq://)",
+    "en": "The link opens in your browser, where you can finish the reset. To finish it in this app instead, copy the link and paste it into “Open a link” on the sign-in.",
+    "de": "Der Link öffnet sich in deinem Browser, dort kannst du das Zurücksetzen abschließen. Um es stattdessen in dieser App abzuschließen, kopiere den Link und füge ihn bei der Anmeldung unter „Link öffnen“ ein."
   },
   "tv_picker_title": {
     "note": "a TV's account picker's heading (ADR 0159 decision 4): each household member picks their own account",

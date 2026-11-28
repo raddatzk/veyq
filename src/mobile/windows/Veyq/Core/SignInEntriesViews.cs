@@ -189,7 +189,7 @@ internal sealed class RecoverView
         var sentLine = WayInPage.Text(Words.RecoverySent(), "recover-sent");
         sentLine.Foreground = (Brush)Application.Current.Resources["SystemFillColorSuccessBrush"];
         _sent.Children.Add(sentLine);
-        _sent.Children.Add(WayInPage.Text(Words.RecoveryOnWeb()));
+        _sent.Children.Add(WayInPage.Text(Words.RecoveryLinkNote()));
         AutomationProperties.SetAutomationId(_working, "recover-working");
         Page = WayInPage.Column(
             WayInPage.Heading(Words.RecoveryTitle(), "recover-title"), WayInPage.Text(Words.RecoveryIntro()),

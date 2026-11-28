@@ -175,9 +175,18 @@ wrote no Emergency Kit, encoded no WebP and called none of the operations these 
   container first is unmeasured (inbox #975).
 - **The sign-in's two account entries came later** (2026-11-23, [ADR 0154](0154-every-app-draws-the-cores-plans-through-a-core-ui-its-applications-plug-into-as-the-webs-do.md)
   § As built: the sign-in's entries). The locked sign-in (uc.account.sessions E3) is the login alone, every device signed
-  out, the way back keeping nothing; *Forgot your password?* asks for the recovery link as the web does, and the mailed
-  link's page — the web's, as decision 6's confirm is — finishes the reset with the kit (the owner, 2026-11-23: it stays so; the app never
-  finishes it itself).
+  out, the way back keeping nothing; *Forgot your password?* asks for the recovery link as the web does. **The finish is the app's too** (owner 2026-11-26:
+  every app does what the web does, replacing 2026-11-23's "the web finishes it"): the mailed link
+  (`<tenant>/recover#<token>`) reaches the app through *Open a link* or shared text only — never `veyq://`, which carries
+  no token (ADR 0150 § O1, § O5 rule 2) — and `session/RecoveryFinish` ports the web's `RecoverView` over `recovery.ts`:
+  the material released (any failure the web's `linkSpent`), the RECOVERY wrap opened by the Secret Key alone through the
+  flows' key control (`KeyIntake`, bound to the released address), a new password with the breached-password check, a
+  fresh PASSWORD wrap, auth key and `secret_key_proof.recovery` sent once, every key zeroed at done and close; done hands
+  the sign-in its server and address (`SessionModel.recovered`). The device's own trusted record of the account, where it
+  has one, is left to the paths that already end a record whose wraps and sessions the server dropped (a refused
+  refresh, a wrap no longer served), as on the account's other devices. Held by `RecoveryFinishTest` (the complete's
+  proof and new wrap checked as the server checks them), `AccountFlowsDispatchTest`'s recovery case and, live as a
+  throwaway, `LiveRecoveryTest` (the link read from Mailpit, the new password signing in to the same spaces).
 - **The save dialogs' recent-files records are accepted** (2026-11-19, inbox #981). After a kit saved through GTK's
   dialog, `~/.local/share/recently-used.xbel` named the kit's path (measured in the Linux pass; in the Flatpak the
   portal keeps the same record on the host), and Windows' save picker leaves a `.lnk` under `Recent` (measured in the Windows pass). Such a record

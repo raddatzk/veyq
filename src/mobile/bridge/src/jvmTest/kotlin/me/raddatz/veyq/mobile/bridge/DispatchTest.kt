@@ -162,7 +162,9 @@ class DispatchTest {
         assertEquals(Answer.DeepLinked(DeepScreen.OPEN), b.ask(Call.ReceivedOpen(link)), "held while the start decides")
         assertEquals(Answer.Done, b.ask(Call.SessionStart))
         assertEquals(Answer.ReceivedProblem(Msg.LINK_PROBLEM_NOT_OPEN_HERE, browser = false), b.ask(Call.ReceivedOpen(link)))
-        assertEquals(Answer.ReceivedProblem(Msg.LINK_PROBLEM_NOT_A_SHARE, browser = false), b.ask(Call.ReceivedOpen("https://veyq.localhost/recover#tok")))
+        assertEquals(Answer.ReceivedProblem(Msg.LINK_PROBLEM_NOT_A_SHARE, browser = false), b.ask(Call.ReceivedOpen("https://veyq.localhost/nothing#tok")))
+        // a recovery's mailed link is its finish's, never a place: with no finish in this composition it is not offered
+        assertEquals(Answer.Refused(Answer.Why.NOT_OFFERED), b.ask(Call.ReceivedOpen("https://veyq.localhost/recover#tok")))
         b.shutdown()
     }
 
