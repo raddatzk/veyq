@@ -433,7 +433,8 @@ owner's core, the group at its next epoch; bitten by leaving the commit out: red
 
 The two places the web's account flows touch the instance moderation key (ADR 0099 §§ 3–5, ADR 0101 decision 9) are in
 the apps too (owner 2026-11-26), so decision 9's *Do this on the web* is gone. The apps do not moderate: no case is opened,
-no moderation sign-in, no review (inbox #1014). It was decided as follows:
+no moderation sign-in, no review — moderating stays on the web (owner 2026-11-28; inbox #1014 closed). A moderator's
+review link opened in an app keeps *Open in the browser*. It was decided as follows:
 
 1. **The bundle is the suite's** (`V1.moderationBundle`, `moderationSeed`): HKDF-SHA256 of the 32-byte `M_n` under
    `veyq/v1/moderation/kem|sign`, the X-Wing and Ed25519 public halves; held to the `moderation_key` vector by the Kotlin

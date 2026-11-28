@@ -155,7 +155,7 @@ numbers* into the profile); macOS and tvOS built, the Mac's sheet never clicked 
 2026-11-28; ADR 0099 §§ 3–5): a holder's *Secure your account* stages every live epoch's grant re-sealed to the new
 identity or declared (`session/ModerationKeyStage`); the last holder's *Erase account* shows the web's note and hands
 every epoch the Server Owner misses to them inside the erasure (`ModerationGrants.sealForServerOwner`). The apps open no
-case and moderate nothing (#1014). Held by the conformance's `moderation_key`, `ModerationGrantsTest` and
+case and moderate nothing — moderating stays on the web (owner 2026-11-28). Held by the conformance's `moderation_key`, `ModerationGrantsTest` and
 `CredentialFlowsTest`; not live (no throwaway moderator, #992) — owed with the note's passes in inbox #1426.
 
 **The task queue's jobs, in the core** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) § The task queue's jobs, built
@@ -842,7 +842,7 @@ another throwaway held), and the owner's iPhone and iPad.
   screen reader over the guest screens; Android's re-pass of the kept link's page and the guests' reports
   (#1032–#1036), Linux's signed-out Replace and a guest Pot's Settings, Windows' guest Download and a row's context-menu
   report; the `veyq:` link (§ O): the Mac's `open 'veyq://link'` (the coordinator's) and the iPhone from Safari (the
-  owner's). Not built: *Keep* on the web's share page (#1013); a moderator's review link (#1014); a guest medium's EXIF (#1017).
+  owner's). Not built: *Keep* on the web's share page (#1013); a moderator's review link (moderating stays on the web, owner 2026-11-28); a guest medium's EXIF (#1017).
   Built, their device passes owed: a link shared in from another app (#1015), a guest's upload with the app left
   (#1016), a guest's pages following the link live (#1017).
 - Dropping files onto the app (Android; Apple's drop is built, not measured).
