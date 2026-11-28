@@ -457,6 +457,18 @@ deleted, and #436's mention of the disabled major-entry proof is updated.
   stage exists had to move into phase 3 (ADR 0091 decision 8). A CR whose last phase may ship apart should say which
   of its docs belong to which phase.
 
+### Phase 3 — observed (pull request 2's merge push, 2026-11-28)
+
+- **L3 gated a push green.** The Checks run of `321c81366` ([run 46154117080](https://github.com/raddatzk/veyq/actions/runs/46154117080)):
+  `Stack lane L3 (amd64, 1|2|3)` green (4 min 9 s, 4 min 1 s, 3 min 3 s), beside both L2 legs and `Pipeline green`.
+- **It restored exactly the selection:** shard 1 v0.2480 and v1.248, shard 2 v1.0 and v1.260, shard 3 v1.168; each
+  `cosign verify` named the digest phase 2's table holds and archive.yml's identity; each backup installed fresh as the
+  candidate (1.329), restored, and its browser spec passed. Measured: `gh run view --repo raddatzk/veyq --job <id> --log`
+  for jobs 141012513739, 141012513761, 141012513765.
+- So the fourth invariant's condition holds, and phase 4 lands as pull request 3. A shard takes about 4 minutes, well
+  inside the 15-minute budget, so `MAX_PER_SHARD` = 4 holds with room. What is still unseen: the next Publish attesting
+  L3 with `inputs.backups`, and a promotion comparing it.
+
 ### Phase 4 — decision log (implementer, 2026-11-28)
 
 - **Committed apart from phase 3**, on top of it and touching nothing phase 3 needs, so it can move to a branch of its own
