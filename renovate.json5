@@ -298,6 +298,11 @@
       separateMajorMinor: false,
     },
     {
+      description: "The Quarkus Gradle plugin and the platform BOM share the catalog's `quarkus` version, so the plugin is looked up as the BOM: only a version the platform publishes is proposed. The plugin alone is released with every core version, the platform not (measured 2026-11-28 on Maven Central: core and plugin 3.40.2, platform 3.40.1, 3.40.1.1, 3.40.1.2 and no 3.40.2), so the plugin's own lookup proposed a `quarkus` the BOM does not have (PR #123, red: 'Could not find io.quarkus.platform:quarkus-bom:3.40.2'). A platform version with no plugin release would be red in the Renovate follow's derive, never merged.",
+      matchDepNames: ["io.quarkus:gradle-application-plugin"],
+      overridePackageName: "io.quarkus.platform:quarkus-bom",
+    },
+    {
       description: "PyYAML's hashed wheels: a version bump rewrites the hashes to the set PyPI publishes for it.",
       matchManagers: ["pip_requirements"],
       matchFileNames: ["scripts/requirements-release.txt"],
