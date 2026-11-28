@@ -709,6 +709,12 @@ during cr-e2e-orchestrator:
   up front saved a hand-back. Write such a done-when as *"locally: …; observed after the owner's push: …"*, and the
   CR stays until the second half is observed (that CR's: both L2 legs green on the pull request and the push, and
   the Publish's attestation read back with `cosign verify-attestation`).
+- **A step whose precondition only a push can show ships in a pull request of its own, after that push.** A lane that
+  runs on a push alone cannot gate any pull request, so a CR that retires something once that lane has gated green
+  cannot land the retirement in the same pull request as the lane: `cr-stack-lane-l3-backup-archive` split the
+  jar-level proof's retirement into a third pull request, rebased onto `main` after the second's merge push showed L3
+  green. Plan it so in the CR's delivery, and say there which docs belong to which pull request — a stage's docs move
+  with the stage (ADR 0091 decision 8), so a CR that lists them all under its last phase moves them at implement time.
 - **A third gate now outranks both, and it is the one in force: there is no remote.** `git remote -v` is empty
   (measured 2026-08-17), so **no CI run has executed in this repository** — not the trust chain, not `ci.yml`,
   not `web-e2e`. (The runs that admitted backend's, web's and web-e2e's rows predate its 2026-08-06 import, so a
@@ -972,7 +978,10 @@ the dev stack, which is the worse defect and the opposite verdict. Every one of 
 command away, and none of them was reachable by reading the compose files. So: where a phase's lever is a
 shell command, the refine runs **its first invocation** — not the rehearsal, the one call the plan hangs on —
 and the CR carries that output. The cost is seconds; the alternative is redesigning the phase at implement
-time, which is the most expensive place there is to take a design decision.
+time, which is the most expensive place there is to take a design decision. Where the phase builds on a block that
+already runs, that call is the one the phase ADDS, not the block's: `cr-stack-lane-l3-backup-archive`'s refine ran lane
+L2's install-and-seed green, never the `veyqctl backup --objects-to` it put on top, which failed on Docker Desktop for
+macOS at the first implement run (inbox #870).
 
 **And check the lever survives the tool.** An injection is only an injection if the thing under test cannot undo
 it. cr-e2e-orchestrator planned *"store absent — stop the garage container"*; the orchestrator's own

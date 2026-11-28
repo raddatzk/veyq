@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Self-test of lane L3's pure parts (ADR 0091 decision 6, amended 2026-11-26; cr-stack-lane-l3-backup-archive phase 3),
+"""Self-test of lane L3's pure parts (ADR 0091 decision 6, amended 2026-11-26),
 offline and Docker-free: which archived backups the lane restores, how a shard takes its part, and what it refuses of an
 archive before anything is installed.
 
