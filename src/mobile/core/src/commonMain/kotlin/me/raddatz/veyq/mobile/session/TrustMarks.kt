@@ -29,6 +29,9 @@ class MemoryDeviceStore : DeviceStore {
     override fun remove(key: String) { values.remove(key) }
 }
 
+/** What starting a list over came to (the web's `ResetOutcome`): written empty, or it opened after all and nothing was written. */
+enum class StartOver { RESET, ALREADY_READABLE }
+
 /** Why a sealed account document was refused (ADR 0028 decision 7), never read as the empty store. */
 class TrustStateRefused(val code: Code) : Exception(code.name) {
     enum class Code { ROLLED_BACK, UNREADABLE }
@@ -92,6 +95,16 @@ class TrustMarks(private val store: DeviceStore, primitives: Primitives, masterK
     suspend fun floor(scopeId: String): Long = lock.withLock { read().epochs[scopeId] ?: 0 }
 
     suspend fun held(scopeId: String): HeldEpochKey? = lock.withLock { read().held[scopeId] }
+
+    /**
+     * A list started over on this device ([StartOver.RESET], the web's `setMark`, ADR 0028 decision 7's one way back): the
+     * pin store's mark SET — lowered too — to the [revision] this device just wrote. The one door that lowers a mark; its
+     * one caller is the start-over of [PinStore].
+     */
+    internal suspend fun setPins(revision: Long) = lock.withLock { write(read().copy(pins = revision)) }
+
+    /** The device register's mark set to [revision] this device just wrote ([setPins]'s twin; [DeviceRegisterStore]'s start-over). */
+    internal suspend fun setRegister(revision: Long) = lock.withLock { write(read().copy(register = revision)) }
 
     suspend fun raisePins(revision: Long) = lock.withLock {
         val s = read()

@@ -20,7 +20,7 @@ internal static class WhosWhoDialog
 {
     /// <summary>Opens the list over <paramref name="window"/>; <paramref name="openPerson"/> leaves Settings for a person's
     /// profile once the dialog has closed.</summary>
-    public static async void Open(Window window, Action<string> openPerson)
+    public static async void Open(Window window, Action<string> openPerson, Action? trustReset = null)
     {
         try
         {
@@ -34,6 +34,7 @@ internal static class WhosWhoDialog
             };
             AutomationProperties.SetAutomationId(dialog, "whos-who");
             string? chosen = null;
+            var resetting = false;
             void Choose(string userId)
             {
                 chosen = userId;
@@ -58,6 +59,18 @@ internal static class WhosWhoDialog
                 if (read.said is { } said)
                 {
                     Said(body, ReceivedText.Said(said), read.retry, Load);
+                    // the web's `TrustResetLink`: the one way back from a refused pin store (ADR 0028 decision 7)
+                    if (read.trustReset && trustReset is not null)
+                    {
+                        var start = new HyperlinkButton { Content = Words.TrustResetLink(), Padding = new Thickness(0) };
+                        AutomationProperties.SetAutomationId(start, "whos-who-trust-reset");
+                        start.Click += (_, _) =>
+                        {
+                            resetting = true;
+                            dialog.Hide();
+                        };
+                        body.Children.Add(start);
+                    }
                     return;
                 }
                 var list = new StackPanel { Spacing = 4 };
@@ -68,6 +81,7 @@ internal static class WhosWhoDialog
             Load();
             await Dialogs.Show(window, dialog);
             if (chosen is { } id) openPerson(id);
+            else if (resetting) trustReset?.Invoke();
         }
         catch (Exception e)
         {

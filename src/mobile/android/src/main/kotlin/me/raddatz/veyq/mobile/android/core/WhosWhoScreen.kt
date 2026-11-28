@@ -43,7 +43,7 @@ internal data class WhosWhoPage(val loading: Boolean, val read: WhosWho? = null)
  * where the compare lives; core decides every word and whether the compare is offered.
  */
 @Composable
-internal fun WhosWhoDialog(page: WhosWhoPage, onRetry: () -> Unit, onOpen: (String) -> Unit, onClose: () -> Unit) {
+internal fun WhosWhoDialog(page: WhosWhoPage, onRetry: () -> Unit, onOpen: (String) -> Unit, onClose: () -> Unit, onTrustReset: () -> Unit = {}) {
     FlowDialog(title = stringResource(R.string.whos_who_title), secure = false, tag = "whos-who", onClose = onClose) {
         Text(stringResource(R.string.whos_who_sub), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val read = page.read
@@ -55,6 +55,7 @@ internal fun WhosWhoDialog(page: WhosWhoPage, onRetry: () -> Unit, onOpen: (Stri
             read.said != null -> {
                 Text(say(read.said!!), modifier = Modifier.testTag("whos-who-said"))
                 if (read.retry) TextButton(onClick = onRetry, modifier = Modifier.testTag("whos-who-retry")) { Text(stringResource(R.string.people_retry)) }
+                if (read.trustReset) TextButton(onClick = onTrustReset, modifier = Modifier.testTag("whos-who-trust-reset")) { Text(stringResource(R.string.trust_reset_link)) }
             }
             else -> Column(Modifier.testTag("whos-who-list")) {
                 read.people.forEachIndexed { i, row ->

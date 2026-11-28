@@ -41,6 +41,12 @@ class AppleQueued(private val shell: ShellModel) {
     /** The kit notice dismissed ([ShellModel.dismissKitNotice]). */
     fun dismissKitNotice() = shell.dismissKitNotice()
 
+    /** *Finish your profile* ([ShellModel.finishProfile], ADR 0084 decision 7): shown while true. */
+    val finishProfile: StateFlow<Boolean> = shell.finishProfile.stateIn(scope, SharingStarted.Eagerly, false)
+
+    /** The prompt dismissed ([ShellModel.dismissFinishProfile]). */
+    fun dismissFinishProfile() = shell.dismissFinishProfile()
+
     /** The level shown's writes not sent yet ([ShellModel.queuedHere]). */
     val here: StateFlow<List<QueuedItem>> = shell.queuedHere.stateIn(scope, SharingStarted.Eagerly, emptyList())
 

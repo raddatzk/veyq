@@ -179,7 +179,11 @@ by the contact's signed key chain. Key Transparency stays the (out-of-scope) end
      a document until the user resets it: a downgrade that is now consented, not silent. Another device heals
      by reading where its mark sits at or below the reset's revision; one whose mark sits above it (after a
      backup restore) refuses it as rolled back and is offered the same reset, because a device cannot tell a
-     restore from an attack.
+     restore from an attack. The apps offer the same reset from the core (`session/TrustReset` over
+     `PinStore.startOver` and `DeviceRegisterStore.startOver`, `TrustMarks.setPins`/`setRegister` the one lowering door;
+     Settings' `TRUST_RESET` section while `VeyqAccount.trustRefused`, and the link beside Who's who's and the device
+     names' refusal, opening that section, which no link from outside reaches (`Place.NOT_FROM_OUTSIDE`); the search
+     offers it exactly while the page does; held by `GrantTrustTest`'s and `TrustResetTest`'s start-over cases).
    - **A refusal is named and pauses, never declines.** A refused store is named as rolled back or unreadable; the
      grant-delivery worker pauses on one rather than declining a job, and the nearest notice names it and links to
      the one reset.

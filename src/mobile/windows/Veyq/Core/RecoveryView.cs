@@ -74,7 +74,8 @@ internal sealed class RecoveryView : IDisposable
         _next = new NewPasswordField(() => _closed ? null : _flow, "recovery-new",
             (f, typed) => new Call.RecoveryCheck { flow = f, newPassword = typed }, f => new Call.RecoveryEdited { flow = f },
             (f, on) => new Call.RecoveryUseAnyway { flow = f, on = on });
-        foreach (var box in new[] { _next.Box, _confirm })
+        // the flows' secret boxes sit capped at the left; here every field fills the column, as the join's do
+        foreach (var box in new[] { _key.Box, _next.Box, _confirm })
         {
             box.MaxWidth = double.PositiveInfinity;
             box.HorizontalAlignment = HorizontalAlignment.Stretch;

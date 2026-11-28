@@ -263,7 +263,7 @@ apps now show it too (owner 2026-11-26), decided as follows:
    (anomalies first, then `NameOrder` over the folded names, then the id). **Load-bearing:** an anomaly's row takes no
    count, pin or rotation, so it never reads as verified whatever rows the server serves (`WhosWhoTest`, bitten by
    letting an anomaly through as anchored: red). A pin store this device refuses is said in the web's `verify.trust*`
-   words, never read as nobody; the trust reset's link beside them on the web is not in the apps yet.
+   words, never read as nobody, with *Start this list over* beside them (`WhosWho.trustReset`, the web's `TrustResetLink`).
 2. **The core says the words and whether to compare.** A row carries `stateWord`, `note`, `subtitle` (`@username`, the
    web's list) and `compare` (the web's: every row this account has not verified); the page's one line in place of a
    list is `said` with `retry`. The verifiers' names are joined "you" first, as every app's person page already joins

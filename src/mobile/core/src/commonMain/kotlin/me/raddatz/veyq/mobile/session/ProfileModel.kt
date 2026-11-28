@@ -252,16 +252,7 @@ class ProfileModel(
 
     // ---- the seals ----
 
-    private fun openName(k: ByteArray, p: MemberProfile): Pair<String, String>? {
-        val sealed = p.sealedName ?: return null
-        val wrapped = p.wrappedNameValueKey ?: return null
-        val plain = JoinRecords(suite).openValueField(door.tenantId, epoch, k, People.nameContext(door.tenantId, door.userId), unb64(wrapped), unb64(sealed))
-            ?: return null
-        val o = runCatching { Json.parseToJsonElement(plain.decodeToString()) as? JsonObject }.getOrNull() ?: return null
-        val first = (o["firstName"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
-        val last = (o["lastName"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
-        return first to last
-    }
+    private fun openName(k: ByteArray, p: MemberProfile): Pair<String, String>? = openNameOf(suite, door, epoch, k, p)
 
     /** The name as the fields hold it, trimmed — `{"firstName","lastName"}`, the web's `sealName` plaintext. */
     private fun sealName(k: ByteArray, e: Long): JoinRecords.SealedValue {
@@ -322,6 +313,35 @@ class ProfileModel(
     }
 
     companion object {
+        /** The own name sealed in [p] opened under the tenant key [k] of [epoch] (`{"firstName","lastName"}`); null where none opens. */
+        private fun openNameOf(suite: V1, door: Door, epoch: Long, k: ByteArray, p: MemberProfile): Pair<String, String>? {
+            val sealed = p.sealedName ?: return null
+            val wrapped = p.wrappedNameValueKey ?: return null
+            val plain = JoinRecords(suite).openValueField(door.tenantId, epoch, k, People.nameContext(door.tenantId, door.userId), unb64(wrapped), unb64(sealed))
+                ?: return null
+            val o = runCatching { Json.parseToJsonElement(plain.decodeToString()) as? JsonObject }.getOrNull() ?: return null
+            val first = (o["firstName"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
+            val last = (o["lastName"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return null
+            return first to last
+        }
+
+        /**
+         * *Finish your profile*'s check (ADR 0084 decision 7, the web's `FinishProfilePrompt.check`): the own profile read
+         * in the open tenant and its name opened under the tenant key — true where neither a name nor a picture is set
+         * (`avatarRevision` 0). Without the tenant key, or on any failure, false: no prompt. The key copy is zeroed.
+         */
+        suspend fun unfinished(door: Door, suite: V1): Boolean = runCatching {
+            val p = door.profile()
+            val (k, e) = door.tenantKey(false) ?: return false
+            try {
+                if (p.avatarRevision != 0) return false
+                val name = if (p.sealedName == null) null else openNameOf(suite, door, e, k, p) ?: return false
+                name == null || (name.first + name.second).isBlank()
+            } finally {
+                k.fill(0)
+            }
+        }.getOrDefault(false)
+
         /** The picture's pixel edge (`AVATAR_EDGE`). */
         const val EDGE = 256
         /** The constant plaintext every picture is padded to (`AVATAR_PADDED_LEN`, the tenant icon's 16 KiB). */

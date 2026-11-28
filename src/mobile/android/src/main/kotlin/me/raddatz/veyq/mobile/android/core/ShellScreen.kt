@@ -218,10 +218,13 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
         // core's banner: the open page's own kept time where it has one (a Pot's ledger), else the lists'
         val waitingCount by model.queuedBanner.collectAsStateWithLifecycle()
         val kitNotice by model.kitNotice.collectAsStateWithLifecycle()
+        val finishProfile by model.finishProfile.collectAsStateWithLifecycle()
         val offlineBanner: @Composable () -> Unit = {
             Column {
                 s.banner?.let { OfflineBanner(it, waitingCount) }
                 // the one-time "a clearer Emergency Kit exists" (core's `ShellModel.kitNotice`, ADR 0157 decision 5)
+                // *Finish your profile* (core's `ShellModel.finishProfile`, ADR 0084 decision 7), before the kit's as the web's
+                if (finishProfile) FinishProfile(onOpen = { model.dismissFinishProfile(open = true) }, onDismiss = { model.dismissFinishProfile(open = false) })
                 kitNotice?.let { KitNotice(it, onOpen = { model.dismissKitNotice(open = true) }, onDismiss = { model.dismissKitNotice(open = false) }) }
             }
         }
@@ -1149,6 +1152,23 @@ private fun OfflineBanner(banner: me.raddatz.veyq.mobile.words.Notice, waiting: 
             Text(say(banner), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             // how many writes made offline wait to be sent (core's `ShellModel.queuedBanner`)
             waiting?.let { Text(say(it), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.testTag("offline-waiting-count")) }
+        }
+    }
+}
+
+/**
+ * *Finish your profile* (ADR 0084 decision 7; the web's `FinishProfilePrompt`): Material's banner while the account has
+ * neither a name nor a picture in the open space — *Open profile settings* (one's profile) and *Not now*; it never blocks
+ * and never returns once dismissed on this device.
+ */
+@Composable
+private fun FinishProfile(onOpen: () -> Unit, onDismiss: () -> Unit) {
+    Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(horizontal = 16.dp, vertical = 8.dp).testTag("finish-profile")) {
+        Text(stringResource(R.string.profile_finish_title), style = MaterialTheme.typography.titleSmall)
+        Text(stringResource(R.string.profile_finish_body), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.align(Alignment.End)) {
+            androidx.compose.material3.TextButton(onClick = onDismiss, modifier = Modifier.testTag("finish-profile-dismiss")) { Text(stringResource(R.string.profile_finish_dismiss)) }
+            androidx.compose.material3.TextButton(onClick = onOpen, modifier = Modifier.testTag("finish-profile-open")) { Text(stringResource(R.string.profile_finish_open)) }
         }
     }
 }

@@ -351,4 +351,25 @@ class ProfileModelTest {
             return byQuality[quality]
         }
     }
+
+    /**
+     * *Finish your profile*'s check (ADR 0084 decision 7, the web's `FinishProfilePrompt.check`): shown with neither a name
+     * nor a picture, hidden by either, by a name of blanks only shown, never without the tenant key or with a name that does
+     * not open; the key handed out zeroed.
+     */
+    @Test
+    fun finishYourProfileIsAskedWithNeitherANameNorAPicture() = runTest {
+        val none = Played()
+        assertTrue(ProfileModel.unfinished(none, suite), "no name and no picture: no prompt")
+        assertTrue(none.handedOut.all { k -> k.all { it == 0.toByte() } }, "the tenant key was left in memory")
+        val named = Played().apply { seedName("Kevin", "") }
+        assertFalse(ProfileModel.unfinished(named, suite), "a name: a prompt")
+        val blank = Played().apply { seedName(" ", " ") }
+        assertTrue(ProfileModel.unfinished(blank, suite), "a name of blanks counts as none")
+        val pictured = Played().apply { avatarRevision = 2 }
+        assertFalse(ProfileModel.unfinished(pictured, suite), "a picture: a prompt")
+        assertFalse(ProfileModel.unfinished(Played(hasGrant = false), suite), "no tenant key: a prompt")
+        val unopened = Played().apply { seedName("Kevin", "R", at = 2) }
+        assertFalse(ProfileModel.unfinished(unopened, suite), "a name that does not open: a prompt")
+    }
 }

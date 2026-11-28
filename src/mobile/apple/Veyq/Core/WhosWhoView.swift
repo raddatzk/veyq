@@ -10,6 +10,7 @@ struct WhosWhoView: View {
     let model: AppModel
     @State private var loading = true
     @State private var read: WhosWho?
+    @State private var resetting = false
 
     var body: some View {
         List {
@@ -20,6 +21,9 @@ struct WhosWhoView: View {
                     Text(say(said)).accessibilityIdentifier("whos-who-said")
                     if read?.retry ?? true {
                         Button(say(.peopleRetry)) { Task { await load() } }.accessibilityIdentifier("whos-who-retry")
+                    }
+                    if read?.trustReset == true {
+                        Button(say(.trustResetLink)) { resetting = true }.accessibilityIdentifier("whos-who-trust-reset")
                     }
                 } else if let read {
                     ForEach(read.people, id: \.userId) { row in WhosWhoRowView(row: row, open: { open(row.userId) }) }
@@ -33,6 +37,15 @@ struct WhosWhoView: View {
         .accessibilityIdentifier("whos-who")
         .task { await load() }
         .refreshable { await load() }
+        .sheet(isPresented: $resetting, onDismiss: { Task { await load() } }) {
+            NavigationStack {
+                TrustResetView(model: model)
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { resetting = false } } }
+            }
+            #if os(macOS)
+            .frame(minWidth: 520, minHeight: 480)
+            #endif
+        }
     }
 
     private func load() async {

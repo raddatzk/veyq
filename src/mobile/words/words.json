@@ -345,6 +345,11 @@
     "en": "username, real name, profile picture, avatar",
     "de": "Benutzername, Name, Profilbild, Avatar"
   },
+  "search_words_trust_reset": {
+    "note": "the trust reset's section is also found by (comma-separated, never shown)",
+    "en": "trust, keys, devices, rolled back, blocked, start over",
+    "de": "Vertrauen, Schlüssel, Geräte, zurückgesetzt, gesperrt, neu beginnen"
+  },
   "search_words_password": {
     "en": "password, passphrase, sign-in",
     "de": "Kennwort, Passwort, Anmeldung"
@@ -4539,6 +4544,22 @@
     "en": "Your profile",
     "de": "Dein Profil"
   },
+  "profile_finish_title": {
+    "en": "Finish your profile",
+    "de": "Vervollständige dein Profil"
+  },
+  "profile_finish_body": {
+    "en": "Add your name and a picture so the others recognize you. Only members of this space can see them.",
+    "de": "Ergänze deinen Namen und ein Bild, damit die anderen dich erkennen. Nur Mitglieder dieses Bereichs können beides sehen."
+  },
+  "profile_finish_open": {
+    "en": "Open profile settings",
+    "de": "Profil-Einstellungen öffnen"
+  },
+  "profile_finish_dismiss": {
+    "en": "Not now",
+    "de": "Jetzt nicht"
+  },
   "profile_sub": {
     "en": "Your username and name in this shared space. Only members can read your real name.",
     "de": "Dein Benutzername und Name in diesem geteilten Bereich. Nur Mitglieder können deinen echten Namen lesen."
@@ -6720,6 +6741,86 @@
   "verify_trust_unreadable": {
     "en": "The list of the keys you trust could not be opened. Nothing is shared with a key it cannot check until it can be read again.",
     "de": "Die Liste deiner vertrauten Schlüssel ließ sich nicht öffnen. Mit Schlüsseln, die sich nicht prüfen lassen, wird nichts geteilt, bis sie wieder lesbar ist."
+  },
+  "trust_reset_title": {
+    "en": "Start a list over",
+    "de": "Liste neu beginnen"
+  },
+  "trust_reset_sub": {
+    "en": "This device keeps two lists for your account: the keys you trust and the names of your devices. When the server hands this device a copy it can’t accept, the list stays blocked until you start it over.",
+    "de": "Dieses Gerät führt für dein Konto zwei Listen: deine vertrauten Schlüssel und die Namen deiner Geräte. Liefert der Server diesem Gerät eine Fassung, die es nicht annehmen kann, bleibt die Liste gesperrt, bis du sie neu beginnst."
+  },
+  "trust_reset_none": {
+    "en": "This device can read both lists. There is nothing to start over.",
+    "de": "Dieses Gerät kann beide Listen lesen. Es gibt nichts neu zu beginnen."
+  },
+  "trust_reset_load_failed": {
+    "en": "This device could not check your lists right now. Please try again.",
+    "de": "Dieses Gerät konnte deine Listen gerade nicht prüfen. Bitte versuche es erneut."
+  },
+  "trust_reset_document_pins": {
+    "en": "The keys you trust",
+    "de": "Deine vertrauten Schlüssel"
+  },
+  "trust_reset_document_register": {
+    "en": "Your device names",
+    "de": "Deine Gerätenamen"
+  },
+  "trust_reset_code_rolled_back": {
+    "en": "The server returned an older copy than this device has already seen.",
+    "de": "Der Server hat eine ältere Fassung geliefert, als dieses Gerät schon gesehen hat."
+  },
+  "trust_reset_code_unreadable": {
+    "en": "The copy the server returned could not be opened.",
+    "de": "Die Fassung vom Server ließ sich nicht öffnen."
+  },
+  "trust_reset_action": {
+    "en": "Start over…",
+    "de": "Neu beginnen…"
+  },
+  "trust_reset_confirm_title_pins": {
+    "en": "Start the keys you trust over?",
+    "de": "Deine vertrauten Schlüssel neu beginnen?"
+  },
+  "trust_reset_confirm_title_register": {
+    "en": "Start your device names over?",
+    "de": "Deine Gerätenamen neu beginnen?"
+  },
+  "trust_reset_cost_pins": {
+    "en": "Every contact will be new to you again. Someone who joined through an invitation is still confirmed by it, but anyone else whose key changed in the meantime will be accepted as new — without the warning that would have told you. Your verifications stay.",
+    "de": "Alle deine Kontakte sind für dich wieder neu. Wer über eine Einladung beigetreten ist, wird durch sie weiter bestätigt; bei allen anderen wird ein Schlüssel, der sich inzwischen geändert hat, als neu angenommen — ohne die Warnung, die es dir gesagt hätte. Deine Verifizierungen bleiben."
+  },
+  "trust_reset_cost_register": {
+    "en": "Every device will be unnamed until it next signs in, and removing another device’s saved key from here won’t be offered until then. Every session is still listed and can still be ended.",
+    "de": "Jedes Gerät bleibt unbenannt, bis es sich das nächste Mal anmeldet, und den gespeicherten Schlüssel eines anderen Geräts von hier zu entfernen, wird bis dahin nicht angeboten. Jede Sitzung wird weiter angezeigt und lässt sich weiter beenden."
+  },
+  "trust_reset_server_can_wait": {
+    "en": "Only do this if the list doesn’t come back. The server can’t start it over for you — but it could hold it back until you do.",
+    "de": "Tu das nur, wenn die Liste nicht zurückkommt. Der Server kann sie nicht für dich neu beginnen — er könnte sie aber zurückhalten, bis du es tust."
+  },
+  "trust_reset_acknowledge": {
+    "en": "I understand what starting over costs.",
+    "de": "Ich verstehe, was das Neubeginnen kostet."
+  },
+  "trust_reset_confirm": {
+    "en": "Start over",
+    "de": "Neu beginnen"
+  },
+  "trust_reset_failed": {
+    "en": "The list could not be started over. Nothing was changed — please try again.",
+    "de": "Die Liste konnte nicht neu begonnen werden. Es wurde nichts geändert — bitte versuche es erneut."
+  },
+  "trust_reset_done": {
+    "en": "Started over. This device reads the new, empty list from now on.",
+    "de": "Neu begonnen. Dieses Gerät liest ab jetzt die neue, leere Liste."
+  },
+  "trust_reset_already_readable": {
+    "en": "This device can read the list again, so nothing was changed.",
+    "de": "Dieses Gerät kann die Liste wieder lesen, deshalb wurde nichts geändert."
+  },
+  "trust_reset_link": {
+    "en": "Start this list over",
+    "de": "Diese Liste neu beginnen"
   },
   "people_retry": {
     "en": "Try again",

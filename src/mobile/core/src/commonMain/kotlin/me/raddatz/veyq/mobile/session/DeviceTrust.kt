@@ -476,8 +476,8 @@ class DeviceRegisterStore(
 
     private class Opened(val revision: Long, val plain: Plain)
 
-    private suspend fun load(): Opened {
-        val served = api.get()
+    private suspend fun load(served: DeviceRegister? = null): Opened {
+        @Suppress("NAME_SHADOWING") val served = served ?: api.get()
         val mark = marks.register()
         val blob = served.blob
         if (served.revision < mark || (blob == null && mark > 0)) throw TrustStateRefused(TrustStateRefused.Code.ROLLED_BACK)
@@ -491,6 +491,31 @@ class DeviceRegisterStore(
 
     /** The register as this device opens it. */
     suspend fun read(): Plain = load().plain
+
+    /**
+     * The register started over (the web's `resetAccountDocument(registerDocument)`, ADR 0028 decision 7): one that opens
+     * under the marks is [StartOver.ALREADY_READABLE], else the EMPTY register sealed for the served revision + 1, guarded
+     * by the served revision (a `409` reads again, bounded), and the mark set to the revision written.
+     */
+    suspend fun startOver(): StartOver {
+        repeat(MAX_ATTEMPTS) {
+            val served = api.get()
+            val opens = try {
+                load(served)
+                true
+            } catch (e: TrustStateRefused) {
+                false
+            }
+            if (opens) return StartOver.ALREADY_READABLE
+            val stored = served.revision + 1
+            val blob = b64(suite.seal(context(stored), masterKey, utf8(JSON.encodeToString(Plain.serializer(), Plain()))))
+            if (api.put(DeviceRegisterUpdate(blob, served.revision))) {
+                marks.setRegister(stored)
+                return StartOver.RESET
+            }
+        }
+        throw IllegalStateException("device_register_unsettled")
+    }
 
     /** The register re-sealed under [newMasterKey] for the revision a rotation stores it at (the web's
      *  `resealUnderNewKey(registerDocument)`): read through the marks (a refusal refuses the rotation), guarded by the

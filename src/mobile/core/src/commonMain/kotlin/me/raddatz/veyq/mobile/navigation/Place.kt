@@ -65,7 +65,7 @@ class PlaceLink internal constructor(
         private const val MAX = ReceivedLink.MAX_LINK_LENGTH
 
         /** Settings sections that are one action as a whole: never opened from outside. */
-        private val NOT_FROM_OUTSIDE = setOf(SettingsSection.ERASE, SettingsSection.SIGN_OUT)
+        private val NOT_FROM_OUTSIDE = setOf(SettingsSection.ERASE, SettingsSection.SIGN_OUT, SettingsSection.TRUST_RESET)
 
         /**
          * A `veyq://open` link's place, or null where it carries none of the allowed shapes (it then opens the app where it

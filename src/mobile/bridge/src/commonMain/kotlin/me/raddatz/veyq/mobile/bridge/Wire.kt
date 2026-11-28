@@ -440,6 +440,9 @@ internal sealed class Call {
     /** The reconnect's notices ([ShellShown.queuedSaid]: how many writes made offline were sent, how many need the person) said. */
     @Serializable @SerialName("Shell.QueuedSaidSeen") data object ShellQueuedSaidSeen : Call()
 
+    /** *Finish your profile* ([ShellShown.finishProfile]) dismissed — "Not now", or "Open profile settings" before the profile opens. */
+    @Serializable @SerialName("Shell.FinishProfileDismiss") data object ShellFinishProfileDismiss : Call()
+
     /** The one-time kit notice ([ShellShown.kitNotice]) dismissed — "Not now", or "Go to your kit" before Settings → Security opens. */
     @Serializable @SerialName("Shell.KitNoticeDismiss") data object ShellKitNoticeDismiss : Call()
 
@@ -2112,6 +2115,23 @@ internal sealed class Call {
     @Serializable @SerialName("Erasure.Run") data class ErasureRun(val flow: Long, val password: String) : Call()
     @Serializable @SerialName("Erasure.Close") data class ErasureClose(val flow: Long) : Call()
 
+    /** *Start a list over* (`TrustReset`, ADR 0028 decision 7) over the account [connection] names: [Answer.FlowOpened], loading. */
+    @Serializable @SerialName("TrustReset.Open") data class TrustResetOpen(val connection: String) : Call()
+
+    /** A refused list's *Start over…*: the question (`TrustReset.ask`). */
+    @Serializable @SerialName("TrustReset.Ask") data class TrustResetAsk(val flow: Long, val document: me.raddatz.veyq.mobile.session.TrustDocument) : Call()
+
+    /** The question's acknowledgement ticked or not (`TrustReset.acknowledge`). */
+    @Serializable @SerialName("TrustReset.Acknowledge") data class TrustResetAcknowledge(val flow: Long, val on: Boolean) : Call()
+
+    /** The question cancelled (`TrustReset.cancel`). */
+    @Serializable @SerialName("TrustReset.Cancel") data class TrustResetCancel(val flow: Long) : Call()
+
+    /** *Start over* (`TrustReset.confirm`): answered once it ended; the account's Settings pages read anew. */
+    @Serializable @SerialName("TrustReset.Confirm") data class TrustResetConfirm(val flow: Long) : Call()
+
+    @Serializable @SerialName("TrustReset.Close") data class TrustResetClose(val flow: Long) : Call()
+
     /** The Memories section's List | Map (`PersonMemories.view`; not stored), where offered ([PersonMemoriesShown.offersViews]). */
     @Serializable @SerialName("Person.View") data class PersonView(val person: Long, val view: MemoriesView) : Call()
 
@@ -2816,6 +2836,7 @@ internal sealed class Watched {
     @Serializable @SerialName("AddressChange") data class AddressChange(val flow: Long) : Watched()
     @Serializable @SerialName("KeyRotation") data class KeyRotation(val flow: Long) : Watched()
     @Serializable @SerialName("Erasure") data class Erasure(val flow: Long) : Watched()
+    @Serializable @SerialName("TrustReset") data class TrustReset(val flow: Long) : Watched()
     @Serializable @SerialName("Kit") data class Kit(val kit: Long) : Watched()
     @Serializable @SerialName("Join") data class Join(val join: Long) : Watched()
     @Serializable @SerialName("Recovery") data class Recovery(val flow: Long) : Watched()
@@ -3007,6 +3028,8 @@ internal sealed class Update {
         val breach: me.raddatz.veyq.mobile.account.BreachCheck.BreachState? = null,
     ) : Update()
     @Serializable @SerialName("Erasure") data class Erasure(val flow: Long, val shown: me.raddatz.veyq.mobile.session.AccountErasure.State?) : Update()
+    /** *Start a list over*'s rows, question and outcome (`TrustReset.State`), words and flags only; null once closed. */
+    @Serializable @SerialName("TrustReset") data class TrustReset(val flow: Long, val shown: me.raddatz.veyq.mobile.session.TrustReset.State?) : Update()
     @Serializable @SerialName("Kit") data class Kit(val kit: Long, val shown: me.raddatz.veyq.mobile.account.KitStep.State?) : Update()
     /** A join's state (`TenantJoin.State`): words, phases and flags, never a key, the code or a password; null once closed. */
     @Serializable @SerialName("Join") data class Join(val join: Long, val shown: me.raddatz.veyq.mobile.session.TenantJoin.State?) : Update()
@@ -4593,6 +4616,11 @@ internal class ShellShown(
      * null otherwise.
      */
     val kitNotice: Notice? = null,
+    /**
+     * *Finish your profile* (`ShellModel.finishProfile`, ADR 0084 decision 7): true while the prompt shows, beside "Open profile
+     * settings" and "Not now" ([Call.ShellFinishProfileDismiss]).
+     */
+    val finishProfile: Boolean = false,
     /**
      * What the level the shell shows holds that is not sent yet (`ShellModel.queuedAt`, ADR 0153 decision 5): the folders, Memories,
      * chapters and files made offline there, each drawn in place among its rows with its state and line.

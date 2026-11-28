@@ -147,6 +147,34 @@ internal class PinStore(
     }
 
     /**
+     * The store started over (the web's `resetAccountDocument(pinStoreDocument)`, ADR 0028 decision 7): read as served —
+     * a store that opens under the marks is [StartOver.ALREADY_READABLE] and nothing is written —, else the EMPTY whole set
+     * (`replaceAll`, no entries, the head of count 0) sealed for the served revision + 1, guarded by the served revision
+     * (a `409` reads again, bounded), and the mark set to the revision written ([TrustMarks.setPins]). A failure that is no
+     * refusal (the network) is thrown.
+     */
+    suspend fun startOver(): StartOver {
+        repeat(MAX_ATTEMPTS) {
+            val served = api.pinHead()
+            val opens = try {
+                read(served)
+                true
+            } catch (e: TrustStateRefused) {
+                false
+            }
+            if (opens) return StartOver.ALREADY_READABLE
+            val stored = served.revision + 1
+            val head = b64(suite.seal(headContext(stored), masterKey, trust.encodePinHead(0, trust.identityPinSetDigest(emptyList()))))
+            if (api.writePins(IdentityPinsWrite(served.revision, head, emptyList(), emptyList(), true))) {
+                marks.setPins(stored)
+                verified = null
+                return StartOver.RESET
+            }
+        }
+        throw IllegalStateException("identity_pins_unsettled")
+    }
+
+    /**
      * The whole store re-sealed under [newMasterKey] for the revision a rotation stores it at (the web's
      * `resealUnderNewKey(pinStoreDocument)` with `sealWholeSet`): read through this device's marks — a refused store
      * refuses the rotation ([TrustStateRefused]) —, every pin under the new key's pin ids, the head bound to the served

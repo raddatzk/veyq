@@ -15,8 +15,8 @@ import me.raddatz.veyq.mobile.words.Msg
  * `SettingsOrderIsTheWebsTest` reads it there — with the app-only sections beside their kin: offline storage after maps,
  * this device and saved keys after sessions, the account and its address (the apps' own) where the web's password is;
  * then the tenant's sections the apps offer, in the web's tenant order — the members, Who's who, then the terms; Sign out
- * ends the list, as it ends the apps' page. The web's sections the apps do not offer (trust reset, moderation, the
- * tenant's others) arrive with those sections.
+ * ends the list, as it ends the apps' page. The web's sections the apps do not offer (moderation, the tenant's others)
+ * arrive with those sections.
  */
 @me.raddatz.veyq.mobile.navigation.Plan
 @Serializable
@@ -32,6 +32,11 @@ enum class SettingsSection(val id: String, val word: Msg, val keywords: Msg) {
     PASSWORD("password", Msg.PASSWORD_CHANGE_TITLE, Msg.SEARCH_WORDS_PASSWORD),
     ADD_DEVICE("add-device", Msg.ACCOUNT_SETTINGS_ADD_DEVICE, Msg.SEARCH_WORDS_ADD_DEVICE),
     SECURITY("security", Msg.ROTATION_TITLE, Msg.SEARCH_WORDS_SECURITY),
+    /**
+     * *Start a list over* (ADR 0028 decision 7; the web's `trust-reset`, after Security): offered only while one of the
+     * account's lists is refused on this device ([Gates.trustReset], [me.raddatz.veyq.mobile.session.TrustReset]).
+     */
+    TRUST_RESET("trust-reset", Msg.TRUST_RESET_TITLE, Msg.SEARCH_WORDS_TRUST_RESET),
     PROFILE("profile", Msg.PROFILE_TITLE, Msg.SEARCH_WORDS_PROFILE),
     ERASE("erase", Msg.ERASURE_TITLE, Msg.SEARCH_WORDS_ERASE),
     /**
@@ -74,9 +79,10 @@ enum class SettingsSection(val id: String, val word: Msg, val keywords: Msg) {
     /**
      * The gates the page itself reads (`AccountSettings`): [addDevice] while the instance links devices
      * (`core.device-linking`), [storage] where the account keeps an offline store on this device or says why it keeps
-     * none, [maps] where the tenant's map services were built, [appearance] on a platform whose page offers it (the phones).
+     * none, [maps] where the tenant's map services were built, [appearance] on a platform whose page offers it (the phones),
+     * [trustReset] while one of the account's lists is refused on this device.
      */
-    data class Gates(val addDevice: Boolean, val storage: Boolean, val maps: Boolean, val appearance: Boolean)
+    data class Gates(val addDevice: Boolean, val storage: Boolean, val maps: Boolean, val appearance: Boolean, val trustReset: Boolean = false)
 
     companion object {
         /** The sections the page offers under [gates], in its order. */
@@ -86,6 +92,7 @@ enum class SettingsSection(val id: String, val word: Msg, val keywords: Msg) {
                 STORAGE -> gates.storage
                 MAPS -> gates.maps
                 APPEARANCE -> gates.appearance
+                TRUST_RESET -> gates.trustReset
                 SESSIONS, DEVICE, SAVED_KEYS, ACCOUNT, EMAIL, PASSWORD, SECURITY, PROFILE, ERASE, MEMBERS, WHOS_WHO, TERMS, GROUPS, GROUP_INVITATIONS, SIGN_OUT -> true
             }
         }

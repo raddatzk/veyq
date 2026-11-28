@@ -225,6 +225,8 @@ internal class AccountFlows(
     val keyRotation: () -> me.raddatz.veyq.mobile.session.rotation.KeyRotation,
     val erasure: () -> me.raddatz.veyq.mobile.session.AccountErasure,
     val kitRenewal: () -> me.raddatz.veyq.mobile.session.KitRenewal,
+    /** *Start a list over* over the account (`VeyqAccount.trustReset`); none where the composition plays no account. */
+    val trustReset: () -> me.raddatz.veyq.mobile.session.TrustReset? = { null },
 )
 
 /** One of the account's flows the host opened over the connection [connection]; [open] turns false as it closes. */
@@ -548,6 +550,8 @@ internal class QueuedBeside(
     val banner: Notice? = null, val here: List<me.raddatz.veyq.mobile.offline.QueuedItem> = emptyList(), val said: List<Notice> = emptyList(),
     /** Beside them, the shell's one-time kit notice ([ShellShown.kitNotice]). */
     val kitNotice: Notice? = null,
+    /** And *Finish your profile* ([ShellShown.finishProfile]). */
+    val finishProfile: Boolean = false,
 )
 
 /** An entry editor the host opened on Pot [pot] ([Call.EditorOpen]), typed in with [separator]. */
@@ -780,6 +784,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private val kitRenewals = Registry<HeldFlow<me.raddatz.veyq.mobile.session.KitRenewal>>()
     private val keyRotations = Registry<HeldFlow<me.raddatz.veyq.mobile.session.rotation.KeyRotation>>()
     private val erasures = Registry<HeldFlow<me.raddatz.veyq.mobile.session.AccountErasure>>()
+    private val trustResets = Registry<HeldFlow<me.raddatz.veyq.mobile.session.TrustReset>>()
     private val kits = Registry<HeldFlow<me.raddatz.veyq.mobile.account.KitStep>>()
     private val joins = Registry<HeldFlow<me.raddatz.veyq.mobile.session.TenantJoin>>()
     private val recoveries = Registry<HeldFlow<me.raddatz.veyq.mobile.session.RecoveryFinish>>()
@@ -1010,6 +1015,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 Answer.Done
             }
             Call.ShellKitNoticeDismiss -> shell?.dismissKitNotice().done()
+            Call.ShellFinishProfileDismiss -> shell?.dismissFinishProfile().done()
             Call.HomeGroups -> shell?.current?.let { Answer.Groups(it.lists.groups(it.shell)) } ?: noTenant
             Call.SearchOpen -> tenant.value?.models?.search?.let { make ->
                 val id = ids.incrementAndFetch()
@@ -1863,6 +1869,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.KeyRotationClose, is Call.PasswordChangeCheck, is Call.PasswordChangeEdited, is Call.PasswordChangeUseAnyway,
             is Call.KeyRotationCheck, is Call.KeyRotationEdited, is Call.KeyRotationUseAnyway, is Call.KitRead, is Call.KitClear,
             is Call.ErasureOpen, is Call.ErasureChoose, is Call.ErasureRun, is Call.ErasureClose,
+            is Call.TrustResetOpen, is Call.TrustResetAsk, is Call.TrustResetAcknowledge, is Call.TrustResetCancel, is Call.TrustResetConfirm, is Call.TrustResetClose,
             -> accountFlow(call, parts, payload)
         }
     }
@@ -2123,6 +2130,23 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             } ?: noFlow
             is Call.KeyRotationRefreshLinks -> keyRotations[call.flow]?.model?.refreshLinks().done(Answer.Why.NO_SUCH_FLOW)
             is Call.KeyRotationClose -> keyRotations.remove(call.flow)?.close().done(Answer.Why.NO_SUCH_FLOW)
+            is Call.TrustResetOpen -> {
+                val f = flows(call.connection) ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
+                val model = f.trustReset() ?: return Answer.Refused(Answer.Why.NOT_OFFERED)
+                val id = held(trustResets, HeldFlow(model, call.connection))
+                scope.launch { model.load() }
+                Answer.FlowOpened(id)
+            }
+            is Call.TrustResetAsk -> trustResets[call.flow]?.model?.ask(call.document).done(Answer.Why.NO_SUCH_FLOW)
+            is Call.TrustResetAcknowledge -> trustResets[call.flow]?.model?.acknowledge(call.on).done(Answer.Why.NO_SUCH_FLOW)
+            is Call.TrustResetCancel -> trustResets[call.flow]?.model?.cancel().done(Answer.Why.NO_SUCH_FLOW)
+            is Call.TrustResetConfirm -> trustResets[call.flow]?.let { held ->
+                held.model.confirm()
+                // the section is the page's while a list is refused: its pages read anew, so a list started over leaves them
+                accountPages.values().filter { it.connection == held.connection }.forEach { it.model.refresh() }
+                Answer.Done
+            } ?: noFlow
+            is Call.TrustResetClose -> trustResets.remove(call.flow)?.close().done(Answer.Why.NO_SUCH_FLOW)
             is Call.ErasureOpen -> {
                 val f = flows(call.connection) ?: return Answer.Refused(Answer.Why.NO_SUCH_CONNECTION)
                 val model = f.erasure()
@@ -3145,6 +3169,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         kitRenewals.removeAll().forEach { it.close() }
         keyRotations.removeAll().forEach { it.close() }
         erasures.removeAll().forEach { it.close() }
+        trustResets.removeAll().forEach { it.close() }
         // the trusted device's links are the tenant's; a new device's (opened before any tenant) stays
         links.keys().forEach { id -> if (links[id]?.trusted == true) links.remove(id)?.let(::closeLink) }
     }
@@ -3175,7 +3200,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                     // the writes made offline beside it (ADR 0153 decision 5): the banner's count, the level's, the reconnect's notices
                     val queued = combine(
                         m.queued?.banner ?: flowOf(null), m.queued?.here ?: flowOf(emptyList()), queuedSaid, m.shell?.kitNotice ?: flowOf(null),
-                    ) { b, h, said, kit -> QueuedBeside(b, h, said, kit) }
+                        m.shell?.finishProfile ?: flowOf(false),
+                    ) { b, h, said, kit, profile -> QueuedBeside(b, h, said, kit, profile) }
                     combine(state, m.pictures, m.picturesRound, hiddenTurned, viewTurned) { s, pictures, round, _, _ -> Triple(s, pictures, round) }
                         .combine(queued) { (s, pictures, round), q -> Update.Shell(s, s?.let { shown(parts, open, it, pictures.keys, round, q) }) }
                 } ?: flowOf(Update.Shell(null))
@@ -3269,6 +3295,8 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             }
         }
             ?: flowOf(Update.KeyRotation(w.flow, null))
+        is Watched.TrustReset -> trustResets[w.flow]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.TrustReset(w.flow, s.takeIf { open }) } }
+            ?: flowOf(Update.TrustReset(w.flow, null))
         is Watched.Erasure -> erasures[w.flow]?.let { h -> combine(h.model.state, h.open) { s, open -> Update.Erasure(w.flow, s.takeIf { open }) } }
             ?: flowOf(Update.Erasure(w.flow, null))
         is Watched.KitRenewal -> kitRenewals[w.flow]?.let { h ->
@@ -3414,6 +3442,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             queuedHere = queued.here,
             queuedSaid = queued.said,
             kitNotice = queued.kitNotice,
+            finishProfile = queued.finishProfile,
             view = open.models.shell?.levelView?.let { ViewModeShown.valueOf(it.name) } ?: ViewModeShown.valueOf(me.raddatz.veyq.mobile.navigation.ViewMode.FIRST.name),
             dropsHere = open.models.shell?.dropLevel(shell) != null,
             level = open.models.shell?.levelPlan(shell)?.let { p ->
@@ -4117,7 +4146,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 accountFlows = { account, on, open ->
                     AccountFlows(
                         { account.passwordChange() }, { account.addressChange(on ?: account.defaultTenant) },
-                        { account.keyRotation(open = open) }, { account.erasure() }, { account.kitRenewal() },
+                        { account.keyRotation(open = open) }, { account.erasure() }, { account.kitRenewal() }, { account.trustReset() },
                     )
                 },
                 squarePicture = squarePicture,

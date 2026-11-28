@@ -56,6 +56,7 @@ class GrantTrustTest {
         override suspend fun writePins(write: IdentityPinsWrite): Boolean {
             beforeWrite?.let { beforeWrite = null; it() }
             if (write.revision != revision) return false
+            if (write.replaceAll == true) entries.clear()
             write.put.forEach { entries[it.pinId] = it.entry }
             write.remove.forEach { entries.remove(it) }
             revision++
@@ -399,6 +400,33 @@ class GrantTrustTest {
         assertEquals(1, pins().load().pins.size)
         server.revision = 0; server.blob = null; server.entries.clear()
         assertEquals(0, pins(marks(MemoryDeviceStore())).load().pins.size)
+    }
+
+    /**
+     * *Start a list over* (ADR 0028 decision 7, the web's `resetAccountDocument(pinStoreDocument)`): a refused store is
+     * written EMPTY at the served revision + 1, `replaceAll`, and this device's mark SET to that revision — lowered, so the
+     * empty store opens here; a store that opens is never written.
+     */
+    @Test
+    fun aRefusedPinStoreIsStartedOverEmptyAndItsMarkLowered() = runTest {
+        val owner = Person().also { server.chains[it.userId] = it.chain() }
+        assertIs<GrantOutcome.Opened>(opener().open(grant(p.randomBytes(32), owner), null))
+        assertEquals(StartOver.ALREADY_READABLE, pins().startOver(), "a store that opens was started over")
+        val writes = server.writes
+        assertEquals(writes, server.writes)
+        // this device has seen a later revision than the server will now serve
+        marks().raisePins(5)
+        val seen = marks().pins()
+        // served as never written after this device opened it: refused
+        server.revision = 0; server.blob = null; server.entries.clear()
+        assertEquals(TrustStateRefused.Code.ROLLED_BACK, assertFailsWith<TrustStateRefused> { pins().load() }.code)
+        assertEquals(StartOver.RESET, pins().startOver())
+        assertEquals(1, server.revision, "not written at the served revision + 1")
+        assertTrue(server.entries.isEmpty())
+        assertEquals(1, marks().pins(), "the mark was not set to the revision written (it was $seen)")
+        assertEquals(0, pins().load().pins.size, "the empty store does not open on this device")
+        assertEquals(StartOver.ALREADY_READABLE, pins().startOver())
+        assertEquals(writes + 1, server.writes)
     }
 
     @Test

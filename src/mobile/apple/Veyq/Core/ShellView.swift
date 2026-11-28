@@ -904,10 +904,41 @@ struct Picking: ViewModifier {
                 // how many writes made offline wait to be sent (core's `queuedBanner`), online too until they went
                 if let waiting = model.queued?.banner.value { QueuedBanner(banner: waiting) }
                 if let incoming = model.incoming { ShareBanner(model: model, incoming: incoming, onCancel: model.cancelShare) }
+                // *Finish your profile* (ADR 0084 decision 7), before the kit's as the web's
+                if model.queued?.finishProfile.value == true { FinishProfileNotice(model: model) }
                 // the one-time "a clearer Emergency Kit exists" (ADR 0157 decision 5), quiet and dismissible
                 if let news = model.queued?.kitNotice.value { KitNotice(model: model, news: news) }
             }
         }
+    }
+}
+
+/// *Finish your profile* (the web's `FinishProfilePrompt`, ADR 0084 decision 7): while the account has neither a name nor a
+/// picture in the open space — *Open Profile Settings* (Settings at the profile) and *Not Now*. Never blocks.
+struct FinishProfileNotice: View {
+    let model: AppModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(say(.profileFinishTitle)).font(.subheadline.weight(.semibold))
+            Text(say(.profileFinishBody)).font(.footnote).foregroundStyle(Role.muted)
+            HStack {
+                Spacer()
+                Button(say(.profileFinishDismiss)) { model.queued?.queued.dismissFinishProfile() }
+                    .accessibilityIdentifier("finish-profile-dismiss")
+                Button(say(.profileFinishOpen)) {
+                    model.queued?.queued.dismissFinishProfile()
+                    model.settingsAnchor = SettingsSection.profile.id
+                    model.openSettings()
+                }
+                .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("finish-profile-open")
+            }
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.bar)
     }
 }
 

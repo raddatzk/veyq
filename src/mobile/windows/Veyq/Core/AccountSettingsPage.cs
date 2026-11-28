@@ -531,6 +531,7 @@ internal sealed class AccountSettingsPage : IDisposable
                     FlowSection(AccountFlow.Security);
                     KitSection(s);
                 },
+                SettingsSection.TrustReset => DrawTrustReset,
                 SettingsSection.Profile => () => FlowSection(AccountFlow.Profile),
                 SettingsSection.Erase => () => FlowSection(AccountFlow.Erase),
                 SettingsSection.Members => DrawMembers,
@@ -603,6 +604,11 @@ internal sealed class AccountSettingsPage : IDisposable
         {
             var bar = new InfoBar { IsOpen = true, IsClosable = false, Severity = InfoBarSeverity.Warning, Message = Said.Key(names) };
             AutomationProperties.SetAutomationId(bar, "settings-names-missing");
+            // the web's `TrustResetLink`: the one way back from a refused list (ADR 0028 decision 7)
+            var reset = new HyperlinkButton { Content = Words.TrustResetLink() };
+            AutomationProperties.SetAutomationId(reset, "register-trust-reset");
+            reset.Click += (_, _) => OpenTrustReset();
+            bar.ActionButton = reset;
             _sections.Children.Add(bar);
         }
         if (s.families is not { } families)
@@ -688,8 +694,24 @@ internal sealed class AccountSettingsPage : IDisposable
             Act.Send(new Call.ShellOpenPerson { userId = userId });
             // the person shows in the content, which Settings gives way to (as a search's person result does)
             _closedByCore();
-        });
+        }, OpenTrustReset);
         _sections.Children.Add(Card("\uE716", Words.WhosWhoTitle(), [Words.WhosWhoSub()], "settings-whos-who", open));
+    }
+
+    /// <summary>*Start a list over* (the web's section `trust-reset`, offered while a list of the account is refused here):
+    /// opened over the page (TrustResetDialog).</summary>
+    private void DrawTrustReset()
+    {
+        _sections.Children.Add(Anchor("trust-reset", Heading(Words.TrustResetTitle())));
+        var open = TextButton(Words.TrustResetTitle(), "settings-open:trust-reset");
+        open.Click += (_, _) => OpenTrustReset();
+        _sections.Children.Add(Card("\uE81C", Words.TrustResetTitle(), [Words.TrustResetSub()], "settings-trust-reset", open));
+    }
+
+    /// <summary>*Start a list over* over this page's account; a link beside a refusal opens it too.</summary>
+    private void OpenTrustReset()
+    {
+        if (_connection is { } connection) TrustResetDialog.Open(_window, connection);
     }
 
     /// <summary>The open space's members and their roles (the web's tenant section `tenant-members`): opened over the page.</summary>

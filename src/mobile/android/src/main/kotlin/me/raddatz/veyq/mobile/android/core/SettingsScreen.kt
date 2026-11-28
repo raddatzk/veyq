@@ -156,6 +156,9 @@ interface SettingsActions {
     fun openKitRenewal() {}
     fun openErasure() {}
 
+    /** *Start a list over* (core's `TrustReset`, ADR 0028 decision 7): its page over Settings. */
+    fun openTrustReset() {}
+
     /** The open space's Who's who (core's `SettingsSection.WHOS_WHO`, inbox #967). */
     fun openWhosWho() {}
 
@@ -304,6 +307,7 @@ fun SettingsScreen(
                     addDevice(camera, !state.working, actions)
                 }
                 me.raddatz.veyq.mobile.search.SettingsSection.SECURITY -> security(state, actions)
+                me.raddatz.veyq.mobile.search.SettingsSection.TRUST_RESET -> trustReset(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.PROFILE -> profile(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.ERASE -> erase(state, actions)
                 me.raddatz.veyq.mobile.search.SettingsSection.MEMBERS -> members(state, actions)
@@ -401,6 +405,20 @@ private fun LazyListScope.profile(state: AccountSettings.State, actions: Setting
             leadingContent = { Icon(Icons.Outlined.AccountCircle, null) },
             colors = listColors(),
             modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openProfile).testTag("settings-profile"),
+        )
+    }
+}
+
+/** *Start a list over* (the web's section `trust-reset`, offered while a list is refused here): one row opening its page. */
+private fun LazyListScope.trustReset(state: AccountSettings.State, actions: SettingsActions) {
+    header(me.raddatz.veyq.mobile.search.SettingsSection.TRUST_RESET.id, { stringResource(R.string.trust_reset_title) })
+    item(key = "trust-reset") {
+        ListItem(
+            headlineContent = { Text(stringResource(R.string.trust_reset_title)) },
+            supportingContent = { Text(stringResource(R.string.trust_reset_sub)) },
+            leadingContent = { Icon(Icons.Outlined.History, null) },
+            colors = listColors(),
+            modifier = Modifier.clickable(enabled = !state.working, onClick = actions::openTrustReset).testTag("settings-trust-reset"),
         )
     }
 }
@@ -607,7 +625,13 @@ private fun LazyListScope.sessions(state: AccountSettings.State, context: Contex
     header("sessions", { stringResource(R.string.account_settings_sessions) }, { stringResource(R.string.account_settings_sessions_sub) })
     state.registerRefusal?.let { why ->
         item(key = "register-refusal") {
-            Text(say(why), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
+                Text(say(why), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                // the web's `TrustResetLink`: the one way back from a refused list (ADR 0028 decision 7)
+                androidx.compose.material3.TextButton(onClick = actions::openTrustReset, modifier = Modifier.testTag("register-trust-reset")) {
+                    Text(stringResource(R.string.trust_reset_link))
+                }
+            }
         }
     }
     val families = state.families

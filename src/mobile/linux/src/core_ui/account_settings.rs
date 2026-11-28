@@ -424,6 +424,7 @@ impl Page {
                 SettingsSection::Password => ("password", vec![self.password()]),
                 SettingsSection::AddDevice => ("add-device", vec![Some(self.add_device.clone())]),
                 SettingsSection::Security => ("security", vec![self.security(), self.kit(s)]),
+                SettingsSection::TrustReset => ("trust-reset", vec![self.trust_reset()]),
                 SettingsSection::Profile => ("profile", vec![self.profile()]),
                 SettingsSection::Erase => ("erase", vec![self.erase()]),
                 SettingsSection::Members => ("tenant-members", vec![self.members()]),
@@ -572,13 +573,41 @@ impl Page {
         row.connect_activated(move |_| {
             if let Some(p) = weak.upgrade() {
                 let dialog = p.dialog.clone();
+                let w = Rc::downgrade(&p);
                 p.dialog.push_subpage(&crate::core_ui::whos_who::page(Rc::new(move || {
                     dialog.close();
+                }), Rc::new(move || {
+                    if let Some(p) = w.upgrade() {
+                        p.open_trust_reset();
+                    }
                 })));
             }
         });
         group.add(&row);
         Some(group)
+    }
+
+    /// *Start a list over* (the web's section `trust-reset`, offered while a list of the account is refused here): a
+    /// subpage ([crate::core_ui::trust_reset::page]).
+    fn trust_reset(self: &Rc<Self>) -> Option<adw::PreferencesGroup> {
+        let group = adw::PreferencesGroup::builder().title(words::trust_reset_title()).description(words::trust_reset_sub()).build();
+        let row = adw::ActionRow::builder().title(words::trust_reset_title()).activatable(true).build();
+        row.set_widget_name("settings-trust-reset-open");
+        row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+        let weak = Rc::downgrade(self);
+        row.connect_activated(move |_| {
+            if let Some(p) = weak.upgrade() {
+                p.open_trust_reset();
+            }
+        });
+        group.add(&row);
+        Some(group)
+    }
+
+    /// *Start a list over*'s subpage over the account this page is of; a link beside a refusal opens it too.
+    fn open_trust_reset(self: &Rc<Self>) {
+        let Some(connection) = self.connection.borrow().clone() else { return };
+        self.dialog.push_subpage(&crate::core_ui::trust_reset::page(connection));
     }
 
     /// *Your profile* (the web's rubric): one's own profile in the space open now, the same model as one's own page's.
@@ -730,6 +759,18 @@ impl Page {
             hint = format!("{hint}\n\n{}", said::key(why));
         }
         let group = adw::PreferencesGroup::builder().title(words::account_settings_sessions()).description(hint).build();
+        // the web's `TrustResetLink` beside the refusal: the one way back from a refused list (ADR 0028 decision 7)
+        if s.register_refusal.is_some() {
+            let reset = adw::ButtonRow::builder().title(words::trust_reset_link()).build();
+            reset.set_widget_name("register-trust-reset");
+            let weak = Rc::downgrade(self);
+            reset.connect_activated(move |_| {
+                if let Some(p) = weak.upgrade() {
+                    p.open_trust_reset();
+                }
+            });
+            group.add(&reset);
+        }
         let Some(families) = &s.families else {
             let loading = adw::ActionRow::builder().title(words::account_settings_sessions_loading()).build();
             loading.add_prefix(&adw::Spinner::new());

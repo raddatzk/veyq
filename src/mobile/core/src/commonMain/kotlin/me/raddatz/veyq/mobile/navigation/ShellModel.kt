@@ -418,6 +418,43 @@ class ShellModel(
         kitDismissed.value = me.raddatz.veyq.mobile.account.KitWriter.LAYOUT
     }
 
+    /**
+     * *Finish your profile* (ADR 0084 decision 7, uc.spaces.set-profile-picture A3; the web's `FinishProfilePrompt`): true
+     * while the account has neither a name nor a picture in the open tenant ([me.raddatz.veyq.mobile.session.ProfileModel.unfinished],
+     * checked once per tenant opened, as the web's once per document, and only once the address is confirmed — the web's
+     * notices wait while it is not) and the prompt was not dismissed on this device for this account ([dismissFinishProfile]). Not read at all once dismissed; no prompt where the check fails.
+     */
+    val finishProfile: kotlinx.coroutines.flow.Flow<Boolean>
+        get() {
+            if (profileDismissed.value) return kotlinx.coroutines.flow.flowOf(false)
+            return kotlinx.coroutines.flow.combine(profileUnfinished, profileDismissed) { u, d -> u == true && !d }
+                .onStart { checkProfile() }
+        }
+
+    private val profileDismissKey get() = "$FINISH_PROFILE_PREFIX${tenant.account.key}"
+    private val profileDismissed = MutableStateFlow(tenant.account.deviceStore.read(profileDismissKey) == "1")
+    private val profileUnfinished = MutableStateFlow<Boolean?>(null)
+    private val profileChecking = kotlinx.coroutines.sync.Mutex()
+
+    private suspend fun checkProfile() = profileChecking.withLock {
+        if (profileUnfinished.value != null || profileDismissed.value) return@withLock
+        // the web's notices wait while the address is unconfirmed (uc.spaces.set-profile-picture A3): one notice at a time
+        val account = tenant.account
+        val confirmed = runCatching {
+            account.call { me.raddatz.veyq.mobile.api.apis.AccountEmailApi(account.server, account.http).getAccountEmail() }.confirmed
+        }.getOrDefault(false)
+        if (!confirmed) return@withLock
+        profileUnfinished.value = me.raddatz.veyq.mobile.session.ProfileModel.unfinished(
+            me.raddatz.veyq.mobile.session.TenantProfileDoor(tenant), tenant.account.suite,
+        )
+    }
+
+    /** The prompt dismissed ("Not now", or "Open profile settings", which also opens one's profile): never again on this device for this account. */
+    fun dismissFinishProfile() {
+        tenant.account.deviceStore.write(profileDismissKey, "1")
+        profileDismissed.value = true
+    }
+
     /** After each reconnect that sent writes made offline: how many went and how many need the person (one notice each). */
     val queuedSent: kotlinx.coroutines.flow.Flow<List<Notice>>
         get() = tenant.account.queuedReports.map { QueuedShown.report(it) }
@@ -1256,7 +1293,9 @@ class ShellModel(
             // the page's own gates: the storage section where a store is kept or why none is said (AccountSettings.Over)
             val storage = account.offline != null || (account.thisDevice.offlineRoot != null && account.trusted == null)
             return me.raddatz.veyq.mobile.search.SettingsSection.offered(
-                me.raddatz.veyq.mobile.search.SettingsSection.Gates(addDevice = linking, storage = storage, maps = builtMaps != null, appearance = appearance),
+                me.raddatz.veyq.mobile.search.SettingsSection.Gates(
+                    addDevice = linking, storage = storage, maps = builtMaps != null, appearance = appearance, trustReset = account.trustRefused.value,
+                ),
             )
         }
         override fun where(): me.raddatz.veyq.mobile.search.Results.SearchContext {
@@ -1401,6 +1440,9 @@ class ShellModel(
     companion object {
         /** The device store's key of the kit notice's dismissal, per account: the layout it spoke of (ADR 0157 decision 5). */
         const val KIT_NOTICE_PREFIX = "kit-notice:"
+
+        /** The device-store key's prefix of a dismissed *Finish your profile* (`finish-profile:<host>#<userId>`). */
+        internal const val FINISH_PROFILE_PREFIX = "finish-profile:"
         /** The bar's tab that shows the Memories map, no list (`Applications.kt`): a level there offers no view switch. */
         private const val MAP_TAB = "memories.map"
 

@@ -1177,6 +1177,41 @@ class VeyqAccount private constructor(
     /** This device's trust-state marks for the account, as a link hands them over (ADR 0059, ADR 0028 Decision 7). */
     internal suspend fun linkMarks(): PairingMarks = marks.forLink()
 
+    private val _trustRefused = MutableStateFlow(false)
+
+    /**
+     * Whether one of this account's lists — the pin store, the device register — is refused on this device, as last
+     * checked ([trustRefusedNow], a [TrustReset]'s read): *Start a list over*'s section is offered while it is (the web's
+     * `trustRefused` gate of `features/settings/sections.ts`).
+     */
+    val trustRefused: StateFlow<Boolean> get() = _trustRefused.asStateFlow()
+
+    /** Why [document] does not open on this device, or null where it does; a failure that is no refusal is thrown. */
+    internal suspend fun trustRefusal(document: TrustDocument): TrustStateRefused.Code? = try {
+        when (document) {
+            TrustDocument.PINS -> pins.load()
+            TrustDocument.REGISTER -> register().read()
+        }
+        null
+    } catch (e: TrustStateRefused) {
+        e.code
+    }
+
+    /** Both lists checked now ([trustRefused] set): true where one is refused. */
+    suspend fun trustRefusedNow(): Boolean = TrustDocument.entries.any { trustRefusal(it) != null }.also { _trustRefused.value = it }
+
+    /** *Start a list over* (ADR 0028 decision 7) over this account's two lists. */
+    fun trustReset(): TrustReset = TrustReset(object : TrustReset.Door {
+        override suspend fun refusal(document: TrustDocument) = trustRefusal(document)
+        override suspend fun startOver(document: TrustDocument): StartOver = when (document) {
+            TrustDocument.PINS -> pins.startOver()
+            TrustDocument.REGISTER -> register().startOver()
+        }
+        override fun checked(refused: Boolean) {
+            _trustRefused.value = refused
+        }
+    })
+
     /** The account's device register as this device opens it (for a check of what [recordThisDevice] wrote). */
     internal suspend fun readRegister(): DeviceRegisterStore.Plain = register().read()
 

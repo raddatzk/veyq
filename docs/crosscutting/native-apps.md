@@ -799,9 +799,12 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
 - Not in the apps yet (the owner 2026-11-26: every app is to do what the web does — these are gaps, closed one by one):
   the Members panel's and a group page's status lines (the re-keying and resealing hints, a stuck compromise rotation's
   notice), a space's picture in the switcher and the drawer (the apps show it on the Members header and a group's page
-  only), the trust reset,
+  only),
   and an in-app choice of appearance and language (the apps follow the system's; the desktops
   have no per-app language of their own).
+- A recovery finished in the app, *Start a list over* and *Finish your profile* (ADR 0148 § The sign-in's two account
+  entries, ADR 0028 decision 7, ADR 0084 decision 7; built 2026-11-28): Apple and Linux live, the prompt and the trust
+  reset on Windows, and a refused list on any app (not makeable without a forged server answer) (#1427).
 - Reopening where the person left and a place reached from outside (ADR 0150 § O5–O6, built 2026-11-27; passed on Android
   and Linux as throwaways and by the core's tests): Apple, Windows, a real browser's `veyq://open` and the Mac's `open` (#1424);
   the drawer's Recent per account (inbox #1423, built 2026-11-27): Apple and the desktops live (#1424).

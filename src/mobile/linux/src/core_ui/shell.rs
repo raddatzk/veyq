@@ -129,6 +129,8 @@ pub struct Shell {
     /// The one-time "a clearer Emergency Kit exists" (`ShellShown.kitNotice`, ADR 0157 decision 5): its text and its bar.
     kit_notice: gtk::Revealer,
     kit_notice_text: gtk::Label,
+    /// *Finish your profile* (`ShellShown.finishProfile`, ADR 0084 decision 7): its bar, before the kit's as the web's.
+    finish_profile: gtk::Revealer,
     /// The reconnect's notices said last (`ShellShown.queuedSaid`), so an update that repeats them says nothing again.
     queued_said: RefCell<Vec<bridge::wire::Notice>>,
     /// A held rename's *Open* (`QueuedOpen.Rename`): the node whose header asks the person's name once it shows.
@@ -231,6 +233,30 @@ impl Shell {
         content_view.add_top_bar(&banner);
         let queued_banner = adw::Banner::new("");
         content_view.add_top_bar(&queued_banner);
+        // *Finish your profile*: a quiet bar of its own with its two answers, as the kit notice's below it
+        let finish_text = gtk::Label::builder().wrap(true).xalign(0.0).hexpand(true).build();
+        finish_text.set_markup(&format!("<b>{}</b>\n{}", home::glib_escape(&words::profile_finish_title()), home::glib_escape(&words::profile_finish_body())));
+        let finish_dismiss = gtk::Button::builder().label(words::profile_finish_dismiss()).valign(gtk::Align::Center).build();
+        finish_dismiss.add_css_class("flat");
+        finish_dismiss.set_widget_name("finish-profile-dismiss");
+        let finish_open = gtk::Button::builder().label(words::profile_finish_open()).valign(gtk::Align::Center).build();
+        finish_open.add_css_class("suggested-action");
+        finish_open.set_widget_name("finish-profile-open");
+        let finish_bar = gtk::Box::builder().spacing(12).margin_start(12).margin_end(12).margin_top(6).margin_bottom(6).build();
+        finish_bar.append(&finish_text);
+        finish_bar.append(&finish_dismiss);
+        finish_bar.append(&finish_open);
+        let finish_profile = gtk::Revealer::builder().child(&finish_bar).reveal_child(false).build();
+        finish_profile.set_widget_name("finish-profile");
+        content_view.add_top_bar(&finish_profile);
+        finish_dismiss.connect_clicked(|_| bridge::send(Call::ShellFinishProfileDismiss));
+        let opens = window.downgrade();
+        finish_open.connect_clicked(move |_| {
+            bridge::send(Call::ShellFinishProfileDismiss);
+            if let Some(window) = opens.upgrade() {
+                crate::core_ui::profile_edit::open(window.upcast_ref());
+            }
+        });
         // the kit notice: a quiet bar under the banners with its two answers (an AdwBanner holds one button only)
         let kit_notice_text = gtk::Label::builder().wrap(true).xalign(0.0).hexpand(true).build();
         let kit_dismiss = gtk::Button::builder().label(words::kit_notice_dismiss()).valign(gtk::Align::Center).build();
@@ -340,6 +366,7 @@ impl Shell {
             queued_banner,
             kit_notice,
             kit_notice_text,
+            finish_profile,
             queued_said: RefCell::new(Vec::new()),
             pending_rename: RefCell::new(None),
             gone_said: RefCell::new(Vec::new()),
@@ -626,6 +653,7 @@ impl Shell {
             ));
         }
         self.kit_notice.set_reveal_child(shown.kit_notice.is_some());
+        self.finish_profile.set_reveal_child(shown.finish_profile);
         // after a reconnect: how many writes made offline were sent, how many need the person — said once, then told seen
         if *self.queued_said.borrow() != shown.queued_said {
             *self.queued_said.borrow_mut() = shown.queued_said.clone();

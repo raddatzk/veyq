@@ -71,5 +71,6 @@ pub mod tiles;
 pub mod trash;
 pub mod typed;
 pub mod uploads;
+pub mod trust_reset;
 pub mod whos_who;
 pub mod words;

@@ -62,7 +62,9 @@ second UI.
 ([ADR 0111](0111-an-invitee-grants-itself-a-rotator-re-keys-its-own-scopes-and-a-key-chain-anchors-trust.md)
 decision 3) — so name and picture may be sealed together there: the accept and the register-and-accept carry an
 optional sealed picture, and the join view offers the picker next to the name fields. A joiner who skipped either is
-offered them once the device holds the key: a one-time "finish your profile" prompt, plus Settings. There is **no local
+offered them once the device holds the key: a one-time "finish your profile" prompt, plus Settings — on the web and in
+every app (the core's `ShellModel.finishProfile` over `ProfileModel.unfinished`, dismissed per account on the device, checked once
+per tenant opened and only once the address is confirmed, drawn beside the kit notice as the web's beside its prompt). There is **no local
 plaintext caching** of an unsealed image.
 
 **8. Removal clears the picture, keeps the handle.** A removed member's profile row outlives the removal (reused on

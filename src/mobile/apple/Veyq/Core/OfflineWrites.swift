@@ -16,6 +16,8 @@ final class QueuedHeld {
     let said: CoreState<[VeyqCore.Notice]>
     /// The one-time kit notice (core's `ShellModel.kitNotice`, ADR 0157 decision 5).
     let kitNotice: CoreState<VeyqCore.Notice?>
+    /// *Finish your profile* (core's `ShellModel.finishProfile`, ADR 0084 decision 7).
+    let finishProfile: CoreState<Bool>
 
     init(_ shell: ShellModel) {
         let q = AppleQueued(shell: shell)
@@ -35,6 +37,9 @@ final class QueuedHeld {
         kitNotice = CoreState({ q.kitNotice.value as? VeyqCore.Notice }) { changed in
             ApplePlatform.shared.watch(flow: q.kitNotice) { @Sendable _ in changed() }
         }
+        finishProfile = CoreState({ (q.finishProfile.value as? KotlinBoolean)?.boolValue ?? false }) { changed in
+            ApplePlatform.shared.watch(flow: q.finishProfile) { @Sendable _ in changed() }
+        }
     }
 
     func close() {
@@ -43,6 +48,7 @@ final class QueuedHeld {
         here.stop()
         said.stop()
         kitNotice.stop()
+        finishProfile.stop()
         queued.close()
     }
 }

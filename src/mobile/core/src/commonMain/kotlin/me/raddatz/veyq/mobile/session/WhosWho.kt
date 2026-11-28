@@ -21,7 +21,13 @@ import me.raddatz.veyq.mobile.words.ShownText
  * anomalies first (the one state that asks for action), then by name ([NameOrder] over the folded names), then the id.
  */
 @Serializable
-data class WhosWho(val people: List<Other>, val said: Msg?, val retry: Boolean) {
+data class WhosWho(
+    val people: List<Other>,
+    val said: Msg?,
+    val retry: Boolean,
+    /** [said] is this device refusing its own pin store: *Start this list over* stands beside it (the web's `TrustResetLink`). */
+    val trustReset: Boolean = false,
+) {
 
     /** The one state a person shows (the web's `OverviewState`). */
     enum class State {
@@ -91,6 +97,7 @@ data class WhosWho(val people: List<Other>, val said: Msg?, val retry: Boolean) 
                 TrustStateRefused.Code.UNREADABLE -> Msg.VERIFY_TRUST_UNREADABLE
             },
             retry = false,
+            trustReset = true,
         )
 
         /** How each listed member's anchor check came out. */

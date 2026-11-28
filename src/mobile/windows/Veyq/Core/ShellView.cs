@@ -62,6 +62,8 @@ internal sealed class ShellView
     /// <summary>The one-time "a clearer Emergency Kit exists" (ShellShown.kitNotice, ADR 0157 decision 5): Fluent's
     /// InfoBar, its action "Go to your kit" (Settings at Security), its close "Not now"; both dismiss it for good.</summary>
     private readonly InfoBar _kitNotice;
+    /// <summary>*Finish your profile* (ShellShown.finishProfile, ADR 0084 decision 7), before the kit notice as the web's.</summary>
+    private readonly InfoBar _finishProfile;
     private string _queuedSaid = "";
     /// <summary>The items no longer available offline, said once; and what it said last.</summary>
     private readonly InfoBar _gone;
@@ -175,6 +177,19 @@ internal sealed class ShellView
         head.Children.Add(_commands);
         _offline = new InfoBar { IsOpen = false, IsClosable = false, Severity = InfoBarSeverity.Warning, Margin = new Thickness(12, 0, 12, 4) };
         AutomationProperties.SetAutomationId(_offline, "offline-banner");
+        _finishProfile = new InfoBar { IsOpen = false, IsClosable = true, Severity = InfoBarSeverity.Informational, Title = Words.ProfileFinishTitle(), Message = Words.ProfileFinishBody(), Margin = new Thickness(12, 0, 12, 4) };
+        AutomationProperties.SetAutomationId(_finishProfile, "finish-profile");
+        var finishOpen = new Button { Content = Words.ProfileFinishOpen() };
+        AutomationProperties.SetAutomationId(finishOpen, "finish-profile-open");
+        finishOpen.Click += (_, _) =>
+        {
+            Act.Send(new Call.ShellFinishProfileDismiss());
+            _finishProfile.IsOpen = false;
+            EditProfile();
+        };
+        _finishProfile.ActionButton = finishOpen;
+        _finishProfile.CloseButtonClick += (_, _) => Act.Send(new Call.ShellFinishProfileDismiss());
+        ToolTipService.SetToolTip(_finishProfile, Words.ProfileFinishDismiss());
         _kitNotice = new InfoBar { IsOpen = false, IsClosable = true, Severity = InfoBarSeverity.Informational, Title = Words.KitNoticeTitle(), Margin = new Thickness(12, 0, 12, 4) };
         AutomationProperties.SetAutomationId(_kitNotice, "kit-notice");
         var kitOpen = new Button { Content = Words.KitNoticeOpen() };
@@ -220,6 +235,7 @@ internal sealed class ShellView
         content.Children.Add(head);
         var banners = new StackPanel();
         banners.Children.Add(_offline);
+        banners.Children.Add(_finishProfile);
         banners.Children.Add(_kitNotice);
         Grid.SetRow(banners, 2);
         content.Children.Add(banners);
@@ -437,6 +453,7 @@ internal sealed class ShellView
         _offline.IsOpen = shown.offlineBanner is not null || shown.queuedBanner is not null;
         if (shown.kitNotice is { } news) _kitNotice.Message = $"{Said.Notice(news)} {Words.KitStatusKeepsWorking()}";
         _kitNotice.IsOpen = shown.kitNotice is not null;
+        _finishProfile.IsOpen = shown.finishProfile;
         // what the reconnect sent and what now needs the person, said once, then told seen (Shell.QueuedSaidSeen)
         var sent = string.Join("\n", shown.queuedSaid.Select(Said.Notice));
         if (sent != _queuedSaid)

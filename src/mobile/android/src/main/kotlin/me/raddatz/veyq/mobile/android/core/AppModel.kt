@@ -669,6 +669,30 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         _whosWho.value = null
     }
 
+    private val _trustReset = MutableStateFlow<me.raddatz.veyq.mobile.session.TrustReset?>(null)
+
+    /** *Start a list over* while its page is open (core's `TrustReset`, ADR 0028 decision 7); null when closed. */
+    val trustReset: StateFlow<me.raddatz.veyq.mobile.session.TrustReset?> = _trustReset.asStateFlow()
+
+    /** The page opened over Settings, reading which lists this device refuses. */
+    fun openTrustReset() {
+        val account = session.signedTo?.account ?: return
+        val m = account.trustReset()
+        _trustReset.value = m
+        viewModelScope.launch { m.load() }
+    }
+
+    /** One of the page's steps (the confirm writes): off the main thread. */
+    fun trustResetStep(step: suspend () -> Unit) {
+        viewModelScope.launch { step() }
+    }
+
+    /** The page closed: Settings read anew, so a list started over leaves its section. */
+    fun closeTrustReset() {
+        _trustReset.value = null
+        viewModelScope.launch { settingsModel?.refresh() }
+    }
+
     /** A Who's who row: Settings closes and the person's profile opens over the shell, where the compare lives (the web's link). */
     fun openPersonFromWhosWho(userId: String) {
         closeWhosWho()
@@ -1369,6 +1393,7 @@ class AppModel(app: Application) : AndroidViewModel(app) {
         override fun openKeyRotation() = this@AppModel.openKeyRotation()
         override fun openKitRenewal() = this@AppModel.openKitRenewal()
         override fun openErasure() = this@AppModel.openErasure()
+        override fun openTrustReset() = this@AppModel.openTrustReset()
     }
 
     // ---- the account's own flows (ADR 0148): the profile, the password, the address, the keys, the erasure ----
@@ -1555,6 +1580,19 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     val kitNotice: StateFlow<me.raddatz.veyq.mobile.words.Notice?> by lazy {
         _shell.flatMapLatest { it?.kitNotice ?: kotlinx.coroutines.flow.flowOf(null) }
             .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, null)
+    }
+
+    /** *Finish your profile* (core's `ShellModel.finishProfile`, ADR 0084 decision 7): shown while true. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val finishProfile: StateFlow<Boolean> by lazy {
+        _shell.flatMapLatest { it?.finishProfile ?: kotlinx.coroutines.flow.flowOf(false) }
+            .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, false)
+    }
+
+    /** The prompt dismissed; [open] opens one's profile too ("Open profile settings"). */
+    fun dismissFinishProfile(open: Boolean) {
+        _shell.value?.dismissFinishProfile()
+        if (open) openProfile()
     }
 
     /** The notice dismissed; [open] opens Settings at Security too ("Go to your kit"). */

@@ -90,6 +90,7 @@ struct SettingsView: View {
     @State private var showingMembers = false
     /// Settings' Who's who open over the page on a Mac (core's `SettingsSection.WHOS_WHO`); iOS pushes it.
     @State private var showingWhosWho = false
+    @State private var showingTrustReset = false
     /// Settings' Groups open over the page on a Mac (core's `SettingsSection.GROUPS`); iOS pushes it.
     @State private var showingGroups = false
     /// Settings' Group invitations open over the page on a Mac (core's `SettingsSection.GROUP_INVITATIONS`); iOS pushes it.
@@ -206,6 +207,17 @@ struct SettingsView: View {
         .sheet(item: $flow) { f in
             if let model = maps { AccountFlowSheet(flow: f, model: model) }
         }
+        .sheet(isPresented: $showingTrustReset) {
+            if let model = maps {
+                NavigationStack {
+                    TrustResetView(model: model)
+                        .toolbar { ToolbarItem(placement: .confirmationAction) { Button(say(.shareDone)) { showingTrustReset = false } } }
+                }
+                #if os(macOS)
+                .frame(minWidth: 520, minHeight: 480)
+                #endif
+            }
+        }
         .sheet(isPresented: $showingWhosWho) {
             if let model = maps {
                 NavigationStack {
@@ -318,6 +330,18 @@ struct SettingsView: View {
             if let model = maps {
                 flowSection(.security, model)
                 kitSection
+            }
+        case .trustReset:
+            // *Start a list over* (the web's `trust-reset`), offered while a list of the account is refused here
+            if maps != nil {
+                Section {
+                    Button { showingTrustReset = true } label: { Label(say(.trustResetTitle), systemImage: "clock.arrow.circlepath") }
+                        .accessibilityIdentifier("settings-trust-reset")
+                } header: {
+                    Text(say(.trustResetTitle))
+                } footer: {
+                    Text(say(.trustResetSub))
+                }
             }
         case .profile: if let model = maps { flowSection(.profile, model) }
         case .erase: if let model = maps { flowSection(.erase, model) }
@@ -658,6 +682,10 @@ struct SettingsView: View {
         Section {
             if let why = state.registerRefusal {
                 Text(say(why)).font(.footnote).foregroundStyle(Role.danger)
+                // the web's `TrustResetLink`: the one way back from a refused list (ADR 0028 decision 7)
+                if maps != nil {
+                    Button(say(.trustResetLink)) { showingTrustReset = true }.accessibilityIdentifier("register-trust-reset")
+                }
             }
             if let families = state.families {
                 if families.isEmpty {

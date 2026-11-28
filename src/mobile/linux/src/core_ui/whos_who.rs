@@ -14,8 +14,9 @@ use crate::bridge::{self, wire::Answer, wire::Call, wire::WhosWho, wire::Other, 
 use crate::core_ui::received::said_msg;
 use crate::core_ui::{avatars, words};
 
-/// The subpage, read when it opens and at each *Try again*; [leave] closes Settings once a person is chosen.
-pub fn page(leave: Rc<dyn Fn()>) -> adw::NavigationPage {
+/// The subpage, read when it opens and at each *Try again*; [leave] closes Settings once a person is chosen, [reset] opens
+/// *Start a list over* where this device refuses its own pin store (`WhosWho.trustReset`, the web's `TrustResetLink`).
+pub fn page(leave: Rc<dyn Fn()>, reset: Rc<dyn Fn()>) -> adw::NavigationPage {
     let column = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(18).margin_top(24).margin_bottom(24).margin_start(12).margin_end(12).build();
     let view = adw::ToolbarView::new();
     view.add_top_bar(&adw::HeaderBar::new());
@@ -23,11 +24,11 @@ pub fn page(leave: Rc<dyn Fn()>) -> adw::NavigationPage {
     view.set_content(Some(&gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).vexpand(true).child(&clamp).build()));
     let page = adw::NavigationPage::builder().title(words::whos_who_title()).child(&view).build();
     page.set_widget_name("whos-who");
-    load(column, leave);
+    load(column, leave, reset);
     page
 }
 
-fn load(column: gtk::Box, leave: Rc<dyn Fn()>) {
+fn load(column: gtk::Box, leave: Rc<dyn Fn()>, reset: Rc<dyn Fn()>) {
     while let Some(child) = column.first_child() {
         column.remove(&child);
     }
@@ -43,11 +44,11 @@ fn load(column: gtk::Box, leave: Rc<dyn Fn()>) {
             }
         };
         column.remove(&spinner);
-        draw(&column, read, leave);
+        draw(&column, read, leave, reset);
     });
 }
 
-fn draw(column: &gtk::Box, read: Option<WhosWho>, leave: Rc<dyn Fn()>) {
+fn draw(column: &gtk::Box, read: Option<WhosWho>, leave: Rc<dyn Fn()>, reset: Rc<dyn Fn()>) {
     let (said, retry) = match &read {
         None => (Some(words::whos_who_load_failed()), true),
         Some(w) => (w.said.as_ref().map(said_msg), w.retry),
@@ -59,9 +60,16 @@ fn draw(column: &gtk::Box, read: Option<WhosWho>, leave: Rc<dyn Fn()>) {
         if retry {
             let again = gtk::Button::builder().label(words::people_retry()).halign(gtk::Align::Start).build();
             again.set_widget_name("whos-who-retry");
-            let (c, l) = (column.clone(), leave.clone());
-            again.connect_clicked(move |_| load(c.clone(), l.clone()));
+            let (c, l, r) = (column.clone(), leave.clone(), reset.clone());
+            again.connect_clicked(move |_| load(c.clone(), l.clone(), r.clone()));
             column.append(&again);
+        }
+        if read.as_ref().is_some_and(|w| w.trust_reset) {
+            let start = gtk::Button::builder().label(words::trust_reset_link()).halign(gtk::Align::Start).build();
+            start.add_css_class("flat");
+            start.set_widget_name("whos-who-trust-reset");
+            start.connect_clicked(move |_| reset());
+            column.append(&start);
         }
         return;
     }

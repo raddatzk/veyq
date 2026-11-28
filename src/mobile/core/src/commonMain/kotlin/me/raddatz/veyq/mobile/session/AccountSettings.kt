@@ -111,6 +111,9 @@ class AccountSettings<A : Connection, T : Any>(
         /** Which Emergency Kit the account has (ADR 0157 decision 5, [me.raddatz.veyq.mobile.account.KitStatus]); null: not offered. */
         open suspend fun kit(): me.raddatz.veyq.mobile.account.KitStatus.Standing? = null
 
+        /** Whether one of the account's lists is refused on this device ([VeyqAccount.trustRefusedNow]): *Start a list over* offered. */
+        open suspend fun trustRefused(): Boolean = false
+
         /** Each change of the pins or their fetches: what the section reads anew while it is shown ([followStorage]). */
         open val storageChanges: kotlinx.coroutines.flow.Flow<Unit> get() = kotlinx.coroutines.flow.emptyFlow()
         @PlatformApi
@@ -216,6 +219,8 @@ class AccountSettings<A : Connection, T : Any>(
          * ([me.raddatz.veyq.mobile.session.KitRenewal]) —, or that it could not be read; null until read.
          */
         val kit: me.raddatz.veyq.mobile.account.KitStatus.Standing? = null,
+        /** *Start a list over* is offered: one of the account's lists is refused on this device (ADR 0028 decision 7). */
+        val trustRefused: Boolean = false,
     ) {
         /** Whether "Sign out every other" has anything to end. */
         val hasOthers: Boolean get() = families.orEmpty().any { !it.current }
@@ -230,6 +235,7 @@ class AccountSettings<A : Connection, T : Any>(
             me.raddatz.veyq.mobile.search.SettingsSection.offered(
                 me.raddatz.veyq.mobile.search.SettingsSection.Gates(
                     addDevice = addDevice, storage = storage != null || storageUnavailable != null, maps = maps, appearance = appearance,
+                    trustReset = trustRefused,
                 ),
             )
     }
@@ -452,6 +458,7 @@ class AccountSettings<A : Connection, T : Any>(
         attempt { door.email() }.onSuccess { (address, confirmed) -> _state.value = current.copy(email = address, emailConfirmed = confirmed) }
         attempt { door.capabilities() }.onSuccess { _state.value = current.copy(addDevice = DEVICE_LINKING in it) }
         attempt { door.kit() }.onSuccess { _state.value = current.copy(kit = it) }
+        attempt { door.trustRefused() }.onSuccess { _state.value = current.copy(trustRefused = it) }
         val families = attempt { door.families() }.getOrElse {
             if (current.refusal == null) refuse(Msg.ACCOUNT_SETTINGS_LOAD_FAILED)
             _state.value = current.copy(device = current.device.copy(trust = here.trust()))
@@ -554,6 +561,7 @@ class AccountSettings<A : Connection, T : Any>(
             .mapNotNull { it.id }
         override suspend fun removeSavedKey(wrap: String) = done { AccountWrapsApi(account.server, account.http).deleteAccountWrap(wrap) }
         override suspend fun capabilities() = account.call { SetupApi(account.server, account.http).getSetupStatus() }.capabilities.map { it.id }.toSet()
+        override suspend fun trustRefused() = account.trustRefusedNow()
         override fun register() = account.register()
         override suspend fun kit() = account.kitStatus.also { it.ensure() }.current.standing
         override suspend fun storage(): Storage? {

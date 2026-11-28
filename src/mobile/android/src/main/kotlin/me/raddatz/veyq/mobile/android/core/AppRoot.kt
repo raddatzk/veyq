@@ -130,7 +130,15 @@ fun AppRoot(model: AppModel) {
             GroupInvitationsDialog(it, onRetry = model::openGroupInvitations, onAccept = model::acceptGroupInvitation, onDecline = model::declineGroupInvitation, onClose = model::closeGroupInvitations)
         }
         // Settings' Who's who (core's `SettingsSection.WHOS_WHO`), over the page; a row opens the person's profile
-        if (terms == null) whosWho?.let { WhosWhoDialog(it, onRetry = model::openWhosWho, onOpen = model::openPersonFromWhosWho, onClose = model::closeWhosWho) }
+        if (terms == null) whosWho?.let {
+            WhosWhoDialog(it, onRetry = model::openWhosWho, onOpen = model::openPersonFromWhosWho, onClose = model::closeWhosWho, onTrustReset = {
+                model.closeWhosWho()
+                model.openTrustReset()
+            })
+        }
+        // *Start a list over* (core's `TrustReset`), over Settings
+        val trustReset by model.trustReset.collectAsStateWithLifecycle()
+        trustReset?.let { TrustResetScreen(it, model) }
         // the account was erased here: the sign-in says so once (the web's `explainEnding('erased')`)
         ended?.let { msg ->
             androidx.compose.material3.AlertDialog(

@@ -62,7 +62,7 @@ final class PlayedSettings: SettingsActions {
                 email: "ada@example.org", emailConfirmed: nil, device: AccountSettingsDevice(label: label, familyId: nil, trust: trust),
                 families: nil, savedKeyDevices: [], otherSavedKeys: false, addDevice: false, working: false,
                 refusal: .accountSettingsLoadFailed, registerRefusal: .accountSettingsRegisterUnreadable, storage: nil,
-                storageUnavailable: nil, askingRemoveAll: false, backgroundSync: nil, backgroundSyncMissing: nil, kit: nil)
+                storageUnavailable: nil, askingRemoveAll: false, backgroundSync: nil, backgroundSyncMissing: nil, kit: nil, trustRefused: true)
         }
         return AccountSettingsState(
             email: "ada@example.org", emailConfirmed: KotlinBoolean(value: false),
@@ -74,7 +74,7 @@ final class PlayedSettings: SettingsActions {
             },
             savedKeyDevices: saved.map { AccountSettingsSavedKeyDevice(deviceId: $0.0, label: $0.1) },
             otherSavedKeys: otherKeys, addDevice: true, working: false, refusal: nil, registerRefusal: nil, storage: nil,
-            storageUnavailable: nil, askingRemoveAll: false, backgroundSync: background.on, backgroundSyncMissing: background.missing, kit: nil)
+            storageUnavailable: nil, askingRemoveAll: false, backgroundSync: background.on, backgroundSyncMissing: background.missing, kit: nil, trustRefused: false)
     }
 
     func closeSettings() { log("close") }

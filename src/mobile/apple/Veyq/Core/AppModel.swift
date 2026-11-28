@@ -858,6 +858,14 @@ final class AppModel {
         Task { try? await m.refresh() }
     }
 
+    /// *Start a list over* over the signed-in account (core's `TrustReset`, ADR 0028 decision 7), not loaded yet.
+    func trustReset() -> TrustReset? { session.signedTo?.account.trustReset() }
+
+    /// After *Start a list over* closed: the Settings page read anew, so a list started over leaves its section.
+    func trustResetClosed() {
+        if let m = settingsModel { Task { try? await m.refresh() } }
+    }
+
     func closeSettings() {
         settingsWatch?.stop()
         settingsWatch = nil
