@@ -747,27 +747,38 @@ impl Shell {
             None => avatars::show(&self.me, shown.me.as_deref()),
         }
         let marked = |label: String, needs_lock: bool| if needs_lock { said::joined(&[label, words::members_compromise_rotation_mark()]) } else { label };
+        // Each space's and tenant's row is a custom child of the popover: GTK's popover menu draws no icon beside a
+        // stateful item's label (measured 2026-11-28 under Broadway, inbox #1428), so a row carries its picture — or the
+        // initials, as the web's switcher — and a check where it is the current one, and activates the same action.
         let menu = gio::Menu::new();
         let spaces = gio::Menu::new();
+        let mut rows: Vec<(String, gtk::Widget)> = Vec::new();
+        let current_space = state.shell.space.clone().unwrap_or_default();
         for s in &shown.spaces {
-            let item = gio::MenuItem::new(Some(&marked(said::piece(&s.name), s.needs_lock)), None);
-            if let Some(t) = pictures.textures.get(&s.space.scope_id) {
-                item.set_icon(t);
-            }
-            item.set_action_and_target_value(Some("win.space"), Some(&s.space.scope_id.to_variant()));
+            let label = marked(said::piece(&s.name), s.needs_lock);
+            let id = format!("space-{}", s.space.scope_id);
+            let item = gio::MenuItem::new(Some(&label), None);
+            item.set_attribute_value("custom", Some(&id.to_variant()));
             spaces.append_item(&item);
+            let target = s.space.scope_id.to_variant();
+            // the personal space a person's mark, as the web's and Android's switcher draw it
+            let icon = (s.space.kind == "PERSONAL").then_some("avatar-default-symbolic");
+            rows.push((id, self.switcher_row(&label, None, icon, pictures.textures.get(&s.space.scope_id), s.space.scope_id == current_space, "win.space", target)));
         }
         menu.append_section(Some(&shown.tenant.name), &spaces);
         // every signed-in account's tenants, each row saying where it is (core's `ShellWords.switcher`: its domain, and the
         // account's address where two accounts list the same tenant; owner 2026-11-19)
         let tenants = gio::Menu::new();
-        for e in &shown.switcher {
-            let item = gio::MenuItem::new(Some(&marked(e.line.clone(), e.needs_lock)), None);
-            if let Some(t) = pictures.textures.get(&e.tenant.tenant_id).filter(|_| e.picture) {
-                item.set_icon(t);
-            }
-            item.set_action_and_target_value(Some("win.tenant"), Some(&format!("{}\n{}", e.connection, e.tenant.tenant_id).to_variant()));
+        let current_tenant = format!("{}\n{}", shown.connection, shown.tenant.tenant_id);
+        for (i, e) in shown.switcher.iter().enumerate() {
+            let label = marked(e.line.clone(), e.needs_lock);
+            let id = format!("tenant-{i}");
+            let item = gio::MenuItem::new(Some(&label), None);
+            item.set_attribute_value("custom", Some(&id.to_variant()));
             tenants.append_item(&item);
+            let value = format!("{}\n{}", e.connection, e.tenant.tenant_id);
+            let picture = pictures.textures.get(&e.tenant.tenant_id).filter(|_| e.picture);
+            rows.push((id, self.switcher_row(&label, Some(&e.tenant.name), None, picture, value == current_tenant, "win.tenant", value.to_variant())));
         }
         menu.append_section(None, &tenants);
         // "Manage servers" (the window's `win.manage`, `manage.rs`); *Open a link* is the sign-in's alone (owner 2026-11-19)
@@ -775,8 +786,52 @@ impl Shell {
         manage.append(Some(&words::switcher_manage()), Some("win.manage"));
         menu.append_section(None, &manage);
         self.switcher.set_menu_model(Some(&menu));
+        if let Some(popover) = self.switcher.popover().and_downcast::<gtk::PopoverMenu>() {
+            for (id, row) in &rows {
+                popover.add_child(row, id);
+            }
+        }
         self.space_action.set_state(&state.shell.space.clone().unwrap_or_default().to_variant());
         self.tenant_action.set_state(&format!("{}\n{}", shown.connection, shown.tenant.tenant_id).to_variant());
+    }
+
+    /// A switcher row: [picture] (else [icon], else [initials_of]'s or [label]'s initials) beside [label], a check where [current],
+    /// [action] with [target] on a click, the popover closed.
+    #[allow(clippy::too_many_arguments)]
+    fn switcher_row(&self, label: &str, initials_of: Option<&str>, icon: Option<&str>, picture: Option<&gdk::Texture>, current: bool, action: &str, target: glib::Variant) -> gtk::Widget {
+        let avatar = adw::Avatar::new(24, Some(initials_of.unwrap_or(label)), icon.is_none());
+        if let Some(name) = icon {
+            avatar.set_icon_name(Some(name));
+        }
+        if let Some(t) = picture {
+            avatar.set_custom_image(Some(t));
+        }
+        let text = gtk::Label::builder().label(label).xalign(0.0).hexpand(true).ellipsize(gtk::pango::EllipsizeMode::End).build();
+        // a menu row's weight, not a button's
+        let weight = gtk::pango::AttrList::new();
+        weight.insert(gtk::pango::AttrInt::new_weight(gtk::pango::Weight::Normal));
+        text.set_attributes(Some(&weight));
+        let check = gtk::Image::from_icon_name("object-select-symbolic");
+        check.set_opacity(if current { 1.0 } else { 0.0 });
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        row.append(&avatar);
+        row.append(&text);
+        row.append(&check);
+        let button = gtk::Button::builder().child(&row).build();
+        button.add_css_class("flat");
+        button.update_property(&[gtk::accessible::Property::Label(label)]);
+        if current {
+            button.update_state(&[gtk::accessible::State::Checked(gtk::AccessibleTristate::True)]);
+        }
+        let action = action.to_owned();
+        let switcher = self.switcher.downgrade();
+        button.connect_clicked(move |b| {
+            if let Some(s) = switcher.upgrade() {
+                s.popdown();
+            }
+            let _ = b.activate_action(&action, Some(&target));
+        });
+        button.upcast()
     }
 
     /// The drawer's New (`DrawerSection.NEW`): hidden until the sidebar's plan names it ([Shell::draw_sidebar]).

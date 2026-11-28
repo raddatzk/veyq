@@ -14,6 +14,7 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
+import org.junit.Assume.assumeTrue
 
 /**
  * The last parity gaps against a running dev instance, as a throwaway ([Throwaway], never the seeded accounts; its owner
@@ -55,6 +56,30 @@ class LiveParityTest {
                 assertTrue(tenant.icons(encoder).clear(id).done, "the icon was not removed")
             }
             assertNull(tenant.faces.held.value.picture(id), "a removed picture leaves the initial")
+        }
+    }
+
+    /**
+     * Not a check: a desktop or phone pass's tenant picture. `VEYQ_LIVE_SPACE_ICON=<a WebP file>` sets the throwaway's tenant
+     * icon to that file's bytes (sealed as the owner's own write would seal it) and leaves it, for the switcher and the
+     * drawer to draw; `VEYQ_LIVE_SPACE_ICON=clear` removes it.
+     */
+    @Test
+    fun aPassesTenantPictureIsSetAndKept() {
+        val file = System.getenv("VEYQ_LIVE_SPACE_ICON")
+        assumeTrue("VEYQ_LIVE_SPACE_ICON is not set: a pass's helper", file != null)
+        val t = Throwaway.accounts()
+        runTest(timeout = 3.minutes) {
+            val tenant = open(t, LiveRun("VEYQ", t.file).also { runs += it })
+            val id = tenant.tenant.tenantId
+            if (file == "clear") {
+                assertTrue(tenant.icons(null).clear(id).done, "the icon was not removed")
+                return@runTest
+            }
+            val webp = java.io.File(file!!).readBytes()
+            val set = tenant.icons(WebpEncoder { _, _, _, _ -> webp }).set(id, ByteArray(ProfileModel.EDGE * ProfileModel.EDGE * 4))
+            assertTrue(set.done, "the icon was not set")
+            assertContentEquals(webp, tenant.faces.held.value.picture(id))
         }
     }
 
