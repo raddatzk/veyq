@@ -159,8 +159,11 @@ case and moderate nothing — moderating stays on the web (owner 2026-11-28). He
 `CredentialFlowsTest`; the key replacement live too (measured 2026-11-28: `LiveModerationKeyTest` as a throwaway made a
 moderator by `throwaway:account -- --moderator` — the epoch it holds re-sealed to the new identity, opening there, the
 old identity opening none; red with the staging's `moderationKey.put` taken out, the server refusing the publish). The
-last holder's erasure is not live: the dev Server Owner holds every epoch, so no throwaway is ever a last holder — owed
-with the note's passes in inbox #1426.
+last holder's erasure live too (measured 2026-11-28: `LiveLastHolderErasureTest` as a throwaway made the last holder by
+`throwaway:account -- --last-holder` — an epoch left out and another identity each refused as such with nothing moved,
+then every epoch handed over inside the erasure, the Server Owner's own client opening every live epoch after; red with
+the request's upload dropped), and its note drawn and the erasure run on Android, Linux and Windows; Apple's passes owed
+in inbox #1426.
 
 **The task queue's jobs, in the core** ([ADR 0148](../decisions/0148-the-apps-account-the-webs-flows-ported-into-the-core-the-kit-written-by-the-core-into-the-file-the-person-chose.md) § The task queue's jobs, built
 2026-11-28; ADR 0021): while a tenant is open, every 45 s, the core claims each open shared scope's `grant-delivery` jobs

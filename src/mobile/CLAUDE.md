@@ -827,7 +827,13 @@ A Gradle build of its own, run through its own wrapper.
   pending erasure listed). `--moderator` also makes the owner a moderator through the Server Owner's own acts
   (appointed, its own acceptance, a fresh epoch minted to every accepted moderator — the principal's password alone used,
   none of its grants opened), and its `--erase` mints the next epoch for the moderators left: `LiveModerationKeyTest`
-  (a moderator's key replacement) runs on such a file. The core's such cases read `VEYQ_LIVE_THROWAWAY_ENV=<file>` (`Throwaway`, `testing/src/jvmMain`)
+  (a moderator's key replacement) runs on such a file. `--last-holder` goes on to make it the LAST holder (the Server
+  Owner's own client — `.run/.env`'s password and Secret Key, never printed — delivers it every older epoch, then the
+  Server Owner is removed; refused on a roster with anyone else), so its erasure must hand every epoch to the Server
+  Owner: `LiveLastHolderErasureTest` runs on such a file, and so does a device pass of the erasure's note
+  (`--with-member --moderator-is-member` makes the member that holder, for a fixed `--tenant` name the owner must keep
+  movable). Its `--erase` restores the Server Owner first where the throwaway still stands and is red unless the Server
+  Owner's client opens every live epoch after; `--status` reads the same and changes nothing. The core's such cases read `VEYQ_LIVE_THROWAWAY_ENV=<file>` (`Throwaway`, `testing/src/jvmMain`)
   and **fail**, not skip, on a file naming `.run/.env`'s principal or member; an app pass points `VEYQ_ENV_FILE` at the
   file for `devlogin.py` / `run.py --devlogin`. A machine that resolves no `*.localhost` (the Windows VM) maps one
   fixed name instead, which `--tenant tw-<name>` gives the tenant (the VM's `hosts` maps `tw-win.localhost`, 2026-11-19).
