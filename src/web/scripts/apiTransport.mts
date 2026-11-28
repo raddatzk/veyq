@@ -221,7 +221,7 @@ export function installPinnedFetch(target: PinnedTarget): () => void {
 /** One Server-Owner call on the admin listener with a hand-built JSON body — for an admin operation the web client does not
  *  generate (`/api/instance/store`, ADR 0089: web has no `instance` client, admin-web does). The seeder reads only the fields
  *  it names from the answer. Returns the status and the parsed body, never throws on a non-2xx. */
-export async function adminCall<T>(token: string, method: 'GET' | 'PUT' | 'POST', path: string, body?: unknown): Promise<{ status: number; json: T }> {
+export async function adminCall<T>(token: string, method: 'GET' | 'PUT' | 'POST' | 'DELETE', path: string, body?: unknown): Promise<{ status: number; json: T }> {
   const res = await fetch(`${ADMIN_BASE}${path}`, {
     method,
     headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
