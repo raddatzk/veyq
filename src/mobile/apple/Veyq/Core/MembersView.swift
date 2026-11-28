@@ -42,6 +42,7 @@ struct MembersView: View {
                         owner: roster.ownerActs, working: working, notImage: iconNotImage,
                         choose: { choosingIcon = true }, remove: { removingIcon = true }
                     )
+                    SpaceStatusLines(lines: roster.status, working: working) { requeue() }
                 }
             }
             if roster?.owner == true {
@@ -157,6 +158,18 @@ struct MembersView: View {
             let outcome = await run(id)
             said = outcome.map { say(notice: $0.notice) } ?? say(.spaceIconFailed)
             if outcome?.done == true { icon = await model.scopeIcon(id) }
+            working = false
+        }
+    }
+
+    /// *Start Again* on the stuck rotation's notice: a failure said under the list, the roster read anew where it went through.
+    private func requeue() {
+        working = true
+        Task {
+            if let r = try? await model.membersRequeue() {
+                said = r.notice.map { say(notice: $0) }
+                if r.done { roster = await model.membersRead() }
+            }
             working = false
         }
     }
@@ -325,6 +338,29 @@ struct TrustNote: View {
 
     var body: some View {
         if let note { Text(say(note)).font(.footnote).foregroundStyle(Role.muted).accessibilityIdentifier("member-trust-note") }
+    }
+}
+
+/// The status lines above a space's member list (core's `SpaceStatus.lines`, the web's panels): a stuck rotation's
+/// warning — a failed one with *Start Again* —, the resealing or the re-keying hint.
+struct SpaceStatusLines: View {
+    let lines: [SpaceStatusLine]
+    let working: Bool
+    let requeue: () -> Void
+
+    var body: some View {
+        ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+            VStack(alignment: .leading, spacing: 8) {
+                Label(say(line.word), systemImage: line.warn ? "exclamationmark.triangle.fill" : "info.circle")
+                    .foregroundStyle(line.warn ? AnyShapeStyle(.orange) : AnyShapeStyle(.secondary))
+                if line.requeue {
+                    Button(say(.membersCompromiseRotationRequeue), action: requeue)
+                        .disabled(working)
+                        .accessibilityIdentifier("space-status-requeue")
+                }
+            }
+            .accessibilityIdentifier(line.warn ? "space-status-warn" : "space-status-info")
+        }
     }
 }
 

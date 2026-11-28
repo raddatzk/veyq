@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ArrowDownward
@@ -76,7 +77,32 @@ internal class ScopeActions(
     val clearIcon: () -> Unit,
     val revokeLinks: () -> Unit,
     val newLock: () -> Unit,
+    /** *Start again* on a failed compromise rotation's notice. */
+    val requeue: () -> Unit,
 )
+
+/**
+ * The status lines above a space's member list (core's `SpaceStatus.lines`, the web's panels): a warning card for a stuck
+ * rotation — a failed one with *Start again* —, an information card for the resealing or the re-keying hint.
+ */
+@Composable
+internal fun SpaceStatusLines(lines: List<me.raddatz.veyq.mobile.session.SpaceStatusLine>, enabled: Boolean, onRequeue: () -> Unit) {
+    for (line in lines) {
+        val colors = if (line.warn) {
+            androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer)
+        } else {
+            androidx.compose.material3.CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer, contentColor = MaterialTheme.colorScheme.onSecondaryContainer)
+        }
+        androidx.compose.material3.Card(colors = colors, modifier = Modifier.fillMaxWidth().testTag(if (line.warn) "space-status-warn" else "space-status-info")) {
+            Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(say(line.word), style = MaterialTheme.typography.bodyMedium)
+                if (line.requeue) OutlinedButton(onClick = onRequeue, enabled = enabled, modifier = Modifier.testTag("space-status-requeue")) {
+                    Text(stringResource(R.string.members_compromise_rotation_requeue))
+                }
+            }
+        }
+    }
+}
 
 /** The owner's acts on invites (core's `TenantInvites` through the app's model). */
 internal class InviteActions(
@@ -131,6 +157,7 @@ internal fun MembersDialog(
                     roster.tenantName.ifEmpty { spaceName }, page.icon, owner = roster.ownerActs, enabled = !page.working,
                     onSetIcon = scope.setIcon, onClearIcon = scope.clearIcon, model = model,
                 )
+                SpaceStatusLines(roster.status, enabled = !page.working, onRequeue = scope.requeue)
                 if (roster.owner) androidx.compose.material3.FilledTonalButton(
                     onClick = { inviting = true }, enabled = !page.working, modifier = Modifier.testTag("members-invite"),
                 ) {

@@ -2399,6 +2399,9 @@ class TenantSession internal constructor(
     /** The members' pictures a UI shows, and the rule of when they are synced ([AvatarsModel]). */
     val pictures: AvatarsModel by lazy { AvatarsModel.of(this) }
 
+    /** The spaces' pictures and *Needs a new lock* marks the switcher and the drawer show, and when they are read ([SpaceFaces]). */
+    val faces: SpaceFaces by lazy { SpaceFaces.of(this) }
+
     override suspend fun spaces(): List<SpaceRef> = scopes.map { SpaceRef(it.summary.id, it.summary.kind.value, it.name) }
 
     /** The kind of open scope [scopeId] (`TENANT`, `GROUP`, `PERSONAL`), or null where it is not open here. */

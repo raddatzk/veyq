@@ -343,6 +343,17 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     /** *Turn off every link* of the space, after its question (core's `TenantMembers.revokeAllLinks`). */
     fun membersRevokeLinks() = memberAct { it.revokeAllLinks() }
 
+    /** *Start again* on the tenant's failed compromise rotation (core's `TenantMembers.requeue`): the roster read anew. */
+    fun membersRequeue() {
+        val m = tenantSession?.members ?: return
+        _members.update { it?.copy(working = true) }
+        viewModelScope.launch {
+            val o = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { m.requeue() }
+            val read = if (o.done) m.read() else null
+            _members.update { p -> p?.copy(working = false, roster = read ?: p.roster, said = o.notice ?: p.said, round = if (o.notice != null) p.round + 1 else p.round) }
+        }
+    }
+
     /**
      * The owner's invite (core's `TenantInvites`, the web's `InviteMemberDialog`): a link with its optional [label], or a
      * mail to [email] under a generated code or the [password] the owner chose. [done] hears what it came to; one that went
@@ -530,6 +541,9 @@ class AppModel(app: Application) : AndroidViewModel(app) {
 
     /** *Turn off every link* of the group, after its question (core's `TenantGroups.revokeAllLinks`). */
     fun groupRevokeLinks() = groupAct { g, id -> g.revokeAllLinks(id) }
+
+    /** *Start again* on the group's failed compromise rotation (core's `TenantGroups.requeue`): the page read anew. */
+    fun groupRequeue() = groupAct { g, id -> g.requeue(id).let { r -> me.raddatz.veyq.mobile.session.TenantGroups.Outcome(r.done, r.notice) } }
 
     private val _invitations = MutableStateFlow<InvitationsPage?>(null)
 
@@ -1933,12 +1947,21 @@ class AppModel(app: Application) : AndroidViewModel(app) {
     val avatars: StateFlow<Map<String, ByteArray>> = _avatars.asStateFlow()
     private var avatarsWatch: kotlinx.coroutines.Job? = null
 
+    /** The spaces' pictures and marks the switcher shows (core's `SpaceFaces`, read when its rule says): the initial for the rest. */
+    private val _faces = MutableStateFlow<me.raddatz.veyq.mobile.session.SpaceFaces.Held?>(null)
+    val faces: StateFlow<me.raddatz.veyq.mobile.session.SpaceFaces.Held?> = _faces.asStateFlow()
+    private var facesWatch: kotlinx.coroutines.Job? = null
+
     /** Shows the tenant's pictures as core reads them (when is core's rule); the letters show meanwhile. */
     private fun watchAvatars(t: me.raddatz.veyq.mobile.session.TenantSession) {
         avatarsWatch?.cancel()
         _avatars.value = emptyMap()
         avatarsWatch = viewModelScope.launch { t.pictures.state.collect { _avatars.value = it } }
         viewModelScope.launch { t.pictures.load() }
+        facesWatch?.cancel()
+        _faces.value = null
+        facesWatch = viewModelScope.launch { t.faces.held.collect { _faces.value = it } }
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.Default) { t.faces.load() }
     }
 
     /** What the rows read last (core's `RowDetails`): a part that does not read next time keeps these. */

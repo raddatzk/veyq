@@ -108,7 +108,10 @@ class ScopeIcons internal constructor(private val tenant: TenantSession, private
             val r = account.respond {
                 ScopesApi(tenant.base, account.http).setScopeIcon(scopeId, SetScopeIconRequest(s.sealedIcon, epoch, s.wrappedIconValueKey))
             }
-            if (r.success) return@attempt Outcome(true, Notice(Msg.SPACE_ICON_SAVED))
+            if (r.success) {
+                faces()
+                return@attempt Outcome(true, Notice(Msg.SPACE_ICON_SAVED))
+            }
             if (r.status == 409 && account.errorCode(r) == ProfileModel.STALE_EPOCH) {
                 if (round == 0) {
                     runCatching { tenant.reopenMoved() }.onFailure { if (it is CancellationException) throw it }
@@ -125,7 +128,15 @@ class ScopeIcons internal constructor(private val tenant: TenantSession, private
     @Throws(Exception::class)
     suspend fun clear(scopeId: String): Outcome = attempt {
         val r = account.respond { ScopesApi(tenant.base, account.http).clearScopeIcon(scopeId) }
-        if (r.success) Outcome(true, Notice(Msg.SPACE_ICON_REMOVED)) else Outcome(false, Notice(Msg.SPACE_ICON_FAILED))
+        if (r.success) {
+            faces()
+            Outcome(true, Notice(Msg.SPACE_ICON_REMOVED))
+        } else Outcome(false, Notice(Msg.SPACE_ICON_FAILED))
+    }
+
+    /** The switcher's and the drawer's pictures read anew after this device changed one (the web's `bumpSpaceIcon`). */
+    private suspend fun faces() {
+        runCatching { tenant.faces.load() }.onFailure { if (it is CancellationException) throw it }
     }
 
     private inline fun attempt(block: () -> Outcome): Outcome = try {

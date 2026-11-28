@@ -797,10 +797,7 @@ its upload); Apple built, not clicked (§ Open). The Use pages: [Share into veyq
   iPad (a flow's kit scanned with the real camera, the breach notice too), Touch ID and Windows Hello for real, a real
   mailbox, a safety code scanned with real cameras (#912).
 - Not in the apps yet (the owner 2026-11-26: every app is to do what the web does — these are gaps, closed one by one):
-  the Members panel's and a group page's status lines (the re-keying and resealing hints, a stuck compromise rotation's
-  notice), a space's picture in the switcher and the drawer (the apps show it on the Members header and a group's page
-  only),
-  and an in-app choice of appearance and language (the apps follow the system's; the desktops
+  an in-app choice of appearance and language (the apps follow the system's; the desktops
   have no per-app language of their own).
 - A recovery finished in the app, *Start a list over* and *Finish your profile* (ADR 0148 § The sign-in's two account
   entries, ADR 0028 decision 7, ADR 0084 decision 7; built 2026-11-28): Apple and Linux live, the prompt and the trust

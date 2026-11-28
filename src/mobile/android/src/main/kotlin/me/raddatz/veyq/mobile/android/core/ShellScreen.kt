@@ -87,6 +87,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -130,6 +131,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     val shell = s.shell
     val rowDetails by model.rowDetails.collectAsStateWithLifecycle()
     val avatars by model.avatars.collectAsStateWithLifecycle()
+    val faces by model.faces.collectAsStateWithLifecycle()
     val incoming by model.incoming.collectAsStateWithLifecycle()
     val palette = LocalPalette.current
     // each list's scroll, kept while an object opened from it is on screen (`ListStates`)
@@ -193,7 +195,7 @@ fun ShellScreen(s: Screen.Signed, model: AppModel) {
     val covers by model.covers.collectAsStateWithLifecycle()
     // how every level is drawn: the account's one view choice on this device (ADR 0149 decision 8)
     val levelView by model.levelView.collectAsStateWithLifecycle()
-    androidx.compose.runtime.CompositionLocalProvider(LocalRowDetails provides rowDetails, LocalAvatars provides avatars, LocalPicking provides (incoming != null), LocalTakesShare provides model::takesShare, LocalCovers provides covers, LocalShellNotices provides ShellNotices(snackbar, scope), LocalLevelView provides levelView) {
+    androidx.compose.runtime.CompositionLocalProvider(LocalRowDetails provides rowDetails, LocalAvatars provides avatars, LocalFaces provides faces, LocalPicking provides (incoming != null), LocalTakesShare provides model::takesShare, LocalCovers provides covers, LocalShellNotices provides ShellNotices(snackbar, scope), LocalLevelView provides levelView) {
     val drawerContent: @Composable () -> Unit = {
         Drawer(
             s,
@@ -770,6 +772,9 @@ private fun Switcher(
     onAddServer: () -> Unit,
 ) {
     val palette = LocalPalette.current
+    // the spaces' pictures and marks (core's `SpaceFaces`): the open account's tenants and the open tenant's groups
+    val faces = LocalFaces.current
+    val ownAccount = s.servers.firstOrNull { it.entry.current }?.account?.key
     var open by remember { mutableStateOf(false) }
     Box {
         Row(
@@ -777,7 +782,7 @@ private fun Switcher(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            TenantAvatar(s.tenant.name)
+            TenantAvatar(s.tenant.name, picture = faces?.picture(s.tenant.tenantId))
             Column(Modifier.weight(1f)) {
                 Text(spaceName(s.space), fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = role(palette.text), maxLines = 1)
                 Text(me.raddatz.veyq.mobile.navigation.ShellWords.switcherSubtitle(s.space, s.tenant.name, s.server), style = MaterialTheme.typography.bodySmall, color = role(palette.muted), maxLines = 1)
@@ -788,8 +793,12 @@ private fun Switcher(
             Text(s.tenant.name, style = VeyqType.sectionLabel, color = role(palette.muted), modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             for (space in s.spaces) {
                 androidx.compose.material3.DropdownMenuItem(
-                    text = { Text(spaceName(space)) },
-                    leadingIcon = { Icon(spaceIcon(space.kind), null, tint = role(palette.accent)) },
+                    text = { Column { Text(spaceName(space)); NeedsLock(faces?.marked(space.scopeId) == true) } },
+                    leadingIcon = {
+                        val picture = faces?.picture(space.scopeId)
+                        if (picture != null) TenantAvatar(spaceName(space), small = true, picture = picture)
+                        else Icon(spaceIcon(space.kind), null, tint = role(palette.accent))
+                    },
                     trailingIcon = { if (space.scopeId == s.shell.space) Icon(Icons.Filled.Check, null) },
                     onClick = { open = false; onSpace(space.scopeId) },
                 )
@@ -804,9 +813,11 @@ private fun Switcher(
                         Column {
                             Text(e.name, maxLines = 1)
                             Text(e.detail, style = MaterialTheme.typography.bodySmall, color = role(palette.muted), maxLines = 1)
+                            NeedsLock(row.account.key == ownAccount && faces?.marked(e.tenant.tenantId) == true)
                         }
                     },
-                    leadingIcon = { TenantAvatar(e.name, small = true) },
+                    // another account's tenant keeps the initial: only the open account's identity opens a picture here
+                    leadingIcon = { TenantAvatar(e.name, small = true, picture = if (row.account.key == ownAccount) faces?.picture(e.tenant.tenantId) else null) },
                     trailingIcon = { if (e.current) Icon(Icons.Filled.Check, null) },
                     onClick = { open = false; onSwitch(row.account, e.tenant) },
                 )
@@ -821,11 +832,32 @@ private fun Switcher(
     }
 }
 
-/** The web's tenant avatar: the initial on the accent's gradient (`.sidebar-tenant-avatar`). */
+/** The spaces' pictures and marks the switcher shows (core's `SpaceFaces.held`); null before the first read. */
+internal val LocalFaces = androidx.compose.runtime.staticCompositionLocalOf<me.raddatz.veyq.mobile.session.SpaceFaces.Held?> { null }
+
+/** *Needs a new lock* under a switcher row whose compromise rotation needs an owner (the web's `compromiseRotationMark`). */
 @Composable
-private fun TenantAvatar(name: String, small: Boolean = false) {
+private fun NeedsLock(shown: Boolean) {
+    if (shown) Text(
+        stringResource(R.string.members_compromise_rotation_mark), style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.error, maxLines = 1, modifier = Modifier.testTag("switcher-needs-lock"),
+    )
+}
+
+/** The web's tenant avatar (`TenantAvatar.vue`): the space's [picture] where one is held, else the initial on the accent's gradient (`.sidebar-tenant-avatar`). */
+@Composable
+private fun TenantAvatar(name: String, small: Boolean = false, picture: ByteArray? = null) {
     val palette = LocalPalette.current
     val size = if (small) 26.dp else 34.dp
+    val bitmap = remember(picture) { picture?.let { runCatching { android.graphics.BitmapFactory.decodeByteArray(it, 0, it.size) }.getOrNull() } }
+    if (bitmap != null) {
+        androidx.compose.foundation.Image(
+            bitmap.asImageBitmap(), null,
+            Modifier.size(size).clip(MaterialTheme.shapes.medium).testTag("switcher-space-picture"),
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+        )
+        return
+    }
     Box(
         Modifier.size(size).clip(MaterialTheme.shapes.medium)
             .background(Brush.linearGradient(listOf(role(palette.accent), role(palette.accent).copy(alpha = 0.72f)))),

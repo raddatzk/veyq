@@ -98,6 +98,12 @@ internal static class MembersDialog
                     Say(o.notice);
                     if (o.done) Load();
                 }
+                else if (answer is Answer.Requeued { requeued: { } r })
+                {
+                    Log.Write($"a rotation queued again: done {r.done}, stuck {r.stuck}");
+                    if (r.notice is { } n2) SayText(Said.Notice(n2), false);
+                    if (r.done) Load();
+                }
                 else if (answer is Answer.IconChanged { notice: { } icon } cleared)
                 {
                     Log.Write($"a space's icon act: done {cleared.done}");
@@ -139,6 +145,7 @@ internal static class MembersDialog
                         dialog.Hide();
                     }, Run, "members-tenant-name"));
                 }
+                ScopeActs.StatusLines(body, roster.status, new Call.SettingsMembersRequeue(), Run);
                 if (roster.owner)
                 {
                     var invite = new Button { Content = Words.MembersInvite(), Style = (Style)Application.Current.Resources["AccentButtonStyle"] };

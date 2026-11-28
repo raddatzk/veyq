@@ -142,7 +142,7 @@ class DispatchTest {
         assertEquals(emptyList(), removed.draft.texts)
         for (c in listOf(
             Call.SettingsMembers, Call.SettingsMemberRole("u2", true), Call.SettingsMemberRemove("u2", true), Call.SettingsMemberRemove("u2", false, newLock = true),
-            Call.SettingsMembersNewLock, Call.SettingsMembersRevokeLinks, Call.SettingsIcon("s"), Call.SettingsIconSet("s", "/p.jpg", me.raddatz.veyq.mobile.session.CoverFrame.Pose(1.0, 0.5, 0.5)),
+            Call.SettingsMembersNewLock, Call.SettingsMembersRevokeLinks, Call.SettingsMembersRequeue, Call.SettingsGroupRequeue("s"), Call.ShellSpacePicture("s"), Call.SettingsIcon("s"), Call.SettingsIconSet("s", "/p.jpg", me.raddatz.veyq.mobile.session.CoverFrame.Pose(1.0, 0.5, 0.5)),
             Call.SettingsIconClear("s"), Call.SettingsTermsEditing, Call.SettingsTermsSave(none),
         )) {
             assertEquals(Answer.Refused(Answer.Why.NO_TENANT_OPEN), b.ask(c), "$c")

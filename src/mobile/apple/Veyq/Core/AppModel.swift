@@ -547,6 +547,16 @@ final class AppModel {
         try await tenantSession?.members.revokeAllLinks()
     }
 
+    /// *Start Again* on the tenant's failed compromise rotation (core's `TenantMembers.requeue`).
+    func membersRequeue() async throws -> SpaceStatus.Requeued? {
+        try await tenantSession?.members.requeue()
+    }
+
+    /// *Start Again* on group `scopeId`'s failed compromise rotation (core's `TenantGroups.requeue`).
+    func groupRequeue(_ scopeId: String) async throws -> SpaceStatus.Requeued? {
+        try await tenantSession?.groups.requeue(scopeId: scopeId)
+    }
+
     // MARK: A scope's icon (core's `ScopeIcons`, uc.spaces.set-space-icon)
 
     /// The open space's scope id, whose icon Members' header draws.
@@ -967,6 +977,13 @@ final class AppModel {
             Task { @MainActor [weak self] in self?.syncAvatars() }
         }
         Task { try? await t.pictures.load() }
+        // The spaces' pictures and marks the switcher shows (core's `SpaceFaces`; when is core's rule).
+        faces = nil
+        facesWatch?.stop()
+        facesWatch = t.faces.watch { @Sendable _ in
+            Task { @MainActor [weak self] in self?.syncFaces() }
+        }
+        Task { try? await t.faces.load() }
         self.tenant = tenant
         server = account.label
         applyShell(start: true)
@@ -2007,6 +2024,23 @@ final class AppModel {
     @ObservationIgnored private var avatarsWatch: AvatarsModel.Watch?
 
     /// The open tenant's pictures as core's model holds them now.
+    /// The spaces' pictures and *Needs a new lock* marks (core's `SpaceFaces.held`); nil before the first read.
+    private(set) var faces: SpaceFaces.Held?
+    @ObservationIgnored private var facesWatch: SpaceFaces.Watch?
+
+    /// `scopeId`'s picture as the switcher shows it; nil shows the initial or the space's symbol.
+    func spacePicture(_ scopeId: String) -> Data? { faces?.picture(scopeId: scopeId).map { Data(kotlin: $0) } }
+
+    /// Whether `scopeId`'s compromise rotation needs an owner (the switcher's *Needs a new lock*).
+    func spaceNeedsLock(_ scopeId: String) -> Bool { faces?.marked(scopeId: scopeId) ?? false }
+
+    /// The open account's connection: the switcher's rows of another account keep the initial.
+    var ownConnection: String? { servers.first(where: { $0.entry.current })?.entry.connection }
+
+    private func syncFaces() {
+        faces = tenantSession?.faces.held.value as? SpaceFaces.Held
+    }
+
     private func syncAvatars() {
         guard let t = tenantSession else { return }
         avatars = AppleSessions.shared.pictures(tenant: t)

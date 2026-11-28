@@ -96,6 +96,11 @@ internal sealed class ShellView
     private NodeHeader? _header;
     private NodeHeader? _undoing;
     private ShellShown? _shown;
+
+    /// <summary>The spaces' pictures the switcher shows (core's SpaceFaces, asked by Shell.SpacePicture), by scope id, with the
+    /// round and the ids they were asked for (ShellShown.spacePicturesRound).</summary>
+    private readonly Dictionary<string, Microsoft.UI.Xaml.Media.Imaging.BitmapImage> _spacePictures = new();
+    private (int Round, string Ids) _spacePicturesAsked = (-1, "");
     private ShellModelState? _state;
     private bool _started;
     private bool _drawing;
@@ -434,6 +439,7 @@ internal sealed class ShellView
         _started = true;
         _state = state;
         Avatars.Listed($"{shown.connection}\n{shown.tenant.tenantId}", shown.pictures, shown.picturesRound);
+        AskSpacePictures(shown);
         DrawOffline(state, shown);
         DrawSwitcher(state, shown);
         DrawPane(state, shown);
@@ -485,6 +491,43 @@ internal sealed class ShellView
     /// <summary>The open tenant's id as the switcher last drew it: the scope of its icon (Settings' Members); empty before.</summary>
     internal static string OpenTenantId { get; private set; } = "";
 
+    /// <summary>The spaces' pictures asked anew where the ids the shell names or their round moved; the switcher drawn
+    /// again as each arrives (decoded as a member's picture is, Avatars.Decode).</summary>
+    private void AskSpacePictures(ShellShown shown)
+    {
+        var ids = shown.spaces.Where(s => s.picture).Select(s => s.space.scopeId)
+            .Concat(shown.switcher.Where(e => e.picture).Select(e => e.tenant.tenantId)).Distinct().ToList();
+        var key = string.Join(",", ids);
+        if (_spacePicturesAsked == (shown.spacePicturesRound, key)) return;
+        _spacePicturesAsked = (shown.spacePicturesRound, key);
+        foreach (var gone in _spacePictures.Keys.Where(id => !ids.Contains(id)).ToList()) _spacePictures.Remove(gone);
+        foreach (var id in ids) AskSpacePicture(shown.spacePicturesRound, key, id);
+    }
+
+    private async void AskSpacePicture(int round, string key, string id)
+    {
+        Microsoft.UI.Xaml.Media.Imaging.BitmapImage? picture = null;
+        try
+        {
+            var (answer, bytes) = await Core.CallAsync(new Call.ShellSpacePicture { scopeId = id });
+            if (answer is Answer.Bytes && bytes is not null) picture = await Avatars.Decode(bytes);
+            else Log.Write($"Shell.SpacePicture answered {answer.GetType().Name}");
+        }
+        catch (Exception e)
+        {
+            // an exception out of an async void would end the app in combase, with nothing in the log
+            Log.Write($"a space's picture did not decode ({e.GetType().Name}: {e.Message})");
+        }
+        if (_spacePicturesAsked != (round, key)) return;
+        if (picture is null) _spacePictures.Remove(id);
+        else _spacePictures[id] = picture;
+        if (_state is { } state && _shown is { } shown) DrawSwitcher(state, shown);
+    }
+
+    /// <summary>A switcher row's icon: the space's picture where one is held, else none.</summary>
+    private IconElement? SpaceIcon(string id) =>
+        _spacePictures.TryGetValue(id, out var p) ? new ImageIcon { Source = p } : null;
+
     private void DrawSwitcher(ShellModelState state, ShellShown shown)
     {
         _switcherTitle.Text = Said.Piece(shown.spaceName);
@@ -492,12 +535,19 @@ internal sealed class ShellView
         _me.DisplayName = shown.tenant.name;
         OpenTenantName = shown.tenant.name;
         OpenTenantId = shown.tenant.tenantId;
-        Avatars.Show(_me, shown.me);
+        // the tenant's picture where the core holds one (the web's switcher, SpaceFaces), else the member's, else initials
+        if (_spacePictures.TryGetValue(shown.tenant.tenantId, out var tenantPicture))
+        {
+            Avatars.Show(_me, null);
+            _me.ProfilePicture = tenantPicture;
+        }
+        else Avatars.Show(_me, shown.me);
+        string Marked(string text, bool needsLock) => needsLock ? Lives.Joined([text, Words.MembersCompromiseRotationMark()]) : text;
         var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft };
         foreach (var s in shown.spaces)
         {
             var name = Said.Piece(s.name);
-            var item = new RadioMenuFlyoutItem { Text = name, GroupName = "space", IsChecked = s.space.scopeId == state.shell.space };
+            var item = new RadioMenuFlyoutItem { Text = Marked(name, s.needsLock), GroupName = "space", IsChecked = s.space.scopeId == state.shell.space, Icon = SpaceIcon(s.space.scopeId) };
             AutomationProperties.SetAutomationId(item, $"space:{name}");
             var scope = s.space.scopeId;
             item.Click += (_, _) =>
@@ -511,7 +561,7 @@ internal sealed class ShellView
         if (shown.switcher.Count > 0) menu.Items.Add(new MenuFlyoutSeparator());
         foreach (var e in shown.switcher)
         {
-            var item = new RadioMenuFlyoutItem { Text = e.line, GroupName = "tenant", IsChecked = e.current };
+            var item = new RadioMenuFlyoutItem { Text = Marked(e.line, e.needsLock), GroupName = "tenant", IsChecked = e.current, Icon = e.picture ? SpaceIcon(e.tenant.tenantId) : null };
             AutomationProperties.SetAutomationId(item, $"tenant:{e.name}");
             var (connection, tenant, current) = (e.connection, e.tenant.tenantId, e.current);
             item.Click += (_, _) =>

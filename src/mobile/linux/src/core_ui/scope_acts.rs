@@ -9,11 +9,62 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gdk, glib};
 
-use crate::bridge::{self, wire::Answer, wire::Call, wire::Msg};
+use crate::bridge::{self, wire::Answer, wire::Call, wire::Msg, wire::SpaceStatusLine};
 use crate::core_ui::groups::Host;
 use crate::core_ui::profile_edit::{self, SquareHost};
 use crate::core_ui::received::said_msg;
 use crate::core_ui::{said, words};
+
+/// The status lines above a space's member list (core's `SpaceStatus.lines`, the web's panels): a stuck rotation's
+/// warning — a failed one with *Start again*, which sends [requeue] and calls [again] where it went through —, the
+/// resealing or the re-keying hint. Each a card; what a failure says is a toast of [host].
+pub fn status_lines(host: &Host, lines: &[SpaceStatusLine], requeue: Call, again: Rc<dyn Fn()>) -> Vec<gtk::Box> {
+    lines
+        .iter()
+        .map(|line| {
+            let card = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(8).build();
+            card.add_css_class("card");
+            card.set_widget_name(if line.warn { "space-status-warn" } else { "space-status-info" });
+            let inner = gtk::Box::builder().orientation(gtk::Orientation::Horizontal).spacing(12).margin_top(12).margin_bottom(12).margin_start(12).margin_end(12).build();
+            let icon = gtk::Image::from_icon_name(if line.warn { "dialog-warning-symbolic" } else { "dialog-information-symbolic" });
+            if line.warn {
+                icon.add_css_class("warning");
+            }
+            inner.append(&icon);
+            let text = gtk::Box::builder().orientation(gtk::Orientation::Vertical).spacing(8).hexpand(true).build();
+            text.append(&gtk::Label::builder().label(said_msg(&line.word)).wrap(true).xalign(0.0).build());
+            if line.requeue {
+                let button = gtk::Button::builder().label(words::members_compromise_rotation_requeue()).halign(gtk::Align::Start).build();
+                button.set_widget_name("space-status-requeue");
+                let (toast, call, again) = (host.toast.clone(), requeue.clone(), again.clone());
+                button.connect_clicked(move |b| {
+                    b.set_sensitive(false);
+                    let (b, toast, call, again) = (b.clone(), toast.clone(), call.clone(), again.clone());
+                    glib::spawn_future_local(async move {
+                        let answer = bridge::call(&call).await.map(|(a, _)| a);
+                        b.set_sensitive(true);
+                        match answer {
+                            Ok(Answer::Requeued { requeued }) => {
+                                eprintln!("veyq: a rotation queued again: done {}, stuck {}", requeued.done, requeued.stuck);
+                                if let Some(notice) = &requeued.notice {
+                                    toast(said::notice_toast(notice));
+                                }
+                                if requeued.done {
+                                    again();
+                                }
+                            }
+                            other => eprintln!("veyq: Start again answered {}", if other.is_ok() { "another answer" } else { "unreadable" }),
+                        }
+                    });
+                });
+                text.append(&button);
+            }
+            inner.append(&text);
+            card.append(&inner);
+            card
+        })
+        .collect()
+}
 
 /// The header of [scope_id] named [name]: the icon (asked of the core now and after each change of it), and where
 /// [owner] its acts; [enabled] false while the page runs an act.

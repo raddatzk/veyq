@@ -207,6 +207,18 @@ internal sealed class Call {
     /** *Give it a new lock* on the open tenant, after its question (`TenantMembers.newLock`): [Answer.MembersChanged]. */
     @Serializable @SerialName("Settings.MembersNewLock") data object SettingsMembersNewLock : Call()
 
+    /** *Start again* on the open tenant's failed compromise rotation (`TenantMembers.requeue`): [Answer.Requeued]. */
+    @Serializable @SerialName("Settings.MembersRequeue") data object SettingsMembersRequeue : Call()
+
+    /** *Start again* on group [scopeId]'s failed compromise rotation (`TenantGroups.requeue`): [Answer.Requeued]. */
+    @Serializable @SerialName("Settings.GroupRequeue") data class SettingsGroupRequeue(val scopeId: String) : Call()
+
+    /**
+     * A space's picture as the switcher and the drawer show it (`SpaceFaces.held`, the ids [ShellShown.ShownSpace.picture]
+     * and [ShellShown.ShownSwitcherEntry.picture] name): [Answer.Bytes] with the picture as the payload, or `NO_PICTURE`.
+     */
+    @Serializable @SerialName("Shell.SpacePicture") data class ShellSpacePicture(val scopeId: String) : Call()
+
     /** *Turn off every link* of the open tenant, after its question (`TenantMembers.revokeAllLinks`): [Answer.MembersChanged]. */
     @Serializable @SerialName("Settings.MembersRevokeLinks") data object SettingsMembersRevokeLinks : Call()
 
@@ -2273,6 +2285,9 @@ internal sealed class Answer {
 
     /** [Call.SettingsMemberRole], [Call.SettingsMemberRemove]: whether it went through ([done]: read the roster anew), and what is said. */
     @Serializable @SerialName("MembersChanged") data class MembersChanged(val done: Boolean, val notice: Notice) : Answer()
+
+    /** [Call.SettingsMembersRequeue], [Call.SettingsGroupRequeue]: whether it went through (read the roster or the page anew), and what is said on a failure. */
+    @Serializable @SerialName("Requeued") data class Requeued(val requeued: me.raddatz.veyq.mobile.session.SpaceStatus.Requeued) : Answer()
 
     /** [Call.SettingsIconSet], [Call.SettingsIconClear]: whether it went through ([done]: ask `Settings.Icon` anew), and what is said. */
     @Serializable @SerialName("IconChanged") data class IconChanged(val done: Boolean, val notice: Notice) : Answer()
@@ -4602,6 +4617,11 @@ internal class ShellShown(
      */
     val picturesRound: Int = 0,
     /**
+     * The spaces' pictures' round (`SpaceFaces.held`): moves with every read that changed a space's picture or mark. A host
+     * asks every space whose `picture` is set again ([Call.ShellSpacePicture]) when this moved.
+     */
+    val spacePicturesRound: Int = 0,
+    /**
      * The banner offline (`ShellModel.State.banner`: "Offline — content as of {time}", the time the open page's own — a
      * Pot's kept ledger, a gallery's kept listing — where it has one, else the lists'); null online. The one offline
      * banner: a host draws no page's time of its own. Offline only what ADR 0153 decision 3 queues is offered: New offers
@@ -4669,8 +4689,15 @@ internal class ShellShown(
 
     @Serializable class ShownServer(val connection: String, val label: String, val tenants: List<TenantRef>)
     /** A switcher row ([me.raddatz.veyq.mobile.navigation.ShellWords.SwitcherEntry]); [line] its name and detail for a one-label menu item. */
-    @Serializable class ShownSwitcherEntry(val connection: String, val tenant: TenantRef, val name: String, val detail: String, val line: String, val current: Boolean)
-    @Serializable class ShownSpace(val space: SpaceRef, val name: Piece)
+    @Serializable class ShownSwitcherEntry(
+        val connection: String, val tenant: TenantRef, val name: String, val detail: String, val line: String, val current: Boolean,
+        /** The tenant's picture is held ([Call.ShellSpacePicture] by the tenant's id; the open account's tenants only), else the initial. */
+        val picture: Boolean = false,
+        /** *Needs a new lock* beside it (`members_compromise_rotation_mark`): its compromise rotation needs an owner. */
+        val needsLock: Boolean = false,
+    )
+    /** A drawer space; [picture] and [needsLock] as a switcher row's ([Call.ShellSpacePicture] by the space's id). */
+    @Serializable class ShownSpace(val space: SpaceRef, val name: Piece, val picture: Boolean = false, val needsLock: Boolean = false)
     @Serializable class ShownApplication(val application: ApplicationId, @Serializable(with = MsgKey::class) val word: Msg)
     @Serializable class ShownTab(val tab: BarTab, @Serializable(with = MsgKey::class) val word: Msg)
     @Serializable class ShownCreate(val create: AppKinds.Create, @Serializable(with = MsgKey::class) val word: Msg)

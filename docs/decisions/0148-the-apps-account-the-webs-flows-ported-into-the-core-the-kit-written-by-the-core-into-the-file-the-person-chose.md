@@ -312,8 +312,18 @@ decision 9) is in the apps too (owner 2026-11-26: every app does what the web do
    Windows a `MenuFlyout`. The removal's question is an alert, a sheet on Apple, and on Windows it is asked in place.
    The bridge carries `Settings.Members`, `Settings.MemberRole` and `Settings.MemberRemove`.
 4. **Leaving a space is no gap**: the web has no self-leave (no operation in `scopes` or `tenants`, no use case), and a
-   member leaves only when an owner removes them. The panel's status lines — the re-keying and resealing hints and a
-   stuck compromise rotation's notice — stay the web's (native-apps § Open).
+   member leaves only when an owner removes them. **The panel's and a group page's status lines are the web's rule in the
+   core** (built 2026-11-28, `session/SpaceStatus`): `SpaceStatus.lines` over the roster's and the page's read — a stuck
+   compromise rotation's notice for an owner (`failed` with *Start again*, `requeueScopeRotation` through
+   `TenantMembers.requeue`/`TenantGroups.requeue`; `stalled` without, its remedy the co-owner the list offers), then the
+   resealing hint while this device stages a scope-level re-key (`Resealing`, around `ScopeRotation.stageScopeLevelRekey`)
+   or, for an owner, the re-keying hint — a close's where every due node sits at the current epoch (`SpaceStatus.cause`
+   over `listRekeyNodes`, ADR 0114 decision 9), a rotation's otherwise. They ride `Roster.status` and `GroupPage.status`
+   as `SpaceStatusLine`s (a word, warn or inform, *Start again*). The lines are as of the read: every act on the page reads
+   them anew (the web's resealing set is reactive; the apps' new lock awaits its rotation, so the hint shows on a page
+   opened while a background rotation stages). **Load-bearing:** the notice and the re-keying hint are an owner's alone,
+   resealing wins over re-keying, a close's cause is said as the closed links' (`SpaceStatusTest`, bitten). The bridge
+   carries `Settings.MembersRequeue` and `Settings.GroupRequeue` (`Answer.Requeued`).
 5. **The space's new lock and turning off every link are one core seam for a tenant and a group** (`session/Locks`;
    ADR 0025 § 2, ADR 0075 point 5), each an owner's section below the roster behind its question. The new lock is the web's
    `rekeySpace`: `commitRotation` over the directory read now, then the nodes re-keyed on the device at once
@@ -331,8 +341,17 @@ decision 9) is in the apps too (owner 2026-11-26: every app does what the web do
    pads it to 16 KiB and seals it `space-icon` under a fresh value key wrapped at the epoch it holds; a `409 stale_epoch`
    reads the scopes anew and seals once more. A deleted group's icon opens from its own grant. **Load-bearing:** an icon
    opens at its own scope, icon epoch and key epoch only, held to a fixture the web's `spaceIcon.ts` wrote
-   (`SpaceIconsTest`, bitten). The bridge carries `Settings.Icon`, `Settings.IconSet` and `Settings.IconClear`. The
-   switcher and the drawer draw no space picture yet (native-apps § Open).
+   (`SpaceIconsTest`, bitten). The bridge carries `Settings.Icon`, `Settings.IconSet` and `Settings.IconClear`. **The
+   switcher and the drawer show a space's picture and its *Needs a new lock* mark** (built 2026-11-28, `session/SpaceFaces`,
+   the web's `AppSidebar.vue`): each tenant of the open account opened under the caller's own grant from its
+   `listMyTenants` row (`openMyTenantIcon`), each group of the open tenant under its key, read when the tenant opens and
+   after an icon's set or removal or a *Start again* on this device, held by scope id with a round. Another signed-in
+   account's rows keep the initial: the web lists one account's tenants, and an account not open holds no unlocked
+   identity. Android and Apple read `TenantSession.faces` (the switcher's avatar, each space's and tenant's row); the
+   bridge marks `ShownSpace.picture`/`needsLock` and `ShownSwitcherEntry.picture`/`needsLock`, moves
+   `ShellShown.spacePicturesRound`, and answers `Shell.SpacePicture` with the bytes (Linux's switcher avatar and menu items,
+   Windows' `PersonPicture` and `MenuFlyout` icons). **Load-bearing:** an unchanged read moves no round and a failed one
+   keeps what was held (`SpaceStatusTest`, bitten).
 7. **The join takes an optional picture** (`TenantJoin.choosePicture`, ADR 0084): below the name on the account step,
    never at a handover (the web's `JoinPicturePicker`), kept encoded in the flow only and sealed `member-avatar` beside the
    name at the accept, the register's and the sign-in's alike; zeroed at the finish and the close. **Load-bearing:** the

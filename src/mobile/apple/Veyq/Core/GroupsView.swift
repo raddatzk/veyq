@@ -231,6 +231,17 @@ struct GroupPageView: View {
                 name: title, icon: icon, owner: page.owner, working: working, notImage: iconNotImage,
                 choose: { choosingIcon = true }, remove: { removingIcon = true }
             )
+            SpaceStatusLines(lines: page.status, working: working) {
+                working = true
+                said = nil
+                Task {
+                    if let r = try? await model.groupRequeue(scopeId) {
+                        said = r.notice.map { say(notice: $0) }
+                        if r.done { await load() }
+                    }
+                    working = false
+                }
+            }
             if page.deleted {
                 // a deleted group's day (core's `GroupPage.deletion`), the web's warning line above the roster
                 Text(page.deletion.map { say(notice: $0) } ?? say(.groupsPendingSub))

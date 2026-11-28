@@ -34,6 +34,8 @@ class TenantMembers internal constructor(private val tenant: TenantSession) {
         val invites: List<TenantInvites.PendingInvite> = emptyList(),
         /** The tenant's name, the identity header's (server-visible metadata, as the web's header shows it). */
         val tenantName: String = "",
+        /** The status lines above the list ([SpaceStatus.lines]: a stuck rotation's, the resealing or the re-keying hint). */
+        val status: List<SpaceStatusLine> = emptyList(),
     ) {
         /** *Add icon* / *Change icon* and *Remove icon*, the *Links* and *New lock* sections: an owner's (the web's panel). */
         val ownerActs: Boolean = owner && said == null
@@ -105,7 +107,7 @@ class TenantMembers internal constructor(private val tenant: TenantSession) {
         // the badges are display only: a trust read that fails leaves every row without one, never the roster unread
         val badges = MemberBadge.of(tenant.personTrust.whosWho())
         val roster = assemble(members, owner, badges) { m -> People.realName(JoinRecords(tenant.account.suite), tenantId, key, epoch.toLong(), m) }
-            .copy(tenantName = mine.name)
+            .copy(tenantName = mine.name, status = SpaceStatus.read(tenant, tenantId, owner, mine.compromiseRotation))
         // only an owner may read the pending list (the server refuses anyone else)
         return if (owner) roster.copy(invites = tenant.invites.pending()) else roster
     }
@@ -162,6 +164,10 @@ class TenantMembers internal constructor(private val tenant: TenantSession) {
         val tenantId = tenant.tenant.tenantId
         Locks.newLock(tenant, tenantId, excluding).let { Outcome(it.done, it.notice) }
     }
+
+    /** *Start again* on the notice of the tenant's failed compromise rotation (an owner's); the roster is read anew after. */
+    @Throws(Exception::class)
+    suspend fun requeue(): SpaceStatus.Requeued = SpaceStatus.requeue(tenant, tenant.tenant.tenantId)
 
     /** *Turn off every link* of the space (ADR 0075 point 5): how many went off is said; the closes' re-keys run in the background. */
     @Throws(Exception::class)

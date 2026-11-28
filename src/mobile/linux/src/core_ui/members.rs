@@ -98,6 +98,10 @@ fn draw(p: &Rc<Page>, read: Option<Roster>) {
     if let Some(tenant) = &p.tenant {
         p.column.prepend(&scope_acts::header(&p.host, tenant, &roster.tenant_name, roster.owner_acts));
     }
+    let again: Rc<dyn Fn()> = { let p = p.clone(); Rc::new(move || load(p.clone())) };
+    for line in scope_acts::status_lines(&p.host, &roster.status, Call::SettingsMembersRequeue, again) {
+        p.column.append(&line);
+    }
     if roster.owner {
         // the owners' *Invite member* (uc.spaces.add-member), the web's button above the roster
         let content = adw::ButtonContent::builder().icon_name("contact-new-symbolic").label(words::members_invite()).build();

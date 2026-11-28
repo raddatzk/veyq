@@ -283,7 +283,9 @@ class ScopeRotation(
      * `listScopeRekeyParts`, then each application's through its [ScopeRekeyParticipant]. Staging twice replaces what the
      * first staged. A wrap or a root entry that does not open under the old key is staged as one nobody opens.
      */
-    internal suspend fun stageScopeLevelRekey(run: Run) {
+    internal suspend fun stageScopeLevelRekey(run: Run) = me.raddatz.veyq.mobile.session.Resealing.during(run.scopeId) { stageParts(run) }
+
+    private suspend fun stageParts(run: Run) {
         val api = RekeyApi(run.base, account.http)
         val kindOf = rootKinds(run.base, run.scopeId)
         var since: String? = null

@@ -29,7 +29,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use adw::prelude::*;
-use gtk::{gio, glib};
+use gtk::{gdk, gio, glib};
 
 use crate::bridge::{self, wire::Answer, wire::ApplicationId, wire::Call, wire::Create, wire::DrawerSection, wire::Facts, wire::LevelTool, wire::ObjectRef, wire::QueuedOpen, wire::ShellModelState, wire::ShellShown, wire::ShownCreate, wire::ViewModeShown};
 use crate::core_ui::bookmark_page::BookmarkPage;
@@ -142,6 +142,8 @@ pub struct Shell {
     /// Where each list was scrolled to, by its place.
     scrolls: ListScrolls,
     now: RefCell<Option<(ShellModelState, ShellShown)>>,
+    /// The spaces' pictures the switcher shows (core's `SpaceFaces`, asked by `Shell.SpacePicture`), by scope id.
+    space_pictures: RefCell<SpacePictures>,
     /// The connection the shell shows, whose Settings the sidebar's foot opens.
     connection: Rc<RefCell<Option<String>>>,
     started: Cell<bool>,
@@ -373,6 +375,7 @@ impl Shell {
             _uploads: uploads,
             scrolls: ListScrolls::default(),
             now: RefCell::new(None),
+            space_pictures: RefCell::new(SpacePictures::default()),
             connection: shown_now,
             started: Cell::new(false),
         });
@@ -618,6 +621,7 @@ impl Shell {
         self.music_bar.start();
         avatars::listed(&format!("{}\n{}", shown.connection, shown.tenant.tenant_id), &shown.pictures, shown.pictures_round);
         *self.connection.borrow_mut() = Some(shown.connection.clone());
+        self.ask_space_pictures(&shown);
         self.draw_offline(&state, &shown);
         *self.now.borrow_mut() = Some((state, shown));
         self.draw_switcher();
@@ -679,18 +683,71 @@ impl Shell {
         bridge::send(Call::ShellOfflineGoneSeen);
     }
 
+    /// The spaces' pictures asked anew where the set the shell names or its round moved (`ShellShown.spacePicturesRound`);
+    /// the switcher drawn again as each arrives.
+    fn ask_space_pictures(self: &Rc<Self>, shown: &ShellShown) {
+        let ids: Vec<String> = shown.spaces.iter().filter(|s| s.picture).map(|s| s.space.scope_id.clone())
+            .chain(shown.switcher.iter().filter(|e| e.picture).map(|e| e.tenant.tenant_id.clone())).collect();
+        {
+            let mut held = self.space_pictures.borrow_mut();
+            if held.round == shown.space_pictures_round && held.ids == ids {
+                return;
+            }
+            held.round = shown.space_pictures_round;
+            held.ids = ids.clone();
+            held.textures.retain(|id, _| ids.contains(id));
+        }
+        for id in ids {
+            let round = shown.space_pictures_round;
+            let me = Rc::downgrade(self);
+            glib::spawn_future_local(async move {
+                let texture = match bridge::call(&Call::ShellSpacePicture { scope_id: id.clone() }).await {
+                    Ok((Answer::Bytes { .. }, Some(bytes))) => gdk::Texture::from_bytes(&glib::Bytes::from_owned(bytes)).ok(),
+                    other => {
+                        eprintln!("veyq: Shell.SpacePicture answered {:?}", other.map(|(answer, _)| answer));
+                        None
+                    }
+                };
+                let Some(me) = me.upgrade() else { return };
+                {
+                    let mut held = me.space_pictures.borrow_mut();
+                    if held.round != round || !held.ids.contains(&id) {
+                        return;
+                    }
+                    match texture {
+                        Some(t) => held.textures.insert(id, t),
+                        None => held.textures.remove(&id),
+                    };
+                }
+                me.draw_switcher();
+            });
+        }
+    }
+
     fn draw_switcher(&self) {
         let now = self.now.borrow();
         let Some((state, shown)) = now.as_ref() else { return };
         self.switcher_title.set_title(&said::piece(&shown.space_name));
         self.switcher_title.set_subtitle(&shown.switcher_subtitle);
-        // the signed-in member's picture where the core holds one, else the tenant's initials
+        // the tenant's picture where the core holds one (the web's switcher, `SpaceFaces`), else the signed-in member's
+        // picture where it holds one, else the tenant's initials
         self.me.set_text(Some(&shown.tenant.name));
-        avatars::show(&self.me, shown.me.as_deref());
+        let pictures = self.space_pictures.borrow();
+        match pictures.textures.get(&shown.tenant.tenant_id) {
+            Some(tenant) => {
+                avatars::show(&self.me, None);
+                self.me.set_custom_image(Some(tenant));
+            }
+            None => avatars::show(&self.me, shown.me.as_deref()),
+        }
+        let marked = |label: String, needs_lock: bool| if needs_lock { said::joined(&[label, words::members_compromise_rotation_mark()]) } else { label };
         let menu = gio::Menu::new();
         let spaces = gio::Menu::new();
         for s in &shown.spaces {
-            let item = gio::MenuItem::new(Some(&said::piece(&s.name)), None);
+            let item = gio::MenuItem::new(Some(&marked(said::piece(&s.name), s.needs_lock)), None);
+            if let Some(t) = pictures.textures.get(&s.space.scope_id) {
+                item.set_icon(t);
+            }
             item.set_action_and_target_value(Some("win.space"), Some(&s.space.scope_id.to_variant()));
             spaces.append_item(&item);
         }
@@ -699,7 +756,10 @@ impl Shell {
         // account's address where two accounts list the same tenant; owner 2026-11-19)
         let tenants = gio::Menu::new();
         for e in &shown.switcher {
-            let item = gio::MenuItem::new(Some(&e.line), None);
+            let item = gio::MenuItem::new(Some(&marked(e.line.clone(), e.needs_lock)), None);
+            if let Some(t) = pictures.textures.get(&e.tenant.tenant_id).filter(|_| e.picture) {
+                item.set_icon(t);
+            }
             item.set_action_and_target_value(Some("win.tenant"), Some(&format!("{}\n{}", e.connection, e.tenant.tenant_id).to_variant()));
             tenants.append_item(&item);
         }
@@ -1197,4 +1257,12 @@ mod tests {
         assert_eq!(put_back(1200.0, 1000.0, 600.0, true), Some(400.0), "grown shorter: its end");
         assert_eq!(put_back(1200.0, 500.0, 600.0, true), None, "no scroll at all: left at its top");
     }
+}
+
+/// The spaces' pictures held for the switcher: the [round] and [ids] they were asked for, each decoded [textures] by id.
+#[derive(Default)]
+struct SpacePictures {
+    round: i32,
+    ids: Vec<String>,
+    textures: HashMap<String, gdk::Texture>,
 }

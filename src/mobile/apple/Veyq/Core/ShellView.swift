@@ -238,7 +238,13 @@ struct TenantSwitcher: View {
             Section(model.tenant?.name ?? "") {
                 ForEach(model.spaces, id: \.scopeId) { space in
                     Button { model.switchSpace(space.scopeId); model.drawerOpen = false } label: {
-                        Label(Names.spaceName(space), systemImage: space.scopeId == model.shell.space ? "checkmark" : Names.spaceSymbol(space.kind))
+                        // the space's picture where one is held (core's `SpaceFaces`), else its symbol
+                        if space.scopeId != model.shell.space, let picture = SpacePicture.image(model.spacePicture(space.scopeId)) {
+                            Label { Text(Names.spaceName(space)) } icon: { picture }
+                        } else {
+                            Label(Names.spaceName(space), systemImage: space.scopeId == model.shell.space ? "checkmark" : Names.spaceSymbol(space.kind))
+                        }
+                        if model.spaceNeedsLock(space.scopeId) { Text(say(.membersCompromiseRotationMark)) }
                     }
                 }
             }
@@ -249,12 +255,16 @@ struct TenantSwitcher: View {
                     Button {
                         model.switchTo(row.account, row.entry.tenant)
                     } label: {
+                        // another account's tenant keeps the initial: only the open account's identity opens a picture here
+                        let own = row.entry.connection == model.ownConnection
                         if row.entry.current {
                             Label(row.entry.name, systemImage: "checkmark")
+                        } else if own, let picture = SpacePicture.image(model.spacePicture(row.entry.tenant.tenantId)) {
+                            Label { Text(row.entry.name) } icon: { picture }
                         } else {
                             Text(row.entry.name)
                         }
-                        Text(row.entry.detail)
+                        Text(own && model.spaceNeedsLock(row.entry.tenant.tenantId) ? joinedLine([row.entry.detail, say(.membersCompromiseRotationMark)]) : row.entry.detail)
                     }
                 }
             }
@@ -262,7 +272,7 @@ struct TenantSwitcher: View {
             Button { model.openManage() } label: { Label(say(.switcherManage), systemImage: "server.rack") }
         } label: {
             HStack(spacing: 10) {
-                TenantAvatar(name: model.tenant?.name ?? "?")
+                TenantAvatar(name: model.tenant?.name ?? "?", picture: model.tenant.flatMap { model.spacePicture($0.tenantId) })
                 VStack(alignment: .leading, spacing: 1) {
                     Text(Names.spaceName(model.space)).fontWeight(.bold).foregroundStyle(Role.text).lineLimit(1)
                     Text(subtitle).font(.caption).foregroundStyle(Role.muted).lineLimit(1)
@@ -280,11 +290,36 @@ struct TenantSwitcher: View {
     }
 }
 
-/// The web's tenant avatar: the initial on the accent's gradient (`.sidebar-tenant-avatar`).
+/// A space's picture (core's `SpaceFaces`) as an image, decoded here; nil where none is held or it does not decode.
+enum SpacePicture {
+    static func image(_ data: Data?) -> Image? {
+        guard let data else { return nil }
+        #if os(iOS)
+        return UIImage(data: data).map(Image.init(uiImage:))
+        #else
+        return NSImage(data: data).map(Image.init(nsImage:))
+        #endif
+    }
+}
+
+/// The web's tenant avatar (`TenantAvatar.vue`): the space's picture where one is held, else the initial on the accent's
+/// gradient (`.sidebar-tenant-avatar`).
 struct TenantAvatar: View {
     let name: String
+    var picture: Data? = nil
 
     var body: some View {
+        if let image = SpacePicture.image(picture) {
+            image.resizable().scaledToFill()
+                .frame(width: 34, height: 34)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.row, style: .continuous))
+                .accessibilityIdentifier("switcher-space-picture")
+        } else {
+            initial
+        }
+    }
+
+    private var initial: some View {
         Text(String(name.prefix(1)).uppercased())
             .font(.system(size: 15, weight: .heavy))
             .foregroundStyle(Role.onFill)

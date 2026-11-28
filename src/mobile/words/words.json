@@ -7011,6 +7011,37 @@
     "en": "The new lock could not be put in. Nothing was changed. Please try again.",
     "de": "Das neue Schloss konnte nicht eingebaut werden. Es wurde nichts geändert. Bitte versuch es erneut."
   },
+  "space_lock_resealing": {
+    "note": "the web's spaceLock.resealing: the scope-level rows sealed again under the new key before the rotation commits (ADR 0115 decision 2)",
+    "en": "Fitting the new lock: names and profiles are being sealed again. With many members this can take a moment — keep this page open.",
+    "de": "Das neue Schloss wird eingebaut: Namen und Profile werden neu versiegelt. Bei vielen Mitgliedern kann das einen Moment dauern – lass diese Seite so lange offen."
+  },
+  "rotation_status_hint_rekeying": {
+    "note": "the web's rotation.statusHint.rekeying: an owner's line while a rotation's re-key is unfinished",
+    "en": "The new lock is going in. Adding something here takes a moment longer until it’s done.",
+    "de": "Das neue Schloss wird eingebaut. Hinzufügen dauert hier etwas länger, bis das fertig ist."
+  },
+  "members_compromise_rotation_stalled": {
+    "note": "the web's members.compromiseRotation.stalled (uc.spaces.complete-queued-rotation E2)",
+    "en": "Someone left this space, and it needs a new lock — but no owner is left who can fit it. Make someone else an owner. Until then, the person who left can still read what’s new here.",
+    "de": "Jemand hat diesen Bereich verlassen, und er braucht ein neues Schloss — aber es gibt keine besitzende Person mehr, die es einbauen kann. Mach jemand anderen zur besitzenden Person. Bis dahin kann die Person, die gegangen ist, Neues hier noch lesen."
+  },
+  "members_compromise_rotation_failed": {
+    "note": "the web's members.compromiseRotation.failed (uc.spaces.complete-queued-rotation E8)",
+    "en": "Someone left this space, and fitting its new lock kept failing — the person who left can still read what’s new here. Start it again, and your device takes it on.",
+    "de": "Jemand hat diesen Bereich verlassen, und das neue Schloss ließ sich wiederholt nicht einbauen — die Person, die gegangen ist, kann Neues hier noch lesen. Stoß es neu an, dann übernimmt dein Gerät."
+  },
+  "members_compromise_rotation_requeue": {
+    "note": "the web's members.compromiseRotationRequeue: the button of a failed rotation's notice",
+    "en": "Start again",
+    "de": "Neu anstoßen",
+    "apple_en": "Start Again"
+  },
+  "members_compromise_rotation_mark": {
+    "note": "the web's members.compromiseRotationMark: the switcher's and the drawer's mark beside a space whose rotation needs an owner",
+    "en": "Needs a new lock",
+    "de": "Braucht ein neues Schloss"
+  },
   "space_lock_remove_option": {
     "note": "the web's spaceLock.removeOption",
     "en": "Also give this space a new lock",

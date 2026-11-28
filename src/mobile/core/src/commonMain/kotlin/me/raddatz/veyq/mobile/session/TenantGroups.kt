@@ -100,6 +100,8 @@ class TenantGroups internal constructor(private val tenant: TenantSession) {
         val said: Msg?,
         /** A deleted group's line with its day (`groups.pendingDeletion`); null otherwise. */
         val deletion: Notice? = null,
+        /** The status lines above the list ([SpaceStatus.lines]: a stuck rotation's, the resealing or the re-keying hint). */
+        val status: List<SpaceStatusLine> = emptyList(),
     ) {
         /** A member's page is read-only (the web's `groups.readonlyNote`). */
         val readonlyNote: Msg? = if (!owner && said == null) Msg.GROUPS_READONLY_NOTE else null
@@ -237,6 +239,10 @@ class TenantGroups internal constructor(private val tenant: TenantSession) {
 
     // ---- a group's page ----
 
+    /** *Start again* on the notice of [scopeId]'s failed compromise rotation (an owner's); the page is read anew after. */
+    @Throws(Exception::class)
+    suspend fun requeue(scopeId: String): SpaceStatus.Requeued = SpaceStatus.requeue(tenant, scopeId)
+
     /** [scopeId]'s page: its name, the caller's role, every member with the acts an owner has on them. */
     @Throws(Exception::class)
     suspend fun page(scopeId: String): GroupPage {
@@ -249,7 +255,8 @@ class TenantGroups internal constructor(private val tenant: TenantSession) {
         val joins = JoinRecords(suite)
         val badges = MemberBadge.of(tenant.personTrust.whosWho())
         val rows = assemble(members, owner, account.userId, badges) { m -> tenantKey?.let { People.realName(joins, tenantId, it, tenantEpoch.toLong(), m) } }
-        return GroupPage(scopeId, name, owner, listed.deletedAt != null, rows, if (rows.isEmpty()) Msg.MEMBERS_EMPTY else null, deletionOf(listed))
+        val status = SpaceStatus.read(tenant, scopeId, owner, listed.compromiseRotation, rekeying = listed.rekeying == true)
+        return GroupPage(scopeId, name, owner, listed.deletedAt != null, rows, if (rows.isEmpty()) Msg.MEMBERS_EMPTY else null, deletionOf(listed), status)
     }
 
     /**

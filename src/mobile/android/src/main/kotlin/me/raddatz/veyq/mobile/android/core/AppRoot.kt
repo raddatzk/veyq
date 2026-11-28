@@ -107,7 +107,7 @@ fun AppRoot(model: AppModel) {
             MembersDialog(
                 it, onRetry = model::openMembers, onRole = model::setMemberRole, onRemove = model::removeMember,
                 invites = InviteActions(model::inviteMember, model::setInviteLabel, model::reissueInvite, model::revokeInvite, model::inviteShownSeen),
-                scope = ScopeActions(model::setTenantIcon, model::clearTenantIcon, model::membersRevokeLinks, model::membersNewLock),
+                scope = ScopeActions(model::setTenantIcon, model::clearTenantIcon, model::membersRevokeLinks, model::membersNewLock, model::membersRequeue),
                 spaceName = model.tenantName(), model = model, onClose = model::closeMembers,
             )
         }
@@ -121,7 +121,7 @@ fun AppRoot(model: AppModel) {
                     setRole = model::setGroupRole, remove = model::removeGroupMember, rescind = model::rescindGroupMember,
                     delete = model::deleteGroup, restore = model::restoreGroup,
                 ),
-                ScopeActions(model::setGroupIcon, model::clearGroupIcon, model::groupRevokeLinks, model::groupNewLock),
+                ScopeActions(model::setGroupIcon, model::clearGroupIcon, model::groupRevokeLinks, model::groupNewLock, model::groupRequeue),
                 model = model, onClose = model::closeGroup,
             )
         }

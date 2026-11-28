@@ -231,6 +231,7 @@ internal fun GroupPageDialog(state: GroupPageState, actions: GroupActions, scope
                     page.name.ifEmpty { stringResource(R.string.groups_untitled) }, state.icon, owner = page.owner, enabled = open,
                     onSetIcon = scope.setIcon, onClearIcon = scope.clearIcon, model = model,
                 )
+                SpaceStatusLines(page.status, enabled = open, onRequeue = scope.requeue)
                 // a deleted group's day (core's `GroupPage.deletion`), the web's warning line above the roster
                 if (page.deleted) Text(
                     page.deletion?.let { say(it) } ?: stringResource(R.string.groups_pending_sub),

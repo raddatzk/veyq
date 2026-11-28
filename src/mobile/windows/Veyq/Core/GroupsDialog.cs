@@ -231,6 +231,12 @@ internal static class GroupsDialog
                 else if (o.done) said.IsOpen = false;
                 if (o.done) Load();
             }
+            else if (answer is Answer.Requeued { requeued: { } r })
+            {
+                Log.Write($"a group's rotation queued again: done {r.done}, stuck {r.stuck}");
+                if (r.notice is { } n) Say(n, false);
+                if (r.done) Load();
+            }
             else if (answer is Answer.IconChanged { notice: { } icon } cleared)
             {
                 Log.Write($"a group's icon act: done {cleared.done}");
@@ -276,6 +282,7 @@ internal static class GroupsDialog
         var header = ScopeActs.Header(page.scopeId, title, page.owner, asks, pickIcon, running, "group-name", rename);
         AutomationProperties.SetAutomationId((FrameworkElement)header, "group-header");
         body.Children.Add(header);
+        ScopeActs.StatusLines(body, page.status, new Call.SettingsGroupRequeue { scopeId = page.scopeId }, running);
 
         if (page.deleted)
         {

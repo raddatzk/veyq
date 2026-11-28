@@ -38,6 +38,35 @@ internal static class ScopeActs
         }
     }
 
+    /// <summary>The status lines above a space's member list (core's SpaceStatus.lines, the web's panels), each added to
+    /// <paramref name="body"/>: a stuck rotation's warning — a failed one with *Start again*, which runs
+    /// <paramref name="requeue"/> through <paramref name="run"/> —, the resealing or the re-keying hint.</summary>
+    public static void StatusLines(Panel body, System.Collections.Generic.IReadOnlyList<SpaceStatusLine> lines, Call requeue, Func<Call, Task> run)
+    {
+        foreach (var line in lines)
+        {
+            var bar = new InfoBar
+            {
+                IsOpen = true, IsClosable = false, Severity = line.warn ? InfoBarSeverity.Warning : InfoBarSeverity.Informational,
+                Message = ReceivedText.Said(line.word),
+            };
+            AutomationProperties.SetAutomationId(bar, line.warn ? "space-status-warn" : "space-status-info");
+            if (line.requeue)
+            {
+                var again = new Button { Content = Words.MembersCompromiseRotationRequeue() };
+                AutomationProperties.SetAutomationId(again, "space-status-requeue");
+                again.Click += async (_, _) =>
+                {
+                    again.IsEnabled = false;
+                    await run(requeue);
+                    again.IsEnabled = true;
+                };
+                bar.ActionButton = again;
+            }
+            body.Children.Add(bar);
+        }
+    }
+
     /// <summary>The header of <paramref name="scopeId"/> named <paramref name="name"/>: the icon (asked of the core now),
     /// and where <paramref name="owner"/> its acts — <paramref name="pick"/> gives the page's way to the square crop (handed
     /// the button's words, the crop's title),

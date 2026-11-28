@@ -903,11 +903,11 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             is Call.SessionRequestRecovery, Call.SessionBackToSignIn, Call.LockedPlan, is Call.RecoverPlan,
             Call.SessionAcceptTerms, Call.SettingsTerms -> signInEntries(call, session)
             Call.SettingsTermsEditing, is Call.SettingsTermsEdit, is Call.SettingsTermsSave, Call.SettingsMembers, is Call.SettingsMemberRole, is Call.SettingsMemberRemove,
-            Call.SettingsMembersNewLock, Call.SettingsMembersRevokeLinks, is Call.SettingsIcon, is Call.SettingsIconSet, is Call.SettingsIconClear,
+            Call.SettingsMembersNewLock, Call.SettingsMembersRevokeLinks, Call.SettingsMembersRequeue, is Call.ShellSpacePicture, is Call.SettingsIcon, is Call.SettingsIconSet, is Call.SettingsIconClear,
             is Call.SettingsInviteLink, is Call.SettingsInviteMail, is Call.SettingsInviteReissue, is Call.SettingsInviteRevoke, is Call.SettingsInviteLabel -> members(call, payload)
             Call.SettingsGroups, is Call.SettingsGroupCreate, is Call.SettingsGroup, is Call.SettingsGroupRename, is Call.SettingsGroupDelete, is Call.SettingsGroupAdd,
             is Call.SettingsGroupRole, is Call.SettingsGroupRemove, Call.SettingsGroupInvitations, is Call.SettingsGroupInvitationAnswer,
-            is Call.SettingsGroupNewLock, is Call.SettingsGroupRevokeLinks -> grouping(call)
+            is Call.SettingsGroupNewLock, is Call.SettingsGroupRevokeLinks, is Call.SettingsGroupRequeue -> grouping(call)
             is Call.JoinCode, is Call.JoinChoose, is Call.JoinCheckPassword, is Call.JoinUseAnyway, is Call.JoinRegister, is Call.JoinFinish, is Call.JoinSignIn, is Call.JoinOpen, is Call.JoinClose,
             is Call.JoinPicture, is Call.JoinRemovePicture, is Call.JoinPictureBytes -> joining(call, payload)
             is Call.RecoveryUnlock, is Call.RecoveryFinish, is Call.RecoveryCheck, is Call.RecoveryEdited, is Call.RecoveryUseAnyway,
@@ -2857,6 +2857,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         is Call.SettingsMemberRemove -> tenant.value?.models?.session?.let { it.members.remove(call.userId, call.revokeLinks, call.newLock).let { o -> Answer.MembersChanged(o.done, o.notice) } } ?: noTenant
         Call.SettingsMembersNewLock -> tenant.value?.models?.session?.let { it.members.newLock().let { o -> Answer.MembersChanged(o.done, o.notice) } } ?: noTenant
         Call.SettingsMembersRevokeLinks -> tenant.value?.models?.session?.let { it.members.revokeAllLinks().let { o -> Answer.MembersChanged(o.done, o.notice) } } ?: noTenant
+        Call.SettingsMembersRequeue -> tenant.value?.models?.session?.let { Answer.Requeued(it.members.requeue()) } ?: noTenant
+        is Call.ShellSpacePicture -> tenant.value?.models?.session?.let { t ->
+            val picture = t.faces.held.value.picture(call.scopeId) ?: return Answer.Refused(Answer.Why.NO_PICTURE)
+            payload(picture)
+            Answer.Bytes(Sniff.image(picture)?.mime)
+        } ?: noTenant
         is Call.SettingsIcon -> tenant.value?.models?.session?.let { t ->
             val picture = t.icons().icon(call.scopeId) ?: return Answer.Refused(Answer.Why.NO_PICTURE)
             payload(picture)
@@ -2953,7 +2959,12 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     private suspend fun grouping(call: Call): Answer {
         val g = tenant.value?.models?.session?.groups ?: return noTenant
         // an act that changed which groups open, or their names, reads the shell's lists anew (the switcher, Home)
-        fun GroupsOutcome.shown(): GroupsOutcome = also { if (it.done) scope.launch { runCatching { tenant.value?.models?.shell?.refresh() } } }
+        fun GroupsOutcome.shown(): GroupsOutcome = also {
+            if (it.done) scope.launch {
+                runCatching { tenant.value?.models?.shell?.refresh() }
+                runCatching { tenant.value?.models?.session?.faces?.load() }
+            }
+        }
         return when (call) {
             Call.SettingsGroups -> Answer.GroupsListed(g.list())
             is Call.SettingsGroupCreate -> Answer.GroupChanged((g.create(call.name)).shown())
@@ -2966,6 +2977,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             Call.SettingsGroupInvitations -> Answer.GroupInvitations(g.invitations())
             is Call.SettingsGroupInvitationAnswer -> Answer.GroupChanged((if (call.accept) g.accept(call.scopeId) else g.decline(call.scopeId)).shown())
             is Call.SettingsGroupNewLock -> Answer.GroupChanged(g.newLock(call.scopeId))
+            is Call.SettingsGroupRequeue -> Answer.Requeued(g.requeue(call.scopeId))
             is Call.SettingsGroupRevokeLinks -> Answer.GroupChanged(g.revokeAllLinks(call.scopeId))
             else -> error("not a group's call: $call")
         }
@@ -3075,6 +3087,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         mapServices.value = t.mapServices?.invoke { language }
         queuedSaidJob = t.queued?.let { q -> scope.launch { q.sent.collect { if (it.isNotEmpty()) queuedSaid.value = it } } }
         scope.launch { runCatching { t.loadPictures() } }
+        t.session?.let { s -> scope.launch { runCatching { s.faces.load() } } }
         t.shell?.load(openLastUsed = true)
         // a place a `veyq:` link named before this shell opened (the sign-in, the unlock): over this tenant only; a Settings
         // link there opens the shell alone (no host waits for an answer then)
@@ -3202,8 +3215,10 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                         m.queued?.banner ?: flowOf(null), m.queued?.here ?: flowOf(emptyList()), queuedSaid, m.shell?.kitNotice ?: flowOf(null),
                         m.shell?.finishProfile ?: flowOf(false),
                     ) { b, h, said, kit, profile -> QueuedBeside(b, h, said, kit, profile) }
+                    val faces = m.session?.faces?.held ?: flowOf(NO_FACES)
                     combine(state, m.pictures, m.picturesRound, hiddenTurned, viewTurned) { s, pictures, round, _, _ -> Triple(s, pictures, round) }
-                        .combine(queued) { (s, pictures, round), q -> Update.Shell(s, s?.let { shown(parts, open, it, pictures.keys, round, q) }) }
+                        .combine(queued) { t, q -> t to q }
+                        .combine(faces) { (t, q), f -> val (s, pictures, round) = t; Update.Shell(s, s?.let { shown(parts, open, it, pictures.keys, round, q, f) }) }
                 } ?: flowOf(Update.Shell(null))
             }
         }
@@ -3403,6 +3418,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
      */
     private fun shown(
         parts: Composition<A, T>, open: Open<A>, s: ShellModel.State, pictures: Set<String>, round: Int, queued: QueuedBeside = QueuedBeside(),
+        faces: me.raddatz.veyq.mobile.session.SpaceFaces.Held = NO_FACES,
     ): ShellShown {
         val shell = s.shell
         val lists = s.lists
@@ -3415,13 +3431,18 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
                 ShellShown.ShownServer(c.key, c.label, parts.hidden.visibleTenants(c.key, c.tenants, if (c == open.account) open.tenant else null))
             },
             switcher = ShellWords.switcher(parts.session.accounts, parts.hidden, open.account, open.tenant).map {
-                ShellShown.ShownSwitcherEntry(it.connection, it.tenant, it.name, it.detail, it.line, it.current)
+                // a space's picture and mark are the open account's own (`SpaceFaces`): another account's rows keep the initial
+                val own = it.connection == open.account.key
+                ShellShown.ShownSwitcherEntry(
+                    it.connection, it.tenant, it.name, it.detail, it.line, it.current,
+                    picture = own && faces.picture(it.tenant.tenantId) != null, needsLock = own && faces.marked(it.tenant.tenantId),
+                )
             },
             drawerSections = open.models.shell?.drawerSections(lists).orEmpty(),
             space = space,
             spaceName = ShellWords.space(space),
             switcherSubtitle = ShellWords.switcherSubtitle(space, open.tenant.name, open.account.label),
-            spaces = lists.spaces.map { ShellShown.ShownSpace(it, ShellWords.space(it)) },
+            spaces = lists.spaces.map { ShellShown.ShownSpace(it, ShellWords.space(it), faces.picture(it.scopeId) != null, faces.marked(it.scopeId)) },
             applicationWords = ApplicationId.entries.map { ShellShown.ShownApplication(it, AppKinds.applicationWord(it)) },
             groups = lists.groups(shell),
             list = shell.application?.let(lists::applicationList),
@@ -3437,6 +3458,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
             me = open.models.me,
             pictures = pictures.sorted(),
             picturesRound = round,
+            spacePicturesRound = faces.round,
             offlineBanner = s.banner,
             queuedBanner = queued.banner,
             queuedHere = queued.here,
@@ -4172,6 +4194,9 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
         /** The device store's names for what the bridge itself keeps there (the others are the core's); [LEGACY_RECENT] the
          *  device-wide Recent of before inbox #1423, removed at the start and never read. */
         const val LEGACY_RECENT = "veyq.recent"
+
+        /** No space's picture or mark held (a test's tenant, which has no session). */
+        val NO_FACES = me.raddatz.veyq.mobile.session.SpaceFaces.Held(emptyMap(), emptySet(), 0)
         const val HIDDEN = "veyq.hidden"
     }
 }

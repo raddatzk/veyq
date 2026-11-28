@@ -300,6 +300,10 @@ fn draw_group(g: &Rc<Group>, read: Option<GroupPage>) {
     );
     g.shell.page.set_title(&title_of(&p.name, None));
     g.shell.column.append(&scope_acts::header(&g.host, &g.scope, &title_of(&p.name, None), p.owner));
+    let again: Rc<dyn Fn()> = { let g = g.clone(); Rc::new(move || load_group(g.clone())) };
+    for line in scope_acts::status_lines(&g.host, &p.status, Call::SettingsGroupRequeue { scope_id: g.scope.clone() }, again) {
+        g.shell.column.append(&line);
+    }
     if let Some(note) = &p.readonly_note {
         let line = label(&said_msg(note), true);
         line.set_widget_name("group-readonly");
