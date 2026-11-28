@@ -36,6 +36,7 @@
     <Compile Include="../Veyq/Core/HeaderPlan.cs" Link="App/HeaderPlan.cs" />
     <Compile Include="../Veyq/Core/ShareDays.cs" Link="App/ShareDays.cs" />
     <Compile Include="../Veyq/Core/TypedText.cs" Link="App/TypedText.cs" />
+    <Compile Include="../Veyq/Core/HeroPlaces.cs" Link="App/HeroPlaces.cs" />
     <Compile Include="../Veyq/Core/MarkdownBlocks.cs" Link="App/MarkdownBlocks.cs" />
     <Compile Include="../Veyq/Core/PdfPages.cs" Link="App/PdfPages.cs" />
     <Compile Include="../Veyq/Core/PdfWeb.cs" Link="App/PdfWeb.cs" />

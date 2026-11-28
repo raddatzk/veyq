@@ -151,6 +151,19 @@ class DispatchTest {
     }
 
     /**
+     * A place's arrival tells the host what to show (inbox #1424): a moved shell is [DeepScreen.PLACE], so a host showing
+     * Settings over the shell lets it go — on Windows the place stayed hidden under Settings while the answer said only
+     * OPEN; nothing moved, or held for a shell, stays OPEN. Bitten by answering a moved shell OPEN (red).
+     */
+    @Test
+    fun aMovedShellIsAnsweredAsThePlaceNotAsTheAppWhereItIs() {
+        assertEquals(Answer.DeepLinked(DeepScreen.PLACE), deepLinked(me.raddatz.veyq.mobile.navigation.Arrived.Opened))
+        assertEquals(Answer.DeepLinked(DeepScreen.OPEN), deepLinked(me.raddatz.veyq.mobile.navigation.Arrived.NotHere))
+        assertEquals(Answer.DeepLinked(DeepScreen.OPEN), deepLinked(me.raddatz.veyq.mobile.navigation.Arrived.Waiting))
+        assertEquals(Answer.DeepLinked(DeepScreen.SETTINGS, "tenant-members"), deepLinked(me.raddatz.veyq.mobile.navigation.Arrived.Settings("tenant-members")))
+    }
+
+    /**
      * A member's own web link pasted into *Open a link* (inbox #1415) is the shell's, never the share check's: while the
      * start still decides it waits for the shell an unlock opens (the field closes), and on the sign-in, with no account to
      * open it, it is refused as not open here. Bitten by a `Received.Open` without its place branch (red: `NOT_A_SHARE`).

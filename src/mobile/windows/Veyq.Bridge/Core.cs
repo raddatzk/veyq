@@ -74,6 +74,13 @@ public static unsafe class Core
     public static Action<string>? NetLogged { get; set; }
 
     /// <summary>
+    /// Told an exception out of a watch's handler before it goes on (inbox #1429): posted through WinUI's
+    /// DispatcherQueueSynchronizationContext it reaches no UnhandledException and ends the app in combase (0xc000027b) with
+    /// nothing in the log, so the app writes it down here first. The exception still ends the process, as before.
+    /// </summary>
+    public static Action<Exception>? Faulted { get; set; }
+
+    /// <summary>
     /// Starts the core once per process with <paramref name="store"/> as the device's store, which the core reads from its own
     /// threads until the process ends.
     /// </summary>
@@ -326,14 +333,22 @@ public static unsafe class Core
     /// <summary>The NUL-terminated UTF-8 string the core handed in, copied: it is valid only during the call.</summary>
     private static string Copy(byte* json) => json == null ? "" : Marshal.PtrToStringUTF8((nint)json) ?? "";
 
-    private sealed class Sink(SynchronizationContext? context, Action<Update> updated, Action<UnreadableException> unreadable)
+    internal sealed class Sink(SynchronizationContext? context, Action<Update> updated, Action<UnreadableException> unreadable)
     {
         public void Deliver(Update? update, UnreadableException? error)
         {
             void Go()
             {
-                if (update != null) updated(update);
-                else unreadable(error!);
+                try
+                {
+                    if (update != null) updated(update);
+                    else unreadable(error!);
+                }
+                catch (Exception e)
+                {
+                    Faulted?.Invoke(e);
+                    throw;
+                }
             }
 
             if (context == null) Go();

@@ -79,6 +79,13 @@ internal static class DeepLinks
                 window.OpenSettingsAt(linked.section);
                 return;
             }
+            if (screen == DeepScreen.Place)
+            {
+                // the shell moved there: Settings, where it showed over the shell, gives way (inbox #1424)
+                Log.Write("veyq: link opened its place");
+                window.ShowPlace();
+                return;
+            }
             if (screen != DeepScreen.Link)
             {
                 Log.Write("veyq: link opened the app where it is");

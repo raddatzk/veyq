@@ -3129,10 +3129,7 @@ internal class Bridge<A : Connection, T : Any>(compose: () -> Composition<A, T>)
     /** [place] opened by the open shell, as its answer to a host; null where no shell is open. */
     private fun arrive(place: me.raddatz.veyq.mobile.navigation.PlaceLink): Answer? {
         val shell = tenant.value?.models?.shell?.takeIf { it.current != null } ?: return null
-        return when (val a = shell.arrive(place)) {
-            is me.raddatz.veyq.mobile.navigation.Arrived.Settings -> Answer.DeepLinked(DeepScreen.SETTINGS, a.section)
-            else -> Answer.DeepLinked(DeepScreen.OPEN)
-        }
+        return deepLinked(shell.arrive(place))
     }
 
     private fun closeTenant() {
@@ -4243,3 +4240,13 @@ internal fun svgPage(): Answer.SvgPage = me.raddatz.veyq.mobile.depot.SvgView.le
     Answer.SvgPage(v.document(), v.DOCUMENT, v.PICTURE, v.CONTENT_SECURITY_POLICY, v.ZOOM_STEPS, v.ZOOM_STEPS.map(v::zoomScript))
 }
 
+/**
+ * What a place's arrival tells the host (inbox #1415): Settings at its section, [DeepScreen.PLACE] where the shell moved —
+ * a host that shows Settings over the shell lets it go, or the place stays hidden under it (measured 2026-11-28 on
+ * Windows, inbox #1424) —, else the app where it is.
+ */
+internal fun deepLinked(arrived: me.raddatz.veyq.mobile.navigation.Arrived): Answer.DeepLinked = when (arrived) {
+    is me.raddatz.veyq.mobile.navigation.Arrived.Settings -> Answer.DeepLinked(DeepScreen.SETTINGS, arrived.section)
+    me.raddatz.veyq.mobile.navigation.Arrived.Opened -> Answer.DeepLinked(DeepScreen.PLACE)
+    me.raddatz.veyq.mobile.navigation.Arrived.NotHere, me.raddatz.veyq.mobile.navigation.Arrived.Waiting -> Answer.DeepLinked(DeepScreen.OPEN)
+}

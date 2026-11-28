@@ -126,6 +126,7 @@ internal sealed class ReceivedView : IDisposable
             long? recovering = null;
             var placed = false;
             string? placedSection = null;
+            var placedHere = false;
             dialog.PrimaryButtonClick += async (_, args) =>
             {
                 // the dialog stays while the core reads the link: it closes on an opened one, else says why
@@ -156,6 +157,7 @@ internal sealed class ReceivedView : IDisposable
                             // a member's own link (inbox #1415): the shell moved there in the core; Settings opens here
                             placed = true;
                             placedSection = d.screen == DeepScreen.Settings ? d.section ?? "" : null;
+                            placedHere = d.screen == DeepScreen.Place;
                             break;
                         case Answer.ReceivedProblem p:
                             args.Cancel = true;
@@ -185,6 +187,7 @@ internal sealed class ReceivedView : IDisposable
             {
                 box.Text = "";
                 if (placedSection is { } section && window is MainWindow main) main.OpenSettingsAt(section.Length == 0 ? null : section);
+                else if (placedHere && window is MainWindow moved) moved.ShowPlace();
             }
             else if (opened is { } received) Present(received, box.Text.Trim());
             else if (recovering is { } recovery)

@@ -386,6 +386,10 @@ internal sealed class ShellView
     /// <summary>A `veyq:` link's or a member's link's Settings section (inbox #1415): the page at it, null its top.</summary>
     internal void OpenSettingsFromLink(string? section) => OpenSettingsAt(section);
 
+    /// <summary>A link's place (inbox #1424): the shell already moved in the core; Settings over it gives way, as a search's
+    /// node does.</summary>
+    internal void ShowPlaceFromLink() => CloseSettings();
+
     /// <summary>Edit profile on one's own person page: Settings opened at Your profile, the flow open in its frame.</summary>
     private void EditProfile()
     {

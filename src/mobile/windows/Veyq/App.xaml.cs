@@ -19,6 +19,8 @@ public partial class App : Application
         UnhandledException += (_, e) => Log.Write($"unhandled exception: {e.Exception}");
         System.AppDomain.CurrentDomain.UnhandledException += (_, e) => Log.Write($"unhandled exception: {e.ExceptionObject}");
         TaskScheduler.UnobservedTaskException += (_, e) => Log.Write($"unobserved task exception: {e.Exception}");
+        // an update's handler that throws reaches none of the three above (WinUI's SynchronizationContext, inbox #1429)
+        Bridge.Core.Faulted = e => Log.Write($"an update's handler threw: {e}");
         InitializeComponent();
         // the whole app's, not only the window's: a brush a screen looks up in code (a caption's secondary text) is the
         // application theme's, and under the window's theme alone it stayed light's on a dark window (measured)

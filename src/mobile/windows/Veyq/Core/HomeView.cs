@@ -208,7 +208,9 @@ internal static class HomeView
         if (state.lists.filters.Count > 1) content.Children.Add(Filters(state, shown));
         if (hero is not null)
         {
-            // the head is the header's one element: taken from the level drawn before; under the filters, as the phones place it
+            // the head is the header's one element: taken from where it was placed last (HeroPlaces: its Parent reads null
+            // until that column is loaded, inbox #1429); under the filters, as the phones place it
+            HeroPlaces.Moving(hero, () => content.Children.Remove(hero));
             if (hero is FrameworkElement { Parent: Panel panel }) panel.Children.Remove(hero);
             if (hero is FrameworkElement { Parent: Border border }) border.Child = null;
             content.Children.Add(hero);

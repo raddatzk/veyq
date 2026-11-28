@@ -66,6 +66,12 @@ internal sealed class HeroSlot
         if (ReferenceEquals(hero, Hero)) return;
         View.Child = null;
         Hero = hero;
+        if (hero is not null)
+        {
+            // taken from where it was placed last, its Parent read null until that place is loaded (inbox #1429)
+            var view = View;
+            HeroPlaces.Moving(hero, () => { if (ReferenceEquals(view.Child, hero)) view.Child = null; });
+        }
         if (hero is FrameworkElement { Parent: Border other }) other.Child = null;
         if (hero is FrameworkElement { Parent: Panel panel }) panel.Children.Remove(hero);
         View.Child = hero;

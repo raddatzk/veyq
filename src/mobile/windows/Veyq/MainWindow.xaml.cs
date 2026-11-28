@@ -29,6 +29,9 @@ public sealed partial class MainWindow : Window
 
     /// <summary>The shell's Settings at <paramref name="section"/> (null: its top), for a link that named it (inbox #1415).</summary>
     internal void OpenSettingsAt(string? section) => _shell?.OpenSettingsFromLink(section);
+
+    /// <summary>The place a link moved the shell to, shown: Settings, where it stood over the shell, gives way (inbox #1424).</summary>
+    internal void ShowPlace() => _shell?.ShowPlaceFromLink();
     /// <summary>A received link's screen while one stands above the faces, and the face it covers (what the session's gate
     /// shows meanwhile), put back once the link is let go.</summary>
     private ReceivedView? _received;
