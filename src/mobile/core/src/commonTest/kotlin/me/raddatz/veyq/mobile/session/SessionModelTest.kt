@@ -76,7 +76,12 @@ class SessionModelTest {
             handed += secretKey
             return by(server)
         }
-        override suspend fun unlockOnDevice(record: TrustedDevice, password: String) = refuse[record.key]?.let { throw SignInFailure(it) } ?: by(record.server)
+        /** Each record a password unlock was asked for. */
+        val unlocked = mutableListOf<TrustedDevice>()
+        override suspend fun unlockOnDevice(record: TrustedDevice, password: String): Acc {
+            unlocked += record
+            return refuse[record.key]?.let { throw SignInFailure(it) } ?: by(record.server)
+        }
         override suspend fun resume(record: TrustedDevice) = refuse[record.key]?.let { throw SignInFailure(it) } ?: by(record.server)
         override suspend fun trust(account: Acc, password: String) {
             trustedWith = account.key
@@ -239,6 +244,35 @@ class SessionModelTest {
         d.refuse[r.key] = SignInFailure.Reason.DEVICE_NOT_TRUSTED
         m.unlock("pw")
         assertEquals(Gate.SignIn(error = Msg.SIGNIN_ERROR_DEVICE_NOT_TRUSTED, server = r.server, email = r.email), m.current)
+    }
+
+    @Test
+    fun a_second_account_of_one_server_keeps_the_first_ones_record_and_its_email_with_the_password_alone_unlocks_it() = runTest {
+        // inbox #1425: the owner and a member of one tenant, both password-trusted here; the unlock names the most recent
+        val d = door()
+        val member = TrustedDevice("https://a.example", "member@a.example", "u2", TrustedDevice.Method.DEVICE, "w2", "alias2")
+        val owner = TrustedDevice("https://a.example", "owner@a.example", "u1", TrustedDevice.Method.DEVICE, "w1", "alias1")
+        d.records += member
+        d.records += owner
+        val m = model(d)
+        m.start()
+        assertEquals(Gate.Unlock(member), m.current)
+        m.otherAccount()
+        assertEquals(owner, m.passwordTrusted("A.example/", " Owner@a.example"))
+        assertNull(m.passwordTrusted("b.example", "owner@a.example"), "another server's sign-in took this one's record")
+        // the owner typed with no Secret Key: the password unlocks its own record, nothing enrolled anew
+        val o = m.signIn("a.example", "owner@a.example", "pw", "")!!
+        assertEquals(a, o.account)
+        assertEquals(listOf(owner), d.unlocked)
+        assertNull(d.trustedWith, "the unlock enrolled a new trust over the record it opened")
+        assertEquals(emptyList(), d.keys, "the owner's sign-in asked for a Secret Key")
+        assertEquals(listOf(member, owner), d.records)
+
+        // a typed Secret Key is a full sign-in still, and an email this device does not trust needs one
+        m.addServer()
+        m.signIn("a.example", "stranger@a.example", "pw", "")
+        assertEquals(Msg.SIGNIN_ERROR_SECRET_KEY, (m.current as Gate.SignIn).error)
+        assertEquals(listOf(""), d.keys)
     }
 
     @Test

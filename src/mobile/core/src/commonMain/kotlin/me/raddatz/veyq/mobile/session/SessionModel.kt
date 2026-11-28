@@ -447,10 +447,16 @@ class SessionModel<A : Connection, T : Any>(
         // this call's copy of the key, zeroed by the door: the held one stays for a retry until the sign-in succeeds
         val key = if (typed) EmergencyKit.read(door.primitives, secretKey)?.secretKey else intake.heldCopy()
         show(Gate.SignIn(working = true, adding = adding, server = server, email = email, kit = kit, keepsNothing = keepsNothing))
+        // an account this device trusts with the password, typed without a Secret Key: the password is enough, as on the
+        // web (`sign-in` § On a device you have used before) — the unlock the start shows only for the most recent one
+        val trusted = if (key == null && !keepsNothing) passwordTrusted(server, email) else null
         return try {
-            val account = if (key != null) door.signInWithKey(origin(server), email, password, key)
-            else door.signIn(origin(server), email, password, secretKey)
-            if (!keepsNothing) door.trust(account, password)
+            val account = when {
+                trusted != null -> door.unlockOnDevice(trusted, password)
+                key != null -> door.signInWithKey(origin(server), email, password, key)
+                else -> door.signIn(origin(server), email, password, secretKey)
+            }
+            if (!keepsNothing && trusted == null) door.trust(account, password)
             add(account)
             offer = if (keepsNothing) null else offerFor(account)
             val (held, tenant) = connections.current!!
@@ -460,6 +466,20 @@ class SessionModel<A : Connection, T : Any>(
             null
         } finally {
             key?.fill(0)
+        }
+    }
+
+    /**
+     * The record by which this device trusts [email] on [server] with the password (DEVICE), if it does: a sign-in typed
+     * for it needs no Secret Key (inbox #1425). Several accounts of one server each keep their own record; the unlock the
+     * start shows names the most recent, and *Use another account* reaches the others here.
+     */
+    fun passwordTrusted(server: String, email: String): TrustedDevice? {
+        if (server.isBlank() || email.isBlank()) return null
+        val host = runCatching { io.ktor.http.Url(origin(server)).host }.getOrNull() ?: return null
+        return door.trusted().firstOrNull {
+            it.method == TrustedDevice.Method.DEVICE && it.email.equals(email.trim(), ignoreCase = true) &&
+                runCatching { io.ktor.http.Url(it.server).host }.getOrNull().equals(host, ignoreCase = true)
         }
     }
 
