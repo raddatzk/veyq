@@ -9,18 +9,16 @@
 namespace Veyq.Core;
 
 using System;
-using System.Runtime.InteropServices.WindowsRuntime;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.Web.WebView2.Core;
 using Windows.Graphics.Imaging;
-using Windows.Storage.Streams;
 
 internal static class SvgRaster
 {
+
     /// <summary>The drawing of <paramref name="page"/> at <paramref name="width"/> × <paramref name="height"/>: straight RGBA
     /// for the core and the frame's picture; null where WebView2 is missing or did not draw it. The view lives in
     /// <paramref name="host"/> while it draws.</summary>
@@ -68,21 +66,9 @@ internal static class SvgRaster
             core.NavigationCompleted += (_, e) => loaded.TrySetResult(e.IsSuccess);
             core.NavigateToString(page);
             if (!await loaded.Task) return null;
-            await core.CallDevToolsProtocolMethodAsync("Emulation.setDefaultBackgroundColorOverride", "{\"color\":{\"r\":0,\"g\":0,\"b\":0,\"a\":0}}");
-            var shot = await core.CallDevToolsProtocolMethodAsync("Page.captureScreenshot",
-                $"{{\"format\":\"png\",\"captureBeyondViewport\":true,\"fromSurface\":true,\"clip\":{{\"x\":0,\"y\":0,\"width\":{width},\"height\":{height},\"scale\":1}}}}");
-            var png = Convert.FromBase64String(JsonDocument.Parse(shot).RootElement.GetProperty("data").GetString() ?? "");
-            using var stream = new InMemoryRandomAccessStream();
-            await stream.WriteAsync(png.AsBuffer());
-            stream.Seek(0);
-            var decoder = await BitmapDecoder.CreateAsync(stream);
-            var transform = new BitmapTransform { ScaledWidth = (uint)width, ScaledHeight = (uint)height, InterpolationMode = BitmapInterpolationMode.Fant };
-            var straight = await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Straight, transform,
-                ExifOrientationMode.IgnoreExifOrientation, ColorManagementMode.DoNotColorManage);
-            var rgba = new byte[width * height * 4];
-            straight.CopyToBuffer(rgba.AsBuffer());
+            var (rgba, straight, png) = await SvgCapture.Capture(core, width, height);
             for (var i = 0; i < rgba.Length; i += 4) (rgba[i], rgba[i + 2]) = (rgba[i + 2], rgba[i]);
-            Log.Write($"svg cover: drawn at {width}×{height} from a {png.Length} B capture");
+            Log.Write($"svg cover: drawn at {width}×{height} from a {png} B capture");
             return (rgba, SoftwareBitmap.Convert(straight, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied));
         }
         catch (Exception e)

@@ -35,6 +35,9 @@ internal static class Avatars
     private sealed class Bound
     {
         public string? Id;
+
+        /// <summary>A picture the caller set in place of a member's (the switcher's tenant picture), kept across a reload.</summary>
+        public Microsoft.UI.Xaml.Media.ImageSource? Instead;
     }
 
     /// <summary>The shell's list of ids with a picture in <paramref name="tenant"/> (ShellShown.pictures) in the pictures'
@@ -99,7 +102,13 @@ internal static class Avatars
 
     /// <summary><paramref name="person"/> shows the picture of <paramref name="userId"/> (none: its initials), now and
     /// whenever that picture arrives or goes while it is loaded.</summary>
-    public static void Show(PersonPicture person, string? userId)
+    public static void Show(PersonPicture person, string? userId) => Show(person, userId, null);
+
+    /// <summary><paramref name="person"/> shows <paramref name="instead"/> where it is set — a picture that is no member's,
+    /// such as the tenant's in the switcher — else the picture of <paramref name="userId"/> as <see cref="Show(PersonPicture, string?)"/>.
+    /// Kept when the control is loaded again: a reload set the member's picture back and dropped the tenant's (inbox #1428,
+    /// the switcher drawn while the sign-in's offer showed, then put into the window).</summary>
+    public static void Show(PersonPicture person, string? userId, Microsoft.UI.Xaml.Media.ImageSource? instead)
     {
         if (!Ids.TryGetValue(person, out var bound))
         {
@@ -109,7 +118,7 @@ internal static class Avatars
             {
                 Loaded[person] = Loaded.GetValueOrDefault(person) + 1;
                 // a picture that arrived while it was out of the tree
-                person.ProfilePicture = bound.Id is null ? null : HeldPictures.Get(bound.Id);
+                person.ProfilePicture = bound.Instead ?? (bound.Id is null ? null : HeldPictures.Get(bound.Id));
             };
             person.Unloaded += (_, _) =>
             {
@@ -118,8 +127,9 @@ internal static class Avatars
                 else Loaded.Remove(person);
             };
         }
-        bound.Id = userId;
-        person.ProfilePicture = userId is null ? null : HeldPictures.Get(userId);
+        bound.Id = instead is null ? userId : null;
+        bound.Instead = instead;
+        person.ProfilePicture = instead ?? (userId is null ? null : HeldPictures.Get(userId));
     }
 
     private static void Refresh(string id)

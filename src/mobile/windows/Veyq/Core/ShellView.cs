@@ -540,12 +540,7 @@ internal sealed class ShellView
         OpenTenantName = shown.tenant.name;
         OpenTenantId = shown.tenant.tenantId;
         // the tenant's picture where the core holds one (the web's switcher, SpaceFaces), else the member's, else initials
-        if (_spacePictures.TryGetValue(shown.tenant.tenantId, out var tenantPicture))
-        {
-            Avatars.Show(_me, null);
-            _me.ProfilePicture = tenantPicture;
-        }
-        else Avatars.Show(_me, shown.me);
+        Avatars.Show(_me, shown.me, _spacePictures.GetValueOrDefault(shown.tenant.tenantId));
         string Marked(string text, bool needsLock) => needsLock ? Lives.Joined([text, Words.MembersCompromiseRotationMark()]) : text;
         var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedLeft };
         foreach (var s in shown.spaces)

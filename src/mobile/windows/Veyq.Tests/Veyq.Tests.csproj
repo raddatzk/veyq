@@ -40,6 +40,7 @@
     <Compile Include="../Veyq/Core/PdfPages.cs" Link="App/PdfPages.cs" />
     <Compile Include="../Veyq/Core/PdfWeb.cs" Link="App/PdfWeb.cs" />
     <Compile Include="../Veyq/Core/SvgWeb.cs" Link="App/SvgWeb.cs" />
+    <Compile Include="../Veyq/Core/SvgCapture.cs" Link="App/SvgCapture.cs" />
     <Compile Include="../Veyq/Core/KitDrawing.cs" Link="App/KitDrawing.cs" />
     <Compile Include="../Veyq/Core/ProfilePicture.cs" Link="App/ProfilePicture.cs" />
     <Compile Include="../Veyq/Core/Log.cs" Link="App/Log.cs" />
