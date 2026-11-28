@@ -824,7 +824,10 @@ A Gradle build of its own, run through its own wrapper.
   throwaway:account -- --out <file> [--with-member]` in `src/web/` makes a fresh tenant `tw-<stamp>.localhost` with its
   owner (and a member through a link invite, so no mailbox is read), writes the credentials to `<file>` (mode 0600,
   outside the repository: the scratchpad), and `--erase <file>` erases them after (the sole-member tenant along; its
-  pending erasure listed). The core's such cases read `VEYQ_LIVE_THROWAWAY_ENV=<file>` (`Throwaway`, `testing/src/jvmMain`)
+  pending erasure listed). `--moderator` also makes the owner a moderator through the Server Owner's own acts
+  (appointed, its own acceptance, a fresh epoch minted to every accepted moderator — the principal's password alone used,
+  none of its grants opened), and its `--erase` mints the next epoch for the moderators left: `LiveModerationKeyTest`
+  (a moderator's key replacement) runs on such a file. The core's such cases read `VEYQ_LIVE_THROWAWAY_ENV=<file>` (`Throwaway`, `testing/src/jvmMain`)
   and **fail**, not skip, on a file naming `.run/.env`'s principal or member; an app pass points `VEYQ_ENV_FILE` at the
   file for `devlogin.py` / `run.py --devlogin`. A machine that resolves no `*.localhost` (the Windows VM) maps one
   fixed name instead, which `--tenant tw-<name>` gives the tenant (the VM's `hosts` maps `tw-win.localhost`, 2026-11-19).

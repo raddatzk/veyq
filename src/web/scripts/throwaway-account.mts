@@ -2,7 +2,7 @@
 // test that changes, rotates or erases an account (ADR 0148 decision 12). The seeded principal and member are the shared
 // test accounts; no such pass signs in as either.
 //
-//   pnpm run throwaway:account -- --out <file> [--with-member] [--tenant tw-<name>]
+//   pnpm run throwaway:account -- --out <file> [--with-member] [--tenant tw-<name>] [--moderator]
 //                                                                create; writes the throwaway's credentials to <file>
 //   pnpm run throwaway:account -- --erase <file>                 erase the throwaway (its sole-member tenant along)
 //
@@ -21,6 +21,19 @@
 // personal scope and points its tenant's mail at Mailpit; `--with-member` invites a second throwaway by a link invite
 // (its token answered to the owner, so no mailbox is read). <file> gets `VEYQ_EMAIL`, `VEYQ_PASSWORD`, `VEYQ_SECRET_KEY`,
 // `VEYQ_TENANT_DOMAIN` (and the member's as `VEYQ_USER2_*`), mode 0600, and must lie outside the repository.
+//
+// `--moderator` makes the throwaway's OWNER a moderator of the instance (ADR 0099 §§ 1 and 3; inbox #992, #1426), by the
+// Server Owner's own acts on the admin listener as admin-web does them (`src/admin-web/src/features/instance/moderation.ts`):
+// `appointModerator` by the owner's address, the owner's own `acceptModeratorAppointment` (its sessions carry the
+// MODERATOR role from then on), then `mintModerationEpoch` — a fresh `M_{n+1}` drawn here, its public bundle derived,
+// sealed (`moderation-grant` [n+1]) to the identity PUBLIC key of every accepted moderator as the roster serves it, and
+// zeroed. So the throwaway holds the new epoch only, beside every moderator already on the roster (the Server Owner
+// among them): no holder's client delivers it the older epochs, and nothing of the principal's but its password is
+// used (no grant of its is opened). Refused before anything is appointed: moderation off (turn it on in admin-web), or a
+// roster that already lists the address. The file gets `VEYQ_MODERATOR=1` and the epoch minted (`VEYQ_MODERATION_EPOCH`).
+// At `--erase`, once the throwaway left (its erasure takes it off the roster and leaves a rotation due, as a removal
+// does), the Server Owner mints the next epoch for the moderators left (reason `REMOVAL`, admin-web's `removeModerator`),
+// so no rotation stays due; the roster before and after is printed by count and state, never by address.
 //
 // Refused, exit 1, before anything is sent: an <file> that is the principal's env file or names the principal's or the
 // seeded member's address (`VEYQ_EMAIL`, `VEYQ_USER2_EMAIL`) — so neither `--out` overwrites them nor `--erase` erases them.
@@ -41,6 +54,7 @@ import { MAILPIT_SMTP_PORT, mailpitReachable } from '../src/test/mailpit'
 import { Configuration as TenantsConfiguration, TenantsApi } from '../src/api/generated/tenants'
 import { Configuration as ScopesConfiguration, ScopesApi } from '../src/api/generated/scopes'
 import { AccountApi, AccountErasureApi, Configuration as AccountConfiguration } from '../src/api/generated/account'
+import { Configuration as ModerationConfiguration, ModerationApi } from '../src/api/generated/moderation'
 import { Configuration as AuthConfiguration, LoginApi } from '../src/api/generated/auth'
 import { adminCall, adminChannel, publicChannel, tenantChannel } from './apiTransport.mts'
 import { awaitBackend, birthPersonalScope, orThrow, signIn } from './instanceBirth.mts'
@@ -84,11 +98,13 @@ const args = process.argv.slice(2).filter((a) => a !== '--')
 const outAt = args.indexOf('--out')
 const eraseAt = args.indexOf('--erase')
 const withMember = args.includes('--with-member')
+const asModerator = args.includes('--moderator')
 const tenantAt = args.indexOf('--tenant')
 const fixedTenant = tenantAt >= 0 ? (args[tenantAt + 1] ?? fail('--tenant needs a name (tw-<name>)')) : null
 if (fixedTenant !== null && !/^tw-[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/.test(fixedTenant)) fail(`--tenant ${fixedTenant}: a name tw-<name> of a-z, 0-9 and inner hyphens`)
 if (fixedTenant !== null && eraseAt >= 0) fail('--tenant is a create option; --erase reads the tenant from <file>')
-if ((outAt < 0) === (eraseAt < 0)) fail('usage: --out <file> [--with-member] [--tenant tw-<name>] | --erase <file>')
+if (asModerator && eraseAt >= 0) fail('--moderator is a create option; --erase reads it from <file>')
+if ((outAt < 0) === (eraseAt < 0)) fail('usage: --out <file> [--with-member] [--tenant tw-<name>] [--moderator] | --erase <file>')
 const file = args[(outAt >= 0 ? outAt : eraseAt) + 1] ?? fail('no <file> given')
 if (!existsSync(PRINCIPAL_ENV)) fail(`no principal env file at ${PRINCIPAL_ENV} — set VEYQ_ENV_FILE`)
 const principal = readEnv(PRINCIPAL_ENV)
@@ -177,6 +193,89 @@ async function createMember(o: Awaited<ReturnType<typeof createOwner>>, ownerTok
   return { email, password, userId, username, built }
 }
 
+// --- the instance's moderation, as the Server Owner acts on it (admin-web's `moderation.ts`, ADR 0099) ---------------------
+
+type Roster = {
+  enabled: boolean
+  currentEpoch: number | null
+  rotationDueSince: string | null
+  serverOwner: { accountId: string }
+  moderators: { accountId: string; address: string; state: 'PENDING' | 'ACCEPTED'; identityPublicKey: string | null; holdsCurrentEpoch: boolean }[]
+}
+
+async function roster(principalToken: string): Promise<Roster> {
+  const r = await adminCall<Roster>(principalToken, 'GET', '/api/instance/moderation')
+  if (r.status !== 200) fail(`getInstanceModeration answered ${r.status} ${JSON.stringify(r.json)}`)
+  return r.json
+}
+
+/** The roster as a line: the epoch, a due rotation, and each moderator by its role and state — never an address. */
+function rosterLine(r: Roster, throwawayId?: string): string {
+  const who = (m: Roster['moderators'][number]) =>
+    `${m.accountId === r.serverOwner.accountId ? 'the Server Owner' : m.accountId === throwawayId ? 'the throwaway' : `another (${m.accountId.slice(0, 8)})`}` +
+    ` ${m.state}${m.holdsCurrentEpoch ? ' holding the current epoch' : ''}`
+  return `moderation ${r.enabled ? 'on' : 'off'}, epoch ${r.currentEpoch ?? 'none'}${r.rotationDueSince ? `, a rotation due since ${r.rotationDueSince}` : ''}; ` +
+    `roster: ${r.moderators.map(who).join('; ') || 'empty'}`
+}
+
+/** admin-web's `rotateModerationKey`: `M_{n+1}` drawn, its bundle derived, sealed to every accepted moderator's identity
+ *  public key as [r] serves it, uploaded and zeroed. The server refuses grants that do not name exactly the accepted
+ *  moderators, so a roster that moved since [r] is its refusal, never retried here. */
+async function mintEpoch(principalToken: string, r: Roster, reason: 'BY_HAND' | 'REMOVAL'): Promise<Roster> {
+  const epoch = (r.currentEpoch ?? 0) + 1
+  const m = v1.generateModerationKey()
+  try {
+    const bundle = v1.moderationBundle(m)
+    const grants = r.moderators.flatMap((mod) => (mod.state === 'ACCEPTED' && mod.identityPublicKey
+      ? [{
+          accountId: mod.accountId, identityPublicKey: mod.identityPublicKey,
+          sealedGrant: b64std(v1.sealTo({ purpose: 'moderation-grant', epoch }, v1.deserializeIdentityPublic(fromB64std(mod.identityPublicKey)).kem, m)),
+        }]
+      : []))
+    const minted = await adminCall<Roster>(principalToken, 'POST', '/api/instance/moderation/epochs', {
+      epoch, kemPublicKey: b64std(bundle.kem), signPublicKey: b64std(bundle.sign), reason, grants,
+    })
+    if (minted.status !== 200) fail(`mintModerationEpoch (${reason}) answered ${minted.status} ${JSON.stringify(minted.json)}`)
+    return minted.json
+  } finally {
+    m.fill(0)
+  }
+}
+
+/** The throwaway owner appointed, accepted by itself, and handed a freshly minted epoch with every accepted moderator. */
+async function makeModerator(principalToken: string, owner: Born, ownerToken: string): Promise<number> {
+  const seeded = [principal.VEYQ_EMAIL, principal.VEYQ_USER2_EMAIL].filter(Boolean).map((e) => e.trim().toLowerCase())
+  if (seeded.includes(owner.email.toLowerCase())) fail('the appointee is a seeded account — refused')
+  const before = await roster(principalToken)
+  console.log(`moderation before: ${rosterLine(before)}`)
+  if (!before.enabled) fail('moderation is off on this instance — turn it on in admin-web first (the throwaway is written, erase it with --erase)')
+  if (before.moderators.some((m) => m.accountId === owner.userId)) fail('the throwaway is already on the roster')
+  const appointed = await adminCall<Roster>(principalToken, 'POST', '/api/instance/moderation/moderators', { address: owner.email })
+  if (appointed.status !== 200) fail(`appointModerator answered ${appointed.status} ${JSON.stringify(appointed.json)}`)
+  const accepted = await orThrow('acceptModeratorAppointment', new ModerationApi(new ModerationConfiguration(publicChannel(ownerToken))).acceptModeratorAppointment())
+  if (accepted.state !== 'ACCEPTED') fail(`the appointment is ${accepted.state} after its acceptance`)
+  const after = await mintEpoch(principalToken, await roster(principalToken), 'BY_HAND')
+  const mine = after.moderators.find((m) => m.accountId === owner.userId)
+  if (!mine?.holdsCurrentEpoch) fail(`the throwaway does not hold epoch ${after.currentEpoch} after the mint`)
+  console.log(`moderation after: ${rosterLine(after, owner.userId)}`)
+  return after.currentEpoch!
+}
+
+/** After a moderator throwaway left: the epoch its erasure left due minted anew for the moderators left. */
+async function settleModeration(principalToken: string, throwawayId: string | undefined): Promise<void> {
+  const now = await roster(principalToken)
+  if (throwawayId && now.moderators.some((m) => m.accountId === throwawayId)) {
+    console.warn(`the throwaway is still on the roster — ${rosterLine(now, throwawayId)}`)
+    return
+  }
+  if (!now.rotationDueSince) {
+    console.log(`moderation: ${rosterLine(now)} — nothing due`)
+    return
+  }
+  const after = await mintEpoch(principalToken, now, 'REMOVAL')
+  console.log(`moderation: epoch ${after.currentEpoch} minted for the moderators left — ${rosterLine(after)}`)
+}
+
 async function create(): Promise<void> {
   const setup = await awaitBackend()
   if (setup.setupRequired) fail('the instance is not set up — run bootstrap:user first')
@@ -196,6 +295,11 @@ async function create(): Promise<void> {
   }
   persist()
   const ownerToken = await signIn(o.owner.email, o.owner.password)
+  if (asModerator) {
+    const epoch = await makeModerator(principalToken, o.owner, ownerToken)
+    Object.assign(fields, { VEYQ_MODERATOR: '1', VEYQ_MODERATION_EPOCH: String(epoch), VEYQ_USER_ID: o.owner.userId })
+    persist()
+  }
   const scopeId = await birthPersonalScope(ownerToken, o.domain, o.owner.userId, o.owner.built)
   console.log(`scope: personal scope ${scopeId}`)
   if (await mailpitReachable()) {
@@ -265,6 +369,7 @@ async function erase(): Promise<void> {
   // The member first: the owner's erasure then finds its tenant with no other member and deletes it along.
   if (t.VEYQ_USER2_EMAIL) await eraseOne(t.VEYQ_USER2_EMAIL, t.VEYQ_USER2_PASSWORD)
   await eraseOne(t.VEYQ_EMAIL, t.VEYQ_PASSWORD)
+  if (t.VEYQ_MODERATOR === '1') await settleModeration(principalToken, t.VEYQ_USER_ID)
   const pending = await adminCall<{ erasures: { address: string; dueAt: string }[] }>(principalToken, 'GET', '/api/instance/accounts/erasures')
   const mine = pending.json.erasures.filter((e) => e.address === t.VEYQ_EMAIL || e.address === t.VEYQ_USER2_EMAIL)
   for (const e of mine) console.log(`pending erasure: ${e.address}, purged at ${e.dueAt}`)
