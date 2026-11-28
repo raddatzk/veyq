@@ -14,7 +14,7 @@ FROM mariadb:12.3@sha256:4aaf88b3106382c8c18e49f0cec60267be618fc22f858c4503afb2a
 # The rclone the tool already runs as a container (`RCLONE_IMAGE`), as a binary: a static Go build.
 FROM rclone/rclone:1.76.0@sha256:7cbeec24a44f206067597c0368be4de90ae19a64d5113c7d1938bd737a81e466 AS rclone
 
-FROM ubuntu:24.04@sha256:9c7f200c07e3d4a03e7249d2c16bf66a51120fb876aa2242cf31451412543289 AS runtime-tools
+FROM ubuntu:24.04@sha256:562111b88caa79c71391c0c4d3c2114a7d5c35915c20561fd893cb1e07929e6b AS runtime-tools
 # python3 for the tool; libedit2, libncurses6 and libbsd0 for the `mariadb` client, which links them (`ldd` on the
 # pinned image), libssl3t64 and zlib1g for both client binaries; ca-certificates for an operator's own store over TLS.
 RUN apt-get update \
